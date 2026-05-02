@@ -237,7 +237,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     emit formatReady(sampleRate, nbChannels);
 
     if (fmtCtx->duration != AV_NOPTS_VALUE) {
-        int64_t durationMs = fmtCtx->duration / (AV_TIME_BASE / 1000);
+        const int64_t durationMs = fmtCtx->duration / (AV_TIME_BASE / 1000);
         qDebug() << "DECODER: duration=" << durationMs << "ms";
         emit durationChanged(durationMs);
     } else {

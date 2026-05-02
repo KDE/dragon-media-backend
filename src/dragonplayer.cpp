@@ -218,22 +218,16 @@ public:
                 fftProcessor->setSampleRate(sampleRate);
                 setStatus(MediaStatus::LoadedMedia);
             },
-            Qt::AutoConnection);
+            Qt::QueuedConnection);
 
         connect(
             decoder.get(),
             &DragonDecoder::durationChanged,
             q,
             [this](int64_t durationMs) {
-                QMetaObject::invokeMethod(
-                    q,
-                    [this, durationMs]() {
-                        currentDuration = durationMs;
-                        Q_EMIT q->durationChanged(durationMs);
-                    },
-                    Qt::QueuedConnection);
+                setDuration(durationMs);
             },
-            Qt::DirectConnection);
+            Qt::QueuedConnection);
 
         connect(
             decoder.get(),
@@ -241,14 +235,9 @@ public:
             q,
             [this](const QString &msg) {
                 qDebug() << "Decoder error:" << msg;
-                QMetaObject::invokeMethod(
-                    q,
-                    [this]() {
-                        setError(currentIsLocal ? Error::FormatError : Error::NetworkError);
-                    },
-                    Qt::QueuedConnection);
+                setError(currentIsLocal ? Error::FormatError : Error::NetworkError);
             },
-            Qt::DirectConnection);
+            Qt::QueuedConnection);
 
         return decoder;
     }
@@ -586,6 +575,15 @@ public:
         if (error != Error::NoError) {
             setStatus(MediaStatus::InvalidMedia);
         }
+    }
+
+    void setDuration(int64_t durationMs)
+    {
+        if (currentDuration == durationMs) {
+            return;
+        }
+        currentDuration = durationMs;
+        Q_EMIT q->durationChanged(durationMs);
     }
 
     float volume() const
