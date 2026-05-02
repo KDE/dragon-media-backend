@@ -18,6 +18,7 @@ find_package(ECM 6 QUIET)
 include(FetchContent)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Network Gui)
+find_package(Qt6 COMPONENTS Widgets)
 find_package(SDL3 REQUIRED)
 find_package(PkgConfig REQUIRED)
 
@@ -130,6 +131,11 @@ install(TARGETS dragon-sdl
 )
 
 install(DIRECTORY include/dragonsdl DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+option(BUILD_EXAMPLES "Build examples" ON)
+if(BUILD_EXAMPLES AND Qt6Widgets_FOUND)
+    add_subdirectory(examples/qwidget)
+endif()
 
 option(BUILD_TESTING "Build tests" ON)
 if(BUILD_TESTING)
