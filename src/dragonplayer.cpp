@@ -16,6 +16,8 @@
 #include <QTimer>
 
 #include <algorithm>
+#include <condition_variable>
+#include <mutex>
 #include <stop_token>
 #include <thread>
 
@@ -56,6 +58,8 @@ public:
         QObject::connect(positionTimer, &QTimer::timeout, q, [this]() {
             Q_EMIT q->positionChanged(position());
         });
+
+        startThreads();
     }
 
     ~DragonPlayerPrivate()
@@ -63,47 +67,82 @@ public:
         stopPipeline();
     }
 
-    void setSource(const QUrl &source)
+    void startThreads()
     {
-        qDebug() << "PLAYER: setSource(" << source.toString() << ")";
-        stopPipeline();
-        startTrack(source, false);
+        fftThread = std::jthread([this](std::stop_token st) {
+            fftProcessor->processLoop(st);
+        });
+
+        decodeThread = std::jthread([this](std::stop_token st) {
+            while (!st.stop_requested()) {
+                std::unique_lock lock(decoderMutex);
+                decoderCv.wait(lock, [this, &st]() {
+                    return activeDecoder != nullptr || st.stop_requested();
+                });
+                if (st.stop_requested())
+                    break;
+
+                DragonDecoder *decoder = activeDecoder.get();
+                decodeLoopActive = true;
+                lock.unlock();
+
+                decoder->decodeLoop(decodeStopSource.get_token());
+
+                lock.lock();
+                decodeLoopActive = false;
+                lock.unlock();
+                decoderCv.notify_all();
+
+                if (st.stop_requested())
+                    break;
+
+                if (decodeStopSource.stop_requested()) {
+                    continue;
+                }
+
+                std::unique_lock plock(decoderMutex);
+                if (preWarmedDecoder) {
+                    activeDecoder = std::move(preWarmedDecoder);
+                    QUrl newSource = nextSource;
+                    nextSource.clear();
+
+                    plock.unlock();
+
+                    QMetaObject::invokeMethod(
+                        q,
+                        [this, newSource]() {
+                            currentSource = newSource;
+                            currentPosition = 0;
+                            currentIsLocal = newSource.isLocalFile();
+                            currentSeekable = currentIsLocal;
+                            currentDuration = 0;
+
+                            audioOutput->setPositionOffset(0);
+
+                            Q_EMIT q->trackChanged();
+                            Q_EMIT q->sourceChanged();
+                            Q_EMIT q->nextSourceChanged();
+                            Q_EMIT q->seekableChanged(currentSeekable);
+                        },
+                        Qt::QueuedConnection);
+                } else {
+                    plock.unlock();
+
+                    QMetaObject::invokeMethod(
+                        q,
+                        [this]() {
+                            setStatus(MediaStatus::EndOfMedia);
+                            setPlaybackState(PlaybackState::StoppedState);
+                        },
+                        Qt::QueuedConnection);
+                }
+            }
+        });
     }
 
-    void setNextSource(const QUrl &next)
+    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless)
     {
-        nextSource = next;
-        Q_EMIT q->nextSourceChanged();
-    }
-
-    void startTrack(const QUrl &source, bool seamless)
-    {
-        if (!seamless) {
-            audioQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(audioBuffer));
-            fftQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(fftBuffer));
-            audioOutput->setQueue(audioQueue.get());
-            fftProcessor->setQueue(fftQueue.get());
-            qDebug() << "PLAYER: queues recreated audioQueue cap=" << audioQueue->get_capacity() << "free=" << audioQueue->get_num_free()
-                     << "ready=" << audioQueue->get_num_items_ready() << "fftQueue cap=" << fftQueue->get_capacity() << "free=" << fftQueue->get_num_free()
-                     << "ready=" << fftQueue->get_num_items_ready();
-        }
-
-        currentSource = source;
-        currentPosition = 0;
-        Q_EMIT q->sourceChanged();
-
-        if (source.isEmpty()) {
-            setStatus(MediaStatus::NoMedia);
-            return;
-        }
-
-        setError(Error::NoError);
-        setStatus(MediaStatus::LoadingMedia);
-
         const bool isLocal = source.isLocalFile();
-        currentIsLocal = isLocal;
-        currentSeekable = isLocal;
-        Q_EMIT q->seekableChanged(currentSeekable);
 
         if (!isLocal) {
             if (radioStream) {
@@ -127,11 +166,6 @@ public:
             radioStream.reset();
         }
 
-        decodeStopSource = std::stop_source{};
-        if (!seamless) {
-            fftStopSource = std::stop_source{};
-        }
-
         DragonDecoder::ReadCallback readCb;
         if (!isLocal) {
             readCb = [this](std::span<uint8_t> buf) -> int {
@@ -139,15 +173,15 @@ public:
             };
         }
 
-        decoder = std::make_unique<DragonDecoder>(std::move(readCb), isLocal ? source.toLocalFile() : QString{});
+        auto decoder = std::make_unique<DragonDecoder>(std::move(readCb), isLocal ? source.toLocalFile() : QString{});
 
-        QObject::connect(
+        connect(
             decoder.get(),
             &DragonDecoder::formatReady,
             q,
-            [this, seamless](int sampleRate, int channels) {
+            [this, isGapless](int sampleRate, int channels) {
                 qDebug() << "PLAYER: formatReady sr=" << sampleRate << "ch=" << channels;
-                if (!seamless || !audioOutput->hasFormat(sampleRate, channels)) {
+                if (!isGapless || !audioOutput->hasFormat(sampleRate, channels)) {
                     audioOutput->start(sampleRate, channels);
                 }
                 audioOutput->setPositionOffset(currentPosition);
@@ -156,7 +190,7 @@ public:
             },
             Qt::AutoConnection);
 
-        QObject::connect(
+        connect(
             decoder.get(),
             &DragonDecoder::durationChanged,
             q,
@@ -171,7 +205,7 @@ public:
             },
             Qt::DirectConnection);
 
-        QObject::connect(
+        connect(
             decoder.get(),
             &DragonDecoder::samplesDecoded,
             q,
@@ -180,13 +214,12 @@ public:
             },
             Qt::DirectConnection);
 
-        QObject::connect(
+        connect(
             decoder.get(),
             &DragonDecoder::streamError,
             q,
             [this](const QString &msg) {
                 qWarning() << "Decoder error:" << msg;
-
                 QMetaObject::invokeMethod(
                     q,
                     [this]() {
@@ -196,96 +229,164 @@ public:
             },
             Qt::DirectConnection);
 
-        if (!seamless) {
-            fftProcessor->reset();
+        return decoder;
+    }
+
+    void setSource(const QUrl &source)
+    {
+        qDebug() << "PLAYER: setSource(" << source.toString() << ")";
+
+        {
+            std::lock_guard lock(decoderMutex);
+            preWarmedDecoder.reset();
+        }
+        if (preWarmThread.joinable()) {
+            preWarmThread.request_stop();
+            preWarmThread.join();
         }
 
-        decodeThread = std::jthread([this](std::stop_token st) {
-            decoder->decodeLoop(st);
+        if (decodeStopSource.stop_possible()) {
+            decodeStopSource.request_stop();
+        }
+        {
+            std::unique_lock lock(decoderMutex);
+            decoderCv.wait(lock, [this]() {
+                return !decodeLoopActive;
+            });
+            activeDecoder.reset();
+        }
 
-            if (!st.stop_requested()) {
-                QMetaObject::invokeMethod(
-                    q,
-                    [this]() {
-                        if (!nextSource.isEmpty()) {
-                            QUrl url = nextSource;
-                            nextSource.clear();
-                            Q_EMIT q->nextSourceChanged();
-                            transitionToNextTrack(url);
-                        } else {
-                            setStatus(MediaStatus::EndOfMedia);
-                            setPlaybackState(PlaybackState::StoppedState);
-                        }
-                    },
-                    Qt::QueuedConnection);
-            }
+        if (audioOutput) {
+            audioOutput->stop();
+            audioOutput->reset();
+        }
+        audioQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(audioBuffer));
+        fftQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(fftBuffer));
+        audioOutput->setQueue(audioQueue.get());
+        fftProcessor->setQueue(fftQueue.get());
+        fftProcessor->reset();
+
+        fftThread = std::jthread([this](std::stop_token st) {
+            fftProcessor->processLoop(st);
         });
 
-        if (!seamless) {
-            fftThread = std::jthread([this](std::stop_token st) {
-                fftProcessor->processLoop(st);
-            });
+        currentSource = source;
+        currentPosition = 0;
+        currentDuration = 0;
+        nextSource.clear();
+
+        Q_EMIT q->sourceChanged();
+        Q_EMIT q->nextSourceChanged();
+
+        if (source.isEmpty()) {
+            setStatus(MediaStatus::NoMedia);
+            setPlaybackState(PlaybackState::StoppedState);
+            return;
         }
+
+        setError(Error::NoError);
+        setStatus(MediaStatus::LoadingMedia);
+
+        const bool isLocal = source.isLocalFile();
+        currentIsLocal = isLocal;
+        currentSeekable = isLocal;
+        Q_EMIT q->seekableChanged(currentSeekable);
+
+        auto decoder = createDecoder(source, false);
+        if (!decoder) {
+            setError(Error::FormatError);
+            setStatus(MediaStatus::InvalidMedia);
+            return;
+        }
+
+        {
+            std::lock_guard lock(decoderMutex);
+            activeDecoder = std::move(decoder);
+        }
+
+        decodeStopSource = std::stop_source{};
+        decoderCv.notify_one();
 
         setPlaybackState(PlaybackState::PlayingState);
     }
 
+    void setNextSource(const QUrl &next)
+    {
+        nextSource = next;
+        Q_EMIT q->nextSourceChanged();
+
+        {
+            std::lock_guard lock(decoderMutex);
+            preWarmedDecoder.reset();
+        }
+        if (preWarmThread.joinable()) {
+            preWarmThread.request_stop();
+            preWarmThread.join();
+        }
+
+        if (next.isEmpty() || !next.isLocalFile()) {
+            return;
+        }
+
+        preWarmThread = std::jthread([this, next](std::stop_token st) {
+            auto decoder = createDecoder(next, true);
+            if (st.stop_requested()) {
+                return;
+            }
+            if (decoder) {
+                std::lock_guard lock(decoderMutex);
+                if (!st.stop_requested()) {
+                    preWarmedDecoder = std::move(decoder);
+                }
+            }
+        });
+    }
+
     void stopPipeline()
     {
-        qDebug() << "PLAYER: stopPipeline() begin teardown";
+        qDebug() << "PLAYER: stopPipeline() full teardown";
 
         if (decodeStopSource.stop_possible()) {
-            qDebug() << "PLAYER: requesting decode stop";
             decodeStopSource.request_stop();
         }
-        if (fftStopSource.stop_possible()) {
-            qDebug() << "PLAYER: requesting FFT stop";
-            fftStopSource.request_stop();
+        decodeThread.request_stop();
+
+        fftThread.request_stop();
+
+        if (preWarmThread.joinable()) {
+            preWarmThread.request_stop();
         }
 
-        qDebug() << "PLAYER: joining decode thread...";
-        decodeThread = std::jthread{};
-        qDebug() << "PLAYER: joining FFT thread...";
-        fftThread = std::jthread{};
+        decoderCv.notify_all();
+
+        if (decodeThread.joinable()) {
+            decodeThread.join();
+        }
+        if (fftThread.joinable()) {
+            fftThread.join();
+        }
+        if (preWarmThread.joinable()) {
+            preWarmThread.join();
+        }
+
+        {
+            std::lock_guard lock(decoderMutex);
+            activeDecoder.reset();
+            preWarmedDecoder.reset();
+            decodeLoopActive = false;
+        }
 
         if (audioOutput) {
-            qDebug() << "PLAYER: stopping audio output...";
             audioOutput->stop();
             audioOutput->reset();
         }
 
-        qDebug() << "PLAYER: destroying decoder...";
-        decoder.reset();
-
         if (radioStream) {
-            qDebug() << "PLAYER: stopping radio stream...";
             radioStream->stop();
             radioStream.reset();
         }
 
         qDebug() << "PLAYER: stopPipeline() teardown complete";
-    }
-
-    void stopDecodeOnly()
-    {
-        qDebug() << "PLAYER: stopDecodeOnly() stopping decode side only";
-
-        if (decodeStopSource.stop_possible()) {
-            decodeStopSource.request_stop();
-        }
-        decodeThread = std::jthread{};
-        decoder.reset();
-
-        qDebug() << "PLAYER: stopDecodeOnly() decode side stopped";
-    }
-
-    void transitionToNextTrack(const QUrl &source)
-    {
-        qDebug() << "PLAYER: transitionToNextTrack(" << source.toString() << ")";
-        stopDecodeOnly();
-        startTrack(source, true);
-        Q_EMIT q->trackChanged();
-        qDebug() << "PLAYER: seamless transition complete";
     }
 
     void play()
@@ -320,7 +421,43 @@ public:
 
     void stop()
     {
-        stopPipeline();
+        qDebug() << "PLAYER: stop()";
+
+        {
+            std::lock_guard lock(decoderMutex);
+            preWarmedDecoder.reset();
+        }
+        if (preWarmThread.joinable()) {
+            preWarmThread.request_stop();
+            preWarmThread.join();
+        }
+
+        if (decodeStopSource.stop_possible()) {
+            decodeStopSource.request_stop();
+        }
+        {
+            std::unique_lock lock(decoderMutex);
+            decoderCv.wait(lock, [this]() {
+                return !decodeLoopActive;
+            });
+            activeDecoder.reset();
+        }
+
+        if (radioStream) {
+            radioStream->stop();
+            radioStream.reset();
+        }
+
+        if (audioOutput) {
+            audioOutput->stop();
+            audioOutput->reset();
+        }
+
+        if (fftThread.joinable()) {
+            fftThread.request_stop();
+            fftThread.join();
+        }
+
         setPlaybackState(PlaybackState::StoppedState);
     }
 
@@ -478,9 +615,14 @@ public:
             posMs = std::min(posMs, currentDuration);
         }
         currentPosition = posMs;
-        if (decoder) {
-            decoder->requestSeek(posMs);
+
+        {
+            std::lock_guard lock(decoderMutex);
+            if (activeDecoder) {
+                activeDecoder->requestSeek(posMs);
+            }
         }
+
         if (audioOutput) {
             audioOutput->setPositionOffset(posMs);
         }
@@ -496,13 +638,19 @@ public:
 
     std::unique_ptr<DragonAudioOutput> audioOutput;
     std::unique_ptr<DragonFftProcessor> fftProcessor;
-    std::unique_ptr<DragonDecoder> decoder;
     std::unique_ptr<DragonRadioStream> radioStream;
 
     std::jthread decodeThread;
-    std::jthread fftThread;
     std::stop_source decodeStopSource;
-    std::stop_source fftStopSource;
+    std::mutex decoderMutex;
+    std::condition_variable decoderCv;
+    bool decodeLoopActive = false;
+    std::unique_ptr<DragonDecoder> activeDecoder;
+    std::unique_ptr<DragonDecoder> preWarmedDecoder;
+
+    std::jthread preWarmThread;
+
+    std::jthread fftThread;
 
     QUrl currentSource;
     QUrl nextSource;
