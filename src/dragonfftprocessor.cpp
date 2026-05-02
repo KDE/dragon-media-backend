@@ -1,0 +1,188 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ */
+
+#include <dragonsdl/dragonfftprocessor.h>
+
+#include <LockFreeSpscQueue.h>
+#include <kissfft.hh>
+
+#include <algorithm>
+#include <array>
+#include <cassert>
+#include <cmath>
+#include <complex>
+#include <numbers>
+#include <ranges>
+#include <thread>
+
+using namespace std::chrono_literals;
+
+DragonFftProcessor::DragonFftProcessor()
+    : m_fft(std::make_unique<kissfft<float>>(FFT_SIZE / 2, false))
+    , m_inputWindow{}
+    , m_prevBarFrequencies{}
+{
+    m_prevBarFrequencies.fill(-80.0f);
+}
+
+DragonFftProcessor::~DragonFftProcessor() = default;
+
+void DragonFftProcessor::setQueue(LockFreeSpscQueue<float> *queue)
+{
+    m_fftQueue = queue;
+}
+
+void DragonFftProcessor::setSampleRate(int sampleRate)
+{
+    m_sampleRate = sampleRate;
+}
+
+void DragonFftProcessor::reset()
+{
+    m_prevBarFrequencies.fill(-80.0f);
+}
+
+void DragonFftProcessor::transformReal(std::span<const float, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output)
+{
+    m_fft->transform_real(input.data(), output.data());
+}
+
+void DragonFftProcessor::setFrameCallback(FrameCallback cb)
+{
+    m_frameCallback = std::move(cb);
+}
+
+DragonFftFrame DragonFftProcessor::takeLatestFrame()
+{
+    std::lock_guard lock(m_frameMutex);
+    DragonFftFrame result = std::move(m_latestFrame);
+    m_latestFrame = {};
+    return result;
+}
+
+void DragonFftProcessor::processLoop(std::stop_token st)
+{
+    while (!st.stop_requested()) {
+        if (!m_fftQueue || m_fftQueue->get_num_items_ready() < FFT_SIZE) {
+            std::this_thread::sleep_for(8ms);
+            continue;
+        }
+
+        auto scope = m_fftQueue->prepare_read(FFT_SIZE);
+        assert(scope.get_items_read() == FFT_SIZE);
+
+        auto block1 = scope.get_block1();
+        auto block2 = scope.get_block2();
+        std::copy(block1.begin(), block1.end(), m_inputWindow.begin());
+        std::copy(block2.begin(), block2.end(), m_inputWindow.begin() + block1.size());
+
+        if (st.stop_requested()) {
+            break;
+        }
+
+        applyHannWindow(m_inputWindow);
+
+        std::array<std::complex<float>, FFT_SIZE / 2> fftOut;
+        transformReal(m_inputWindow, fftOut);
+
+        const float binToFreq = static_cast<float>(m_sampleRate) / static_cast<float>(FFT_SIZE);
+
+        auto getMag = [&](int idx) -> float {
+            if (idx < 0 || idx >= static_cast<int>(fftOut.size())) {
+                return 0.0f;
+            }
+            float mag;
+            if (idx == 0) {
+                mag = std::abs(fftOut[0].real()) / static_cast<float>(FFT_SIZE);
+            } else {
+                mag = std::abs(fftOut[static_cast<size_t>(idx)]) / static_cast<float>(FFT_SIZE);
+            }
+
+            const float freq = static_cast<float>(idx) * binToFreq;
+            const float tilt = std::sqrt(std::max(freq, MIN_FREQ) / MIN_FREQ);
+            return mag * tilt;
+        };
+
+        const float melMin = hzToMel(MIN_FREQ);
+        const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate) / 2.0f));
+
+        auto computeBin = [&](float t0, float t1) -> float {
+            const float freq0 = melToHz(melMin + t0 * (melMax - melMin));
+            const float freq1 = melToHz(melMin + t1 * (melMax - melMin));
+
+            const float binIdx0 = freq0 / binToFreq;
+            const float binIdx1 = freq1 / binToFreq;
+
+            const int startBin = static_cast<int>(std::floor(binIdx0));
+            const int endBin = static_cast<int>(std::ceil(binIdx1));
+
+            float maxMag = 0.0f;
+            if (endBin <= startBin + 1) {
+                const float frac = binIdx0 - static_cast<float>(startBin);
+                maxMag = std::lerp(getMag(startBin), getMag(startBin + 1), frac);
+            } else {
+                for (int i = startBin; i < std::min(endBin, static_cast<int>(fftOut.size())); ++i) {
+                    maxMag = std::max(maxMag, getMag(i));
+                }
+            }
+
+            return 20.0f * std::log10(std::max(maxMag, 1e-6f));
+        };
+
+        std::array<float, NUM_LOG_BINS> logBins;
+        for (int i = 0; i < NUM_LOG_BINS; ++i) {
+            const float t0 = static_cast<float>(i) / static_cast<float>(NUM_LOG_BINS);
+            const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_LOG_BINS);
+            logBins[static_cast<size_t>(i)] = computeBin(t0, t1);
+        }
+
+        std::array<float, NUM_BAR_BINS> barBins;
+        for (int i = 0; i < NUM_BAR_BINS; ++i) {
+            const float t0 = static_cast<float>(i) / static_cast<float>(NUM_BAR_BINS);
+            const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_BAR_BINS);
+            barBins[static_cast<size_t>(i)] = computeBin(t0, t1);
+        }
+
+        constexpr float decayRate = 1.5f;
+        for (int i = 0; i < NUM_BAR_BINS; ++i) {
+            const auto idx = static_cast<size_t>(i);
+            m_prevBarFrequencies[idx] = std::max(barBins[idx], m_prevBarFrequencies[idx] - decayRate);
+            barBins[idx] = m_prevBarFrequencies[idx];
+        }
+
+        DragonFftFrame frame;
+        frame.frequenciesDb.assign(logBins.begin(), logBins.end());
+        frame.barData.assign(barBins.begin(), barBins.end());
+        frame.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
+
+        {
+            std::lock_guard lock(m_frameMutex);
+            m_latestFrame = frame;
+        }
+
+        if (m_frameCallback) {
+            m_frameCallback(frame);
+        }
+    }
+}
+
+void DragonFftProcessor::applyHannWindow(std::span<float> data)
+{
+    const float size = static_cast<float>(data.size());
+    for (auto [i, val] : std::views::enumerate(data)) {
+        const float window = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / (size - 1.0f)));
+        val *= window;
+    }
+}
+
+constexpr float DragonFftProcessor::hzToMel(float f)
+{
+    return 2595.0f * std::log10(1.0f + f / 700.0f);
+}
+
+constexpr float DragonFftProcessor::melToHz(float m)
+{
+    return 700.0f * (std::pow(10.0f, m / 2595.0f) - 1.0f);
+}

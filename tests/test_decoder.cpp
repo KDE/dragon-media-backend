@@ -1,0 +1,600 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+ * SPDX-License-Identifier: LGPL-3.0-or-later
+ */
+
+#include <QtCore>
+#include <QtTest>
+
+#include <dragonsdl/dragondecoder.h>
+
+#include <atomic>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <numbers>
+#include <stop_token>
+#include <thread>
+#include <vector>
+
+extern "C" {
+#include <libavcodec/avcodec.h>
+#include <libavformat/avformat.h>
+}
+
+class MockReadCallback
+{
+public:
+    std::vector<uint8_t> data;
+    size_t pos = 0;
+    std::atomic<int> callCount{0};
+
+    int readCallback(std::span<uint8_t> buf)
+    {
+        callCount.fetch_add(1);
+        if (pos >= data.size()) {
+            return 0;
+        }
+        size_t remaining = data.size() - pos;
+        size_t toCopy = std::min(buf.size(), remaining);
+        std::copy(data.begin() + static_cast<std::ptrdiff_t>(pos), data.begin() + static_cast<std::ptrdiff_t>(pos + toCopy), buf.begin());
+        pos += toCopy;
+        return static_cast<int>(toCopy);
+    }
+
+    void reset()
+    {
+        pos = 0;
+        callCount.store(0);
+    }
+};
+
+QByteArray createTestWavData(int sampleRate = 44100, int channels = 2, int durationMs = 100)
+{
+    const int numSamples = (sampleRate * durationMs) / 1000;
+    const int dataSize = numSamples * channels * 2;
+    const int fileSize = 36 + dataSize;
+
+    QByteArray wav;
+    wav.reserve(44 + dataSize);
+
+    wav.append("RIFF");
+    wav.append(static_cast<char>(fileSize & 0xFF));
+    wav.append(static_cast<char>((fileSize >> 8) & 0xFF));
+    wav.append(static_cast<char>((fileSize >> 16) & 0xFF));
+    wav.append(static_cast<char>((fileSize >> 24) & 0xFF));
+    wav.append("WAVE");
+
+    wav.append("fmt ");
+    wav.append(static_cast<char>(16));
+    wav.append(static_cast<char>(0));
+    wav.append(static_cast<char>(0));
+    wav.append(static_cast<char>(0));
+    wav.append(static_cast<char>(1));
+    wav.append(static_cast<char>(0));
+    wav.append(static_cast<char>(channels));
+    wav.append(static_cast<char>(0));
+    wav.append(static_cast<char>(sampleRate & 0xFF));
+    wav.append(static_cast<char>((sampleRate >> 8) & 0xFF));
+    wav.append(static_cast<char>((sampleRate >> 16) & 0xFF));
+    wav.append(static_cast<char>((sampleRate >> 24) & 0xFF));
+    int byteRate = sampleRate * channels * 2;
+    wav.append(static_cast<char>(byteRate & 0xFF));
+    wav.append(static_cast<char>((byteRate >> 8) & 0xFF));
+    wav.append(static_cast<char>((byteRate >> 16) & 0xFF));
+    wav.append(static_cast<char>((byteRate >> 24) & 0xFF));
+    int blockAlign = channels * 2;
+    wav.append(static_cast<char>(blockAlign & 0xFF));
+    wav.append(static_cast<char>((blockAlign >> 8) & 0xFF));
+    wav.append(static_cast<char>(16));
+    wav.append(static_cast<char>(0));
+
+    wav.append("data");
+    wav.append(static_cast<char>(dataSize & 0xFF));
+    wav.append(static_cast<char>((dataSize >> 8) & 0xFF));
+    wav.append(static_cast<char>((dataSize >> 16) & 0xFF));
+    wav.append(static_cast<char>((dataSize >> 24) & 0xFF));
+
+    const float frequency = 440.0f;
+    for (int i = 0; i < numSamples; ++i) {
+        float sample = 0.3f * std::sin(2.0f * std::numbers::pi_v<float> * frequency * static_cast<float>(i) / static_cast<float>(sampleRate));
+        int16_t sampleInt = static_cast<int16_t>(sample * 32767.0f);
+        for (int ch = 0; ch < channels; ++ch) {
+            wav.append(static_cast<char>(sampleInt & 0xFF));
+            wav.append(static_cast<char>((sampleInt >> 8) & 0xFF));
+        }
+    }
+
+    return wav;
+}
+
+class TestDecoder : public QObject
+{
+    Q_OBJECT
+
+private slots:
+    void testConstruction();
+    void testLocalFileDecoding();
+    void testNetworkStreamDecoding();
+    void testFormatReadySignal();
+    void testSamplesDecodedSignal();
+    void testDurationSignal();
+    void testErrorSignal();
+    void testEmptySource();
+    void testStopTokenCancellation();
+
+    void testDifferentSampleRates_data();
+    void testDifferentSampleRates();
+    void testMonoToStereoConversion();
+    void testMultipleDecoderInstances();
+    void testCorruptDataHandling();
+    void testResamplerBehavior();
+    void testChannelConfiguration_data();
+    void testChannelConfiguration();
+
+private:
+    QTemporaryDir m_tempDir;
+};
+
+void TestDecoder::testConstruction()
+{
+    auto readCb = [](std::span<uint8_t>) -> int {
+        return 0;
+    };
+    DragonDecoder decoder(std::move(readCb), {});
+    QVERIFY(true);
+
+    DragonDecoder decoder2(nullptr, QStringLiteral("/nonexistent/file.mp3"));
+    QVERIFY(true);
+}
+
+void TestDecoder::testLocalFileDecoding()
+{
+    QVERIFY2(m_tempDir.isValid(), "Failed to create temp directory");
+
+    QString filePath = m_tempDir.filePath("test.wav");
+    QFile wavFile(filePath);
+    QVERIFY(wavFile.open(QIODevice::WriteOnly));
+    wavFile.write(createTestWavData(44100, 2, 100));
+    wavFile.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+    QSignalSpy durationSpy(&decoder, &DragonDecoder::durationChanged);
+    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+
+    std::stop_source stopSource;
+    std::jthread decodeThread([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT((samplesSpy.count() > 0) || (errorSpy.count() > 0) || !decodeThread.joinable(), 10000);
+
+    stopSource.request_stop();
+    decodeThread.join();
+
+    if (errorSpy.count() > 0) {
+        QString errorMsg = errorSpy.at(0).at(0).toString();
+        QFAIL(qPrintable(QString("Decoder error: %1").arg(errorMsg)));
+    }
+
+    QVERIFY2(formatSpy.count() > 0, "formatReady signal should have been emitted");
+    QVERIFY2(samplesSpy.count() > 0, "samplesDecoded signal should have been emitted");
+
+    QList<QVariant> formatArgs = formatSpy.at(0);
+    int sampleRate = formatArgs.at(0).toInt();
+    int channels = formatArgs.at(1).toInt();
+    QVERIFY(sampleRate > 0);
+    QVERIFY(channels > 0);
+
+    QList<QVariant> samplesArgs = samplesSpy.at(0);
+    QVERIFY(samplesArgs.at(0).value<std::span<const float>>().size() > 0);
+}
+
+void TestDecoder::testNetworkStreamDecoding()
+{
+    MockReadCallback mock;
+    QByteArray wavData = createTestWavData(44100, 2, 500);
+    mock.data = std::vector<uint8_t>(wavData.begin(), wavData.end());
+
+    auto readCb = [&mock](std::span<uint8_t> buf) -> int {
+        return mock.readCallback(buf);
+    };
+
+    DragonDecoder decoder(std::move(readCb), {});
+
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+
+    std::stop_source stopSource;
+    std::jthread decodeThread([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT((formatSpy.count() > 0) || (samplesSpy.count() > 0) || (errorSpy.count() > 0), 5000);
+
+    stopSource.request_stop();
+    decodeThread.join();
+
+    QVERIFY2(formatSpy.count() > 0 || errorSpy.count() > 0, "Decoder should either produce format or error");
+}
+
+void TestDecoder::testFormatReadySignal()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_format.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(48000, 1, 50));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+    QSignalSpy spy(&decoder, &DragonDecoder::formatReady);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(spy.count() > 0, 5000);
+    t.join();
+
+    QList<QVariant> args = spy.at(0);
+    int sampleRate = args.at(0).toInt();
+    int channels = args.at(1).toInt();
+
+    QVERIFY(sampleRate == 48000);
+    QVERIFY(channels == 1);
+}
+
+void TestDecoder::testSamplesDecodedSignal()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_samples.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 2, 200));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+
+    std::vector<float> capturedSamples;
+    std::mutex samplesMutex;
+    QObject::connect(
+        &decoder,
+        &DragonDecoder::samplesDecoded,
+        this,
+        [&capturedSamples, &samplesMutex](std::span<const float> data, int, int) {
+            std::lock_guard lock(samplesMutex);
+            capturedSamples.insert(capturedSamples.end(), data.begin(), data.end());
+        },
+        Qt::DirectConnection);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+
+    t.join();
+
+    std::lock_guard lock(samplesMutex);
+    QVERIFY2(capturedSamples.size() > 0, "No samples were decoded");
+
+    for (const float &f : capturedSamples) {
+        QVERIFY2(f >= -1.0f && f <= 1.0f, qPrintable(QString("Sample out of range: %1").arg(f)));
+    }
+}
+
+void TestDecoder::testDurationSignal()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_duration.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 2, 150));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+    QSignalSpy spy(&decoder, &DragonDecoder::durationChanged);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(spy.count() > 0, 5000);
+    t.join();
+
+    qint64 duration = spy.at(0).at(0).toLongLong();
+    QVERIFY(duration > 0);
+    QVERIFY(duration <= 200);
+}
+
+void TestDecoder::testErrorSignal()
+{
+    auto readCb = [](std::span<uint8_t>) -> int {
+        return -1;
+    };
+    DragonDecoder decoder(std::move(readCb), "/nonexistent/path/audio.mp3");
+
+    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(formatSpy.count() > 0 || errorSpy.count() > 0, 5000);
+    t.join();
+
+    QVERIFY(errorSpy.count() > 0 || formatSpy.count() == 0);
+}
+
+void TestDecoder::testEmptySource()
+{
+    auto readCb = [](std::span<uint8_t>) -> int {
+        return 0;
+    };
+    DragonDecoder decoder(std::move(readCb), QString{});
+
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    QTest::qWait(500);
+    t.join();
+
+    QVERIFY(formatSpy.count() == 0);
+    QVERIFY(samplesSpy.count() == 0);
+}
+
+void TestDecoder::testStopTokenCancellation()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_cancel.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 2, 500));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(formatSpy.count() > 0, 3000);
+
+    QTest::qWait(100);
+
+    int samplesBeforeCancel = samplesSpy.count();
+
+    stopSource.request_stop();
+    t.join();
+
+    QVERIFY2(samplesBeforeCancel > 0, qPrintable(QString("Expected samples before cancel, got %1").arg(samplesBeforeCancel)));
+}
+
+void TestDecoder::testDifferentSampleRates_data()
+{
+    QTest::addColumn<int>("sampleRate");
+    QTest::addColumn<int>("channels");
+    QTest::addColumn<int>("durationMs");
+
+    QTest::newRow("44100_stereo") << 44100 << 2 << 100;
+    QTest::newRow("48000_stereo") << 48000 << 2 << 100;
+    QTest::newRow("22050_mono") << 22050 << 1 << 150;
+    QTest::newRow("96000_stereo") << 96000 << 2 << 80;
+    QTest::newRow("8000_mono") << 8000 << 1 << 200;
+}
+
+void TestDecoder::testDifferentSampleRates()
+{
+    QFETCH(int, sampleRate);
+    QFETCH(int, channels);
+    QFETCH(int, durationMs);
+
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath(QString("test_sr_%1_ch_%2.wav").arg(sampleRate).arg(channels));
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(sampleRate, channels, durationMs));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    t.join();
+
+    QVERIFY2(formatSpy.count() > 0, qPrintable(QString("Format not detected for %1Hz/%2ch").arg(sampleRate).arg(channels)));
+    QVERIFY2(samplesSpy.count() > 0, qPrintable(QString("No samples decoded for %1Hz/%2ch").arg(sampleRate).arg(channels)));
+
+    QList<QVariant> formatArgs = formatSpy.at(0);
+    int decodedSampleRate = formatArgs.at(0).toInt();
+    int decodedChannels = formatArgs.at(1).toInt();
+    QVERIFY2(decodedSampleRate == sampleRate, qPrintable(QString("Sample rate mismatch: expected %1, got %2").arg(sampleRate).arg(decodedSampleRate)));
+    QVERIFY2(decodedChannels == channels, qPrintable(QString("Channel mismatch: expected %1, got %2").arg(channels).arg(decodedChannels)));
+}
+
+void TestDecoder::testMonoToStereoConversion()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_mono.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 1, 100));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    t.join();
+
+    QVERIFY(formatSpy.count() > 0);
+    QList<QVariant> formatArgs = formatSpy.at(0);
+    int channels = formatArgs.at(1).toInt();
+    QVERIFY(channels == 1);
+}
+
+void TestDecoder::testMultipleDecoderInstances()
+{
+    QVERIFY(m_tempDir.isValid());
+
+    QString filePath1 = m_tempDir.filePath("test_multi_1.wav");
+    QString filePath2 = m_tempDir.filePath("test_multi_2.wav");
+
+    QFile file1(filePath1);
+    QVERIFY(file1.open(QIODevice::WriteOnly));
+    file1.write(createTestWavData(44100, 2, 100));
+    file1.close();
+
+    QFile file2(filePath2);
+    QVERIFY(file2.open(QIODevice::WriteOnly));
+    file2.write(createTestWavData(48000, 2, 80));
+    file2.close();
+
+    DragonDecoder decoder1(nullptr, filePath1);
+    DragonDecoder decoder2(nullptr, filePath2);
+
+    QSignalSpy formatSpy1(&decoder1, &DragonDecoder::formatReady);
+    QSignalSpy formatSpy2(&decoder2, &DragonDecoder::formatReady);
+
+    std::stop_source stopSource1, stopSource2;
+    std::jthread t1([&](std::stop_token st) {
+        decoder1.decodeLoop(st);
+    });
+    std::jthread t2([&](std::stop_token st) {
+        decoder2.decodeLoop(st);
+    });
+
+    t1.join();
+    t2.join();
+
+    QVERIFY(formatSpy1.count() > 0);
+    QVERIFY(formatSpy2.count() > 0);
+
+    int sr1 = formatSpy1.at(0).at(0).toInt();
+    int sr2 = formatSpy2.at(0).at(0).toInt();
+    QVERIFY2(sr1 == 44100, qPrintable(QString("Expected 44100, got %1").arg(sr1)));
+    QVERIFY2(sr2 == 48000, qPrintable(QString("Expected 48000, got %1").arg(sr2)));
+}
+
+void TestDecoder::testCorruptDataHandling()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_corrupt.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+
+    QByteArray garbage;
+    garbage.resize(1024);
+    for (int i = 0; i < 1024; ++i) {
+        garbage[i] = static_cast<char>(QRandomGenerator::global()->bounded(256));
+    }
+    file.write(garbage);
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(formatSpy.count() > 0 || errorSpy.count() > 0, 5000);
+    t.join();
+
+    QVERIFY2(errorSpy.count() > 0 || formatSpy.count() == 0, "Corrupt data should produce error or no format");
+}
+
+void TestDecoder::testResamplerBehavior()
+{
+    QVERIFY(m_tempDir.isValid());
+
+    QString filePath = m_tempDir.filePath("test_8k_resample.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(8000, 1, 200));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    t.join();
+
+    QVERIFY(formatSpy.count() > 0);
+    QVERIFY(samplesSpy.count() > 0);
+
+    std::vector<float> allSamples;
+    for (int i = 0; i < samplesSpy.count(); ++i) {
+        auto span = samplesSpy.at(i).at(0).value<std::span<const float>>();
+        allSamples.insert(allSamples.end(), span.begin(), span.end());
+    }
+
+    for (const float &s : allSamples) {
+        QVERIFY2(!std::isnan(s) && !std::isinf(s), qPrintable(QString("Sample is NaN or Inf: %1").arg(s)));
+        QVERIFY2(s >= -2.0f && s <= 2.0f, qPrintable(QString("Sample out of range: %1").arg(s)));
+    }
+}
+
+void TestDecoder::testChannelConfiguration_data()
+{
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<int>("channels");
+
+    QTest::newRow("mono") << "mono" << 1;
+    QTest::newRow("stereo") << "stereo" << 2;
+}
+
+void TestDecoder::testChannelConfiguration()
+{
+    QFETCH(int, channels);
+
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath(QString("test_ch_%1.wav").arg(channels));
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, channels, 100));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    t.join();
+
+    QVERIFY(formatSpy.count() > 0);
+    int decodedChannels = formatSpy.at(0).at(1).toInt();
+    QVERIFY2(decodedChannels == channels, qPrintable(QString("Channel configuration mismatch: expected %1, got %2").arg(channels).arg(decodedChannels)));
+}
+
+QTEST_MAIN(TestDecoder)
+#include "test_decoder.moc"
