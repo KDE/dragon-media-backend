@@ -36,6 +36,7 @@ private slots:
     void testAudioDataProcessing();
     void testPositionTrackingWithData();
     void testQueueBehavior();
+    void testStartWhileAlreadyStarted();
 
 private:
     void fillQueue(LockFreeSpscQueue<float> *queue, const std::vector<float> &data);
@@ -276,16 +277,34 @@ void TestAudioOutput::testQueueBehavior()
     QVERIFY(true);
 
     DragonAudioOutput output2;
-    output2.start(44100, 2);
 
     std::vector<float> buffer2(65536);
     LockFreeSpscQueue<float> queue2{std::span{buffer2}};
     output2.setQueue(&queue2);
+    output2.start(44100, 2);
 
     fillQueue(&queue2, std::vector<float>(4096, 0.5f));
     QTest::qWait(100);
 
     output2.stop();
+}
+
+void TestAudioOutput::testStartWhileAlreadyStarted()
+{
+    DragonAudioOutput output;
+
+    std::vector<float> buffer(65536);
+    LockFreeSpscQueue<float> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    QVERIFY(output.isDeviceOpen());
+
+    output.start(48000, 2);
+    QVERIFY(output.isDeviceOpen());
+    QVERIFY(output.hasFormat(48000, 2));
+
+    output.stop();
 }
 
 void TestAudioOutput::fillQueue(LockFreeSpscQueue<float> *queue, const std::vector<float> &data)

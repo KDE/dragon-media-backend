@@ -48,13 +48,10 @@ public:
     [[nodiscard]] bool isDeviceOpen() const;
 
     static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
-
     [[nodiscard]] float volume() const;
     void setVolume(float linearGain);
-
     [[nodiscard]] bool muted() const;
     void setMuted(bool muted);
-
     void setStreamName(const QString &name);
 
     [[nodiscard]] int64_t positionMs() const;
@@ -68,12 +65,16 @@ Q_SIGNALS:
     void volumeChanged();
 
 private:
-    std::atomic<LockFreeSpscQueue<float> *> m_audioQueue{nullptr};
-    std::atomic<SDL_AudioStream *> m_stream{nullptr};
-    std::atomic<SDL_AudioDeviceID> m_deviceId{0};
+    struct AudioSession {
+        SDL_AudioStream *stream = nullptr;
+        int channels = 2;
+        int sampleRate = 44100;
+        SDL_AudioDeviceID deviceId = 0;
+    };
 
-    std::atomic<int> m_channels{2};
-    std::atomic<int> m_sampleRate{44100};
+    std::atomic<AudioSession *> m_session{nullptr};
+
+    std::atomic<LockFreeSpscQueue<float> *> m_audioQueue{nullptr};
 
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};
@@ -81,6 +82,5 @@ private:
     float m_volume = 1.0f;
     bool m_muted = false;
 
-    std::atomic<bool> m_shuttingDown{false};
     std::atomic<int> m_activeCallbacks{0};
 };

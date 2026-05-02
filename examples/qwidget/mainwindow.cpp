@@ -11,11 +11,13 @@
 #include <QApplication>
 #include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenuBar>
 #include <QPushButton>
+#include <QSettings>
 #include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
@@ -175,19 +177,26 @@ void MainWindow::connectPlayer()
 
 void MainWindow::openFile()
 {
+    QSettings settings;
+    const QString lastDir = settings.value(QStringLiteral("lastOpenDir"), QDir::homePath()).toString();
+
     const QString file =
-        QFileDialog::getOpenFileName(this, tr("Open Audio File"), QDir::homePath(), tr("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
+        QFileDialog::getOpenFileName(this, tr("Open Audio File"), lastDir, tr("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
 
     if (!file.isEmpty()) {
         m_playlist->clear();
         m_playlist->addTrack(QUrl::fromLocalFile(file));
+        settings.setValue(QStringLiteral("lastOpenDir"), QFileInfo(file).absolutePath());
     }
 }
 
 void MainWindow::openMultipleFiles()
 {
+    QSettings settings;
+    const QString lastDir = settings.value(QStringLiteral("lastOpenDir"), QDir::homePath()).toString();
+
     const QStringList files =
-        QFileDialog::getOpenFileNames(this, tr("Open Audio Files"), QDir::homePath(), tr("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
+        QFileDialog::getOpenFileNames(this, tr("Open Audio Files"), lastDir, tr("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
 
     if (!files.isEmpty()) {
         QList<QUrl> urls;
@@ -195,6 +204,7 @@ void MainWindow::openMultipleFiles()
             urls.append(QUrl::fromLocalFile(f));
         }
         m_playlist->addTracks(urls);
+        settings.setValue(QStringLiteral("lastOpenDir"), QFileInfo(files.first()).absolutePath());
     }
 }
 
