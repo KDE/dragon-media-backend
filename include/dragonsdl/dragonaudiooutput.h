@@ -68,16 +68,19 @@ Q_SIGNALS:
     void volumeChanged();
 
 private:
-    LockFreeSpscQueue<float> *m_audioQueue = nullptr;
-    SDL_AudioStream *m_stream = nullptr;
-    SDL_AudioDeviceID m_deviceId = 0;
+    std::atomic<LockFreeSpscQueue<float> *> m_audioQueue{nullptr};
+    std::atomic<SDL_AudioStream *> m_stream{nullptr};
+    std::atomic<SDL_AudioDeviceID> m_deviceId{0};
 
-    int m_channels = 2;
-    int m_sampleRate = 44100;
+    std::atomic<int> m_channels{2};
+    std::atomic<int> m_sampleRate{44100};
 
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};
 
     float m_volume = 1.0f;
     bool m_muted = false;
+
+    std::atomic<bool> m_shuttingDown{false};
+    std::atomic<int> m_activeCallbacks{0};
 };

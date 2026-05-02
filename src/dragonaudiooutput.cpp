@@ -11,6 +11,8 @@
 #include <QGuiApplication>
 #include <QIcon>
 
+#include <thread>
+
 using namespace Qt::StringLiterals;
 
 DragonAudioOutput::DragonAudioOutput(QObject *parent)
@@ -34,92 +36,116 @@ DragonAudioOutput::~DragonAudioOutput()
 
 void DragonAudioOutput::setQueue(LockFreeSpscQueue<float> *queue)
 {
-    m_audioQueue = queue;
+    m_audioQueue.store(queue, std::memory_order_release);
 }
 
 void DragonAudioOutput::start(int sampleRate, int channels)
 {
     qDebug() << "DragonAudioOutput::start" << sampleRate << channels;
 
-    m_channels = channels;
-    m_sampleRate = sampleRate;
-    m_totalSamplesWritten = 0;
+    m_channels.store(channels, std::memory_order_relaxed);
+    m_sampleRate.store(sampleRate, std::memory_order_relaxed);
+    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
 
     const SDL_AudioSpec spec = {SDL_AUDIO_F32, channels, sampleRate};
 
-    m_stream = SDL_CreateAudioStream(&spec, nullptr);
-    if (!m_stream) {
+    SDL_AudioStream *stream = SDL_CreateAudioStream(&spec, nullptr);
+    if (!stream) {
         qCritical() << "SDL_CreateAudioStream failed:" << SDL_GetError();
+        m_stream.store(nullptr, std::memory_order_release);
         emit errorOccurred(QString::fromUtf8(SDL_GetError()));
         return;
     }
+    m_stream.store(stream, std::memory_order_release);
 
-    m_deviceId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
-    if (m_deviceId == 0) {
+    SDL_AudioDeviceID deviceId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
+    if (deviceId == 0) {
         qCritical() << "SDL_OpenAudioDevice failed:" << SDL_GetError();
-        SDL_DestroyAudioStream(m_stream);
-        m_stream = nullptr;
+        SDL_DestroyAudioStream(stream);
+        m_stream.store(nullptr, std::memory_order_release);
+        m_deviceId.store(0, std::memory_order_release);
         emit errorOccurred(QString::fromUtf8(SDL_GetError()));
         return;
     }
+    m_deviceId.store(deviceId, std::memory_order_release);
 
-    if (!SDL_BindAudioStreams(m_deviceId, &m_stream, 1)) {
+    if (!SDL_BindAudioStreams(deviceId, &stream, 1)) {
         qCritical() << "SDL_BindAudioStreams failed:" << SDL_GetError();
-        SDL_CloseAudioDevice(m_deviceId);
-        m_deviceId = 0;
-        SDL_DestroyAudioStream(m_stream);
-        m_stream = nullptr;
+        SDL_CloseAudioDevice(deviceId);
+        m_deviceId.store(0, std::memory_order_release);
+        SDL_DestroyAudioStream(stream);
+        m_stream.store(nullptr, std::memory_order_release);
         emit errorOccurred(QString::fromUtf8(SDL_GetError()));
         return;
     }
 
-    SDL_SetAudioStreamGain(m_stream, m_muted ? 0.0f : m_volume);
+    SDL_SetAudioStreamGain(stream, m_muted ? 0.0f : m_volume);
 
     qDebug() << "AUDIO_OUT: registering get callback on stream";
-    if (!SDL_SetAudioStreamGetCallback(m_stream, &DragonAudioOutput::audioStreamCallback, this)) {
+    if (!SDL_SetAudioStreamGetCallback(stream, &DragonAudioOutput::audioStreamCallback, this)) {
         qCritical() << "AUDIO_OUT: SDL_SetAudioStreamGetCallback FAILED:" << SDL_GetError();
+        SDL_CloseAudioDevice(deviceId);
+        m_deviceId.store(0, std::memory_order_release);
+        SDL_DestroyAudioStream(stream);
+        m_stream.store(nullptr, std::memory_order_release);
         emit errorOccurred(QString::fromUtf8(SDL_GetError()));
     } else {
         qDebug() << "AUDIO_OUT: get callback registered successfully";
     }
 
-    SDL_ResumeAudioDevice(m_deviceId);
+    SDL_ResumeAudioDevice(deviceId);
+    m_shuttingDown.store(false, std::memory_order_release);
     qDebug() << "SDL audio device started";
 }
 
 void DragonAudioOutput::pause()
 {
-    if (m_deviceId != 0) {
-        SDL_PauseAudioDevice(m_deviceId);
+    if (auto id = m_deviceId.load(std::memory_order_acquire); id != 0) {
+        SDL_PauseAudioDevice(id);
     }
 }
 
 void DragonAudioOutput::resume()
 {
-    if (m_deviceId != 0) {
-        SDL_ResumeAudioDevice(m_deviceId);
+    if (auto id = m_deviceId.load(std::memory_order_acquire); id != 0) {
+        SDL_ResumeAudioDevice(id);
     }
 }
 
 void DragonAudioOutput::stop()
 {
-    qDebug() << "AUDIO_OUT: stop() pausing device=" << m_deviceId;
-    if (m_deviceId != 0) {
-        SDL_PauseAudioDevice(m_deviceId);
-        SDL_CloseAudioDevice(m_deviceId);
-        m_deviceId = 0;
+    qDebug() << "AUDIO_OUT: stop() pausing device=" << m_deviceId.load();
+
+    m_shuttingDown.store(true, std::memory_order_release);
+
+    if (auto id = m_deviceId.load(std::memory_order_acquire); id != 0) {
+        SDL_PauseAudioDevice(id);
+        SDL_CloseAudioDevice(id);
+        m_deviceId.store(0, std::memory_order_release);
     }
-    if (m_stream) {
+    if (auto stream = m_stream.load(std::memory_order_acquire)) {
         qDebug() << "AUDIO_OUT: stop() destroying stream";
-        SDL_DestroyAudioStream(m_stream);
-        m_stream = nullptr;
+        SDL_DestroyAudioStream(stream);
+        m_stream.store(nullptr, std::memory_order_release);
     }
+
+    int spinCount = 0;
+    while (m_activeCallbacks.load(std::memory_order_acquire) > 0) {
+        if (++spinCount > 100000) {
+            qWarning() << "AUDIO_OUT: timeout waiting for audio callbacks to finish";
+            break;
+        }
+        std::this_thread::yield();
+    }
+
+    m_audioQueue.store(nullptr, std::memory_order_release);
+
     qDebug() << "AUDIO_OUT: stop() complete";
 }
 
 void DragonAudioOutput::reset()
 {
-    m_totalSamplesWritten = 0;
+    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
     m_positionOffsetMs.store(0, std::memory_order_relaxed);
 }
 
@@ -131,7 +157,7 @@ void DragonAudioOutput::setPositionOffset(int64_t offsetMs)
 
 bool DragonAudioOutput::isDeviceOpen() const
 {
-    return m_deviceId != 0 && m_stream != nullptr;
+    return m_deviceId.load(std::memory_order_acquire) != 0 && m_stream.load(std::memory_order_acquire) != nullptr;
 }
 
 float DragonAudioOutput::volume() const
@@ -145,8 +171,8 @@ void DragonAudioOutput::setVolume(float linearGain)
         return;
     }
     m_volume = linearGain;
-    if (m_stream && !m_muted) {
-        SDL_SetAudioStreamGain(m_stream, linearGain);
+    if (auto stream = m_stream.load(std::memory_order_acquire); stream && !m_muted) {
+        SDL_SetAudioStreamGain(stream, linearGain);
     }
     emit volumeChanged();
 }
@@ -162,8 +188,8 @@ void DragonAudioOutput::setMuted(bool muted)
         return;
     }
     m_muted = muted;
-    if (m_stream) {
-        SDL_SetAudioStreamGain(m_stream, muted ? 0.0f : m_volume);
+    if (auto stream = m_stream.load(std::memory_order_acquire); stream) {
+        SDL_SetAudioStreamGain(stream, muted ? 0.0f : m_volume);
     }
     emit volumeChanged();
 }
@@ -176,17 +202,20 @@ void DragonAudioOutput::setStreamName(const QString &name)
 int64_t DragonAudioOutput::positionMs() const
 {
     int64_t written = m_totalSamplesWritten.load(std::memory_order_relaxed);
+    auto stream = m_stream.load(std::memory_order_acquire);
+    auto channels = m_channels.load(std::memory_order_relaxed);
+    auto sampleRate = m_sampleRate.load(std::memory_order_relaxed);
 
-    if (m_stream && m_channels > 0) {
-        const int bytesQueued = SDL_GetAudioStreamQueued(m_stream);
+    if (stream && channels > 0) {
+        const int bytesQueued = SDL_GetAudioStreamQueued(stream);
         if (bytesQueued > 0) {
             const int64_t samplesQueued = bytesQueued / static_cast<int>(sizeof(float));
             written = std::max(int64_t{0}, written - samplesQueued);
         }
     }
 
-    const int64_t frameCount = written / m_channels;
-    return (frameCount * 1000 / m_sampleRate) + m_positionOffsetMs.load(std::memory_order_relaxed);
+    const int64_t frameCount = written / channels;
+    return (frameCount * 1000 / sampleRate) + m_positionOffsetMs.load(std::memory_order_relaxed);
 }
 
 int64_t DragonAudioOutput::totalSamplesWritten() const
@@ -196,29 +225,51 @@ int64_t DragonAudioOutput::totalSamplesWritten() const
 
 bool DragonAudioOutput::hasFormat(int sampleRate, int channels) const
 {
-    return isDeviceOpen() && m_sampleRate == sampleRate && m_channels == channels;
+    return isDeviceOpen() && m_sampleRate.load(std::memory_order_relaxed) == sampleRate && m_channels.load(std::memory_order_relaxed) == channels;
 }
 
 void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int)
 {
     auto *self = static_cast<DragonAudioOutput *>(userdata);
-    if (!self || !self->m_audioQueue) {
-        qDebug() << "AUDIO_CB: no self or no queue";
+    if (!self) {
+        return;
+    }
+
+    self->m_activeCallbacks.fetch_add(1, std::memory_order_relaxed);
+    struct Guard {
+        std::atomic<int> *counter;
+        ~Guard()
+        {
+            counter->fetch_sub(1, std::memory_order_relaxed);
+        }
+    };
+    Guard guard{&self->m_activeCallbacks};
+
+    if (self->m_shuttingDown.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    if (stream != self->m_stream.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    auto *queue = self->m_audioQueue.load(std::memory_order_acquire);
+    if (!queue) {
         return;
     }
     if (additional_amount <= 0) {
         return;
     }
 
-    const size_t queueReady = self->m_audioQueue->get_num_items_ready();
+    const size_t queueReady = queue->get_num_items_ready();
 
-    const size_t floatsNeeded =
-        (static_cast<size_t>(additional_amount) / sizeof(float)) / static_cast<size_t>(self->m_channels) * static_cast<size_t>(self->m_channels);
+    auto channels = self->m_channels.load(std::memory_order_relaxed);
+    const size_t floatsNeeded = (static_cast<size_t>(additional_amount) / sizeof(float)) / static_cast<size_t>(channels) * static_cast<size_t>(channels);
     if (floatsNeeded == 0) {
         return;
     }
 
-    auto scope = self->m_audioQueue->prepare_read(floatsNeeded);
+    auto scope = queue->prepare_read(floatsNeeded);
     const size_t itemsRead = scope.get_items_read();
 
     if (itemsRead == 0) {
