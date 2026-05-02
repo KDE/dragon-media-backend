@@ -1,1 +1,4 @@
 /build*
+/.qtcreator
+/.idea
+/cmake-build*
