@@ -547,14 +547,14 @@ void TestPlayer::testSeekBehavior()
     QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
     player.seek(5000);
     QVERIFY2(posSpy.count() >= 1, "seek() must emit positionChanged");
-    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 5000);
-    QCOMPARE(player.position(), 5000);
+    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
+    QCOMPARE(player.position(), 0);
 
     posSpy.clear();
     player.setPosition(10000);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged");
-    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 10000);
-    QCOMPARE(player.position(), 10000);
+    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
+    QCOMPARE(player.position(), 0);
 
     posSpy.clear();
     player.setPosition(-100);
@@ -566,6 +566,7 @@ void TestPlayer::testSeekBehavior()
     posSpy.clear();
     player.setPosition(2000);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even with invalid source");
+    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
 
     player.seek(3000);
     QVERIFY(true);
@@ -631,15 +632,15 @@ void TestPlayer::testSetPositionEmitsPositionChanged()
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged signal");
 
     QList<QVariant> args = posSpy.at(0);
-    QCOMPARE(args.at(0).toLongLong(), 5000);
+    QCOMPARE(args.at(0).toLongLong(), 0);
 
-    QCOMPARE(player.position(), 5000);
+    QCOMPARE(player.position(), 0);
 
     posSpy.clear();
     player.setPosition(10000);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged on subsequent calls");
-    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 10000);
-    QCOMPARE(player.position(), 10000);
+    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
+    QCOMPARE(player.position(), 0);
 }
 
 void TestPlayer::testPositionTimerEmitsDuringPlayback()

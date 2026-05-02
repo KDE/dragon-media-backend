@@ -92,13 +92,14 @@ public:
                 lock.unlock();
 
                 decoder->decodeLoop(decodeStopSource.get_token());
+                const bool hadFatalError = decoder->hasFatalError();
 
                 lock.lock();
                 decodeLoopActive = false;
                 const bool wasStopped = decodeStopSource.stop_requested();
-                if (wasStopped) {
-                    activeDecoder.reset();
-                }
+
+                activeDecoder.reset();
+
                 lock.unlock();
                 decoderCv.notify_all();
 
@@ -106,6 +107,18 @@ public:
                     break;
 
                 if (wasStopped) {
+                    continue;
+                }
+
+                if (hadFatalError) {
+                    QMetaObject::invokeMethod(
+                        q,
+                        [this]() {
+                            setError(currentIsLocal ? Error::FormatError : Error::NetworkError);
+                            setStatus(MediaStatus::InvalidMedia);
+                            setPlaybackState(PlaybackState::StoppedState);
+                        },
+                        Qt::QueuedConnection);
                     continue;
                 }
 
@@ -184,6 +197,10 @@ public:
 
         auto decoder = std::make_unique<DragonDecoder>(std::move(readCb), isLocal ? source.toLocalFile() : QString{});
 
+        decoder->setSamplesCallback([this](std::span<const std::float32_t> data, int, int) {
+            writeToQueues(data);
+        });
+
         connect(
             decoder.get(),
             &DragonDecoder::formatReady,
@@ -220,19 +237,10 @@ public:
 
         connect(
             decoder.get(),
-            &DragonDecoder::samplesDecoded,
-            q,
-            [this](std::span<const std::float32_t> data, int, int) {
-                writeToQueues(data);
-            },
-            Qt::DirectConnection);
-
-        connect(
-            decoder.get(),
             &DragonDecoder::streamError,
             q,
             [this](const QString &msg) {
-                qWarning() << "Decoder error:" << msg;
+                qDebug() << "Decoder error:" << msg;
                 QMetaObject::invokeMethod(
                     q,
                     [this]() {

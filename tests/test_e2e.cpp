@@ -95,20 +95,14 @@ TestE2E::DecodeResult TestE2E::decodeFileSync(const QString &filePath, int timeo
     DragonDecoder decoder(nullptr, filePath);
 
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
     QSignalSpy durationSpy(&decoder, &DragonDecoder::durationChanged);
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
 
-    QObject::connect(
-        &decoder,
-        &DragonDecoder::samplesDecoded,
-        this,
-        [&result](std::span<const std::float32_t> data, int sampleRate, int channels) {
-            result.sampleRate = sampleRate;
-            result.channels = channels;
-            result.allSamples.insert(result.allSamples.end(), data.begin(), data.end());
-        },
-        Qt::DirectConnection);
+    decoder.setSamplesCallback([&result](std::span<const std::float32_t> data, int sampleRate, int channels) {
+        result.sampleRate = sampleRate;
+        result.channels = channels;
+        result.allSamples.insert(result.allSamples.end(), data.begin(), data.end());
+    });
 
     std::stop_source stopSource;
     std::jthread decodeThread([&](std::stop_token) {
@@ -505,8 +499,12 @@ void TestE2E::testDecoderSignalEmissionOrder()
 
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
     QSignalSpy durationSpy(&decoder, &DragonDecoder::durationChanged);
-    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+
+    std::atomic<int> callbackCount{0};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
+        callbackCount.fetch_add(1);
+    });
 
     std::stop_source stopSource;
     std::jthread t([&](std::stop_token) {
@@ -515,11 +513,11 @@ void TestE2E::testDecoderSignalEmissionOrder()
 
     t.join();
 
-    if (formatSpy.count() > 0 && samplesSpy.count() > 0) {
+    if (formatSpy.count() > 0 && callbackCount.load() > 0) {
         QVERIFY2(formatSpy.at(0).at(0).toInt() > 0, "Format should specify valid sample rate");
     }
 
-    qDebug() << "Signal counts - format:" << formatSpy.count() << "duration:" << durationSpy.count() << "samples:" << samplesSpy.count()
+    qDebug() << "Signal counts - format:" << formatSpy.count() << "duration:" << durationSpy.count() << "samples (callback):" << callbackCount.load()
              << "error:" << errorSpy.count();
 }
 

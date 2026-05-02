@@ -97,6 +97,8 @@ DragonDecoder::~DragonDecoder() = default;
 
 void DragonDecoder::decodeLoop(std::stop_token st)
 {
+    av_log_set_level(AV_LOG_ERROR);
+
     AVIOContext *avioCtx = nullptr;
     uint8_t *ioBuffer = nullptr;
 
@@ -116,6 +118,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
         avioCtx = avio_alloc_context(ioBuffer, IO_BUFFER_SIZE, 0, this, readPacket, nullptr, nullptr);
         if (!avioCtx) {
             av_free(ioBuffer);
+            m_hadFatalError.store(true, std::memory_order_relaxed);
             emit streamError(u"Failed to create AVIOContext"_s);
             return;
         }
@@ -129,6 +132,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
             uint8_t *currentBuffer = avioCtx ? avioCtx->buffer : nullptr;
             avio_context_free(&avioCtx);
             av_free(currentBuffer);
+            m_hadFatalError.store(true, std::memory_order_relaxed);
             emit streamError(u"Failed to allocate AVFormatContext"_s);
             return;
         }
@@ -143,12 +147,14 @@ void DragonDecoder::decodeLoop(std::stop_token st)
             uint8_t *currentBuffer = avioCtx ? avioCtx->buffer : nullptr;
             avio_context_free(&avioCtx);
             av_free(currentBuffer);
+            m_hadFatalError.store(true, std::memory_order_relaxed);
             emit streamError(u"avformat_open_input failed"_s);
             return;
         }
     } else {
         int ret = avformat_open_input(&rawFmtCtx, m_filePath.toUtf8().constData(), nullptr, nullptr);
         if (ret < 0) {
+            m_hadFatalError.store(true, std::memory_order_relaxed);
             emit streamError(u"avformat_open_input failed for %1"_s.arg(m_filePath));
             return;
         }
@@ -158,6 +164,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
 
     int ret = avformat_find_stream_info(fmtCtx.get(), nullptr);
     if (ret < 0) {
+        m_hadFatalError.store(true, std::memory_order_relaxed);
         emit streamError(u"avformat_find_stream_info failed"_s);
         return;
     }
@@ -177,6 +184,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     }
 
     if (audioStreamIndex < 0 || !codec) {
+        m_hadFatalError.store(true, std::memory_order_relaxed);
         emit streamError(u"No supported audio stream found"_s);
         return;
     }
@@ -186,18 +194,21 @@ void DragonDecoder::decodeLoop(std::stop_token st)
 
     AVCodecContext *rawCodecCtx = avcodec_alloc_context3(codec);
     if (!rawCodecCtx) {
+        m_hadFatalError.store(true, std::memory_order_relaxed);
         emit streamError(u"Failed to allocate codec context"_s);
         return;
     }
     ret = avcodec_parameters_to_context(rawCodecCtx, codecPar);
     if (ret < 0) {
         avcodec_free_context(&rawCodecCtx);
+        m_hadFatalError.store(true, std::memory_order_relaxed);
         emit streamError(u"avcodec_parameters_to_context failed"_s);
         return;
     }
     ret = avcodec_open2(rawCodecCtx, codec, nullptr);
     if (ret < 0) {
         avcodec_free_context(&rawCodecCtx);
+        m_hadFatalError.store(true, std::memory_order_relaxed);
         emit streamError(u"avcodec_open2 failed"_s);
         return;
     }
@@ -210,12 +221,14 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     AVChannelLayout outLayout = codecCtx->ch_layout;
     ret = swr_alloc_set_opts2(&rawSwrCtx, &outLayout, AV_SAMPLE_FMT_FLT, sampleRate, &codecCtx->ch_layout, codecCtx->sample_fmt, sampleRate, 0, nullptr);
     if (ret < 0 || !rawSwrCtx) {
+        m_hadFatalError.store(true, std::memory_order_relaxed);
         emit streamError(u"swr_alloc_set_opts2 failed"_s);
         return;
     }
     std::unique_ptr<SwrContext, SwrCtxDeleter> swrCtx(rawSwrCtx);
     ret = swr_init(swrCtx.get());
     if (ret < 0) {
+        m_hadFatalError.store(true, std::memory_order_relaxed);
         emit streamError(u"swr_init failed"_s);
         return;
     }
@@ -234,6 +247,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     std::unique_ptr<AVPacket, AvPacketDeleter> pkt(av_packet_alloc());
     std::unique_ptr<AVFrame, AvFrameDeleter> frame(av_frame_alloc());
     if (!pkt || !frame) {
+        m_hadFatalError.store(true, std::memory_order_relaxed);
         emit streamError(u"Failed to allocate packet/frame"_s);
         return;
     }
@@ -320,7 +334,9 @@ void DragonDecoder::decodeLoop(std::stop_token st)
                     qDebug() << "DECODER: first frame" << totalSamples << "samples";
                     emit stateChanged(false, 1.0);
                 }
-                emit samplesDecoded(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
+                if (m_samplesCallback) {
+                    m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
+                }
             }
 
             av_frame_unref(frame.get());
@@ -363,7 +379,9 @@ void DragonDecoder::decodeLoop(std::stop_token st)
         if (converted > 0) {
             int totalSamples = converted * nbChannels;
             qDebug() << "DECODER: flush samplesDecoded" << totalSamples << "samples";
-            emit samplesDecoded(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
+            if (m_samplesCallback) {
+                m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
+            }
         }
         av_frame_unref(frame.get());
     }
@@ -371,8 +389,18 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     qDebug() << "DECODER: decodeLoop finished total packets=" << packetCount << "total frames=" << frameCount;
 }
 
+bool DragonDecoder::hasFatalError() const
+{
+    return m_hadFatalError.load(std::memory_order_relaxed);
+}
+
 void DragonDecoder::requestSeek(int64_t positionMs)
 {
     m_seekTargetMs.store(std::max(int64_t{0}, positionMs), std::memory_order_relaxed);
     m_seekRequested.store(true, std::memory_order_release);
+}
+
+void DragonDecoder::setSamplesCallback(SamplesCallback cb)
+{
+    m_samplesCallback = std::move(cb);
 }

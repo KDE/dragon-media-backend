@@ -118,7 +118,7 @@ private slots:
     void testLocalFileDecoding();
     void testNetworkStreamDecoding();
     void testFormatReadySignal();
-    void testSamplesDecodedSignal();
+    void testSamplesCallback();
     void testDurationSignal();
     void testErrorSignal();
     void testEmptySource();
@@ -132,6 +132,13 @@ private slots:
     void testResamplerBehavior();
     void testChannelConfiguration_data();
     void testChannelConfiguration();
+
+    void testSamplesCallbackInvoked();
+    void testCallbackThreadAffinity();
+    void testCallbackNotSetIsSafe();
+    void testCallbackEmptySpanNotFired();
+    void testCallbackSampleRateAndChannels();
+    void testCallbackReentrant();
 
 private:
     QTemporaryDir m_tempDir;
@@ -162,16 +169,24 @@ void TestDecoder::testLocalFileDecoding()
     DragonDecoder decoder(nullptr, filePath);
 
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
     QSignalSpy durationSpy(&decoder, &DragonDecoder::durationChanged);
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+
+    std::vector<std::float32_t> capturedSamples;
+    std::mutex samplesMutex;
+    std::atomic<bool> callbackFired{false};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t> data, int, int) {
+        std::lock_guard lock(samplesMutex);
+        capturedSamples.insert(capturedSamples.end(), data.begin(), data.end());
+        callbackFired.store(true);
+    });
 
     std::stop_source stopSource;
     std::jthread decodeThread([&](std::stop_token) {
         decoder.decodeLoop(stopSource.get_token());
     });
 
-    QTRY_VERIFY_WITH_TIMEOUT((samplesSpy.count() > 0) || (errorSpy.count() > 0) || !decodeThread.joinable(), 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(callbackFired.load() || (errorSpy.count() > 0) || !decodeThread.joinable(), 10000);
 
     stopSource.request_stop();
     decodeThread.join();
@@ -182,16 +197,15 @@ void TestDecoder::testLocalFileDecoding()
     }
 
     QVERIFY2(formatSpy.count() > 0, "formatReady signal should have been emitted");
-    QVERIFY2(samplesSpy.count() > 0, "samplesDecoded signal should have been emitted");
+
+    std::lock_guard lock(samplesMutex);
+    QVERIFY2(!capturedSamples.empty(), "Samples callback should have been invoked with data");
 
     QList<QVariant> formatArgs = formatSpy.at(0);
     int sampleRate = formatArgs.at(0).toInt();
     int channels = formatArgs.at(1).toInt();
     QVERIFY(sampleRate > 0);
     QVERIFY(channels > 0);
-
-    QList<QVariant> samplesArgs = samplesSpy.at(0);
-    QVERIFY(samplesArgs.at(0).value<std::span<const std::float32_t>>().size() > 0);
 }
 
 void TestDecoder::testNetworkStreamDecoding()
@@ -207,15 +221,19 @@ void TestDecoder::testNetworkStreamDecoding()
     DragonDecoder decoder(std::move(readCb), {});
 
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+
+    std::atomic<bool> callbackFired{false};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
+        callbackFired.store(true);
+    });
 
     std::stop_source stopSource;
     std::jthread decodeThread([&](std::stop_token) {
         decoder.decodeLoop(stopSource.get_token());
     });
 
-    QTRY_VERIFY_WITH_TIMEOUT((formatSpy.count() > 0) || (samplesSpy.count() > 0) || (errorSpy.count() > 0), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT((formatSpy.count() > 0) || callbackFired.load() || (errorSpy.count() > 0), 5000);
 
     stopSource.request_stop();
     decodeThread.join();
@@ -250,7 +268,7 @@ void TestDecoder::testFormatReadySignal()
     QVERIFY(channels == 1);
 }
 
-void TestDecoder::testSamplesDecodedSignal()
+void TestDecoder::testSamplesCallback()
 {
     QVERIFY(m_tempDir.isValid());
     QString filePath = m_tempDir.filePath("test_samples.wav");
@@ -263,15 +281,10 @@ void TestDecoder::testSamplesDecodedSignal()
 
     std::vector<std::float32_t> capturedSamples;
     std::mutex samplesMutex;
-    QObject::connect(
-        &decoder,
-        &DragonDecoder::samplesDecoded,
-        this,
-        [&capturedSamples, &samplesMutex](std::span<const std::float32_t> data, int, int) {
-            std::lock_guard lock(samplesMutex);
-            capturedSamples.insert(capturedSamples.end(), data.begin(), data.end());
-        },
-        Qt::DirectConnection);
+    decoder.setSamplesCallback([&](std::span<const std::float32_t> data, int, int) {
+        std::lock_guard lock(samplesMutex);
+        capturedSamples.insert(capturedSamples.end(), data.begin(), data.end());
+    });
 
     std::stop_source stopSource;
     std::jthread t([&](std::stop_token) {
@@ -340,7 +353,11 @@ void TestDecoder::testEmptySource()
     DragonDecoder decoder(std::move(readCb), QString{});
 
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+
+    std::atomic<int> callbackCount{0};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
+        callbackCount.fetch_add(1);
+    });
 
     std::stop_source stopSource;
     std::jthread t([&](std::stop_token) {
@@ -350,7 +367,7 @@ void TestDecoder::testEmptySource()
     t.join();
 
     QVERIFY(formatSpy.count() == 0);
-    QVERIFY(samplesSpy.count() == 0);
+    QVERIFY(callbackCount.load() == 0);
 }
 
 void TestDecoder::testStopTokenCancellation()
@@ -364,7 +381,11 @@ void TestDecoder::testStopTokenCancellation()
 
     DragonDecoder decoder(nullptr, filePath);
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+
+    std::atomic<int> callbackCount{0};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
+        callbackCount.fetch_add(1);
+    });
 
     std::stop_source stopSource;
     std::jthread t([&](std::stop_token) {
@@ -375,7 +396,7 @@ void TestDecoder::testStopTokenCancellation()
 
     QTest::qWait(100);
 
-    int samplesBeforeCancel = samplesSpy.count();
+    int samplesBeforeCancel = callbackCount.load();
 
     stopSource.request_stop();
     t.join();
@@ -411,8 +432,12 @@ void TestDecoder::testDifferentSampleRates()
 
     DragonDecoder decoder(nullptr, filePath);
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+
+    std::atomic<int> callbackCount{0};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
+        callbackCount.fetch_add(1);
+    });
 
     std::stop_source stopSource;
     std::jthread t([&](std::stop_token) {
@@ -421,7 +446,7 @@ void TestDecoder::testDifferentSampleRates()
     t.join();
 
     QVERIFY2(formatSpy.count() > 0, qPrintable(QString("Format not detected for %1Hz/%2ch").arg(sampleRate).arg(channels)));
-    QVERIFY2(samplesSpy.count() > 0, qPrintable(QString("No samples decoded for %1Hz/%2ch").arg(sampleRate).arg(channels)));
+    QVERIFY2(callbackCount.load() > 0, qPrintable(QString("No samples decoded for %1Hz/%2ch").arg(sampleRate).arg(channels)));
 
     QList<QVariant> formatArgs = formatSpy.at(0);
     int decodedSampleRate = formatArgs.at(0).toInt();
@@ -441,7 +466,11 @@ void TestDecoder::testMonoToStereoConversion()
 
     DragonDecoder decoder(nullptr, filePath);
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+
+    std::atomic<int> callbackCount{0};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
+        callbackCount.fetch_add(1);
+    });
 
     std::stop_source stopSource;
     std::jthread t([&](std::stop_token) {
@@ -450,6 +479,7 @@ void TestDecoder::testMonoToStereoConversion()
     t.join();
 
     QVERIFY(formatSpy.count() > 0);
+    QVERIFY(callbackCount.load() > 0);
     QList<QVariant> formatArgs = formatSpy.at(0);
     int channels = formatArgs.at(1).toInt();
     QVERIFY(channels == 1);
@@ -540,7 +570,13 @@ void TestDecoder::testResamplerBehavior()
 
     DragonDecoder decoder(nullptr, filePath);
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy samplesSpy(&decoder, &DragonDecoder::samplesDecoded);
+
+    std::vector<std::float32_t> allSamples;
+    std::mutex samplesMutex;
+    decoder.setSamplesCallback([&](std::span<const std::float32_t> data, int, int) {
+        std::lock_guard lock(samplesMutex);
+        allSamples.insert(allSamples.end(), data.begin(), data.end());
+    });
 
     std::stop_source stopSource;
     std::jthread t([&](std::stop_token) {
@@ -549,13 +585,9 @@ void TestDecoder::testResamplerBehavior()
     t.join();
 
     QVERIFY(formatSpy.count() > 0);
-    QVERIFY(samplesSpy.count() > 0);
 
-    std::vector<std::float32_t> allSamples;
-    for (int i = 0; i < samplesSpy.count(); ++i) {
-        auto span = samplesSpy.at(i).at(0).value<std::span<const std::float32_t>>();
-        allSamples.insert(allSamples.end(), span.begin(), span.end());
-    }
+    std::lock_guard lock(samplesMutex);
+    QVERIFY(!allSamples.empty());
 
     for (const float &s : allSamples) {
         QVERIFY2(!std::isnan(s) && !std::isinf(s), qPrintable(QString("Sample is NaN or Inf: %1").arg(s)));
@@ -595,6 +627,199 @@ void TestDecoder::testChannelConfiguration()
     QVERIFY(formatSpy.count() > 0);
     int decodedChannels = formatSpy.at(0).at(1).toInt();
     QVERIFY2(decodedChannels == channels, qPrintable(QString("Channel configuration mismatch: expected %1, got %2").arg(channels).arg(decodedChannels)));
+}
+
+void TestDecoder::testSamplesCallbackInvoked()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_callback_invoked.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 2, 100));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+
+    std::atomic<bool> callbackFired{false};
+    std::atomic<size_t> totalSamples{0};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t> data, int, int) {
+        callbackFired.store(true);
+        totalSamples.fetch_add(data.size());
+    });
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    t.join();
+
+    QVERIFY2(callbackFired.load(), "Callback should have been invoked");
+    QVERIFY2(totalSamples.load() > 0, "Callback should have received non-empty data");
+}
+
+void TestDecoder::testCallbackThreadAffinity()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_thread.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 2, 100));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+
+    std::thread::id callbackThreadId;
+    std::mutex threadIdMutex;
+    std::atomic<bool> callbackFired{false};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
+        std::lock_guard lock(threadIdMutex);
+        callbackThreadId = std::this_thread::get_id();
+        callbackFired.store(true);
+    });
+
+    std::thread::id decodeThreadId;
+    std::stop_source stopSource;
+    std::jthread decodeThread([&](std::stop_token) {
+        decodeThreadId = std::this_thread::get_id();
+        decoder.decodeLoop(stopSource.get_token());
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(callbackFired.load(), 5000);
+    decodeThread.join();
+
+    std::lock_guard lock(threadIdMutex);
+    QVERIFY2(callbackThreadId == decodeThreadId, "Callback must run on the decode thread, not be queued elsewhere");
+}
+
+void TestDecoder::testCallbackNotSetIsSafe()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_no_callback.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 2, 100));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    t.join();
+
+    QVERIFY(formatSpy.count() > 0);
+}
+
+void TestDecoder::testCallbackEmptySpanNotFired()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_no_empty.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 2, 100));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+
+    std::atomic<int> emptySpanCount{0};
+    std::atomic<int> nonEmptySpanCount{0};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t> data, int, int) {
+        if (data.empty()) {
+            emptySpanCount.fetch_add(1);
+        } else {
+            nonEmptySpanCount.fetch_add(1);
+        }
+    });
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    t.join();
+
+    QVERIFY(nonEmptySpanCount.load() > 0);
+    QVERIFY2(emptySpanCount.load() == 0, "Callback should never be called with empty span");
+}
+
+void TestDecoder::testCallbackSampleRateAndChannels()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_callback_params.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(48000, 1, 100));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+
+    int callbackSampleRate = 0;
+    int callbackChannels = 0;
+    std::mutex paramsMutex;
+    std::atomic<bool> callbackFired{false};
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int sr, int ch) {
+        std::lock_guard lock(paramsMutex);
+        callbackSampleRate = sr;
+        callbackChannels = ch;
+        callbackFired.store(true);
+    });
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(formatSpy.count() > 0, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(callbackFired.load(), 5000);
+    t.join();
+
+    QList<QVariant> formatArgs = formatSpy.at(0);
+    int formatSampleRate = formatArgs.at(0).toInt();
+    int formatChannels = formatArgs.at(1).toInt();
+
+    std::lock_guard lock(paramsMutex);
+    QVERIFY2(callbackSampleRate == formatSampleRate,
+             qPrintable(QString("Sample rate mismatch: callback=%1, formatReady=%2").arg(callbackSampleRate).arg(formatSampleRate)));
+    QVERIFY2(callbackChannels == formatChannels,
+             qPrintable(QString("Channel mismatch: callback=%1, formatReady=%2").arg(callbackChannels).arg(formatChannels)));
+    QVERIFY2(callbackSampleRate == 48000, "Callback should receive 48000Hz");
+    QVERIFY2(callbackChannels == 1, "Callback should receive mono");
+}
+
+void TestDecoder::testCallbackReentrant()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_reentrant.wav");
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 2, 100));
+    file.close();
+
+    DragonDecoder decoder(nullptr, filePath);
+
+    std::atomic<int> firstCallbackCount{0};
+    std::atomic<int> secondCallbackCount{0};
+
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
+        firstCallbackCount.fetch_add(1);
+    });
+
+    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
+        secondCallbackCount.fetch_add(1);
+    });
+
+    std::stop_source stopSource;
+    std::jthread t([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+    t.join();
+
+    QVERIFY2(firstCallbackCount.load() == 0, "First callback should not have been invoked");
+    QVERIFY2(secondCallbackCount.load() > 0, "Second callback should have been invoked");
 }
 
 QTEST_MAIN(TestDecoder)
