@@ -39,8 +39,6 @@ void DragonAudioOutput::setQueue(LockFreeSpscQueue<float> *queue)
 
 void DragonAudioOutput::start(int sampleRate, int channels)
 {
-    std::lock_guard lock(m_mutex);
-
     qDebug() << "DragonAudioOutput::start" << sampleRate << channels;
 
     m_channels = channels;
@@ -91,8 +89,6 @@ void DragonAudioOutput::start(int sampleRate, int channels)
 
 void DragonAudioOutput::stop()
 {
-    std::lock_guard lock(m_mutex);
-
     qDebug() << "AUDIO_OUT: stop() pausing device=" << m_deviceId;
     if (m_deviceId != 0) {
         SDL_PauseAudioDevice(m_deviceId);
@@ -119,8 +115,6 @@ float DragonAudioOutput::volume() const
 
 void DragonAudioOutput::setVolume(float linearGain)
 {
-    std::lock_guard lock(m_mutex);
-
     if (qAbs(m_volume - linearGain) < 0.001f) {
         return;
     }
@@ -138,8 +132,6 @@ bool DragonAudioOutput::muted() const
 
 void DragonAudioOutput::setMuted(bool muted)
 {
-    std::lock_guard lock(m_mutex);
-
     if (m_muted == muted) {
         return;
     }
@@ -157,8 +149,6 @@ void DragonAudioOutput::setStreamName(const QString &name)
 
 int64_t DragonAudioOutput::positionMs() const
 {
-    std::lock_guard lock(m_mutex);
-
     int64_t written = m_totalSamplesWritten.load(std::memory_order_relaxed);
 
     if (m_stream && m_channels > 0) {

@@ -14,7 +14,6 @@
 
 #include <atomic>
 #include <cstdint>
-#include <mutex>
 
 template<typename T>
 class LockFreeSpscQueue;
@@ -70,6 +69,4 @@ private:
 
     float m_volume = 1.0f;
     bool m_muted = false;
-
-    mutable std::mutex m_mutex;
 };
