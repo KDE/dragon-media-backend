@@ -4,6 +4,7 @@
  */
 
 #include <dragonsdl/dragonfftprocessor.h>
+#include <stdfloat>
 
 #include <LockFreeSpscQueue.h>
 #include <kissfft.hh>
@@ -31,7 +32,7 @@ DragonFftProcessor::DragonFftProcessor()
 
 DragonFftProcessor::~DragonFftProcessor() = default;
 
-void DragonFftProcessor::setQueue(LockFreeSpscQueue<float> *queue)
+void DragonFftProcessor::setQueue(LockFreeSpscQueue<std::float32_t> *queue)
 {
     m_fftQueue = queue;
 }
@@ -46,9 +47,9 @@ void DragonFftProcessor::reset()
     m_prevBarFrequencies.fill(-80.0f);
 }
 
-void DragonFftProcessor::transformReal(std::span<const float, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output)
+void DragonFftProcessor::transformReal(std::span<const std::float32_t, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output)
 {
-    m_fft->transform_real(input.data(), output.data());
+    m_fft->transform_real(reinterpret_cast<const float *>(input.data()), output.data());
 }
 
 void DragonFftProcessor::setFrameCallback(FrameCallback cb)
@@ -136,14 +137,14 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             return 20.0f * std::log10(std::max(maxMag, 1e-6f));
         };
 
-        std::array<float, NUM_LOG_BINS> logBins;
+        std::array<std::float32_t, NUM_LOG_BINS> logBins;
         for (int i = 0; i < NUM_LOG_BINS; ++i) {
             const float t0 = static_cast<float>(i) / static_cast<float>(NUM_LOG_BINS);
             const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_LOG_BINS);
             logBins[static_cast<size_t>(i)] = computeBin(t0, t1);
         }
 
-        std::array<float, NUM_BAR_BINS> barBins;
+        std::array<std::float32_t, NUM_BAR_BINS> barBins;
         for (int i = 0; i < NUM_BAR_BINS; ++i) {
             const float t0 = static_cast<float>(i) / static_cast<float>(NUM_BAR_BINS);
             const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_BAR_BINS);
@@ -178,7 +179,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
     }
 }
 
-void DragonFftProcessor::applyHannWindow(std::span<float> data)
+void DragonFftProcessor::applyHannWindow(std::span<std::float32_t> data)
 {
     const float size = static_cast<float>(data.size());
     for (auto [i, val] : std::views::enumerate(data)) {

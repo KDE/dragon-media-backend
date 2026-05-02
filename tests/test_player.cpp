@@ -5,6 +5,7 @@
 
 #include <QtCore>
 #include <QtTest>
+#include <stdfloat>
 
 #include <dragonsdl/dragonfftframe.h>
 #include <dragonsdl/dragonplayer.h>

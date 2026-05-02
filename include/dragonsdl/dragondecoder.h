@@ -6,6 +6,7 @@
 #pragma once
 
 #include "dragonsdl_export.h"
+#include <stdfloat>
 
 #include <QObject>
 #include <QString>
@@ -37,7 +38,7 @@ public:
 
 Q_SIGNALS:
 
-    void samplesDecoded(std::span<const float> data, int sampleRate, int nbChannels);
+    void samplesDecoded(std::span<const std::float32_t> data, int sampleRate, int nbChannels);
 
     void formatReady(int sampleRate, int nbChannels);
 
@@ -50,7 +51,7 @@ Q_SIGNALS:
 private:
     ReadCallback m_readCb;
     QString m_filePath;
-    mutable std::vector<float> m_pcmBuffer;
+    mutable std::vector<std::float32_t> m_pcmBuffer;
 
     std::atomic<bool> m_seekRequested{false};
     std::atomic<int64_t> m_seekTargetMs{0};

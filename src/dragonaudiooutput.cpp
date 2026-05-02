@@ -4,6 +4,7 @@
  */
 
 #include <dragonsdl/dragonaudiooutput.h>
+#include <stdfloat>
 
 #include <LockFreeSpscQueue.h>
 
@@ -34,7 +35,7 @@ DragonAudioOutput::~DragonAudioOutput()
     SDL_Quit();
 }
 
-void DragonAudioOutput::setQueue(LockFreeSpscQueue<float> *queue)
+void DragonAudioOutput::setQueue(LockFreeSpscQueue<std::float32_t> *queue)
 {
     m_audioQueue.store(queue, std::memory_order_release);
 }

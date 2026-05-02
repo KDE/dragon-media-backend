@@ -4,6 +4,7 @@
  */
 
 #include <QtTest>
+#include <stdfloat>
 
 #include <LockFreeSpscQueue.h>
 #include <dragonsdl/dragonfftframe.h>
@@ -49,8 +50,8 @@ private slots:
     void testSampleRateChange();
 
 private:
-    std::vector<float> createSineWave(float frequency, int sampleRate, int numSamples);
-    std::vector<float> createSilence(int numSamples);
+    std::vector<std::float32_t> createSineWave(float frequency, int sampleRate, int numSamples);
+    std::vector<std::float32_t> createSilence(int numSamples);
 };
 
 void TestFftProcessor::testHannWindow_data()
@@ -66,7 +67,7 @@ void TestFftProcessor::testHannWindow()
 {
     QFETCH(int, windowSize);
 
-    std::vector<float> data(static_cast<size_t>(windowSize), 1.0f);
+    std::vector<std::float32_t> data(static_cast<size_t>(windowSize), 1.0f);
     DragonFftProcessor::applyHannWindow(data);
 
     QVERIFY(data.front() == 0.0f);
@@ -121,8 +122,8 @@ void TestFftProcessor::testConstruction()
 
 void TestFftProcessor::testSetQueue()
 {
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
 
     DragonFftProcessor processor;
     processor.setQueue(&queue);
@@ -157,9 +158,9 @@ void TestFftProcessor::testTakeLatestFrameEmpty()
     QVERIFY(frame.barData.empty());
 }
 
-std::vector<float> TestFftProcessor::createSineWave(float frequency, int sampleRate, int numSamples)
+std::vector<std::float32_t> TestFftProcessor::createSineWave(float frequency, int sampleRate, int numSamples)
 {
-    std::vector<float> wave(static_cast<size_t>(numSamples));
+    std::vector<std::float32_t> wave(static_cast<size_t>(numSamples));
     const float amplitude = 0.5f;
     for (int i = 0; i < numSamples; ++i) {
         wave[static_cast<size_t>(i)] =
@@ -168,9 +169,9 @@ std::vector<float> TestFftProcessor::createSineWave(float frequency, int sampleR
     return wave;
 }
 
-std::vector<float> TestFftProcessor::createSilence(int numSamples)
+std::vector<std::float32_t> TestFftProcessor::createSilence(int numSamples)
 {
-    return std::vector<float>(static_cast<size_t>(numSamples), 0.0f);
+    return std::vector<std::float32_t>(static_cast<size_t>(numSamples), 0.0f);
 }
 
 void TestFftProcessor::testProcessLoopSineWave()
@@ -179,16 +180,16 @@ void TestFftProcessor::testProcessLoopSineWave()
     constexpr float freq = 440.0f;
     auto sineWave = createSineWave(freq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
 
-    queue.try_write(sineWave.size(), [&](std::span<float> b1, std::span<float> b2) {
+    queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
-        for (float &v : b1) {
+        for (std::float32_t &v : b1) {
             if (i < sineWave.size())
                 v = sineWave[i++];
         }
-        for (float &v : b2) {
+        for (std::float32_t &v : b2) {
             if (i < sineWave.size())
                 v = sineWave[i++];
         }
@@ -235,15 +236,15 @@ void TestFftProcessor::testProcessLoopSilence()
     constexpr int sampleRate = 44100;
     auto silence = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
-    queue.try_write(silence.size(), [&](std::span<float> b1, std::span<float> b2) {
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    queue.try_write(silence.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
-        for (float &v : b1) {
+        for (std::float32_t &v : b1) {
             if (i < silence.size())
                 v = silence[i++];
         }
-        for (float &v : b2) {
+        for (std::float32_t &v : b2) {
             if (i < silence.size())
                 v = silence[i++];
         }
@@ -280,17 +281,17 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     constexpr int sampleRate = 44100;
     auto sine1kHz = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
 
     for (int frame = 0; frame < 3; ++frame) {
-        queue.try_write(sine1kHz.size(), [&](std::span<float> b1, std::span<float> b2) {
+        queue.try_write(sine1kHz.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
             size_t i = 0;
-            for (float &v : b1) {
+            for (std::float32_t &v : b1) {
                 if (i < sine1kHz.size())
                     v = sine1kHz[i++];
             }
-            for (float &v : b2) {
+            for (std::float32_t &v : b2) {
                 if (i < sine1kHz.size())
                     v = sine1kHz[i++];
             }
@@ -335,15 +336,15 @@ void TestFftProcessor::testFrameCallbackInvoked()
     constexpr int sampleRate = 44100;
     auto noise = createSineWave(2000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
-    queue.try_write(noise.size(), [&](std::span<float> b1, std::span<float> b2) {
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    queue.try_write(noise.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
-        for (float &v : b1) {
+        for (std::float32_t &v : b1) {
             if (i < noise.size())
                 v = noise[i++];
         }
-        for (float &v : b2) {
+        for (std::float32_t &v : b2) {
             if (i < noise.size())
                 v = noise[i++];
         }
@@ -376,15 +377,15 @@ void TestFftProcessor::testPeakHoldDecay()
     constexpr int sampleRate = 44100;
     auto silence = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
-    queue.try_write(silence.size(), [&](std::span<float> b1, std::span<float> b2) {
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    queue.try_write(silence.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
-        for (float &v : b1) {
+        for (std::float32_t &v : b1) {
             if (i < silence.size())
                 v = silence[i++];
         }
-        for (float &v : b2) {
+        for (std::float32_t &v : b2) {
             if (i < silence.size())
                 v = silence[i++];
         }
@@ -394,7 +395,7 @@ void TestFftProcessor::testPeakHoldDecay()
     processor.setQueue(&queue);
     processor.setSampleRate(sampleRate);
 
-    std::vector<float> peakValues;
+    std::vector<std::float32_t> peakValues;
     std::mutex mutex;
 
     processor.setFrameCallback([&](const DragonFftFrame &frame) {
@@ -444,15 +445,15 @@ void TestFftProcessor::testBarDataSizeValidation()
     constexpr float freq = 1000.0f;
     auto sineWave = createSineWave(freq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
-    queue.try_write(sineWave.size(), [&](std::span<float> b1, std::span<float> b2) {
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
-        for (float &v : b1) {
+        for (std::float32_t &v : b1) {
             if (i < sineWave.size())
                 v = sineWave[i++];
         }
-        for (float &v : b2) {
+        for (std::float32_t &v : b2) {
             if (i < sineWave.size())
                 v = sineWave[i++];
         }
@@ -500,15 +501,15 @@ void TestFftProcessor::testFrequencyDetectionAccuracy()
 
     auto sineWave = createSineWave(frequency, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
-    queue.try_write(sineWave.size(), [&](std::span<float> b1, std::span<float> b2) {
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
-        for (float &v : b1) {
+        for (std::float32_t &v : b1) {
             if (i < sineWave.size())
                 v = sineWave[i++];
         }
-        for (float &v : b2) {
+        for (std::float32_t &v : b2) {
             if (i < sineWave.size())
                 v = sineWave[i++];
         }
@@ -552,15 +553,15 @@ void TestFftProcessor::testFrameTimestamp()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
-    queue.try_write(sineWave.size(), [&](std::span<float> b1, std::span<float> b2) {
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
-        for (float &v : b1) {
+        for (std::float32_t &v : b1) {
             if (i < sineWave.size())
                 v = sineWave[i++];
         }
-        for (float &v : b2) {
+        for (std::float32_t &v : b2) {
             if (i < sineWave.size())
                 v = sineWave[i++];
         }
@@ -593,8 +594,8 @@ void TestFftProcessor::testFrameTimestamp()
 
 void TestFftProcessor::testSampleRateChange()
 {
-    std::vector<float> buffer(65536);
-    LockFreeSpscQueue<float> queue{std::span{buffer}};
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
 
     DragonFftProcessor processor;
     processor.setQueue(&queue);
@@ -602,13 +603,13 @@ void TestFftProcessor::testSampleRateChange()
     processor.setSampleRate(44100);
 
     auto sine44k = createSineWave(1000.0f, 44100, static_cast<int>(DragonFftProcessor::FFT_SIZE));
-    queue.try_write(sine44k.size(), [&](std::span<float> b1, std::span<float> b2) {
+    queue.try_write(sine44k.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
-        for (float &v : b1) {
+        for (std::float32_t &v : b1) {
             if (i < sine44k.size())
                 v = sine44k[i++];
         }
-        for (float &v : b2) {
+        for (std::float32_t &v : b2) {
             if (i < sine44k.size())
                 v = sine44k[i++];
         }

@@ -18,19 +18,24 @@
 #include <algorithm>
 #include <condition_variable>
 #include <mutex>
+#include <ranges>
+#include <stdfloat>
 #include <stop_token>
 #include <thread>
+#include <utility>
 
 class DragonPlayer::DragonPlayerPrivate
 {
+    static constexpr size_t kBufferCapacity = 65536;
+
 public:
     explicit DragonPlayerPrivate(DragonPlayer *player)
         : q(player)
     {
-        fftBuffer.resize(65536);
-        audioBuffer.resize(65536);
-        fftQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(fftBuffer));
-        audioQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(audioBuffer));
+        fftBuffer.resize(kBufferCapacity);
+        audioBuffer.resize(kBufferCapacity);
+        fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(fftBuffer));
+        audioQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(audioBuffer));
 
         audioOutput = std::make_unique<DragonAudioOutput>();
         audioOutput->setQueue(audioQueue.get());
@@ -217,7 +222,7 @@ public:
             decoder.get(),
             &DragonDecoder::samplesDecoded,
             q,
-            [this](std::span<const float> data, int, int) {
+            [this](std::span<const std::float32_t> data, int, int) {
                 writeToQueues(data);
             },
             Qt::DirectConnection);
@@ -269,8 +274,8 @@ public:
             audioOutput->stop();
             audioOutput->reset();
         }
-        audioQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(audioBuffer));
-        fftQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(fftBuffer));
+        audioQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(audioBuffer));
+        fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(fftBuffer));
         audioOutput->setQueue(audioQueue.get());
         fftProcessor->setQueue(fftQueue.get());
         fftProcessor->reset();
@@ -471,7 +476,7 @@ public:
         setPlaybackState(PlaybackState::StoppedState);
     }
 
-    void writeToQueues(std::span<const float> pcm)
+    void writeToQueues(std::span<const std::float32_t> pcm)
     {
         if (pcm.empty()) {
             return;
@@ -482,12 +487,9 @@ public:
         const size_t audioWritten = writeToQueueWithBackpressure(*audioQueue, pcm);
 
         const size_t fftFreeBefore = fftQueue->get_num_free();
-        const size_t fftWritten = fftQueue->try_write(pcmSize, [&](std::span<float> b1, std::span<float> b2) {
-            size_t i = 0;
-            for (auto &v : b1)
-                v = pcm[i++];
-            for (auto &v : b2)
-                v = pcm[i++];
+        const size_t fftWritten = fftQueue->try_write(pcmSize, [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+            auto in_iter = std::ranges::copy_n(pcm.begin(), b1.size(), b1.begin()).in;
+            std::ranges::copy_n(in_iter, b2.size(), b2.begin());
         });
 
         if (fftWritten < pcmSize) {
@@ -495,17 +497,14 @@ public:
         }
     }
 
-    size_t writeToQueueWithBackpressure(LockFreeSpscQueue<float> &queue, std::span<const float> pcm)
+    size_t writeToQueueWithBackpressure(LockFreeSpscQueue<std::float32_t> &queue, std::span<const std::float32_t> pcm)
     {
         size_t written = 0;
         while (written < pcm.size() && !decodeStopSource.stop_requested()) {
             auto remaining = pcm.subspan(written);
-            size_t n = queue.try_write(remaining.size(), [&](std::span<float> b1, std::span<float> b2) {
-                size_t i = 0;
-                for (auto &v : b1)
-                    v = remaining[i++];
-                for (auto &v : b2)
-                    v = remaining[i++];
+            size_t n = queue.try_write(remaining.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+                auto in_iter = std::ranges::copy_n(remaining.begin(), b1.size(), b1.begin()).in;
+                std::ranges::copy_n(in_iter, b2.size(), b2.begin());
             });
             written += n;
             if (written < pcm.size() && !decodeStopSource.stop_requested()) {
@@ -550,6 +549,8 @@ public:
         case PlaybackState::StoppedState:
             Q_EMIT q->stopped();
             break;
+        default:
+            std::unreachable();
         }
     }
 
@@ -620,10 +621,7 @@ public:
 
     void setPosition(int64_t posMs)
     {
-        posMs = std::max(posMs, int64_t{0});
-        if (currentDuration > 0) {
-            posMs = std::min(posMs, currentDuration);
-        }
+        posMs = std::clamp(posMs, int64_t{0}, std::max(currentDuration, int64_t{0}));
         currentPosition = posMs;
 
         {
@@ -641,10 +639,10 @@ public:
 
     DragonPlayer *q;
 
-    std::vector<float> fftBuffer;
-    std::vector<float> audioBuffer;
-    std::unique_ptr<LockFreeSpscQueue<float>> fftQueue;
-    std::unique_ptr<LockFreeSpscQueue<float>> audioQueue;
+    std::vector<std::float32_t> fftBuffer;
+    std::vector<std::float32_t> audioBuffer;
+    std::unique_ptr<LockFreeSpscQueue<std::float32_t>> fftQueue;
+    std::unique_ptr<LockFreeSpscQueue<std::float32_t>> audioQueue;
 
     std::unique_ptr<DragonAudioOutput> audioOutput;
     std::unique_ptr<DragonFftProcessor> fftProcessor;

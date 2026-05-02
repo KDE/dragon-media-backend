@@ -4,6 +4,7 @@
  */
 
 #include <dragonsdl/dragondecoder.h>
+#include <stdfloat>
 
 #include <QDebug>
 

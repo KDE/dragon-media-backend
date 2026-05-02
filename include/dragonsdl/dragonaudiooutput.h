@@ -6,6 +6,7 @@
 #pragma once
 
 #include "dragonsdl_export.h"
+#include <stdfloat>
 
 #include <QObject>
 #include <QString>
@@ -31,7 +32,7 @@ public:
     DragonAudioOutput(DragonAudioOutput &&) = delete;
     DragonAudioOutput &operator=(DragonAudioOutput &&) = delete;
 
-    void setQueue(LockFreeSpscQueue<float> *queue);
+    void setQueue(LockFreeSpscQueue<std::float32_t> *queue);
 
     void start(int sampleRate, int channels);
 
@@ -74,7 +75,7 @@ private:
 
     std::atomic<AudioSession *> m_session{nullptr};
 
-    std::atomic<LockFreeSpscQueue<float> *> m_audioQueue{nullptr};
+    std::atomic<LockFreeSpscQueue<std::float32_t> *> m_audioQueue{nullptr};
 
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};

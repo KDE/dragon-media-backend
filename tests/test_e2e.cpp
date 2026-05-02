@@ -7,6 +7,7 @@
 
 #include <QtCore>
 #include <QtTest>
+#include <stdfloat>
 
 #include <dragonsdl/dragondecoder.h>
 #include <dragonsdl/dragonplayer.h>
@@ -73,7 +74,7 @@ private:
         int sampleRate = 0;
         int channels = 0;
         int64_t duration = 0;
-        std::vector<float> allSamples;
+        std::vector<std::float32_t> allSamples;
         bool hadError = false;
         QString errorMessage;
     };
@@ -102,7 +103,7 @@ TestE2E::DecodeResult TestE2E::decodeFileSync(const QString &filePath, int timeo
         &decoder,
         &DragonDecoder::samplesDecoded,
         this,
-        [&result](std::span<const float> data, int sampleRate, int channels) {
+        [&result](std::span<const std::float32_t> data, int sampleRate, int channels) {
             result.sampleRate = sampleRate;
             result.channels = channels;
             result.allSamples.insert(result.allSamples.end(), data.begin(), data.end());

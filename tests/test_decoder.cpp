@@ -5,6 +5,7 @@
 
 #include <QtCore>
 #include <QtTest>
+#include <stdfloat>
 
 #include <dragonsdl/dragondecoder.h>
 
@@ -190,7 +191,7 @@ void TestDecoder::testLocalFileDecoding()
     QVERIFY(channels > 0);
 
     QList<QVariant> samplesArgs = samplesSpy.at(0);
-    QVERIFY(samplesArgs.at(0).value<std::span<const float>>().size() > 0);
+    QVERIFY(samplesArgs.at(0).value<std::span<const std::float32_t>>().size() > 0);
 }
 
 void TestDecoder::testNetworkStreamDecoding()
@@ -260,13 +261,13 @@ void TestDecoder::testSamplesDecodedSignal()
 
     DragonDecoder decoder(nullptr, filePath);
 
-    std::vector<float> capturedSamples;
+    std::vector<std::float32_t> capturedSamples;
     std::mutex samplesMutex;
     QObject::connect(
         &decoder,
         &DragonDecoder::samplesDecoded,
         this,
-        [&capturedSamples, &samplesMutex](std::span<const float> data, int, int) {
+        [&capturedSamples, &samplesMutex](std::span<const std::float32_t> data, int, int) {
             std::lock_guard lock(samplesMutex);
             capturedSamples.insert(capturedSamples.end(), data.begin(), data.end());
         },
@@ -550,9 +551,9 @@ void TestDecoder::testResamplerBehavior()
     QVERIFY(formatSpy.count() > 0);
     QVERIFY(samplesSpy.count() > 0);
 
-    std::vector<float> allSamples;
+    std::vector<std::float32_t> allSamples;
     for (int i = 0; i < samplesSpy.count(); ++i) {
-        auto span = samplesSpy.at(i).at(0).value<std::span<const float>>();
+        auto span = samplesSpy.at(i).at(0).value<std::span<const std::float32_t>>();
         allSamples.insert(allSamples.end(), span.begin(), span.end());
     }
 

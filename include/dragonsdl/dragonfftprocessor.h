@@ -7,6 +7,7 @@
 
 #include "dragonfftframe.h"
 #include "dragonsdl_export.h"
+#include <stdfloat>
 
 #include <array>
 #include <complex>
@@ -43,7 +44,7 @@ public:
     DragonFftProcessor(DragonFftProcessor &&) = delete;
     DragonFftProcessor &operator=(DragonFftProcessor &&) = delete;
 
-    void setQueue(LockFreeSpscQueue<float> *queue);
+    void setQueue(LockFreeSpscQueue<std::float32_t> *queue);
     void setSampleRate(int sampleRate);
 
     void setFrameCallback(FrameCallback cb);
@@ -53,19 +54,19 @@ public:
     [[nodiscard]] DragonFftFrame takeLatestFrame();
     void reset();
 
-    static void applyHannWindow(std::span<float> data);
+    static void applyHannWindow(std::span<std::float32_t> data);
     static constexpr float hzToMel(float f);
     static constexpr float melToHz(float m);
 
 private:
-    LockFreeSpscQueue<float> *m_fftQueue = nullptr;
+    LockFreeSpscQueue<std::float32_t> *m_fftQueue = nullptr;
     int m_sampleRate = 44100;
 
     std::unique_ptr<kissfft<float>> m_fft;
-    std::array<float, FFT_SIZE> m_inputWindow;
-    std::array<float, NUM_BAR_BINS> m_prevBarFrequencies;
+    std::array<std::float32_t, FFT_SIZE> m_inputWindow;
+    std::array<std::float32_t, NUM_BAR_BINS> m_prevBarFrequencies;
 
-    void transformReal(std::span<const float, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output);
+    void transformReal(std::span<const std::float32_t, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output);
 
     FrameCallback m_frameCallback;
 

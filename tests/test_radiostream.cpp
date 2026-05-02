@@ -6,6 +6,7 @@
 #include <QtCore>
 #include <QtNetwork>
 #include <QtTest>
+#include <stdfloat>
 
 #include <dragonsdl/dragonradiostream.h>
 
