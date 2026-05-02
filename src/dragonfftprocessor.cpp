@@ -8,6 +8,8 @@
 #include <LockFreeSpscQueue.h>
 #include <kissfft.hh>
 
+#include <QDebug>
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -64,14 +66,19 @@ DragonFftFrame DragonFftProcessor::takeLatestFrame()
 
 void DragonFftProcessor::processLoop(std::stop_token st)
 {
+    int frameCount = 0;
     while (!st.stop_requested()) {
         if (!m_fftQueue || m_fftQueue->get_num_items_ready() < FFT_SIZE) {
+            if (m_fftQueue && m_fftQueue->get_num_items_ready() > 0) {
+                qDebug() << "FFT: waiting ready=" << m_fftQueue->get_num_items_ready() << "need=" << FFT_SIZE;
+            }
             std::this_thread::sleep_for(8ms);
             continue;
         }
 
         auto scope = m_fftQueue->prepare_read(FFT_SIZE);
         assert(scope.get_items_read() == FFT_SIZE);
+        ++frameCount;
 
         auto block1 = scope.get_block1();
         auto block2 = scope.get_block2();
@@ -164,6 +171,11 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 
         if (m_frameCallback) {
             m_frameCallback(frame);
+        }
+
+        if (frameCount <= 3 || frameCount % 60 == 0) {
+            qDebug() << "FFT: frame emitted count=" << frameCount << "barData[0]=" << frame.barData[0] << "barData[11]=" << frame.barData[11]
+                     << "barData[23]=" << frame.barData[23];
         }
     }
 }

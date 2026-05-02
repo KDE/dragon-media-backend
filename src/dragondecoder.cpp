@@ -219,11 +219,15 @@ void DragonDecoder::decodeLoop(std::stop_token st)
         return;
     }
 
+    qDebug() << "DECODER: formatReady sr=" << sampleRate << "ch=" << nbChannels << "codec=" << codec->name;
     emit formatReady(sampleRate, nbChannels);
 
     if (fmtCtx->duration != AV_NOPTS_VALUE) {
         int64_t durationMs = fmtCtx->duration / (AV_TIME_BASE / 1000);
+        qDebug() << "DECODER: duration=" << durationMs << "ms";
         emit durationChanged(durationMs);
+    } else {
+        qDebug() << "DECODER: duration unknown";
     }
 
     std::unique_ptr<AVPacket, AvPacketDeleter> pkt(av_packet_alloc());
@@ -234,15 +238,20 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     }
 
     bool firstFrame = true;
+    int packetCount = 0;
+    int frameCount = 0;
     while (!st.stop_requested()) {
         ret = av_read_frame(fmtCtx.get(), pkt.get());
         if (ret < 0) {
             if (ret == AVERROR_EOF) {
+                qDebug() << "DECODER: EOF reached after" << packetCount << "packets," << frameCount << "frames";
                 break;
             }
+            qDebug() << "DECODER: av_read_frame transient error" << ret;
             av_packet_unref(pkt.get());
             continue;
         }
+        ++packetCount;
 
         if (pkt->stream_index != audioStreamIndex) {
             av_packet_unref(pkt.get());
@@ -294,9 +303,15 @@ void DragonDecoder::decodeLoop(std::stop_token st)
 
             int totalSamples = converted * nbChannels;
             if (totalSamples > 0) {
+                ++frameCount;
                 if (firstFrame) {
                     firstFrame = false;
+                    qDebug() << "DECODER: first frame" << totalSamples << "samples";
                     emit stateChanged(false, 1.0);
+                }
+                if (frameCount <= 5 || frameCount % 100 == 0) {
+                    qDebug() << "DECODER: samplesDecoded" << totalSamples << "samples"
+                             << "frame=" << frameCount << "packet=" << packetCount;
                 }
                 emit samplesDecoded(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
             }
@@ -308,6 +323,8 @@ void DragonDecoder::decodeLoop(std::stop_token st)
             break;
         }
     }
+
+    qDebug() << "DECODER: flushing decoder...";
 
     avcodec_send_packet(codecCtx.get(), nullptr);
     while (true) {
@@ -338,8 +355,11 @@ void DragonDecoder::decodeLoop(std::stop_token st)
         int converted = swr_convert(swrCtx.get(), outData, maxOutSamples, const_cast<const uint8_t **>(frame->data), frame->nb_samples);
         if (converted > 0) {
             int totalSamples = converted * nbChannels;
+            qDebug() << "DECODER: flush samplesDecoded" << totalSamples << "samples";
             emit samplesDecoded(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
         }
         av_frame_unref(frame.get());
     }
+
+    qDebug() << "DECODER: decodeLoop finished total packets=" << packetCount << "total frames=" << frameCount;
 }

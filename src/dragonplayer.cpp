@@ -57,7 +57,16 @@ public:
 
     void setSource(const QUrl &source)
     {
+        qDebug() << "PLAYER: setSource(" << source.toString() << ")";
         stopPipeline();
+
+        audioQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(audioBuffer));
+        fftQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(fftBuffer));
+        audioOutput->setQueue(audioQueue.get());
+        fftProcessor->setQueue(fftQueue.get());
+        qDebug() << "PLAYER: queues recreated audioQueue cap=" << audioQueue->get_capacity() << "free=" << audioQueue->get_num_free()
+                 << "ready=" << audioQueue->get_num_items_ready() << "fftQueue cap=" << fftQueue->get_capacity() << "free=" << fftQueue->get_num_free()
+                 << "ready=" << fftQueue->get_num_items_ready();
 
         currentSource = source;
         Q_EMIT q->sourceChanged();
@@ -107,6 +116,7 @@ public:
             &DragonDecoder::formatReady,
             q,
             [this](int sampleRate, int channels) {
+                qDebug() << "PLAYER: formatReady sr=" << sampleRate << "ch=" << channels;
                 audioOutput->start(sampleRate, channels);
                 fftProcessor->setSampleRate(sampleRate);
                 setStatus(MediaStatus::LoadedMedia);
@@ -132,7 +142,9 @@ public:
             decoder.get(),
             &DragonDecoder::samplesDecoded,
             q,
-            [this](std::span<const float> data, int, int) {
+            [this](std::span<const float> data, int sampleRate, int nbChannels) {
+                qDebug() << "PLAYER: samplesDecoded" << data.size() << "samples"
+                         << "sr=" << sampleRate << "ch=" << nbChannels;
                 writeToQueues(data);
             },
             Qt::DirectConnection);
@@ -176,27 +188,38 @@ public:
 
     void stopPipeline()
     {
+        qDebug() << "PLAYER: stopPipeline() begin teardown";
+
         if (decodeStopSource.stop_possible()) {
+            qDebug() << "PLAYER: requesting decode stop";
             decodeStopSource.request_stop();
         }
         if (fftStopSource.stop_possible()) {
+            qDebug() << "PLAYER: requesting FFT stop";
             fftStopSource.request_stop();
         }
 
+        qDebug() << "PLAYER: joining decode thread...";
         decodeThread = std::jthread{};
+        qDebug() << "PLAYER: joining FFT thread...";
         fftThread = std::jthread{};
 
         if (audioOutput) {
+            qDebug() << "PLAYER: stopping audio output...";
             audioOutput->stop();
             audioOutput->reset();
         }
 
+        qDebug() << "PLAYER: destroying decoder...";
         decoder.reset();
 
         if (radioStream) {
+            qDebug() << "PLAYER: stopping radio stream...";
             radioStream->stop();
             radioStream.reset();
         }
+
+        qDebug() << "PLAYER: stopPipeline() teardown complete";
     }
 
     void play()
@@ -229,25 +252,45 @@ public:
             return;
         }
 
-        [[maybe_unused]] auto written = audioQueue->try_write(pcm.size(), [&](std::span<float> b1, std::span<float> b2) {
+        const size_t pcmSize = pcm.size();
+
+        const size_t audioWritten = writeToQueueWithBackpressure(*audioQueue, pcm);
+
+        const size_t fftFreeBefore = fftQueue->get_num_free();
+        const size_t fftWritten = fftQueue->try_write(pcmSize, [&](std::span<float> b1, std::span<float> b2) {
             size_t i = 0;
-            for (auto &v : b1) {
+            for (auto &v : b1)
                 v = pcm[i++];
-            }
-            for (auto &v : b2) {
+            for (auto &v : b2)
                 v = pcm[i++];
-            }
         });
 
-        [[maybe_unused]] auto fftWritten = fftQueue->try_write(pcm.size(), [&](std::span<float> b1, std::span<float> b2) {
-            size_t i = 0;
-            for (auto &v : b1) {
-                v = pcm[i++];
+        qDebug() << "WRITE_Q: pcm=" << pcmSize << "audioWritten=" << audioWritten << "audioFree=" << audioQueue->get_num_free() << "fftWritten=" << fftWritten
+                 << "fftFree=" << fftFreeBefore << "→" << fftQueue->get_num_free();
+
+        if (fftWritten < pcmSize) {
+            qWarning() << "WRITE_Q: FFT QUEUE OVERFLOW dropped" << (pcmSize - fftWritten) << "samples";
+        }
+    }
+
+    size_t writeToQueueWithBackpressure(LockFreeSpscQueue<float> &queue, std::span<const float> pcm)
+    {
+        size_t written = 0;
+        while (written < pcm.size() && !decodeStopSource.stop_requested()) {
+            auto remaining = pcm.subspan(written);
+            size_t n = queue.try_write(remaining.size(), [&](std::span<float> b1, std::span<float> b2) {
+                size_t i = 0;
+                for (auto &v : b1)
+                    v = remaining[i++];
+                for (auto &v : b2)
+                    v = remaining[i++];
+            });
+            written += n;
+            if (written < pcm.size() && !decodeStopSource.stop_requested()) {
+                std::this_thread::sleep_for(std::chrono::microseconds(500));
             }
-            for (auto &v : b2) {
-                v = pcm[i++];
-            }
-        });
+        }
+        return written;
     }
 
     void setPlaybackState(PlaybackState state)

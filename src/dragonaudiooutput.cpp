@@ -11,10 +11,7 @@
 #include <QGuiApplication>
 #include <QIcon>
 
-#include <chrono>
-
 using namespace Qt::StringLiterals;
-using namespace std::chrono_literals;
 
 DragonAudioOutput::DragonAudioOutput(QObject *parent)
     : QObject(parent)
@@ -42,6 +39,8 @@ void DragonAudioOutput::setQueue(LockFreeSpscQueue<float> *queue)
 
 void DragonAudioOutput::start(int sampleRate, int channels)
 {
+    std::lock_guard lock(m_mutex);
+
     qDebug() << "DragonAudioOutput::start" << sampleRate << channels;
 
     m_channels = channels;
@@ -78,10 +77,13 @@ void DragonAudioOutput::start(int sampleRate, int channels)
 
     SDL_SetAudioStreamGain(m_stream, m_muted ? 0.0f : m_volume);
 
-    m_pumpStopSource = std::stop_source{};
-    m_pumpThread = std::jthread([this](std::stop_token st) {
-        pumpLoop(st);
-    });
+    qDebug() << "AUDIO_OUT: registering get callback on stream";
+    if (!SDL_SetAudioStreamGetCallback(m_stream, &DragonAudioOutput::audioStreamCallback, this)) {
+        qCritical() << "AUDIO_OUT: SDL_SetAudioStreamGetCallback FAILED:" << SDL_GetError();
+        emit errorOccurred(QString::fromUtf8(SDL_GetError()));
+    } else {
+        qDebug() << "AUDIO_OUT: get callback registered successfully";
+    }
 
     SDL_ResumeAudioDevice(m_deviceId);
     qDebug() << "SDL audio device started";
@@ -89,20 +91,20 @@ void DragonAudioOutput::start(int sampleRate, int channels)
 
 void DragonAudioOutput::stop()
 {
-    if (m_pumpStopSource.stop_possible()) {
-        m_pumpStopSource.request_stop();
-    }
-    m_pumpThread = std::jthread{};
+    std::lock_guard lock(m_mutex);
 
+    qDebug() << "AUDIO_OUT: stop() pausing device=" << m_deviceId;
     if (m_deviceId != 0) {
         SDL_PauseAudioDevice(m_deviceId);
         SDL_CloseAudioDevice(m_deviceId);
         m_deviceId = 0;
     }
     if (m_stream) {
+        qDebug() << "AUDIO_OUT: stop() destroying stream";
         SDL_DestroyAudioStream(m_stream);
         m_stream = nullptr;
     }
+    qDebug() << "AUDIO_OUT: stop() complete";
 }
 
 void DragonAudioOutput::reset()
@@ -117,6 +119,8 @@ float DragonAudioOutput::volume() const
 
 void DragonAudioOutput::setVolume(float linearGain)
 {
+    std::lock_guard lock(m_mutex);
+
     if (qAbs(m_volume - linearGain) < 0.001f) {
         return;
     }
@@ -134,6 +138,8 @@ bool DragonAudioOutput::muted() const
 
 void DragonAudioOutput::setMuted(bool muted)
 {
+    std::lock_guard lock(m_mutex);
+
     if (m_muted == muted) {
         return;
     }
@@ -151,6 +157,8 @@ void DragonAudioOutput::setStreamName(const QString &name)
 
 int64_t DragonAudioOutput::positionMs() const
 {
+    std::lock_guard lock(m_mutex);
+
     int64_t written = m_totalSamplesWritten.load(std::memory_order_relaxed);
 
     if (m_stream && m_channels > 0) {
@@ -170,37 +178,51 @@ int64_t DragonAudioOutput::totalSamplesWritten() const
     return m_totalSamplesWritten.load(std::memory_order_relaxed);
 }
 
-void DragonAudioOutput::pumpLoop(std::stop_token st)
+void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int)
 {
-    static constexpr size_t chunkSize = 4096;
-
-    while (!st.stop_requested()) {
-        if (!m_audioQueue) {
-            std::this_thread::sleep_for(10ms);
-            continue;
-        }
-
-        if (!m_stream) {
-            std::this_thread::sleep_for(10ms);
-            continue;
-        }
-
-        auto scope = m_audioQueue->prepare_read(chunkSize);
-        const size_t itemsRead = scope.get_items_read();
-
-        if (itemsRead > 0) {
-            auto block1 = scope.get_block1();
-            if (!block1.empty()) {
-                SDL_PutAudioStreamData(m_stream, block1.data(), static_cast<int>(block1.size() * sizeof(float)));
-            }
-            auto block2 = scope.get_block2();
-            if (!block2.empty()) {
-                SDL_PutAudioStreamData(m_stream, block2.data(), static_cast<int>(block2.size() * sizeof(float)));
-            }
-
-            m_totalSamplesWritten.fetch_add(static_cast<int64_t>(itemsRead), std::memory_order_relaxed);
-        } else {
-            std::this_thread::sleep_for(2ms);
-        }
+    auto *self = static_cast<DragonAudioOutput *>(userdata);
+    if (!self || !self->m_audioQueue) {
+        qDebug() << "AUDIO_CB: no self or no queue";
+        return;
     }
+    if (additional_amount <= 0) {
+        qDebug() << "AUDIO_CB: additional_amount=" << additional_amount << "≤ 0, skipping";
+        return;
+    }
+
+    const size_t queueReady = self->m_audioQueue->get_num_items_ready();
+
+    const size_t floatsNeeded =
+        (static_cast<size_t>(additional_amount) / sizeof(float)) / static_cast<size_t>(self->m_channels) * static_cast<size_t>(self->m_channels);
+    if (floatsNeeded == 0) {
+        qDebug() << "AUDIO_CB: additional=" << additional_amount << "queueReady=" << queueReady << "→ floatsNeeded=0 (frame-align), skipping";
+        return;
+    }
+
+    auto scope = self->m_audioQueue->prepare_read(floatsNeeded);
+    const size_t itemsRead = scope.get_items_read();
+
+    if (itemsRead == 0) {
+        qDebug() << "AUDIO_CB: STARVATION additional=" << additional_amount << "queueReady=" << queueReady << "floatsNeeded=" << floatsNeeded
+                 << "itemsRead=0";
+        return;
+    }
+
+    auto block1 = scope.get_block1();
+    auto block2 = scope.get_block2();
+    int bytesPushed = 0;
+    if (!block1.empty()) {
+        SDL_PutAudioStreamData(stream, block1.data(), static_cast<int>(block1.size() * sizeof(float)));
+        bytesPushed += static_cast<int>(block1.size() * sizeof(float));
+    }
+    if (!block2.empty()) {
+        SDL_PutAudioStreamData(stream, block2.data(), static_cast<int>(block2.size() * sizeof(float)));
+        bytesPushed += static_cast<int>(block2.size() * sizeof(float));
+    }
+
+    self->m_totalSamplesWritten.fetch_add(static_cast<int64_t>(itemsRead), std::memory_order_relaxed);
+
+    qDebug() << "AUDIO_CB: additional=" << additional_amount << "queueReady=" << queueReady << "floatsNeeded=" << floatsNeeded << "itemsRead=" << itemsRead
+             << "block1=" << block1.size() << "block2=" << block2.size() << "bytesPushed=" << bytesPushed
+             << "totalWritten=" << self->m_totalSamplesWritten.load(std::memory_order_relaxed);
 }

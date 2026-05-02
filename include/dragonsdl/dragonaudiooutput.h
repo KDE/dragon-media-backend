@@ -14,8 +14,7 @@
 
 #include <atomic>
 #include <cstdint>
-#include <stop_token>
-#include <thread>
+#include <mutex>
 
 template<typename T>
 class LockFreeSpscQueue;
@@ -41,6 +40,8 @@ public:
 
     void reset();
 
+    static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
+
     [[nodiscard]] float volume() const;
     void setVolume(float linearGain);
 
@@ -58,8 +59,6 @@ Q_SIGNALS:
     void volumeChanged();
 
 private:
-    void pumpLoop(std::stop_token st);
-
     LockFreeSpscQueue<float> *m_audioQueue = nullptr;
     SDL_AudioStream *m_stream = nullptr;
     SDL_AudioDeviceID m_deviceId = 0;
@@ -72,6 +71,5 @@ private:
     float m_volume = 1.0f;
     bool m_muted = false;
 
-    std::jthread m_pumpThread;
-    std::stop_source m_pumpStopSource;
+    mutable std::mutex m_mutex;
 };
