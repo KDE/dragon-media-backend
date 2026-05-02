@@ -67,14 +67,26 @@ public:
     {
         qDebug() << "PLAYER: setSource(" << source.toString() << ")";
         stopPipeline();
+        startTrack(source, false);
+    }
 
-        audioQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(audioBuffer));
-        fftQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(fftBuffer));
-        audioOutput->setQueue(audioQueue.get());
-        fftProcessor->setQueue(fftQueue.get());
-        qDebug() << "PLAYER: queues recreated audioQueue cap=" << audioQueue->get_capacity() << "free=" << audioQueue->get_num_free()
-                 << "ready=" << audioQueue->get_num_items_ready() << "fftQueue cap=" << fftQueue->get_capacity() << "free=" << fftQueue->get_num_free()
-                 << "ready=" << fftQueue->get_num_items_ready();
+    void setNextSource(const QUrl &next)
+    {
+        nextSource = next;
+        Q_EMIT q->nextSourceChanged();
+    }
+
+    void startTrack(const QUrl &source, bool seamless)
+    {
+        if (!seamless) {
+            audioQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(audioBuffer));
+            fftQueue = std::make_unique<LockFreeSpscQueue<float>>(std::span(fftBuffer));
+            audioOutput->setQueue(audioQueue.get());
+            fftProcessor->setQueue(fftQueue.get());
+            qDebug() << "PLAYER: queues recreated audioQueue cap=" << audioQueue->get_capacity() << "free=" << audioQueue->get_num_free()
+                     << "ready=" << audioQueue->get_num_items_ready() << "fftQueue cap=" << fftQueue->get_capacity() << "free=" << fftQueue->get_num_free()
+                     << "ready=" << fftQueue->get_num_items_ready();
+        }
 
         currentSource = source;
         currentPosition = 0;
@@ -94,6 +106,10 @@ public:
         Q_EMIT q->seekableChanged(currentSeekable);
 
         if (!isLocal) {
+            if (radioStream) {
+                radioStream->stop();
+                radioStream.reset();
+            }
             radioStream = std::make_unique<DragonRadioStream>();
             radioStream->setUrl(source);
 
@@ -106,10 +122,15 @@ public:
             });
 
             radioStream->start();
+        } else if (radioStream) {
+            radioStream->stop();
+            radioStream.reset();
         }
 
         decodeStopSource = std::stop_source{};
-        fftStopSource = std::stop_source{};
+        if (!seamless) {
+            fftStopSource = std::stop_source{};
+        }
 
         DragonDecoder::ReadCallback readCb;
         if (!isLocal) {
@@ -124,9 +145,11 @@ public:
             decoder.get(),
             &DragonDecoder::formatReady,
             q,
-            [this](int sampleRate, int channels) {
+            [this, seamless](int sampleRate, int channels) {
                 qDebug() << "PLAYER: formatReady sr=" << sampleRate << "ch=" << channels;
-                audioOutput->start(sampleRate, channels);
+                if (!seamless || !audioOutput->hasFormat(sampleRate, channels)) {
+                    audioOutput->start(sampleRate, channels);
+                }
                 audioOutput->setPositionOffset(currentPosition);
                 fftProcessor->setSampleRate(sampleRate);
                 setStatus(MediaStatus::LoadedMedia);
@@ -173,23 +196,36 @@ public:
             },
             Qt::DirectConnection);
 
-        fftProcessor->reset();
+        if (!seamless) {
+            fftProcessor->reset();
+        }
 
         decodeThread = std::jthread([this](std::stop_token st) {
             decoder->decodeLoop(st);
 
-            QMetaObject::invokeMethod(
-                q,
-                [this]() {
-                    setStatus(MediaStatus::EndOfMedia);
-                    setPlaybackState(PlaybackState::StoppedState);
-                },
-                Qt::QueuedConnection);
+            if (!st.stop_requested()) {
+                QMetaObject::invokeMethod(
+                    q,
+                    [this]() {
+                        if (!nextSource.isEmpty()) {
+                            QUrl url = nextSource;
+                            nextSource.clear();
+                            Q_EMIT q->nextSourceChanged();
+                            transitionToNextTrack(url);
+                        } else {
+                            setStatus(MediaStatus::EndOfMedia);
+                            setPlaybackState(PlaybackState::StoppedState);
+                        }
+                    },
+                    Qt::QueuedConnection);
+            }
         });
 
-        fftThread = std::jthread([this](std::stop_token st) {
-            fftProcessor->processLoop(st);
-        });
+        if (!seamless) {
+            fftThread = std::jthread([this](std::stop_token st) {
+                fftProcessor->processLoop(st);
+            });
+        }
 
         setPlaybackState(PlaybackState::PlayingState);
     }
@@ -228,6 +264,28 @@ public:
         }
 
         qDebug() << "PLAYER: stopPipeline() teardown complete";
+    }
+
+    void stopDecodeOnly()
+    {
+        qDebug() << "PLAYER: stopDecodeOnly() stopping decode side only";
+
+        if (decodeStopSource.stop_possible()) {
+            decodeStopSource.request_stop();
+        }
+        decodeThread = std::jthread{};
+        decoder.reset();
+
+        qDebug() << "PLAYER: stopDecodeOnly() decode side stopped";
+    }
+
+    void transitionToNextTrack(const QUrl &source)
+    {
+        qDebug() << "PLAYER: transitionToNextTrack(" << source.toString() << ")";
+        stopDecodeOnly();
+        startTrack(source, true);
+        Q_EMIT q->trackChanged();
+        qDebug() << "PLAYER: seamless transition complete";
     }
 
     void play()
@@ -447,6 +505,7 @@ public:
     std::stop_source fftStopSource;
 
     QUrl currentSource;
+    QUrl nextSource;
     PlaybackState currentPlaybackState = PlaybackState::StoppedState;
     MediaStatus currentStatus = MediaStatus::NoMedia;
     Error currentError = Error::NoError;
@@ -481,6 +540,10 @@ float DragonPlayer::volume() const
 QUrl DragonPlayer::source() const
 {
     return d->currentSource;
+}
+QUrl DragonPlayer::nextSource() const
+{
+    return d->nextSource;
 }
 DragonPlayer::PlaybackState DragonPlayer::playbackState() const
 {
@@ -522,6 +585,10 @@ void DragonPlayer::setVolume(float gain)
 void DragonPlayer::setSource(const QUrl &source)
 {
     d->setSource(source);
+}
+void DragonPlayer::setNextSource(const QUrl &nextSource)
+{
+    d->setNextSource(nextSource);
 }
 
 void DragonPlayer::setPosition(int64_t posMs)

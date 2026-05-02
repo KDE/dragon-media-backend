@@ -63,6 +63,8 @@ private slots:
 
     void testDecoderSignalEmissionOrder();
 
+    void testSeamlessPlaybackTransition();
+
     void testDecoderMultipleFilesConsecutive();
     void testDecoderNoMemoryLeaks();
 
@@ -552,6 +554,59 @@ void TestE2E::testDecoderNoMemoryLeaks()
 
         qDebug() << "Iteration" << i << "completed, samples:" << result.allSamples.size();
     }
+}
+
+void TestE2E::testSeamlessPlaybackTransition()
+{
+    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg");
+    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a");
+
+    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: " + track1));
+    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: " + track2));
+
+    DragonPlayer player;
+
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+    QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
+    QSignalSpy nextSourceSpy(&player, &DragonPlayer::nextSourceChanged);
+
+    player.setSource(QUrl::fromLocalFile(track1));
+    player.setNextSource(QUrl::fromLocalFile(track2));
+
+    QVERIFY(player.nextSource() == QUrl::fromLocalFile(track2));
+    QVERIFY(nextSourceSpy.count() >= 1);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QVERIFY2(player.isAudioActive(), "Audio device should be open during first track playback");
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
+
+    for (const auto &args : stateSpy) {
+        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
+        QVERIFY2(state != DragonPlayer::PlaybackState::StoppedState, "Playback state should never stop during seamless transition");
+    }
+
+    for (const auto &args : statusSpy) {
+        auto status = args.at(0).value<DragonPlayer::MediaStatus>();
+        QVERIFY2(status != DragonPlayer::MediaStatus::EndOfMedia, "EndOfMedia should not be emitted during seamless transition");
+    }
+
+    QVERIFY2(player.isAudioActive(), "Audio device should remain open after seamless transition");
+
+    QVERIFY(player.source() == QUrl::fromLocalFile(track2));
+
+    QVERIFY(!player.nextSource().isValid());
+
+    QVERIFY2(sourceSpy.count() >= 2, qPrintable(QString("Expected at least 2 source changes, got %1").arg(sourceSpy.count())));
+
+    qDebug() << "Seamless playback test passed:"
+             << "trackChanged=" << trackChangedSpy.count() << "stateChanges=" << stateSpy.count() << "sourceChanges=" << sourceSpy.count();
+
+    player.stop();
 }
 
 QTEST_MAIN(TestE2E)

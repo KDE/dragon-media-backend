@@ -61,6 +61,8 @@ public:
 
     [[nodiscard]] int64_t totalSamplesWritten() const;
 
+    [[nodiscard]] bool hasFormat(int sampleRate, int channels) const;
+
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();

@@ -7,6 +7,8 @@ add_executable(dragon-sdl-qwidget-example
     main.cpp
     mainwindow.cpp
     mainwindow.h
+    dragonplaylist.cpp
+    dragonplaylist.h
 )
 
 target_link_libraries(dragon-sdl-qwidget-example PRIVATE

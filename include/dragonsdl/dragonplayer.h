@@ -58,6 +58,7 @@ public:
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY mutedChanged)
     Q_PROPERTY(float volume READ volume WRITE setVolume NOTIFY volumeChanged)
     Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
+    Q_PROPERTY(QUrl nextSource READ nextSource WRITE setNextSource NOTIFY nextSourceChanged)
     Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY playbackStateChanged)
     Q_PROPERTY(MediaStatus status READ status NOTIFY statusChanged)
     Q_PROPERTY(Error error READ error NOTIFY errorChanged)
@@ -68,6 +69,7 @@ public:
     [[nodiscard]] bool muted() const;
     [[nodiscard]] float volume() const;
     [[nodiscard]] QUrl source() const;
+    [[nodiscard]] QUrl nextSource() const;
     [[nodiscard]] PlaybackState playbackState() const;
     [[nodiscard]] MediaStatus status() const;
     [[nodiscard]] Error error() const;
@@ -81,6 +83,8 @@ Q_SIGNALS:
     void mutedChanged(bool muted);
     void volumeChanged();
     void sourceChanged();
+    void nextSourceChanged();
+    void trackChanged();
     void playbackStateChanged(DragonPlayer::PlaybackState state);
     void statusChanged(DragonPlayer::MediaStatus status);
     void errorChanged(DragonPlayer::Error error);
@@ -100,8 +104,8 @@ public Q_SLOTS:
     void setMuted(bool muted);
     void setVolume(float linearGain);
     void setSource(const QUrl &source);
+    void setNextSource(const QUrl &nextSource);
     void setPosition(int64_t positionMs);
-
     void play();
     void pause();
     void stop();

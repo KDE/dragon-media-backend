@@ -194,6 +194,11 @@ int64_t DragonAudioOutput::totalSamplesWritten() const
     return m_totalSamplesWritten.load(std::memory_order_relaxed);
 }
 
+bool DragonAudioOutput::hasFormat(int sampleRate, int channels) const
+{
+    return isDeviceOpen() && m_sampleRate == sampleRate && m_channels == channels;
+}
+
 void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int)
 {
     auto *self = static_cast<DragonAudioOutput *>(userdata);
