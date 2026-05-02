@@ -26,6 +26,7 @@ private slots:
     void openFile();
     void openMultipleFiles();
     void clearPlaylist();
+    void playKexp();
     void playPlaylistItem(int index);
     void updatePlaybackState();
     void updatePosition(int64_t positionMs);
@@ -49,6 +50,7 @@ private:
     QPushButton *m_pauseButton = nullptr;
     QPushButton *m_nextButton = nullptr;
     QPushButton *m_prevButton = nullptr;
+    QPushButton *m_kexpButton = nullptr;
 
     QSlider *m_seekSlider = nullptr;
     QLabel *m_timeLabel = nullptr;

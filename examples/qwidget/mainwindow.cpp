@@ -21,6 +21,7 @@
 #include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
+#include <QUrl>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -80,6 +81,9 @@ void MainWindow::setupUi()
     hBtnLayout->addWidget(m_stopButton);
     hBtnLayout->addWidget(m_nextButton);
     hBtnLayout->addStretch();
+    m_kexpButton = new QPushButton(tr("Play KEXP"), this);
+    m_kexpButton->setToolTip(tr("Play KEXP Radio Stream"));
+    hBtnLayout->addWidget(m_kexpButton);
     vLayout->addLayout(hBtnLayout);
 
     auto *hSeekLayout = new QHBoxLayout();
@@ -131,6 +135,7 @@ void MainWindow::connectPlayer()
     connect(m_pauseButton, &QPushButton::clicked, m_player, &DragonPlayer::pause);
     connect(m_nextButton, &QPushButton::clicked, m_playlist, &DragonPlaylist::playNext);
     connect(m_prevButton, &QPushButton::clicked, m_playlist, &DragonPlaylist::playPrevious);
+    connect(m_kexpButton, &QPushButton::clicked, this, &MainWindow::playKexp);
 
     connect(m_playlistWidget, &QListWidget::activated, this, [this](const QModelIndex &index) {
         m_playlist->setCurrentIndex(index.row());
@@ -211,6 +216,12 @@ void MainWindow::openMultipleFiles()
 void MainWindow::clearPlaylist()
 {
     m_playlist->clear();
+}
+
+void MainWindow::playKexp()
+{
+    m_playlist->clear();
+    m_playlist->addTrack(QUrl(QStringLiteral("https://kexp.streamguys1.com/kexp160.aac")));
 }
 
 void MainWindow::playPlaylistItem(int index)
