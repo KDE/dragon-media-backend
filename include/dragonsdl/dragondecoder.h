@@ -33,6 +33,8 @@ public:
 
     void decodeLoop(std::stop_token st);
 
+    void requestSeek(int64_t positionMs);
+
 Q_SIGNALS:
 
     void samplesDecoded(std::span<const float> data, int sampleRate, int nbChannels);
@@ -49,4 +51,7 @@ private:
     ReadCallback m_readCb;
     QString m_filePath;
     mutable std::vector<float> m_pcmBuffer;
+
+    std::atomic<bool> m_seekRequested{false};
+    std::atomic<int64_t> m_seekTargetMs{0};
 };

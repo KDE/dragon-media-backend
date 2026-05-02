@@ -13,7 +13,9 @@
 
 #include <QDebug>
 #include <QMetaObject>
+#include <QTimer>
 
+#include <algorithm>
 #include <stop_token>
 #include <thread>
 
@@ -48,6 +50,12 @@ public:
                 },
                 Qt::QueuedConnection);
         });
+
+        positionTimer = new QTimer(q);
+        positionTimer->setInterval(100);
+        QObject::connect(positionTimer, &QTimer::timeout, q, [this]() {
+            Q_EMIT q->positionChanged(position());
+        });
     }
 
     ~DragonPlayerPrivate()
@@ -69,6 +77,7 @@ public:
                  << "ready=" << fftQueue->get_num_items_ready();
 
         currentSource = source;
+        currentPosition = 0;
         Q_EMIT q->sourceChanged();
 
         if (source.isEmpty()) {
@@ -118,6 +127,7 @@ public:
             [this](int sampleRate, int channels) {
                 qDebug() << "PLAYER: formatReady sr=" << sampleRate << "ch=" << channels;
                 audioOutput->start(sampleRate, channels);
+                audioOutput->setPositionOffset(currentPosition);
                 fftProcessor->setSampleRate(sampleRate);
                 setStatus(MediaStatus::LoadedMedia);
             },
@@ -228,6 +238,14 @@ public:
             return;
         }
 
+        if (currentPlaybackState == PlaybackState::PausedState) {
+            if (audioOutput) {
+                audioOutput->resume();
+            }
+            setPlaybackState(PlaybackState::PlayingState);
+            return;
+        }
+
         if (currentStatus == MediaStatus::EndOfMedia || currentStatus == MediaStatus::LoadedMedia) {
             setSource(currentSource);
             return;
@@ -238,11 +256,15 @@ public:
 
     void pause()
     {
+        if (audioOutput) {
+            audioOutput->pause();
+        }
         setPlaybackState(PlaybackState::PausedState);
     }
 
     void stop()
     {
+        stopPipeline();
         setPlaybackState(PlaybackState::StoppedState);
     }
 
@@ -293,10 +315,25 @@ public:
         return written;
     }
 
+    bool isAudioActive() const
+    {
+        return audioOutput ? audioOutput->isDeviceOpen() : false;
+    }
+
     void setPlaybackState(PlaybackState state)
     {
         if (currentPlaybackState == state) {
             return;
+        }
+
+        if (state == PlaybackState::PlayingState) {
+            if (positionTimer) {
+                positionTimer->start();
+            }
+        } else {
+            if (positionTimer) {
+                positionTimer->stop();
+            }
         }
 
         currentPlaybackState = state;
@@ -375,7 +412,26 @@ public:
 
     int64_t position() const
     {
-        return audioOutput ? audioOutput->positionMs() : 0;
+        if (audioOutput && audioOutput->isDeviceOpen()) {
+            return audioOutput->positionMs();
+        }
+        return currentPosition;
+    }
+
+    void setPosition(int64_t posMs)
+    {
+        posMs = std::max(posMs, int64_t{0});
+        if (currentDuration > 0) {
+            posMs = std::min(posMs, currentDuration);
+        }
+        currentPosition = posMs;
+        if (decoder) {
+            decoder->requestSeek(posMs);
+        }
+        if (audioOutput) {
+            audioOutput->setPositionOffset(posMs);
+        }
+        Q_EMIT q->positionChanged(posMs);
     }
 
     DragonPlayer *q;
@@ -406,6 +462,9 @@ public:
     bool currentIsLocal = false;
 
     int64_t undoPosition = 0;
+
+    QTimer *positionTimer = nullptr;
+    int64_t currentPosition = 0;
 };
 
 DragonPlayer::DragonPlayer(QObject *parent)
@@ -452,6 +511,10 @@ bool DragonPlayer::seekable() const
 {
     return d->currentSeekable;
 }
+bool DragonPlayer::isAudioActive() const
+{
+    return d->isAudioActive();
+}
 
 void DragonPlayer::setMuted(bool muted)
 {
@@ -468,7 +531,7 @@ void DragonPlayer::setSource(const QUrl &source)
 
 void DragonPlayer::setPosition(int64_t posMs)
 {
-    Q_UNUSED(posMs);
+    d->setPosition(posMs);
 }
 
 void DragonPlayer::play()

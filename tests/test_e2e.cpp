@@ -52,6 +52,9 @@ private slots:
     void testPlayerWithMp3File();
     void testPlayerWithOggFile();
 
+    void testPlayerStopActuallyStopsAudio();
+    void testPlayerPauseResumeSequence();
+
     void testDecodeAndVerifySamples_data();
     void testDecodeAndVerifySamples();
 
@@ -329,6 +332,54 @@ void TestE2E::testPlayerWithOggFile()
     QVERIFY(player.seekable());
 
     qDebug() << "OGG Player test completed. Status:" << static_cast<int>(player.status());
+}
+
+void TestE2E::testPlayerStopActuallyStopsAudio()
+{
+    QString filePath = TestFixture::fixturePath("sample-3s.mp3");
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: " + filePath));
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QVERIFY2(player.isAudioActive(), "Audio should be active after starting playback");
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    player.stop();
+
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
+
+    QVERIFY2(!player.isAudioActive(), "Audio should be inactive after calling stop() SDL device must be closed");
+}
+
+void TestE2E::testPlayerPauseResumeSequence()
+{
+    QString filePath = TestFixture::fixturePath("sample-3s.mp3");
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: " + filePath));
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QVERIFY2(player.isAudioActive(), "Audio should be active after starting playback");
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    player.pause();
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
+    QVERIFY2(player.isAudioActive(), "Audio device should still be open after pause");
+
+    player.play();
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY2(player.isAudioActive(), "Audio should be active after resuming from pause");
+
+    player.stop();
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY2(!player.isAudioActive(), "Audio should be inactive after calling stop()");
 }
 
 void TestE2E::testDecodeAndVerifySamples_data()

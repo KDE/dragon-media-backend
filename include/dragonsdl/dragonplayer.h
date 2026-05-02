@@ -75,6 +75,8 @@ public:
     [[nodiscard]] int64_t position() const;
     [[nodiscard]] bool seekable() const;
 
+    [[nodiscard]] bool isAudioActive() const;
+
 Q_SIGNALS:
     void mutedChanged(bool muted);
     void volumeChanged();

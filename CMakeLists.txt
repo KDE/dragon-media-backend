@@ -188,6 +188,9 @@ if(BUILD_TESTING)
         spsc_queue
         kissfft::kissfft
     )
+    target_compile_definitions(test_player PRIVATE
+        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
     add_test(NAME test_player COMMAND test_player)
 
     add_executable(test_e2e tests/test_e2e.cpp)

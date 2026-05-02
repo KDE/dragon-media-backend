@@ -62,6 +62,10 @@ private slots:
     void testSignalEmissionOrder();
     void testCurrentPlayingForRadiosSignal();
 
+    void testSetPositionEmitsPositionChanged();
+    void testPositionTimerEmitsDuringPlayback();
+    void testSeekWithRealAudio();
+
 private:
     bool waitForSignal(QSignalSpy &spy, int timeoutMs = 5000);
 };
@@ -541,17 +545,26 @@ void TestPlayer::testSeekBehavior()
 
     QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
     player.seek(5000);
-    QVERIFY(posSpy.count() == 0);
+    QVERIFY2(posSpy.count() >= 1, "seek() must emit positionChanged");
+    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 5000);
+    QCOMPARE(player.position(), 5000);
 
+    posSpy.clear();
     player.setPosition(10000);
-    QVERIFY(true);
+    QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged");
+    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 10000);
+    QCOMPARE(player.position(), 10000);
+
+    posSpy.clear();
+    player.setPosition(-100);
+    QCOMPARE(player.position(), 0);
 
     player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"));
     QTest::qWait(200);
 
     posSpy.clear();
     player.setPosition(2000);
-    QVERIFY(true);
+    QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even with invalid source");
 
     player.seek(3000);
     QVERIFY(true);
@@ -604,6 +617,80 @@ void TestPlayer::testCurrentPlayingForRadiosSignal()
     QVERIFY(spy.isValid());
 
     QVERIFY(true);
+}
+
+void TestPlayer::testSetPositionEmitsPositionChanged()
+{
+    DragonPlayer player;
+
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+
+    player.setPosition(5000);
+
+    QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged signal");
+
+    QList<QVariant> args = posSpy.at(0);
+    QCOMPARE(args.at(0).toLongLong(), 5000);
+
+    QCOMPARE(player.position(), 5000);
+
+    posSpy.clear();
+    player.setPosition(10000);
+    QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged on subsequent calls");
+    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 10000);
+    QCOMPARE(player.position(), 10000);
+}
+
+void TestPlayer::testPositionTimerEmitsDuringPlayback()
+{
+    QString filePath = QString::fromLocal8Bit(DRAGON_SDL_TESTS_FIXTURES_DIR) + "/sample-3s.mp3";
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QTest::qWait(300);
+
+    QVERIFY2(posSpy.count() > 0, "positionChanged must be emitted periodically during playback");
+
+    QVERIFY2(player.position() >= 0, "position() must return non-negative value during playback");
+
+    player.stop();
+}
+
+void TestPlayer::testSeekWithRealAudio()
+{
+    QString filePath = QString::fromLocal8Bit(DRAGON_SDL_TESTS_FIXTURES_DIR) + "/sample-3s.mp3";
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QTest::qWait(200);
+
+    player.seek(1000);
+
+    QTest::qWait(200);
+
+    int64_t pos = player.position();
+    QVERIFY2(std::llabs(pos - 1000) < 500, qPrintable(QString("Seek failed: expected ~1000ms, got %1ms").arg(pos)));
+
+    player.stop();
 }
 
 bool TestPlayer::waitForSignal(QSignalSpy &spy, int timeoutMs)

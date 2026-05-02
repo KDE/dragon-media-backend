@@ -87,6 +87,20 @@ void DragonAudioOutput::start(int sampleRate, int channels)
     qDebug() << "SDL audio device started";
 }
 
+void DragonAudioOutput::pause()
+{
+    if (m_deviceId != 0) {
+        SDL_PauseAudioDevice(m_deviceId);
+    }
+}
+
+void DragonAudioOutput::resume()
+{
+    if (m_deviceId != 0) {
+        SDL_ResumeAudioDevice(m_deviceId);
+    }
+}
+
 void DragonAudioOutput::stop()
 {
     qDebug() << "AUDIO_OUT: stop() pausing device=" << m_deviceId;
@@ -106,6 +120,18 @@ void DragonAudioOutput::stop()
 void DragonAudioOutput::reset()
 {
     m_totalSamplesWritten = 0;
+    m_positionOffsetMs.store(0, std::memory_order_relaxed);
+}
+
+void DragonAudioOutput::setPositionOffset(int64_t offsetMs)
+{
+    m_positionOffsetMs.store(offsetMs, std::memory_order_relaxed);
+    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+}
+
+bool DragonAudioOutput::isDeviceOpen() const
+{
+    return m_deviceId != 0 && m_stream != nullptr;
 }
 
 float DragonAudioOutput::volume() const
@@ -160,7 +186,7 @@ int64_t DragonAudioOutput::positionMs() const
     }
 
     const int64_t frameCount = written / m_channels;
-    return frameCount * 1000 / m_sampleRate;
+    return (frameCount * 1000 / m_sampleRate) + m_positionOffsetMs.load(std::memory_order_relaxed);
 }
 
 int64_t DragonAudioOutput::totalSamplesWritten() const

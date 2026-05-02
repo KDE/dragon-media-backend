@@ -37,7 +37,15 @@ public:
 
     void stop();
 
+    void pause();
+
+    void resume();
+
     void reset();
+
+    void setPositionOffset(int64_t offsetMs);
+
+    [[nodiscard]] bool isDeviceOpen() const;
 
     static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
 
@@ -66,6 +74,7 @@ private:
     int m_sampleRate = 44100;
 
     std::atomic<int64_t> m_totalSamplesWritten{0};
+    std::atomic<int64_t> m_positionOffsetMs{0};
 
     float m_volume = 1.0f;
     bool m_muted = false;

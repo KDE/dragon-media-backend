@@ -241,6 +241,16 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     int packetCount = 0;
     int frameCount = 0;
     while (!st.stop_requested()) {
+        if (m_seekRequested.exchange(false, std::memory_order_acq_rel)) {
+            int64_t targetMs = m_seekTargetMs.load(std::memory_order_relaxed);
+            AVRational msTimeBase = AVRational{1, 1000};
+            int64_t streamTimestamp = av_rescale_q(targetMs, msTimeBase, audioStream->time_base);
+            int seekRet = av_seek_frame(fmtCtx.get(), audioStreamIndex, streamTimestamp, AVSEEK_FLAG_BACKWARD);
+            if (seekRet >= 0) {
+                avcodec_flush_buffers(codecCtx.get());
+            }
+        }
+
         ret = av_read_frame(fmtCtx.get(), pkt.get());
         if (ret < 0) {
             if (ret == AVERROR_EOF) {
@@ -362,4 +372,10 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     }
 
     qDebug() << "DECODER: decodeLoop finished total packets=" << packetCount << "total frames=" << frameCount;
+}
+
+void DragonDecoder::requestSeek(int64_t positionMs)
+{
+    m_seekTargetMs.store(std::max(int64_t{0}, positionMs), std::memory_order_relaxed);
+    m_seekRequested.store(true, std::memory_order_release);
 }
