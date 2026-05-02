@@ -90,13 +90,17 @@ public:
 
                 lock.lock();
                 decodeLoopActive = false;
+                const bool wasStopped = decodeStopSource.stop_requested();
+                if (wasStopped) {
+                    activeDecoder.reset();
+                }
                 lock.unlock();
                 decoderCv.notify_all();
 
                 if (st.stop_requested())
                     break;
 
-                if (decodeStopSource.stop_requested()) {
+                if (wasStopped) {
                     continue;
                 }
 
@@ -140,7 +144,7 @@ public:
         });
     }
 
-    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless)
+    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless, uint64_t generation)
     {
         const bool isLocal = source.isLocalFile();
 
@@ -179,7 +183,11 @@ public:
             decoder.get(),
             &DragonDecoder::formatReady,
             q,
-            [this, isGapless](int sampleRate, int channels) {
+            [this, generation, isGapless](int sampleRate, int channels) {
+                if (currentDecoderGeneration != generation) {
+                    qDebug() << "PLAYER: ignoring stale formatReady (gen" << generation << "!= current" << currentDecoderGeneration << ")";
+                    return;
+                }
                 qDebug() << "PLAYER: formatReady sr=" << sampleRate << "ch=" << channels;
                 if (!isGapless || !audioOutput->hasFormat(sampleRate, channels)) {
                     audioOutput->start(sampleRate, channels);
@@ -255,6 +263,7 @@ public:
             });
             activeDecoder.reset();
         }
+        ++currentDecoderGeneration;
 
         if (audioOutput) {
             audioOutput->stop();
@@ -292,7 +301,7 @@ public:
         currentSeekable = isLocal;
         Q_EMIT q->seekableChanged(currentSeekable);
 
-        auto decoder = createDecoder(source, false);
+        auto decoder = createDecoder(source, false, currentDecoderGeneration);
         if (!decoder) {
             setError(Error::FormatError);
             setStatus(MediaStatus::InvalidMedia);
@@ -329,7 +338,7 @@ public:
         }
 
         preWarmThread = std::jthread([this, next](std::stop_token st) {
-            auto decoder = createDecoder(next, true);
+            auto decoder = createDecoder(next, true, currentDecoderGeneration);
             if (st.stop_requested()) {
                 return;
             }
@@ -442,6 +451,7 @@ public:
             });
             activeDecoder.reset();
         }
+        ++currentDecoderGeneration;
 
         if (radioStream) {
             radioStream->stop();
@@ -662,6 +672,8 @@ public:
     bool currentMuted = false;
     bool currentSeekable = false;
     bool currentIsLocal = false;
+
+    uint64_t currentDecoderGeneration = 0;
 
     int64_t undoPosition = 0;
 
