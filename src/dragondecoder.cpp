@@ -319,10 +319,6 @@ void DragonDecoder::decodeLoop(std::stop_token st)
                     qDebug() << "DECODER: first frame" << totalSamples << "samples";
                     emit stateChanged(false, 1.0);
                 }
-                if (frameCount <= 5 || frameCount % 100 == 0) {
-                    qDebug() << "DECODER: samplesDecoded" << totalSamples << "samples"
-                             << "frame=" << frameCount << "packet=" << packetCount;
-                }
                 emit samplesDecoded(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
             }
 

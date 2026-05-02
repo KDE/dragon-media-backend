@@ -69,9 +69,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
     int frameCount = 0;
     while (!st.stop_requested()) {
         if (!m_fftQueue || m_fftQueue->get_num_items_ready() < FFT_SIZE) {
-            if (m_fftQueue && m_fftQueue->get_num_items_ready() > 0) {
-                qDebug() << "FFT: waiting ready=" << m_fftQueue->get_num_items_ready() << "need=" << FFT_SIZE;
-            }
+            if (m_fftQueue && m_fftQueue->get_num_items_ready() > 0) { }
             std::this_thread::sleep_for(8ms);
             continue;
         }

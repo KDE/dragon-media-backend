@@ -202,7 +202,6 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
         return;
     }
     if (additional_amount <= 0) {
-        qDebug() << "AUDIO_CB: additional_amount=" << additional_amount << "≤ 0, skipping";
         return;
     }
 
@@ -211,7 +210,6 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     const size_t floatsNeeded =
         (static_cast<size_t>(additional_amount) / sizeof(float)) / static_cast<size_t>(self->m_channels) * static_cast<size_t>(self->m_channels);
     if (floatsNeeded == 0) {
-        qDebug() << "AUDIO_CB: additional=" << additional_amount << "queueReady=" << queueReady << "→ floatsNeeded=0 (frame-align), skipping";
         return;
     }
 
@@ -237,8 +235,4 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     }
 
     self->m_totalSamplesWritten.fetch_add(static_cast<int64_t>(itemsRead), std::memory_order_relaxed);
-
-    qDebug() << "AUDIO_CB: additional=" << additional_amount << "queueReady=" << queueReady << "floatsNeeded=" << floatsNeeded << "itemsRead=" << itemsRead
-             << "block1=" << block1.size() << "block2=" << block2.size() << "bytesPushed=" << bytesPushed
-             << "totalWritten=" << self->m_totalSamplesWritten.load(std::memory_order_relaxed);
 }

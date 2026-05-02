@@ -152,9 +152,7 @@ public:
             decoder.get(),
             &DragonDecoder::samplesDecoded,
             q,
-            [this](std::span<const float> data, int sampleRate, int nbChannels) {
-                qDebug() << "PLAYER: samplesDecoded" << data.size() << "samples"
-                         << "sr=" << sampleRate << "ch=" << nbChannels;
+            [this](std::span<const float> data, int, int) {
                 writeToQueues(data);
             },
             Qt::DirectConnection);
@@ -286,9 +284,6 @@ public:
             for (auto &v : b2)
                 v = pcm[i++];
         });
-
-        qDebug() << "WRITE_Q: pcm=" << pcmSize << "audioWritten=" << audioWritten << "audioFree=" << audioQueue->get_num_free() << "fftWritten=" << fftWritten
-                 << "fftFree=" << fftFreeBefore << "→" << fftQueue->get_num_free();
 
         if (fftWritten < pcmSize) {
             qWarning() << "WRITE_Q: FFT QUEUE OVERFLOW dropped" << (pcmSize - fftWritten) << "samples";
