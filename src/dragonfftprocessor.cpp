@@ -93,8 +93,8 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 
         auto block1 = scope.get_block1();
         auto block2 = scope.get_block2();
-        std::copy(block1.begin(), block1.end(), m_inputWindow.begin());
-        std::copy(block2.begin(), block2.end(), m_inputWindow.begin() + block1.size());
+        auto [_, out1] = std::ranges::copy(block1, m_inputWindow.begin());
+        std::ranges::copy(block2, out1);
 
         if (st.stop_requested()) {
             break;
@@ -107,7 +107,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 
         const float binToFreq = static_cast<float>(m_sampleRate) / static_cast<float>(FFT_SIZE);
 
-        auto getMag = [&](int idx) -> float {
+        auto getMag = [&](const int idx) -> float {
             if (idx < 0 || idx >= static_cast<int>(fftOut.size())) {
                 return 0.0f;
             }
