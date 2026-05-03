@@ -190,7 +190,7 @@ void DragonRadioStream::onReplyError(QNetworkReply::NetworkError code)
     m_bufferCv.notify_all();
 
     if (!m_abort) {
-        emit errorOccurred(u"Network error: %1"_s.arg(static_cast<int>(code)));
+        Q_EMIT errorOccurred(u"Network error: %1"_s.arg(static_cast<int>(code)));
     }
 }
 
@@ -320,6 +320,6 @@ void DragonRadioStream::processMetadata(const QByteArray &metadata)
 
     if (icy != m_lastMetadata) {
         m_lastMetadata = icy;
-        emit metadataReady(icy);
+        Q_EMIT metadataReady(icy);
     }
 }

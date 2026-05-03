@@ -112,7 +112,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     if (m_readCb && m_filePath.isEmpty()) {
         ioBuffer = static_cast<uint8_t *>(av_malloc(IO_BUFFER_SIZE));
         if (!ioBuffer) {
-            emit streamError(u"Failed to allocate AVIOContext buffer"_s);
+            Q_EMIT streamError(u"Failed to allocate AVIOContext buffer"_s);
             return;
         }
 
@@ -120,7 +120,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
         if (!avioCtx) {
             av_free(ioBuffer);
             m_hadFatalError.store(true, std::memory_order_relaxed);
-            emit streamError(u"Failed to create AVIOContext"_s);
+            Q_EMIT streamError(u"Failed to create AVIOContext"_s);
             return;
         }
     }
@@ -134,7 +134,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
             avio_context_free(&avioCtx);
             av_free(currentBuffer);
             m_hadFatalError.store(true, std::memory_order_relaxed);
-            emit streamError(u"Failed to allocate AVFormatContext"_s);
+            Q_EMIT streamError(u"Failed to allocate AVFormatContext"_s);
             return;
         }
         rawFmtCtx->pb = avioCtx;
@@ -149,14 +149,14 @@ void DragonDecoder::decodeLoop(std::stop_token st)
             avio_context_free(&avioCtx);
             av_free(currentBuffer);
             m_hadFatalError.store(true, std::memory_order_relaxed);
-            emit streamError(u"avformat_open_input failed"_s);
+            Q_EMIT streamError(u"avformat_open_input failed"_s);
             return;
         }
     } else {
         int ret = avformat_open_input(&rawFmtCtx, m_filePath.toUtf8().constData(), nullptr, nullptr);
         if (ret < 0) {
             m_hadFatalError.store(true, std::memory_order_relaxed);
-            emit streamError(u"avformat_open_input failed for %1"_s.arg(m_filePath));
+            Q_EMIT streamError(u"avformat_open_input failed for %1"_s.arg(m_filePath));
             return;
         }
     }
@@ -166,7 +166,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     int ret = avformat_find_stream_info(fmtCtx.get(), nullptr);
     if (ret < 0) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        emit streamError(u"avformat_find_stream_info failed"_s);
+        Q_EMIT streamError(u"avformat_find_stream_info failed"_s);
         return;
     }
 
@@ -186,7 +186,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
 
     if (audioStreamIndex < 0 || !codec) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        emit streamError(u"No supported audio stream found"_s);
+        Q_EMIT streamError(u"No supported audio stream found"_s);
         return;
     }
 
@@ -196,21 +196,21 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     AVCodecContext *rawCodecCtx = avcodec_alloc_context3(codec);
     if (!rawCodecCtx) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        emit streamError(u"Failed to allocate codec context"_s);
+        Q_EMIT streamError(u"Failed to allocate codec context"_s);
         return;
     }
     ret = avcodec_parameters_to_context(rawCodecCtx, codecPar);
     if (ret < 0) {
         avcodec_free_context(&rawCodecCtx);
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        emit streamError(u"avcodec_parameters_to_context failed"_s);
+        Q_EMIT streamError(u"avcodec_parameters_to_context failed"_s);
         return;
     }
     ret = avcodec_open2(rawCodecCtx, codec, nullptr);
     if (ret < 0) {
         avcodec_free_context(&rawCodecCtx);
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        emit streamError(u"avcodec_open2 failed"_s);
+        Q_EMIT streamError(u"avcodec_open2 failed"_s);
         return;
     }
     std::unique_ptr<AVCodecContext, AvCodecCtxDeleter> codecCtx(rawCodecCtx);
@@ -223,24 +223,24 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     ret = swr_alloc_set_opts2(&rawSwrCtx, &outLayout, AV_SAMPLE_FMT_FLT, sampleRate, &codecCtx->ch_layout, codecCtx->sample_fmt, sampleRate, 0, nullptr);
     if (ret < 0 || !rawSwrCtx) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        emit streamError(u"swr_alloc_set_opts2 failed"_s);
+        Q_EMIT streamError(u"swr_alloc_set_opts2 failed"_s);
         return;
     }
     std::unique_ptr<SwrContext, SwrCtxDeleter> swrCtx(rawSwrCtx);
     ret = swr_init(swrCtx.get());
     if (ret < 0) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        emit streamError(u"swr_init failed"_s);
+        Q_EMIT streamError(u"swr_init failed"_s);
         return;
     }
 
     qDebug() << "DECODER: formatReady sr=" << sampleRate << "ch=" << nbChannels << "codec=" << codec->name;
-    emit formatReady(sampleRate, nbChannels);
+    Q_EMIT formatReady(sampleRate, nbChannels);
 
     if (fmtCtx->duration != AV_NOPTS_VALUE) {
         const int64_t durationMs = fmtCtx->duration / (AV_TIME_BASE / 1000);
         qDebug() << "DECODER: duration=" << durationMs << "ms";
-        emit durationChanged(durationMs);
+        Q_EMIT durationChanged(durationMs);
     } else {
         qDebug() << "DECODER: duration unknown";
     }
@@ -249,7 +249,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     std::unique_ptr<AVFrame, AvFrameDeleter> frame(av_frame_alloc());
     if (!pkt || !frame) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        emit streamError(u"Failed to allocate packet/frame"_s);
+        Q_EMIT streamError(u"Failed to allocate packet/frame"_s);
         return;
     }
 
@@ -338,7 +338,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
                 if (firstFrame) {
                     firstFrame = false;
                     qDebug() << "DECODER: first frame" << totalSamples << "samples";
-                    emit stateChanged(false, 1.0);
+                    Q_EMIT stateChanged(false, 1.0);
                 }
                 if (m_samplesCallback) {
                     m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);

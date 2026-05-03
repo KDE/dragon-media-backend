@@ -30,7 +30,7 @@ DragonAudioOutput::DragonAudioOutput(QObject *parent)
 
     if (!SDL_Init(SDL_INIT_AUDIO)) {
         qCritical() << "SDL_Init(SDL_INIT_AUDIO) failed:" << SDL_GetError();
-        emit errorOccurred(QString::fromUtf8(SDL_GetError()));
+        Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
     }
 }
 
@@ -71,7 +71,7 @@ void DragonAudioOutput::start(int sampleRate, int channels)
     if (!stream) {
         qCritical() << "SDL_CreateAudioStream failed:" << SDL_GetError();
         delete session;
-        emit errorOccurred(QString::fromUtf8(SDL_GetError()));
+        Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
         return;
     }
     session->stream = stream;
@@ -81,7 +81,7 @@ void DragonAudioOutput::start(int sampleRate, int channels)
         qCritical() << "SDL_OpenAudioDevice failed:" << SDL_GetError();
         SDL_DestroyAudioStream(stream);
         delete session;
-        emit errorOccurred(QString::fromUtf8(SDL_GetError()));
+        Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
         return;
     }
     session->deviceId = deviceId;
@@ -91,7 +91,7 @@ void DragonAudioOutput::start(int sampleRate, int channels)
         SDL_CloseAudioDevice(deviceId);
         SDL_DestroyAudioStream(stream);
         delete session;
-        emit errorOccurred(QString::fromUtf8(SDL_GetError()));
+        Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
         return;
     }
 
@@ -103,7 +103,7 @@ void DragonAudioOutput::start(int sampleRate, int channels)
         SDL_CloseAudioDevice(deviceId);
         SDL_DestroyAudioStream(stream);
         delete session;
-        emit errorOccurred(QString::fromUtf8(SDL_GetError()));
+        Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
         return;
     }
 
@@ -196,7 +196,7 @@ void DragonAudioOutput::setVolume(float linearGain)
     if (auto *session = m_session.load(std::memory_order_acquire); session && session->stream && !m_muted) {
         SDL_SetAudioStreamGain(session->stream, linearGain);
     }
-    emit volumeChanged();
+    Q_EMIT volumeChanged();
 }
 
 bool DragonAudioOutput::muted() const
@@ -213,7 +213,7 @@ void DragonAudioOutput::setMuted(bool muted)
     if (auto *session = m_session.load(std::memory_order_acquire); session && session->stream) {
         SDL_SetAudioStreamGain(session->stream, muted ? 0.0f : m_volume);
     }
-    emit volumeChanged();
+    Q_EMIT volumeChanged();
 }
 
 void DragonAudioOutput::setStreamName(const QString &name)
