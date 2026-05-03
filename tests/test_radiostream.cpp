@@ -250,7 +250,7 @@ void TestRadioStream::testReadBehaviorWithStopToken()
         std::stop_source source;
         std::stop_token token = source.get_token();
 
-        int result = stream.read(buffer, token);
+        [[maybe_unused]] int result = stream.read(buffer, token);
         readCompleted = true;
 
         stopTokenRespected = source.stop_requested();

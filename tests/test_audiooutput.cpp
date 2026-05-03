@@ -313,7 +313,7 @@ void TestAudioOutput::fillQueue(LockFreeSpscQueue<std::float32_t> *queue, const 
     if (!queue || data.empty())
         return;
 
-    queue->try_write(data.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    [[maybe_unused]] const auto written = queue->try_write(data.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
         for (std::float32_t &v : b1) {
             if (i < data.size())

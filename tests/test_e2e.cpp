@@ -406,9 +406,9 @@ void TestE2E::testDecodeAndVerifySamples()
     QVERIFY2(result.allSamples.size() > 1000, qPrintable(QString("Expected many samples for %1, got %2").arg(filename).arg(result.allSamples.size())));
 
     if (checkSampleRange) {
-        float minSample = 1.0f;
-        float maxSample = -1.0f;
-        for (const float &s : result.allSamples) {
+        std::float32_t minSample = 1.0f;
+        std::float32_t maxSample = -1.0f;
+        for (const auto &s : result.allSamples) {
             minSample = std::min(minSample, s);
             maxSample = std::max(maxSample, s);
         }
@@ -445,7 +445,7 @@ void TestE2E::testDecoderNonExistentFile()
         decoder.decodeLoop(stopSource.get_token());
     });
 
-    bool done = QTest::qWaitFor(
+    [[maybe_unused]] bool done = QTest::qWaitFor(
         [&]() {
             return formatSpy.count() > 0 || errorSpy.count() > 0;
         },
@@ -479,7 +479,7 @@ void TestE2E::testDecoderInvalidFile()
         decoder.decodeLoop(stopSource.get_token());
     });
 
-    bool done = QTest::qWaitFor(
+    [[maybe_unused]] bool done = QTest::qWaitFor(
         [&]() {
             return formatSpy.count() > 0 || errorSpy.count() > 0;
         },

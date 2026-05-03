@@ -296,7 +296,7 @@ void TestDecoder::testSamplesCallback()
     std::lock_guard lock(samplesMutex);
     QVERIFY2(capturedSamples.size() > 0, "No samples were decoded");
 
-    for (const float &f : capturedSamples) {
+    for (const auto &f : capturedSamples) {
         QVERIFY2(f >= -1.0f && f <= 1.0f, qPrintable(QString("Sample out of range: %1").arg(f)));
     }
 }
@@ -589,7 +589,7 @@ void TestDecoder::testResamplerBehavior()
     std::lock_guard lock(samplesMutex);
     QVERIFY(!allSamples.empty());
 
-    for (const float &s : allSamples) {
+    for (const auto &s : allSamples) {
         QVERIFY2(!std::isnan(s) && !std::isinf(s), qPrintable(QString("Sample is NaN or Inf: %1").arg(s)));
         QVERIFY2(s >= -2.0f && s <= 2.0f, qPrintable(QString("Sample out of range: %1").arg(s)));
     }

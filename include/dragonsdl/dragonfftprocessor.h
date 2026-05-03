@@ -57,8 +57,6 @@ public:
     void reset();
 
     static void applyHannWindow(std::span<std::float32_t> data);
-    static constexpr float hzToMel(float f);
-    static constexpr float melToHz(float m);
 
 private:
     LockFreeSpscQueue<std::float32_t> *m_fftQueue = nullptr;

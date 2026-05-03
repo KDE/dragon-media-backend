@@ -21,6 +21,19 @@
 #include <ranges>
 #include <thread>
 
+namespace
+{
+constexpr float hzToMel(float f)
+{
+    return 2595.0f * std::log10(1.0f + f / 700.0f);
+}
+
+constexpr float melToHz(float m)
+{
+    return 700.0f * (std::pow(10.0f, m / 2595.0f) - 1.0f);
+}
+}
+
 using namespace std::chrono_literals;
 
 DragonFftProcessor::DragonFftProcessor()
@@ -198,14 +211,4 @@ void DragonFftProcessor::applyHannWindow(std::span<std::float32_t> data)
         const float window = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / (size - 1.0f)));
         val *= window;
     }
-}
-
-constexpr float DragonFftProcessor::hzToMel(float f)
-{
-    return 2595.0f * std::log10(1.0f + f / 700.0f);
-}
-
-constexpr float DragonFftProcessor::melToHz(float m)
-{
-    return 700.0f * (std::pow(10.0f, m / 2595.0f) - 1.0f);
 }

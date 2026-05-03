@@ -27,9 +27,6 @@ private slots:
     void testHannWindow_data();
     void testHannWindow();
 
-    void testMelConversion_data();
-    void testMelConversion();
-
     void testConstruction();
     void testSetQueue();
     void testSetSampleRate();
@@ -42,7 +39,6 @@ private slots:
     void testFrameCallbackInvoked();
 
     void testPeakHoldDecay();
-    void testMelBinningRange();
     void testBarDataSizeValidation();
     void testFrequencyDetectionAccuracy_data();
     void testFrequencyDetectionAccuracy();
@@ -82,35 +78,8 @@ void TestFftProcessor::testHannWindow()
                                 .arg(data[static_cast<size_t>(windowSize - 1 - i)])));
     }
 
-    for (const float &val : data) {
+    for (const auto &val : data) {
         QVERIFY2(val >= 0.0f && val <= 1.0f, qPrintable(QString("Window value out of range: %1").arg(val)));
-    }
-}
-
-void TestFftProcessor::testMelConversion_data()
-{
-    QTest::addColumn<float>("frequency");
-    QTest::addColumn<float>("expectedMel");
-
-    QTest::newRow("0Hz") << 0.0f << 0.0f;
-    QTest::newRow("1kHz") << 1000.0f << 2595.0f * std::log10(1.0f + 1000.0f / 700.0f);
-    QTest::newRow("4kHz") << 4000.0f << 2595.0f * std::log10(1.0f + 4000.0f / 700.0f);
-    QTest::newRow("16kHz") << 16000.0f << 2595.0f * std::log10(1.0f + 16000.0f / 700.0f);
-}
-
-void TestFftProcessor::testMelConversion()
-{
-    QFETCH(float, frequency);
-    QFETCH(float, expectedMel);
-
-    float mel = DragonFftProcessor::hzToMel(frequency);
-    float tolerance = std::max(1.0f, expectedMel * 0.01f);
-    QVERIFY2(std::abs(mel - expectedMel) < tolerance, qPrintable(QString("hzToMel(%1) = %2, expected ~%3").arg(frequency).arg(mel).arg(expectedMel)));
-
-    float hz = DragonFftProcessor::melToHz(mel);
-    float hzTolerance = std::max(1.0f, frequency * 0.02f);
-    if (frequency > 0.0f) {
-        QVERIFY2(std::abs(hz - frequency) < hzTolerance, qPrintable(QString("melToHz(hzToMel(%1)) = %2, expected ~%1").arg(frequency).arg(hz)));
     }
 }
 
@@ -183,7 +152,7 @@ void TestFftProcessor::testProcessLoopSineWave()
     std::vector<std::float32_t> buffer(65536);
     LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
 
-    queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    [[maybe_unused]] const auto written = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
         for (std::float32_t &v : b1) {
             if (i < sineWave.size())
@@ -219,12 +188,10 @@ void TestFftProcessor::testProcessLoopSineWave()
     QVERIFY2(!frame.barData.empty(), "FFT frame should have bar data");
     QVERIFY2(callbackInvoked.load(), "Frame callback should have been invoked");
 
-    int peakBin = 0;
     float peakMag = -80.0f;
     for (size_t i = 0; i < frame.frequenciesDb.size(); ++i) {
         if (frame.frequenciesDb[i] > peakMag) {
             peakMag = frame.frequenciesDb[i];
-            peakBin = static_cast<int>(i);
         }
     }
 
@@ -238,7 +205,7 @@ void TestFftProcessor::testProcessLoopSilence()
 
     std::vector<std::float32_t> buffer(65536);
     LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    queue.try_write(silence.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    [[maybe_unused]] const auto written = queue.try_write(silence.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
         for (std::float32_t &v : b1) {
             if (i < silence.size())
@@ -285,7 +252,7 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
 
     for (int frame = 0; frame < 3; ++frame) {
-        queue.try_write(sine1kHz.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+        [[maybe_unused]] const auto written = queue.try_write(sine1kHz.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
             size_t i = 0;
             for (std::float32_t &v : b1) {
                 if (i < sine1kHz.size())
@@ -338,7 +305,7 @@ void TestFftProcessor::testFrameCallbackInvoked()
 
     std::vector<std::float32_t> buffer(65536);
     LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    queue.try_write(noise.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    [[maybe_unused]] const auto written = queue.try_write(noise.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
         for (std::float32_t &v : b1) {
             if (i < noise.size())
@@ -379,7 +346,7 @@ void TestFftProcessor::testPeakHoldDecay()
 
     std::vector<std::float32_t> buffer(65536);
     LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    queue.try_write(silence.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    [[maybe_unused]] const auto written = queue.try_write(silence.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
         for (std::float32_t &v : b1) {
             if (i < silence.size())
@@ -425,20 +392,6 @@ void TestFftProcessor::testPeakHoldDecay()
     }
 }
 
-void TestFftProcessor::testMelBinningRange()
-{
-    constexpr int sampleRate = 44100;
-
-    const float melMin = DragonFftProcessor::hzToMel(DragonFftProcessor::MIN_FREQ);
-    const float melMax = DragonFftProcessor::hzToMel(DragonFftProcessor::MAX_FREQ);
-
-    float minFreq = DragonFftProcessor::melToHz(melMin);
-    float maxFreq = DragonFftProcessor::melToHz(melMax);
-
-    QVERIFY2(minFreq >= 35.0f && minFreq <= 45.0f, qPrintable(QString("MIN_FREQ bin %1 Hz outside expected range [35, 45]").arg(minFreq)));
-    QVERIFY2(maxFreq >= 15000.0f && maxFreq <= 17000.0f, qPrintable(QString("MAX_FREQ bin %1 Hz outside expected range [15000, 17000]").arg(maxFreq)));
-}
-
 void TestFftProcessor::testBarDataSizeValidation()
 {
     constexpr int sampleRate = 44100;
@@ -447,7 +400,7 @@ void TestFftProcessor::testBarDataSizeValidation()
 
     std::vector<std::float32_t> buffer(65536);
     LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    [[maybe_unused]] const auto written = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
         for (std::float32_t &v : b1) {
             if (i < sineWave.size())
@@ -503,7 +456,7 @@ void TestFftProcessor::testFrequencyDetectionAccuracy()
 
     std::vector<std::float32_t> buffer(65536);
     LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    [[maybe_unused]] const auto written = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
         for (std::float32_t &v : b1) {
             if (i < sineWave.size())
@@ -555,7 +508,7 @@ void TestFftProcessor::testFrameTimestamp()
 
     std::vector<std::float32_t> buffer(65536);
     LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    [[maybe_unused]] const auto written = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
         for (std::float32_t &v : b1) {
             if (i < sineWave.size())
@@ -603,7 +556,7 @@ void TestFftProcessor::testSampleRateChange()
     processor.setSampleRate(44100);
 
     auto sine44k = createSineWave(1000.0f, 44100, static_cast<int>(DragonFftProcessor::FFT_SIZE));
-    queue.try_write(sine44k.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    [[maybe_unused]] const auto written = queue.try_write(sine44k.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
         size_t i = 0;
         for (std::float32_t &v : b1) {
             if (i < sine44k.size())

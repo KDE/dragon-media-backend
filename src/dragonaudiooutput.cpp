@@ -306,14 +306,11 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
 
     auto block1 = scope.get_block1();
     auto block2 = scope.get_block2();
-    int bytesPushed = 0;
     if (!block1.empty()) {
         SDL_PutAudioStreamData(stream, block1.data(), static_cast<int>(block1.size() * sizeof(float)));
-        bytesPushed += static_cast<int>(block1.size() * sizeof(float));
     }
     if (!block2.empty()) {
         SDL_PutAudioStreamData(stream, block2.data(), static_cast<int>(block2.size() * sizeof(float)));
-        bytesPushed += static_cast<int>(block2.size() * sizeof(float));
     }
 
     if (auto *fftQueue = self->m_fftQueue.load(std::memory_order_acquire)) {
