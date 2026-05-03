@@ -6,6 +6,9 @@
 #include <dragonsdl/dragonaudiooutput.h>
 #include <stdfloat>
 
+#include <SDL3/SDL_hints.h>
+#include <SDL3/SDL_init.h>
+
 #include <LockFreeSpscQueue.h>
 
 #include <QDebug>

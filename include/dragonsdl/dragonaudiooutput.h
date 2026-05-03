@@ -10,11 +10,10 @@
 
 #include <QObject>
 
-#include <SDL3/SDL.h>
+#include <SDL3/SDL_audio.h>
 
 #include <atomic>
 #include <condition_variable>
-#include <cstdint>
 
 template<typename T>
 class LockFreeSpscQueue;

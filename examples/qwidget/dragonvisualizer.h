@@ -32,7 +32,7 @@ private:
     std::vector<float> m_displayData;
 
     static constexpr float PeakDecayRate = 2.0f;
-    static constexpr float SmoothingFactor = 0.3f;
+    static constexpr float SmoothingFactor = 0.4f;
     static constexpr float MinDb = -80.0f;
     static constexpr float MaxDb = 0.0f;
 
