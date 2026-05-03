@@ -7,6 +7,7 @@
 #include <stdfloat>
 
 #include <QDebug>
+#include <QScopeGuard>
 
 #include <cstring>
 #include <memory>
@@ -263,6 +264,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
             int seekRet = av_seek_frame(fmtCtx.get(), audioStreamIndex, streamTimestamp, AVSEEK_FLAG_BACKWARD);
             if (seekRet >= 0) {
                 avcodec_flush_buffers(codecCtx.get());
+                swr_convert(swrCtx.get(), nullptr, 0, nullptr, 0);
             }
         }
 
@@ -303,6 +305,10 @@ void DragonDecoder::decodeLoop(std::stop_token st)
                 continue;
             }
 
+            auto frameGuard = qScopeGuard([&]() {
+                av_frame_unref(frame.get());
+            });
+
             int inSamples = frame->nb_samples;
             if (inSamples <= 0) {
                 continue;
@@ -338,8 +344,6 @@ void DragonDecoder::decodeLoop(std::stop_token st)
                     m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
                 }
             }
-
-            av_frame_unref(frame.get());
         }
 
         if (st.stop_requested()) {
@@ -358,6 +362,11 @@ void DragonDecoder::decodeLoop(std::stop_token st)
         if (ret < 0) {
             continue;
         }
+
+        auto frameGuard = qScopeGuard([&]() {
+            av_frame_unref(frame.get());
+        });
+
         int inSamples = frame->nb_samples;
         if (inSamples <= 0) {
             continue;
@@ -383,7 +392,25 @@ void DragonDecoder::decodeLoop(std::stop_token st)
                 m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
             }
         }
-        av_frame_unref(frame.get());
+    }
+
+    {
+        int delaySamples = swr_get_delay(swrCtx.get(), sampleRate);
+        if (delaySamples > 0) {
+            size_t neededSize = static_cast<size_t>(delaySamples) * static_cast<size_t>(nbChannels);
+            if (m_pcmBuffer.size() < neededSize) {
+                m_pcmBuffer.resize(neededSize);
+            }
+            uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(m_pcmBuffer.data())};
+            int converted = swr_convert(swrCtx.get(), outData, delaySamples, nullptr, 0);
+            if (converted > 0) {
+                int totalSamples = converted * nbChannels;
+                qDebug() << "DECODER: swr flush samplesDecoded" << totalSamples << "samples";
+                if (m_samplesCallback) {
+                    m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), sampleRate, nbChannels);
+                }
+            }
+        }
     }
 
     qDebug() << "DECODER: decodeLoop finished total packets=" << packetCount << "total frames=" << frameCount;
