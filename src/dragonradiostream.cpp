@@ -45,6 +45,7 @@ void DragonRadioStream::start()
     m_icyMetaint = 0;
     m_icyBytesRead = 0;
     m_icyPendingData.clear();
+    m_lastMetadata.clear();
 
     if (m_reply) {
         m_reply->disconnect(this);
@@ -153,7 +154,7 @@ void DragonRadioStream::onReplyReadyRead()
     }
     m_watchdogTimer->start();
 
-    QByteArray data = m_reply->readAll();
+    const QByteArray data = m_reply->readAll();
     if (data.isEmpty()) {
         return;
     }
@@ -262,30 +263,63 @@ void DragonRadioStream::processIcyData(const QByteArray &data)
 
 void DragonRadioStream::processMetadata(const QByteArray &metadata)
 {
-    const QByteArray streamTitle = "StreamTitle='";
-    int titleStart = metadata.indexOf(streamTitle);
-    if (titleStart >= 0) {
-        titleStart += streamTitle.size();
-        int titleEnd = metadata.indexOf("';", titleStart);
-        if (titleEnd < 0) {
-            titleEnd = metadata.indexOf('\'', titleStart);
-        }
-        if (titleEnd > titleStart) {
-            const QByteArray title = metadata.mid(titleStart, titleEnd - titleStart);
-            QString titleStr = QString::fromUtf8(title).trimmed();
-            if (!titleStr.isEmpty()) {
-                int dashPos = titleStr.indexOf(u" - ");
-                QString artist;
-                QString songTitle;
-                if (dashPos > 0) {
-                    artist = titleStr.left(dashPos).trimmed();
-                    songTitle = titleStr.mid(dashPos + 3).trimmed();
-                } else {
-                    artist = titleStr;
-                    songTitle.clear();
-                }
-                emit metadataReady(songTitle.isEmpty() ? titleStr : songTitle, artist);
+    static constexpr auto wsOrNul = [](const char c) {
+        return c == ' ' || c == '\0';
+    };
+
+    auto ltrim = [](const QByteArrayView v) {
+        qsizetype i = 0;
+        while (i < v.size() && wsOrNul(v[i]))
+            ++i;
+        return v.sliced(i);
+    };
+
+    DragonIcyMetadata icy;
+    QByteArrayView v(metadata);
+
+    while (!(v = ltrim(v)).isEmpty()) {
+        const qsizetype eq = v.indexOf('=');
+        if (eq < 0)
+            break;
+        QString key = QString::fromUtf8(v.first(eq)).trimmed();
+        v = v.sliced(eq + 1);
+        if (v.isEmpty() || v.front() != '\'')
+            break;
+        v = v.sliced(1);
+
+        QByteArray val;
+        while (!v.isEmpty()) {
+            if (const qsizetype q = v.indexOf('\''); q >= 0) {
+                val.append(v.first(q).toByteArray());
+                v = v.sliced(q + 1);
+                if (!v.isEmpty() && v.front() == '\'') {
+                    val.append('\'');
+                    v = v.sliced(1);
+                } else
+                    break;
+            } else {
+                val.append(v.toByteArray());
+                v = {};
+                break;
             }
         }
+
+        if (!key.isEmpty()) {
+            const QString value = QString::fromUtf8(val).trimmed();
+            if (key == QStringLiteral("StreamTitle")) {
+                icy.setStreamTitle(value);
+            } else if (key == QStringLiteral("StreamUrl")) {
+                icy.setStreamUrl(value);
+            } else {
+                icy.insertCustomField(key, value);
+            }
+        }
+        if (!v.isEmpty() && v.front() == ';')
+            v = v.sliced(1);
+    }
+
+    if (icy != m_lastMetadata) {
+        m_lastMetadata = icy;
+        emit metadataReady(icy);
     }
 }

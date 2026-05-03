@@ -189,6 +189,8 @@ void MainWindow::connectPlayer()
     });
 
     connect(m_player, &DragonPlayer::fftFrameReady, this, &MainWindow::updateFftFrame);
+
+    connect(m_player, &DragonPlayer::currentPlayingForRadiosChanged, this, &MainWindow::updateIcyMetadata);
 }
 
 void MainWindow::openFile()
@@ -252,12 +254,21 @@ void MainWindow::updatePlaybackState()
 
     switch (state) {
     case DragonPlayer::PlaybackState::PlayingState:
-        m_statusLabel->setText(tr("Playing"));
+        if (m_lastIcyMetadata.hasStreamTitle()) {
+            m_statusLabel->setText(tr("Playing: %1").arg(m_lastIcyMetadata.streamTitle()));
+        } else {
+            m_statusLabel->setText(tr("Playing"));
+        }
         break;
     case DragonPlayer::PlaybackState::PausedState:
-        m_statusLabel->setText(tr("Paused"));
+        if (m_lastIcyMetadata.hasStreamTitle()) {
+            m_statusLabel->setText(tr("Paused: %1").arg(m_lastIcyMetadata.streamTitle()));
+        } else {
+            m_statusLabel->setText(tr("Paused"));
+        }
         break;
     case DragonPlayer::PlaybackState::StoppedState:
+        m_lastIcyMetadata.clear();
         m_statusLabel->setText(tr("Stopped"));
         break;
     }
@@ -297,6 +308,7 @@ void MainWindow::updateStatus()
         m_statusLabel->setText(tr("No media"));
         break;
     case DragonPlayer::MediaStatus::LoadingMedia:
+        m_lastIcyMetadata.clear();
         m_statusLabel->setText(tr("Loading..."));
         break;
     case DragonPlayer::MediaStatus::LoadedMedia:
@@ -357,4 +369,12 @@ QString MainWindow::formatTime(int64_t ms)
 void MainWindow::updateFftFrame(const DragonFftFrame &frame)
 {
     m_visualizer->updateBarData(frame.barData);
+}
+
+void MainWindow::updateIcyMetadata(const DragonIcyMetadata &metadata)
+{
+    m_lastIcyMetadata = metadata;
+    if (metadata.hasStreamTitle()) {
+        m_statusLabel->setText(tr("Playing: %1").arg(metadata.streamTitle()));
+    }
 }

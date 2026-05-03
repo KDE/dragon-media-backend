@@ -7,9 +7,12 @@
 
 #include "dragonsdl_export.h"
 
+#include <dragonsdl/dragonicymetadata.h>
+
 #include <QNetworkReply>
 #include <QObject>
 #include <QPointer>
+#include <QString>
 #include <QUrl>
 
 #include <atomic>
@@ -46,7 +49,7 @@ public:
 
 Q_SIGNALS:
     void errorOccurred(const QString &message);
-    void metadataReady(const QString &title, const QString &artistOrStation);
+    void metadataReady(const DragonIcyMetadata &metadata);
 
 private Q_SLOTS:
     void onReplyEncrypted();
@@ -77,4 +80,5 @@ private:
     int m_icyMetaint = 0;
     int m_icyBytesRead = 0;
     QByteArray m_icyPendingData;
+    DragonIcyMetadata m_lastMetadata;
 };

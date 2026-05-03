@@ -10,6 +10,7 @@
 
 #include <dragonsdl/dragonradiostream.h>
 
+#include <QHash>
 #include <atomic>
 #include <stop_token>
 #include <thread>
@@ -177,22 +178,37 @@ void TestRadioStream::testErrorSignal()
 void TestRadioStream::testMetadataParsing_data()
 {
     QTest::addColumn<QByteArray>("metadata");
-    QTest::addColumn<QString>("expectedTitle");
-    QTest::addColumn<QString>("expectedArtist");
+    QTest::addColumn<QHash<QString, QString>>("expectedFields");
 
-    QTest::newRow("artist-title") << QByteArray("StreamTitle='The Beatles - Hey Jude';") << QString("Hey Jude") << QString("The Beatles");
+    {
+        QHash<QString, QString> expected;
+        expected.insert(QStringLiteral("StreamTitle"), QStringLiteral("The Beatles - Hey Jude"));
+        QTest::newRow("single-field") << QByteArray("StreamTitle='The Beatles - Hey Jude';") << expected;
+    }
 
-    QTest::newRow("title-only") << QByteArray("StreamTitle='Some Song';") << QString("Some Song") << QString("Some Song");
+    {
+        QHash<QString, QString> expected;
+        expected.insert(QStringLiteral("StreamTitle"), QStringLiteral("Some Song"));
+        QTest::newRow("title-only") << QByteArray("StreamTitle='Some Song';") << expected;
+    }
 
-    QTest::newRow("station-only") << QByteArray("StreamTitle='My Radio Station';") << QString("My Radio Station") << QString("My Radio Station");
+    {
+        QHash<QString, QString> expected;
+        QTest::newRow("empty-value") << QByteArray("StreamTitle='';") << expected;
+    }
 
-    QTest::newRow("empty-title") << QByteArray("StreamTitle='';") << QString() << QString();
+    {
+        QHash<QString, QString> expected;
+        expected.insert(QStringLiteral("StreamTitle"), QStringLiteral("Artist - Song"));
+        expected.insert(QStringLiteral("StreamUrl"), QStringLiteral("http://example.com"));
+        QTest::newRow("multiple-fields") << QByteArray("StreamTitle='Artist - Song';StreamUrl='http://example.com';") << expected;
+    }
 
-    QTest::newRow("no-streamtitle") << QByteArray("SomeOtherHeader='value';") << QString() << QString();
-
-    QTest::newRow("multiple-metadata") << QByteArray("StreamTitle='Artist - Song';StreamUrl='http://example.com';") << QString("Song") << QString("Artist");
-
-    QTest::newRow("special-chars") << QByteArray("StreamTitle='Rock & Roll - Don\\'t Stop';") << QString("Don't Stop") << QString("Rock & Roll");
+    {
+        QHash<QString, QString> expected;
+        expected.insert(QStringLiteral("StreamTitle"), QStringLiteral("Rock & Roll - Don't Stop"));
+        QTest::newRow("escaped-quote") << QByteArray("StreamTitle='Rock & Roll - Don''t Stop';") << expected;
+    }
 }
 
 void TestRadioStream::testMetadataParsing()

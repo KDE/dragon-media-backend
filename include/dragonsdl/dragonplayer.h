@@ -8,6 +8,8 @@
 #include "dragonfftframe.h"
 #include "dragonsdl_export.h"
 
+#include <dragonsdl/dragonicymetadata.h>
+
 #include <QObject>
 #include <QString>
 #include <QUrl>
@@ -98,7 +100,7 @@ Q_SIGNALS:
 
     void fftFrameReady(const DragonFftFrame &frame);
 
-    void currentPlayingForRadiosChanged(const QString &title, const QString &artistOrStation);
+    void currentPlayingForRadiosChanged(const DragonIcyMetadata &metadata);
 
 public Q_SLOTS:
     void setMuted(bool muted);

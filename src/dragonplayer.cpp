@@ -47,11 +47,11 @@ public:
         audioOutput->setQueue(audioQueue.get());
         audioOutput->setFftQueue(fftQueue.get());
 
-        QObject::connect(audioOutput.get(), &DragonAudioOutput::errorOccurred, q, [this](const QString &) {
+        connect(audioOutput.get(), &DragonAudioOutput::errorOccurred, q, [this](const QString &) {
             setError(Error::ResourceError);
         });
 
-        QObject::connect(audioOutput.get(), &DragonAudioOutput::volumeChanged, q, &DragonPlayer::volumeChanged);
+        connect(audioOutput.get(), &DragonAudioOutput::volumeChanged, q, &DragonPlayer::volumeChanged);
 
         fftProcessor = std::make_unique<DragonFftProcessor>();
         fftProcessor->setQueue(fftQueue.get());
@@ -196,8 +196,8 @@ public:
                 setError(Error::NetworkError);
             });
 
-            connect(radioStream.get(), &DragonRadioStream::metadataReady, q, [this](const QString &title, const QString &artistOrStation) {
-                Q_EMIT q->currentPlayingForRadiosChanged(title, artistOrStation);
+            connect(radioStream.get(), &DragonRadioStream::metadataReady, q, [this](const DragonIcyMetadata &metadata) {
+                Q_EMIT q->currentPlayingForRadiosChanged(metadata);
             });
 
             radioStream->start();

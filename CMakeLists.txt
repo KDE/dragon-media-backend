@@ -81,6 +81,7 @@ set(SOURCES
     src/dragonaudiooutput.cpp
     src/dragonfftprocessor.cpp
     src/dragonradiostream.cpp
+    src/dragonicymetadata.cpp
 )
 
 set(HEADERS
@@ -90,6 +91,7 @@ set(HEADERS
     include/dragonsdl/dragonradiostream.h
     include/dragonsdl/dragonfftprocessor.h
     include/dragonsdl/dragonfftframe.h
+    include/dragonsdl/dragonicymetadata.h
 )
 
 qt_add_library(dragon-sdl STATIC ${SOURCES} ${HEADERS})

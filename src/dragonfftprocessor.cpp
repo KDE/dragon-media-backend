@@ -150,14 +150,14 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             return 20.0f * std::log10(std::max(maxMag, 1e-6f));
         };
 
-        std::array<std::float32_t, NUM_LOG_BINS> logBins;
+        std::array<std::float32_t, NUM_LOG_BINS> logBins{};
         for (auto [i, bin] : std::views::enumerate(logBins)) {
             const float t0 = static_cast<float>(i) / static_cast<float>(NUM_LOG_BINS);
             const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_LOG_BINS);
             bin = computeBin(t0, t1);
         }
 
-        std::array<std::float32_t, NUM_BAR_BINS> barBins;
+        std::array<std::float32_t, NUM_BAR_BINS> barBins{};
         for (auto [i, bin] : std::views::enumerate(barBins)) {
             const float t0 = static_cast<float>(i) / static_cast<float>(NUM_BAR_BINS);
             const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_BAR_BINS);
@@ -193,7 +193,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 
 void DragonFftProcessor::applyHannWindow(std::span<std::float32_t> data)
 {
-    const float size = static_cast<float>(data.size());
+    const auto size = static_cast<float>(data.size());
     for (auto [i, val] : std::views::enumerate(data)) {
         const float window = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / (size - 1.0f)));
         val *= window;

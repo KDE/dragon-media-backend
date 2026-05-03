@@ -7,6 +7,7 @@
 
 #include <QMainWindow>
 #include <dragonsdl/dragonfftframe.h>
+#include <dragonsdl/dragonicymetadata.h>
 
 class DragonPlayer;
 class DragonPlaylist;
@@ -38,6 +39,7 @@ private slots:
     void updateStatus();
     void updatePlaylistCurrentIndex(int index);
     void updateFftFrame(const DragonFftFrame &frame);
+    void updateIcyMetadata(const DragonIcyMetadata &metadata);
 
 private:
     void setupUi();
@@ -65,4 +67,5 @@ private:
     QLabel *m_statusLabel = nullptr;
     bool m_seeking = false;
     int64_t m_durationMs = 0;
+    DragonIcyMetadata m_lastIcyMetadata;
 };
