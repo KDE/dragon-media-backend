@@ -99,7 +99,7 @@ set(HEADERS
     include/dragonsdl/dragonicymetadata.h
 )
 
-qt_add_library(dragon-sdl STATIC ${SOURCES} ${HEADERS})
+qt_add_library(dragon-sdl SHARED ${SOURCES} ${HEADERS})
 
 target_include_directories(dragon-sdl PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
