@@ -18,11 +18,17 @@
 #include <algorithm>
 #include <condition_variable>
 #include <mutex>
+#include <pthread.h>
 #include <ranges>
 #include <stdfloat>
 #include <stop_token>
 #include <thread>
 #include <utility>
+
+static inline void setCurrentThreadName(const char *name)
+{
+    pthread_setname_np(pthread_self(), name);
+}
 
 class DragonPlayer::DragonPlayerPrivate
 {
@@ -75,10 +81,12 @@ public:
     void startThreads()
     {
         fftThread = std::jthread([this](std::stop_token st) {
+            setCurrentThreadName("dragon-fft");
             fftProcessor->processLoop(st);
         });
 
         decodeThread = std::jthread([this](std::stop_token st) {
+            setCurrentThreadName("dragon-decode");
             while (!st.stop_requested()) {
                 std::unique_lock lock(decoderMutex);
                 decoderCv.wait(lock, [this, &st]() {
@@ -278,6 +286,7 @@ public:
         fftProcessor->reset();
 
         fftThread = std::jthread([this](std::stop_token st) {
+            setCurrentThreadName("dragon-fft");
             fftProcessor->processLoop(st);
         });
 
@@ -340,6 +349,7 @@ public:
         }
 
         preWarmThread = std::jthread([this, next](std::stop_token st) {
+            setCurrentThreadName("dragon-prewarm");
             auto decoder = createDecoder(next, true, currentDecoderGeneration);
             if (st.stop_requested()) {
                 return;

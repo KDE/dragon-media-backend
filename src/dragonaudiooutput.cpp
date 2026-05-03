@@ -12,6 +12,7 @@
 #include <QGuiApplication>
 #include <QIcon>
 
+#include <pthread.h>
 #include <thread>
 
 using namespace Qt::StringLiterals;
@@ -246,6 +247,12 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     auto *self = static_cast<DragonAudioOutput *>(userdata);
     if (!self) {
         return;
+    }
+
+    thread_local static bool audioThreadNamed = false;
+    if (!audioThreadNamed) {
+        pthread_setname_np(pthread_self(), "dragon-audio");
+        audioThreadNamed = true;
     }
 
     self->m_activeCallbacks.fetch_add(1, std::memory_order_relaxed);
