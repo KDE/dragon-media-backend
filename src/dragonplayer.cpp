@@ -45,6 +45,7 @@ public:
 
         audioOutput = std::make_unique<DragonAudioOutput>();
         audioOutput->setQueue(audioQueue.get());
+        audioOutput->setFftQueue(fftQueue.get());
 
         QObject::connect(audioOutput.get(), &DragonAudioOutput::errorOccurred, q, [this](const QString &) {
             setError(Error::ResourceError);
@@ -54,6 +55,7 @@ public:
 
         fftProcessor = std::make_unique<DragonFftProcessor>();
         fftProcessor->setQueue(fftQueue.get());
+        fftProcessor->setWaitCv(audioOutput->fftCv());
 
         fftProcessor->setFrameCallback([this](DragonFftFrame frame) {
             QMetaObject::invokeMethod(
@@ -289,7 +291,9 @@ public:
         audioQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(audioBuffer));
         fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(fftBuffer));
         audioOutput->setQueue(audioQueue.get());
+        audioOutput->setFftQueue(fftQueue.get());
         fftProcessor->setQueue(fftQueue.get());
+        fftProcessor->setWaitCv(audioOutput->fftCv());
         fftProcessor->reset();
 
         fftThread = std::jthread([this](std::stop_token st) {
@@ -495,19 +499,7 @@ public:
             return;
         }
 
-        const size_t pcmSize = pcm.size();
-
-        const size_t audioWritten = writeToQueueWithBackpressure(*audioQueue, pcm);
-
-        const size_t fftFreeBefore = fftQueue->get_num_free();
-        const size_t fftWritten = fftQueue->try_write(pcmSize, [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
-            auto in_iter = std::ranges::copy_n(pcm.begin(), b1.size(), b1.begin()).in;
-            std::ranges::copy_n(in_iter, b2.size(), b2.begin());
-        });
-
-        if (fftWritten < pcmSize) {
-            qWarning() << "WRITE_Q: FFT QUEUE OVERFLOW dropped" << (pcmSize - fftWritten) << "samples";
-        }
+        writeToQueueWithBackpressure(*audioQueue, pcm);
     }
 
     size_t writeToQueueWithBackpressure(LockFreeSpscQueue<std::float32_t> &queue, std::span<const std::float32_t> pcm)

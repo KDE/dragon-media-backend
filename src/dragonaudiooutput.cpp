@@ -42,6 +42,11 @@ void DragonAudioOutput::setQueue(LockFreeSpscQueue<std::float32_t> *queue)
     m_audioQueue.store(queue, std::memory_order_release);
 }
 
+void DragonAudioOutput::setFftQueue(LockFreeSpscQueue<std::float32_t> *queue)
+{
+    m_fftQueue.store(queue, std::memory_order_release);
+}
+
 void DragonAudioOutput::start(int sampleRate, int channels)
 {
     qDebug() << "DragonAudioOutput::start" << sampleRate << channels;
@@ -307,6 +312,25 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
         SDL_PutAudioStreamData(stream, block2.data(), static_cast<int>(block2.size() * sizeof(float)));
         bytesPushed += static_cast<int>(block2.size() * sizeof(float));
     }
+
+    if (auto *fftQueue = self->m_fftQueue.load(std::memory_order_acquire)) {
+        const size_t totalSamples = block1.size() + block2.size();
+        size_t srcIdx = 0;
+        auto getSrc = [&](size_t idx) -> std::float32_t {
+            return idx < block1.size() ? block1[idx] : block2[idx - block1.size()];
+        };
+
+        [[maybe_unused]] const size_t fftWritten = fftQueue->try_write(totalSamples, [&](std::span<std::float32_t> fb1, std::span<std::float32_t> fb2) {
+            for (size_t i = 0; i < fb1.size() && srcIdx < totalSamples; ++i, ++srcIdx) {
+                fb1[i] = getSrc(srcIdx);
+            }
+            for (size_t i = 0; i < fb2.size() && srcIdx < totalSamples; ++i, ++srcIdx) {
+                fb2[i] = getSrc(srcIdx);
+            }
+        });
+    }
+
+    self->m_fftWaitCv.notify_one();
 
     self->m_totalSamplesWritten.fetch_add(static_cast<int64_t>(itemsRead), std::memory_order_relaxed);
 }

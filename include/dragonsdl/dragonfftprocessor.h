@@ -11,6 +11,7 @@
 
 #include <array>
 #include <complex>
+#include <condition_variable>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -45,6 +46,7 @@ public:
     DragonFftProcessor &operator=(DragonFftProcessor &&) = delete;
 
     void setQueue(LockFreeSpscQueue<std::float32_t> *queue);
+    void setWaitCv(std::condition_variable *cv);
     void setSampleRate(int sampleRate);
 
     void setFrameCallback(FrameCallback cb);
@@ -60,6 +62,8 @@ public:
 
 private:
     LockFreeSpscQueue<std::float32_t> *m_fftQueue = nullptr;
+    std::condition_variable *m_waitCv = nullptr;
+    std::mutex m_waitMutex;
     int m_sampleRate = 44100;
 
     std::unique_ptr<kissfft<float>> m_fft;

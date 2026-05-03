@@ -13,6 +13,7 @@
 #include <SDL3/SDL.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <cstdint>
 
 template<typename T>
@@ -32,6 +33,11 @@ public:
     DragonAudioOutput &operator=(DragonAudioOutput &&) = delete;
 
     void setQueue(LockFreeSpscQueue<std::float32_t> *queue);
+    void setFftQueue(LockFreeSpscQueue<std::float32_t> *queue);
+    std::condition_variable *fftCv()
+    {
+        return &m_fftWaitCv;
+    }
 
     void start(int sampleRate, int channels);
 
@@ -75,6 +81,8 @@ private:
     std::atomic<AudioSession *> m_session{nullptr};
 
     std::atomic<LockFreeSpscQueue<std::float32_t> *> m_audioQueue{nullptr};
+    std::atomic<LockFreeSpscQueue<std::float32_t> *> m_fftQueue{nullptr};
+    std::condition_variable m_fftWaitCv;
 
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};

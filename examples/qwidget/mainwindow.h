@@ -6,9 +6,11 @@
 #pragma once
 
 #include <QMainWindow>
+#include <dragonsdl/dragonfftframe.h>
 
 class DragonPlayer;
 class DragonPlaylist;
+class DragonVisualizer;
 class QPushButton;
 class QSlider;
 class QLabel;
@@ -35,6 +37,7 @@ private slots:
     void setVolumeFromSlider(int value);
     void updateStatus();
     void updatePlaylistCurrentIndex(int index);
+    void updateFftFrame(const DragonFftFrame &frame);
 
 private:
     void setupUi();
@@ -44,6 +47,7 @@ private:
 
     DragonPlayer *m_player = nullptr;
     DragonPlaylist *m_playlist = nullptr;
+    DragonVisualizer *m_visualizer = nullptr;
 
     QPushButton *m_playButton = nullptr;
     QPushButton *m_stopButton = nullptr;

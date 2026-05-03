@@ -5,7 +5,9 @@
 
 #include "mainwindow.h"
 #include "dragonplaylist.h"
+#include "dragonvisualizer.h"
 
+#include <dragonsdl/dragonfftframe.h>
 #include <dragonsdl/dragonplayer.h>
 
 #include <QApplication>
@@ -30,6 +32,7 @@ MainWindow::MainWindow(QWidget *parent)
 {
     m_player = new DragonPlayer(this);
     m_playlist = new DragonPlaylist(m_player, this);
+    m_visualizer = new DragonVisualizer(this);
     setupUi();
     connectPlayer();
 }
@@ -107,6 +110,12 @@ void MainWindow::setupUi()
     hVolLayout->addStretch();
     vLayout->addLayout(hVolLayout);
 
+    auto *visualizerLabel = new QLabel(tr("Visualizer"), this);
+    visualizerLabel->setStyleSheet("font-weight: bold;");
+    vLayout->addWidget(visualizerLabel);
+    m_visualizer->setFixedHeight(DragonVisualizer::PreferredHeight);
+    vLayout->addWidget(m_visualizer);
+
     vLayout->addStretch();
     mainLayout->addWidget(leftPanel, 2);
 
@@ -178,6 +187,8 @@ void MainWindow::connectPlayer()
     connect(m_player, &DragonPlayer::trackChanged, this, [this]() {
         m_statusLabel->setText(tr("Playing (seamless transition)"));
     });
+
+    connect(m_player, &DragonPlayer::fftFrameReady, this, &MainWindow::updateFftFrame);
 }
 
 void MainWindow::openFile()
@@ -341,4 +352,9 @@ QString MainWindow::formatTime(int64_t ms)
         return QStringLiteral("%1:%2:%3").arg(hours).arg(mins, 2, 10, QLatin1Char('0')).arg(seconds, 2, 10, QLatin1Char('0'));
 
     return QStringLiteral("%1:%2").arg(mins, 2, 10, QLatin1Char('0')).arg(seconds, 2, 10, QLatin1Char('0'));
+}
+
+void MainWindow::updateFftFrame(const DragonFftFrame &frame)
+{
+    m_visualizer->updateBarData(frame.barData);
 }

@@ -16,6 +16,7 @@
 #include <cassert>
 #include <cmath>
 #include <complex>
+#include <condition_variable>
 #include <numbers>
 #include <ranges>
 #include <thread>
@@ -35,6 +36,11 @@ DragonFftProcessor::~DragonFftProcessor() = default;
 void DragonFftProcessor::setQueue(LockFreeSpscQueue<std::float32_t> *queue)
 {
     m_fftQueue = queue;
+}
+
+void DragonFftProcessor::setWaitCv(std::condition_variable *cv)
+{
+    m_waitCv = cv;
 }
 
 void DragonFftProcessor::setSampleRate(int sampleRate)
@@ -69,11 +75,17 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 {
     int frameCount = 0;
     while (!st.stop_requested()) {
-        if (!m_fftQueue || m_fftQueue->get_num_items_ready() < FFT_SIZE) {
-            if (m_fftQueue && m_fftQueue->get_num_items_ready() > 0) { }
-            std::this_thread::sleep_for(8ms);
-            continue;
+        if (m_waitCv) {
+            std::unique_lock lock(m_waitMutex);
+            m_waitCv->wait_for(lock, std::chrono::milliseconds(50), [&] {
+                return !m_fftQueue || m_fftQueue->get_num_items_ready() >= FFT_SIZE || st.stop_requested();
+            });
         }
+
+        if (st.stop_requested())
+            break;
+        if (!m_fftQueue || m_fftQueue->get_num_items_ready() < FFT_SIZE)
+            continue;
 
         auto scope = m_fftQueue->prepare_read(FFT_SIZE);
         assert(scope.get_items_read() == FFT_SIZE);
