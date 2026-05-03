@@ -82,7 +82,7 @@ public:
     {
         fftThread = std::jthread([this](std::stop_token st) {
             setCurrentThreadName("dragon-fft");
-            fftProcessor->processLoop(st);
+            fftProcessor->processLoop(std::move(st));
         });
 
         decodeThread = std::jthread([this](std::stop_token st) {
@@ -161,6 +161,14 @@ public:
                     QMetaObject::invokeMethod(
                         q,
                         [this]() {
+                            if (audioOutput) {
+                                audioOutput->stop();
+                                audioOutput->reset();
+                            }
+                            if (fftThread.joinable()) {
+                                fftThread.request_stop();
+                                fftThread.join();
+                            }
                             setStatus(MediaStatus::EndOfMedia);
                             setPlaybackState(PlaybackState::StoppedState);
                         },
@@ -182,11 +190,11 @@ public:
             radioStream = std::make_unique<DragonRadioStream>();
             radioStream->setUrl(source);
 
-            QObject::connect(radioStream.get(), &DragonRadioStream::errorOccurred, q, [this](const QString &) {
+            connect(radioStream.get(), &DragonRadioStream::errorOccurred, q, [this](const QString &) {
                 setError(Error::NetworkError);
             });
 
-            QObject::connect(radioStream.get(), &DragonRadioStream::metadataReady, q, [this](const QString &title, const QString &artistOrStation) {
+            connect(radioStream.get(), &DragonRadioStream::metadataReady, q, [this](const QString &title, const QString &artistOrStation) {
                 Q_EMIT q->currentPlayingForRadiosChanged(title, artistOrStation);
             });
 
@@ -263,9 +271,8 @@ public:
             preWarmThread.join();
         }
 
-        if (decodeStopSource.stop_possible()) {
-            decodeStopSource.request_stop();
-        }
+        decodeStopSource.request_stop();
+
         {
             std::unique_lock lock(decoderMutex);
             decoderCv.wait(lock, [this]() {
@@ -287,7 +294,7 @@ public:
 
         fftThread = std::jthread([this](std::stop_token st) {
             setCurrentThreadName("dragon-fft");
-            fftProcessor->processLoop(st);
+            fftProcessor->processLoop(std::move(st));
         });
 
         currentSource = source;
@@ -367,9 +374,8 @@ public:
     {
         qDebug() << "PLAYER: stopPipeline() full teardown";
 
-        if (decodeStopSource.stop_possible()) {
-            decodeStopSource.request_stop();
-        }
+        decodeStopSource.request_stop();
+
         decodeThread.request_stop();
 
         fftThread.request_stop();
@@ -521,7 +527,7 @@ public:
         return written;
     }
 
-    bool isAudioActive() const
+    [[nodiscard]] bool isAudioActive() const
     {
         return audioOutput ? audioOutput->isDeviceOpen() : false;
     }
@@ -587,7 +593,7 @@ public:
         }
     }
 
-    void setDuration(int64_t durationMs)
+    void setDuration(const int64_t durationMs)
     {
         if (currentDuration == durationMs) {
             return;
@@ -596,7 +602,7 @@ public:
         Q_EMIT q->durationChanged(durationMs);
     }
 
-    float volume() const
+    [[nodiscard]] float volume() const
     {
         return currentVolume;
     }
