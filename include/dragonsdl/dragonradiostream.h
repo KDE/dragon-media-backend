@@ -7,11 +7,9 @@
 
 #include "dragonsdl_export.h"
 
-#include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QObject>
 #include <QPointer>
-#include <QTimer>
 #include <QUrl>
 
 #include <atomic>
@@ -21,6 +19,9 @@
 #include <mutex>
 #include <span>
 #include <stop_token>
+
+class QNetworkAccessManager;
+class QTimer;
 
 class DRAGONSDL_EXPORT DragonRadioStream : public QObject
 {

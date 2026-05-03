@@ -11,6 +11,7 @@
 #include <QDebug>
 #include <QGuiApplication>
 #include <QIcon>
+#include <QString>
 
 #include <pthread.h>
 #include <thread>

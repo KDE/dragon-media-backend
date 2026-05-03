@@ -6,7 +6,11 @@
 #include <dragonsdl/dragonradiostream.h>
 
 #include <QDebug>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QTimer>
+#include <QUrl>
 
 #include <cstring>
 

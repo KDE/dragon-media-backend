@@ -9,7 +9,6 @@
 #include <stdfloat>
 
 #include <QObject>
-#include <QString>
 
 #include <SDL3/SDL.h>
 
