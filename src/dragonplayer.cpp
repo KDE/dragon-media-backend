@@ -460,6 +460,14 @@ public:
 
         {
             std::lock_guard lock(decoderMutex);
+            if (activeDecoder && audioOutput && !audioOutput->isDeviceOpen()) {
+                qDebug() << "PLAYER: stop() decoder exists but audio not open yet, ignoring stale stop";
+                return;
+            }
+        }
+
+        {
+            std::lock_guard lock(decoderMutex);
             preWarmedDecoder.reset();
         }
         if (preWarmThread.joinable()) {
