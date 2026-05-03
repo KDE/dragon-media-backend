@@ -173,7 +173,15 @@ void DragonAudioOutput::reset()
 void DragonAudioOutput::setPositionOffset(int64_t offsetMs)
 {
     m_positionOffsetMs.store(offsetMs, std::memory_order_relaxed);
-    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+    m_flushPending.store(true, std::memory_order_release);
+}
+
+void DragonAudioOutput::clearStream()
+{
+    auto *session = m_session.load(std::memory_order_acquire);
+    if (session && session->stream) {
+        SDL_ClearAudioStream(session->stream);
+    }
 }
 
 bool DragonAudioOutput::isDeviceOpen() const
@@ -283,6 +291,16 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     if (!queue) {
         return;
     }
+
+    if (self->m_flushPending.exchange(false, std::memory_order_acq_rel)) {
+        const size_t ready = queue->get_num_items_ready();
+        if (ready > 0) {
+            auto drain = queue->prepare_read(ready);
+        }
+        self->m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+        return;
+    }
+
     if (additional_amount <= 0) {
         return;
     }

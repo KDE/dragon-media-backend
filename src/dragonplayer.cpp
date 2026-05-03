@@ -659,6 +659,7 @@ public:
 
         if (audioOutput) {
             audioOutput->setPositionOffset(posMs);
+            audioOutput->clearStream();
         }
         Q_EMIT q->positionChanged(posMs);
     }
