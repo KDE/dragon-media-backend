@@ -141,8 +141,9 @@ void DragonFftProcessor::processLoop(std::stop_token st)
                 const float frac = binIdx0 - static_cast<float>(startBin);
                 maxMag = std::lerp(getMag(startBin), getMag(startBin + 1), frac);
             } else {
-                for (int i = startBin; i < std::min(endBin, static_cast<int>(fftOut.size())); ++i) {
-                    maxMag = std::max(maxMag, getMag(i));
+                auto binRange = std::views::iota(startBin, std::min(endBin, static_cast<int>(fftOut.size())));
+                if (!std::ranges::empty(binRange)) {
+                    maxMag = std::ranges::max(binRange | std::views::transform(getMag));
                 }
             }
 
@@ -150,29 +151,28 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         };
 
         std::array<std::float32_t, NUM_LOG_BINS> logBins;
-        for (int i = 0; i < NUM_LOG_BINS; ++i) {
+        for (auto [i, bin] : std::views::enumerate(logBins)) {
             const float t0 = static_cast<float>(i) / static_cast<float>(NUM_LOG_BINS);
             const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_LOG_BINS);
-            logBins[static_cast<size_t>(i)] = computeBin(t0, t1);
+            bin = computeBin(t0, t1);
         }
 
         std::array<std::float32_t, NUM_BAR_BINS> barBins;
-        for (int i = 0; i < NUM_BAR_BINS; ++i) {
+        for (auto [i, bin] : std::views::enumerate(barBins)) {
             const float t0 = static_cast<float>(i) / static_cast<float>(NUM_BAR_BINS);
             const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_BAR_BINS);
-            barBins[static_cast<size_t>(i)] = computeBin(t0, t1);
+            bin = computeBin(t0, t1);
         }
 
         constexpr float decayRate = 1.5f;
-        for (int i = 0; i < NUM_BAR_BINS; ++i) {
-            const auto idx = static_cast<size_t>(i);
-            m_prevBarFrequencies[idx] = std::max(barBins[idx], m_prevBarFrequencies[idx] - decayRate);
-            barBins[idx] = m_prevBarFrequencies[idx];
+        for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, barBins)) {
+            prev = std::max(curr, prev - decayRate);
+            curr = prev;
         }
 
         DragonFftFrame frame;
-        frame.frequenciesDb.assign(logBins.begin(), logBins.end());
-        frame.barData.assign(barBins.begin(), barBins.end());
+        frame.frequenciesDb.assign_range(logBins);
+        frame.barData.assign_range(barBins);
         frame.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
 
         {
