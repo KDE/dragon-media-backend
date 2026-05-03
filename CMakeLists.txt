@@ -62,22 +62,17 @@ else()
     endif()
 endif()
 
-find_package(spsc_queue QUIET)
-if(NOT TARGET spsc_queue)
-    message(STATUS "spsc_queue not found, downloading...")
-    FetchContent_Declare(
-        spsc_queue_src
-        GIT_REPOSITORY https://github.com/joz-k/LockFreeSpscQueue.git
-        GIT_TAG v1.0.3
-    )
-    set(SPSC_QUEUE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(SPSC_QUEUE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(SPSC_QUEUE_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
-    set(SPSC_QUEUE_BUILD_BENCHMARK_COMPARE OFF CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(spsc_queue_src)
-    if(NOT TARGET spsc_queue AND TARGET spsc_queue_src)
-    endif()
-endif()
+FetchContent_Declare(
+    spsc_queue_src
+    GIT_REPOSITORY https://github.com/joz-k/LockFreeSpscQueue.git
+    GIT_TAG v1.0.3
+    PATCH_COMMAND git apply --ignore-whitespace ${CMAKE_CURRENT_SOURCE_DIR}/cmake/lockfree_spsc_queue_no_exceptions.patch || true
+)
+set(SPSC_QUEUE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(SPSC_QUEUE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(SPSC_QUEUE_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+set(SPSC_QUEUE_BUILD_BENCHMARK_COMPARE OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(spsc_queue_src)
 
 set(CMAKE_AUTOMOC ON)
 

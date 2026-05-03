@@ -1,0 +1,29 @@
+diff --git a/include/LockFreeSpscQueue.h b/include/LockFreeSpscQueue.h
+index d00bd6e..83f9acf 100644
+--- a/include/LockFreeSpscQueue.h
++++ b/include/LockFreeSpscQueue.h
+@@ -20,7 +20,7 @@
+ #include <algorithm>
+ #include <functional>
+ #include <span>
+-#include <stdexcept>
++#include <QDebug>
+ #include <bit>
+ #include <new>
+ #include <optional>
+@@ -497,11 +497,13 @@ public:
+         : m_buffer(buffer), m_capacity(buffer.size()), m_capacity_mask(m_capacity - 1)
+     {
+         if (m_capacity == 0) {
+-            throw std::invalid_argument("Buffer capacity cannot be zero.");
++            qWarning() << "LockFreeSpscQueue: Buffer capacity cannot be zero.";
++            return;
+         }
+ 
+         if (!std::has_single_bit(m_capacity)) {
+-            throw std::invalid_argument("Buffer capacity must be a power of two.");
++            qWarning() << "LockFreeSpscQueue: Buffer capacity must be a power of two.";
++            return;
+         }
+     }
+ 
