@@ -426,6 +426,10 @@ public:
             return;
         }
 
+        if (currentPlaybackState == PlaybackState::PlayingState) {
+            return;
+        }
+
         if (currentPlaybackState == PlaybackState::PausedState) {
             if (audioOutput) {
                 audioOutput->resume();
