@@ -6,6 +6,8 @@
 #include <QtTest>
 #include <stdfloat>
 
+using namespace Qt::StringLiterals;
+
 #include <LockFreeSpscQueue.h>
 #include <dragonsdl/dragonfftframe.h>
 #include <dragonsdl/dragonfftprocessor.h>
@@ -23,7 +25,7 @@ class TestFftProcessor : public QObject
 {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testHannWindow_data();
     void testHannWindow();
 
@@ -72,14 +74,14 @@ void TestFftProcessor::testHannWindow()
     for (int i = 0; i < windowSize / 2; ++i) {
         float diff = std::abs(data[static_cast<size_t>(i)] - data[static_cast<size_t>(windowSize - 1 - i)]);
         QVERIFY2(diff < 1e-6f,
-                 qPrintable(QString("Window not symmetric at index %1: %2 vs %3")
+                 qPrintable(QString("Window not symmetric at index %1: %2 vs %3"_L1)
                                 .arg(i)
                                 .arg(data[static_cast<size_t>(i)])
                                 .arg(data[static_cast<size_t>(windowSize - 1 - i)])));
     }
 
     for (const auto &val : data) {
-        QVERIFY2(val >= 0.0f && val <= 1.0f, qPrintable(QString("Window value out of range: %1").arg(val)));
+        QVERIFY2(val >= 0.0f && val <= 1.0f, qPrintable(QString("Window value out of range: %1"_L1).arg(val)));
     }
 }
 
@@ -195,7 +197,7 @@ void TestFftProcessor::testProcessLoopSineWave()
         }
     }
 
-    QVERIFY2(peakMag > -60.0f, qPrintable(QString("Peak magnitude %1 dB too low for sine wave").arg(peakMag)));
+    QVERIFY2(peakMag > -60.0f, qPrintable(QString("Peak magnitude %1 dB too low for sine wave"_L1).arg(peakMag)));
 }
 
 void TestFftProcessor::testProcessLoopSilence()
@@ -239,7 +241,7 @@ void TestFftProcessor::testProcessLoopSilence()
             sum += mag;
         }
         float avg = sum / static_cast<float>(frame.frequenciesDb.size());
-        QVERIFY2(avg < -40.0f, qPrintable(QString("Silence average magnitude %1 dB too high").arg(avg)));
+        QVERIFY2(avg < -40.0f, qPrintable(QString("Silence average magnitude %1 dB too high"_L1).arg(avg)));
     }
 }
 
@@ -288,7 +290,7 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     processorThread.join();
 
     std::lock_guard lock(framesMutex);
-    QVERIFY2(frames.size() >= 1, qPrintable(QString("Expected at least 1 frame, got %1").arg(frames.size())));
+    QVERIFY2(frames.size() >= 1, qPrintable(QString("Expected at least 1 frame, got %1"_L1).arg(frames.size())));
 
     for (const auto &frame : frames) {
         QVERIFY2(!frame.frequenciesDb.empty(), "Each frame should have frequency data");
@@ -336,7 +338,7 @@ void TestFftProcessor::testFrameCallbackInvoked()
     stopSource.request_stop();
     processorThread.join();
 
-    QVERIFY2(callbackCount.load() >= 1, qPrintable(QString("Callback should be invoked at least once, got %1").arg(callbackCount.load())));
+    QVERIFY2(callbackCount.load() >= 1, qPrintable(u"Callback should be invoked at least once, got %1"_s.arg(callbackCount.load())));
 }
 
 void TestFftProcessor::testPeakHoldDecay()
@@ -387,7 +389,7 @@ void TestFftProcessor::testPeakHoldDecay()
     if (peakValues.size() >= 2) {
         for (size_t i = 1; i < peakValues.size(); ++i) {
             QVERIFY2(peakValues[i] <= peakValues[i - 1] + 2.0f,
-                     qPrintable(QString("Peak decay not working: frame %1 = %2, frame %3 = %4").arg(i - 1).arg(peakValues[i - 1]).arg(i).arg(peakValues[i])));
+                     qPrintable(u"Peak decay not working: frame %1 = %2, frame %3 = %4"_s.arg(i - 1).arg(peakValues[i - 1]).arg(i).arg(peakValues[i])));
         }
     }
 }
@@ -430,7 +432,7 @@ void TestFftProcessor::testBarDataSizeValidation()
     QVERIFY(frame.barData.size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS));
 
     for (const float &val : frame.barData) {
-        QVERIFY2(val >= -85.0f && val <= 10.0f, qPrintable(QString("Bar value out of range: %1").arg(val)));
+        QVERIFY2(val >= -85.0f && val <= 10.0f, qPrintable(u"Bar value out of range: %1"_s.arg(val)));
     }
 }
 
@@ -490,7 +492,7 @@ void TestFftProcessor::testFrequencyDetectionAccuracy()
     }
 
     QVERIFY2(peakMag > -50.0f,
-             qPrintable(QString("Peak magnitude %1 dB too low for %2 Hz sine wave at %3 Hz sample rate").arg(peakMag).arg(frequency).arg(sampleRate)));
+             qPrintable(u"Peak magnitude %1 dB too low for %2 Hz sine wave at %3 Hz sample rate"_s.arg(peakMag).arg(frequency).arg(sampleRate)));
 
     int binsAboveNoise = 0;
     for (const float &mag : frame.frequenciesDb) {
@@ -498,7 +500,7 @@ void TestFftProcessor::testFrequencyDetectionAccuracy()
             binsAboveNoise++;
     }
 
-    QVERIFY2(binsAboveNoise <= 50, qPrintable(QString("Too many bins above noise floor (%1), signal may not be a clean sine").arg(binsAboveNoise)));
+    QVERIFY2(binsAboveNoise <= 50, qPrintable(u"Too many bins above noise floor (%1), signal may not be a clean sine"_s.arg(binsAboveNoise)));
 }
 
 void TestFftProcessor::testFrameTimestamp()

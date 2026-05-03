@@ -14,11 +14,13 @@
 #include <thread>
 #include <vector>
 
+using namespace Qt::StringLiterals;
+
 class TestAudioOutput : public QObject
 {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testConstruction();
     void testVolumeSetGet();
     void testMuteSetGet();
@@ -139,9 +141,9 @@ void TestAudioOutput::testSetStreamName()
 {
     DragonAudioOutput output;
 
-    output.setStreamName(QStringLiteral("Test Audio"));
-    output.setStreamName(QStringLiteral(""));
-    output.setStreamName(QStringLiteral("Longer Name With Spaces"));
+    output.setStreamName("Test Audio"_L1);
+    output.setStreamName(""_L1);
+    output.setStreamName("Longer Name With Spaces"_L1);
     QVERIFY(true);
 }
 

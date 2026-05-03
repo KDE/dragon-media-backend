@@ -27,6 +27,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+using namespace Qt::StringLiterals;
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -90,7 +92,7 @@ void MainWindow::setupUi()
     vLayout->addLayout(hBtnLayout);
 
     auto *hSeekLayout = new QHBoxLayout();
-    m_timeLabel = new QLabel("00:00 / 00:00", this);
+    m_timeLabel = new QLabel(u"00:00 / 00:00"_s, this);
     m_timeLabel->setMinimumWidth(100);
     m_seekSlider = new QSlider(Qt::Horizontal, this);
     m_seekSlider->setRange(0, 0);
@@ -111,7 +113,7 @@ void MainWindow::setupUi()
     vLayout->addLayout(hVolLayout);
 
     auto *visualizerLabel = new QLabel(tr("Visualizer"), this);
-    visualizerLabel->setStyleSheet("font-weight: bold;");
+    visualizerLabel->setStyleSheet(u"font-weight: bold;"_s);
     vLayout->addWidget(visualizerLabel);
     m_visualizer->setFixedHeight(DragonVisualizer::PreferredHeight);
     vLayout->addWidget(m_visualizer);
@@ -122,7 +124,7 @@ void MainWindow::setupUi()
     auto *rightPanel = new QWidget(this);
     auto *rightLayout = new QVBoxLayout(rightPanel);
     auto *playlistLabel = new QLabel(tr("Playlist"), this);
-    playlistLabel->setStyleSheet("font-weight: bold;");
+    playlistLabel->setStyleSheet(u"font-weight: bold;"_s);
     rightLayout->addWidget(playlistLabel);
 
     m_playlistWidget = new QListWidget(this);
@@ -196,7 +198,7 @@ void MainWindow::connectPlayer()
 void MainWindow::openFile()
 {
     QSettings settings;
-    const QString lastDir = settings.value(QStringLiteral("lastOpenDir"), QDir::homePath()).toString();
+    const QString lastDir = settings.value("lastOpenDir"_L1, QDir::homePath()).toString();
 
     const QString file =
         QFileDialog::getOpenFileName(this, tr("Open Audio File"), lastDir, tr("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
@@ -204,14 +206,14 @@ void MainWindow::openFile()
     if (!file.isEmpty()) {
         m_playlist->clear();
         m_playlist->addTrack(QUrl::fromLocalFile(file));
-        settings.setValue(QStringLiteral("lastOpenDir"), QFileInfo(file).absolutePath());
+        settings.setValue("lastOpenDir"_L1, QFileInfo(file).absolutePath());
     }
 }
 
 void MainWindow::openMultipleFiles()
 {
     QSettings settings;
-    const QString lastDir = settings.value(QStringLiteral("lastOpenDir"), QDir::homePath()).toString();
+    const QString lastDir = settings.value("lastOpenDir"_L1, QDir::homePath()).toString();
 
     const QStringList files =
         QFileDialog::getOpenFileNames(this, tr("Open Audio Files"), lastDir, tr("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
@@ -222,7 +224,7 @@ void MainWindow::openMultipleFiles()
             urls.append(QUrl::fromLocalFile(f));
         }
         m_playlist->addTracks(urls);
-        settings.setValue(QStringLiteral("lastOpenDir"), QFileInfo(files.first()).absolutePath());
+        settings.setValue("lastOpenDir"_L1, QFileInfo(files.first()).absolutePath());
     }
 }
 
@@ -234,7 +236,7 @@ void MainWindow::clearPlaylist()
 void MainWindow::playKexp()
 {
     m_playlist->clear();
-    m_playlist->addTrack(QUrl(QStringLiteral("https://kexp.streamguys1.com/kexp160.aac")));
+    m_playlist->addTrack(QUrl("https://kexp.streamguys1.com/kexp160.aac"_L1));
 }
 
 void MainWindow::playPlaylistItem(int index)
@@ -279,14 +281,14 @@ void MainWindow::updatePosition(int64_t positionMs)
     if (!m_seeking)
         m_seekSlider->setValue(static_cast<int>(positionMs));
 
-    m_timeLabel->setText(QStringLiteral("%1 / %2").arg(formatTime(positionMs)).arg(formatTime(m_durationMs)));
+    m_timeLabel->setText("%1 / %2"_L1.arg(formatTime(positionMs)).arg(formatTime(m_durationMs)));
 }
 
 void MainWindow::updateDuration(int64_t durationMs)
 {
     m_durationMs = durationMs;
     m_seekSlider->setMaximum(static_cast<int>(durationMs));
-    m_timeLabel->setText(QStringLiteral("%1 / %2").arg(formatTime(m_player->position())).arg(formatTime(durationMs)));
+    m_timeLabel->setText("%1 / %2"_L1.arg(formatTime(m_player->position())).arg(formatTime(durationMs)));
 }
 
 void MainWindow::setPositionFromSlider()
@@ -352,7 +354,7 @@ void MainWindow::updatePlaylistCurrentIndex(int index)
 QString MainWindow::formatTime(int64_t ms)
 {
     if (ms < 0)
-        return QStringLiteral("00:00");
+        return "00:00"_L1;
 
     const int64_t totalSeconds = ms / 1000;
     const int64_t minutes = totalSeconds / 60;
@@ -361,9 +363,9 @@ QString MainWindow::formatTime(int64_t ms)
     const int64_t mins = minutes % 60;
 
     if (hours > 0)
-        return QStringLiteral("%1:%2:%3").arg(hours).arg(mins, 2, 10, QLatin1Char('0')).arg(seconds, 2, 10, QLatin1Char('0'));
+        return u"%1:%2:%3"_s.arg(hours).arg(mins, 2, 10, QLatin1Char('0')).arg(seconds, 2, 10, QLatin1Char('0'));
 
-    return QStringLiteral("%1:%2").arg(mins, 2, 10, QLatin1Char('0')).arg(seconds, 2, 10, QLatin1Char('0'));
+    return u"%1:%2"_s.arg(mins, 2, 10, QLatin1Char('0')).arg(seconds, 2, 10, QLatin1Char('0'));
 }
 
 void MainWindow::updateFftFrame(const DragonFftFrame &frame)

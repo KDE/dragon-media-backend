@@ -21,18 +21,20 @@
 
 namespace fs = std::filesystem;
 
+using namespace Qt::StringLiterals;
+
 class TestFixture
 {
 public:
     static QString fixturePath(const QString &filename)
     {
         QString fixturesDir = QString::fromLocal8Bit(DRAGON_SDL_TESTS_FIXTURES_DIR);
-        return fixturesDir + "/" + filename;
+        return fixturesDir + "/"_L1 + filename;
     }
 
     static QStringList availableFixtures()
     {
-        return {"sample-3s.mp3", "sample-3s.aac", "gs-16b-2c-44100hz.ogg", "gs-16b-1c-44100hz.flac", "gs-16b-2c-44100hz.m4a"};
+        return {u"sample-3s.mp3"_s, u"sample-3s.aac"_s, u"gs-16b-2c-44100hz.ogg"_s, u"gs-16b-1c-44100hz.flac"_s, u"gs-16b-2c-44100hz.m4a"_s};
     }
 };
 
@@ -40,7 +42,7 @@ class TestE2E : public QObject
 {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testDecoderMp3File();
     void testDecoderAacFile();
     void testDecoderOggFile();
@@ -88,7 +90,7 @@ TestE2E::DecodeResult TestE2E::decodeFileSync(const QString &filePath, int timeo
 
     if (!QFileInfo::exists(filePath)) {
         result.hadError = true;
-        result.errorMessage = "File does not exist: " + filePath;
+        result.errorMessage = "File does not exist: "_L1 + filePath;
         return result;
     }
 
@@ -117,7 +119,7 @@ TestE2E::DecodeResult TestE2E::decodeFileSync(const QString &filePath, int timeo
 
     if (!completed) {
         result.hadError = true;
-        result.errorMessage = "Decode timeout";
+        result.errorMessage = "Decode timeout"_L1;
         stopSource.request_stop();
         decodeThread.join();
         return result;
@@ -148,29 +150,29 @@ TestE2E::DecodeResult TestE2E::decodeFileSync(const QString &filePath, int timeo
 
 void TestE2E::testDecoderMp3File()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
 
     auto result = decodeFileSync(filePath);
 
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: " + result.errorMessage));
+    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
 
-    QVERIFY2(result.sampleRate == 44100 || result.sampleRate > 0, qPrintable(QString("Unexpected sample rate: %1").arg(result.sampleRate)));
+    QVERIFY2(result.sampleRate == 44100 || result.sampleRate > 0, qPrintable(u"Unexpected sample rate: %1"_s.arg(result.sampleRate)));
 
     qDebug() << "MP3: sampleRate=" << result.sampleRate << "channels=" << result.channels << "samples=" << result.allSamples.size();
 }
 
 void TestE2E::testDecoderAacFile()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.aac");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("AAC file not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("sample-3s.aac"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("AAC file not found: "_L1 + filePath));
 
     auto result = decodeFileSync(filePath);
 
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: " + result.errorMessage));
+    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
@@ -180,48 +182,48 @@ void TestE2E::testDecoderAacFile()
 
 void TestE2E::testDecoderOggFile()
 {
-    QString filePath = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("OGG file not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("OGG file not found: "_L1 + filePath));
 
     auto result = decodeFileSync(filePath);
 
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: " + result.errorMessage));
+    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
 
-    QVERIFY2(result.sampleRate == 44100, qPrintable(QString("Expected 44100Hz, got %1").arg(result.sampleRate)));
-    QVERIFY2(result.channels == 2, qPrintable(QString("Expected 2 channels, got %1").arg(result.channels)));
+    QVERIFY2(result.sampleRate == 44100, qPrintable(u"Expected 44100Hz, got %1"_s.arg(result.sampleRate)));
+    QVERIFY2(result.channels == 2, qPrintable(u"Expected 2 channels, got %1"_s.arg(result.channels)));
 
     qDebug() << "OGG: sampleRate=" << result.sampleRate << "channels=" << result.channels << "samples=" << result.allSamples.size();
 }
 
 void TestE2E::testDecoderFlacFile()
 {
-    QString filePath = TestFixture::fixturePath("gs-16b-1c-44100hz.flac");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("FLAC file not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("gs-16b-1c-44100hz.flac"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("FLAC file not found: "_L1 + filePath));
 
     auto result = decodeFileSync(filePath);
 
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: " + result.errorMessage));
+    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
 
-    QVERIFY2(result.sampleRate == 44100, qPrintable(QString("Expected 44100Hz, got %1").arg(result.sampleRate)));
-    QVERIFY2(result.channels == 1, qPrintable(QString("Expected 1 channel (mono), got %1").arg(result.channels)));
+    QVERIFY2(result.sampleRate == 44100, qPrintable(u"Expected 44100Hz, got %1"_s.arg(result.sampleRate)));
+    QVERIFY2(result.channels == 1, qPrintable(u"Expected 1 channel (mono), got %1"_s.arg(result.channels)));
 
     qDebug() << "FLAC: sampleRate=" << result.sampleRate << "channels=" << result.channels << "samples=" << result.allSamples.size();
 }
 
 void TestE2E::testDecoderM4aFile()
 {
-    QString filePath = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("M4A file not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("M4A file not found: "_L1 + filePath));
 
     auto result = decodeFileSync(filePath);
 
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: " + result.errorMessage));
+    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
@@ -235,11 +237,11 @@ void TestE2E::testDecoderAllFormats_data()
     QTest::addColumn<int>("expectedSampleRate");
     QTest::addColumn<int>("expectedChannels");
 
-    QTest::newRow("mp3_44k_stereo") << "sample-3s.mp3" << 44100 << -1;
-    QTest::newRow("aac_44k_unknown") << "sample-3s.aac" << 44100 << -1;
-    QTest::newRow("ogg_44k_stereo") << "gs-16b-2c-44100hz.ogg" << 44100 << 2;
-    QTest::newRow("flac_44k_mono") << "gs-16b-1c-44100hz.flac" << 44100 << 1;
-    QTest::newRow("m4a_44k_stereo") << "gs-16b-2c-44100hz.m4a" << 44100 << 2;
+    QTest::newRow("mp3_44k_stereo") << u"sample-3s.mp3"_s << 44100 << -1;
+    QTest::newRow("aac_44k_unknown") << u"sample-3s.aac"_s << 44100 << -1;
+    QTest::newRow("ogg_44k_stereo") << u"gs-16b-2c-44100hz.ogg"_s << 44100 << 2;
+    QTest::newRow("flac_44k_mono") << u"gs-16b-1c-44100hz.flac"_s << 44100 << 1;
+    QTest::newRow("m4a_44k_stereo") << u"gs-16b-2c-44100hz.m4a"_s << 44100 << 2;
 }
 
 void TestE2E::testDecoderAllFormats()
@@ -249,26 +251,26 @@ void TestE2E::testDecoderAllFormats()
     QFETCH(int, expectedChannels);
 
     QString filePath = TestFixture::fixturePath(filename);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: " + filePath));
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: "_L1 + filePath));
 
     auto result = decodeFileSync(filePath);
 
-    QVERIFY2(!result.hadError, qPrintable(QString("Decode failed for %1: %2").arg(filename).arg(result.errorMessage)));
+    QVERIFY2(!result.hadError, qPrintable(u"Decode failed for %1: %2"_s.arg(filename).arg(result.errorMessage)));
 
-    QVERIFY2(result.sampleRate > 0, qPrintable(QString("Invalid sample rate for %1").arg(filename)));
+    QVERIFY2(result.sampleRate > 0, qPrintable(u"Invalid sample rate for %1"_s.arg(filename)));
 
-    QVERIFY2(result.channels > 0, qPrintable(QString("Invalid channel count for %1").arg(filename)));
+    QVERIFY2(result.channels > 0, qPrintable(u"Invalid channel count for %1"_s.arg(filename)));
 
-    QVERIFY2(result.allSamples.size() > 0, qPrintable(QString("No samples decoded for %1").arg(filename)));
+    QVERIFY2(result.allSamples.size() > 0, qPrintable(u"No samples decoded for %1"_s.arg(filename)));
 
     if (expectedSampleRate > 0) {
         QVERIFY2(result.sampleRate == expectedSampleRate,
-                 qPrintable(QString("%1: expected %2Hz, got %3Hz").arg(filename).arg(expectedSampleRate).arg(result.sampleRate)));
+                 qPrintable(u"%1: expected %2Hz, got %3Hz"_s.arg(filename).arg(expectedSampleRate).arg(result.sampleRate)));
     }
 
     if (expectedChannels > 0) {
         QVERIFY2(result.channels == expectedChannels,
-                 qPrintable(QString("%1: expected %2 channels, got %3").arg(filename).arg(expectedChannels).arg(result.channels)));
+                 qPrintable(u"%1: expected %2 channels, got %3"_s.arg(filename).arg(expectedChannels).arg(result.channels)));
     }
 
     qDebug() << filename << "-> sampleRate:" << result.sampleRate << "channels:" << result.channels << "totalSamples:" << result.allSamples.size()
@@ -277,8 +279,8 @@ void TestE2E::testDecoderAllFormats()
 
 void TestE2E::testPlayerWithMp3File()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
 
     DragonPlayer player;
 
@@ -313,8 +315,8 @@ void TestE2E::testPlayerWithMp3File()
 
 void TestE2E::testPlayerWithOggFile()
 {
-    QString filePath = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("OGG file not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("OGG file not found: "_L1 + filePath));
 
     DragonPlayer player;
 
@@ -333,8 +335,8 @@ void TestE2E::testPlayerWithOggFile()
 
 void TestE2E::testPlayerStopActuallyStopsAudio()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
 
     DragonPlayer player;
 
@@ -354,8 +356,8 @@ void TestE2E::testPlayerStopActuallyStopsAudio()
 
 void TestE2E::testPlayerPauseResumeSequence()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
 
     DragonPlayer player;
 
@@ -385,9 +387,9 @@ void TestE2E::testDecodeAndVerifySamples_data()
     QTest::addColumn<bool>("checkSampleRange");
     QTest::addColumn<bool>("checkNoNaNInf");
 
-    QTest::newRow("mp3_verify_samples") << "sample-3s.mp3" << true << true;
-    QTest::newRow("ogg_verify_samples") << "gs-16b-2c-44100hz.ogg" << true << true;
-    QTest::newRow("flac_verify_samples") << "gs-16b-1c-44100hz.flac" << true << true;
+    QTest::newRow("mp3_verify_samples") << u"sample-3s.mp3"_s << true << true;
+    QTest::newRow("ogg_verify_samples") << u"gs-16b-2c-44100hz.ogg"_s << true << true;
+    QTest::newRow("flac_verify_samples") << u"gs-16b-1c-44100hz.flac"_s << true << true;
 }
 
 void TestE2E::testDecodeAndVerifySamples()
@@ -397,13 +399,13 @@ void TestE2E::testDecodeAndVerifySamples()
     QFETCH(bool, checkNoNaNInf);
 
     QString filePath = TestFixture::fixturePath(filename);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: " + filePath));
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: "_L1 + filePath));
 
     auto result = decodeFileSync(filePath);
 
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: " + result.errorMessage));
+    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
 
-    QVERIFY2(result.allSamples.size() > 1000, qPrintable(QString("Expected many samples for %1, got %2").arg(filename).arg(result.allSamples.size())));
+    QVERIFY2(result.allSamples.size() > 1000, qPrintable(u"Expected many samples for %1, got %2"_s.arg(filename).arg(result.allSamples.size())));
 
     if (checkSampleRange) {
         std::float32_t minSample = 1.0f;
@@ -415,15 +417,14 @@ void TestE2E::testDecodeAndVerifySamples()
 
         qDebug() << filename << "sample range:" << minSample << "to" << maxSample;
 
-        QVERIFY2(minSample >= -2.0f && maxSample <= 2.0f,
-                 qPrintable(QString("%1: sample range out of bounds [%2, %3]").arg(filename).arg(minSample).arg(maxSample)));
+        QVERIFY2(minSample >= -2.0f && maxSample <= 2.0f, qPrintable(u"%1: sample range out of bounds [%2, %3]"_s.arg(filename).arg(minSample).arg(maxSample)));
     }
 
     if (checkNoNaNInf) {
         for (size_t i = 0; i < result.allSamples.size(); ++i) {
             float s = result.allSamples[i];
-            QVERIFY2(!std::isnan(s), qPrintable(QString("%1: NaN at index %2").arg(filename).arg(i)));
-            QVERIFY2(!std::isinf(s), qPrintable(QString("%1: Inf at index %2").arg(filename).arg(i)));
+            QVERIFY2(!std::isnan(s), qPrintable(u"%1: NaN at index %2"_s.arg(filename).arg(i)));
+            QVERIFY2(!std::isinf(s), qPrintable(u"%1: Inf at index %2"_s.arg(filename).arg(i)));
         }
     }
 
@@ -432,7 +433,7 @@ void TestE2E::testDecodeAndVerifySamples()
 
 void TestE2E::testDecoderNonExistentFile()
 {
-    QString filePath = "/nonexistent/path/to/audio.mp3";
+    QString filePath = "/nonexistent/path/to/audio.mp3"_L1;
     QVERIFY2(!QFileInfo::exists(filePath), "Test file should not exist");
 
     DragonDecoder decoder(nullptr, filePath);
@@ -461,7 +462,7 @@ void TestE2E::testDecoderInvalidFile()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
 
-    QString invalidPath = tempDir.filePath("invalid.mp3");
+    QString invalidPath = tempDir.filePath("invalid.mp3"_L1);
     QFile file(invalidPath);
     QVERIFY(file.open(QIODevice::WriteOnly));
 
@@ -492,8 +493,8 @@ void TestE2E::testDecoderInvalidFile()
 
 void TestE2E::testDecoderSignalEmissionOrder()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: "_L1 + filePath));
 
     DragonDecoder decoder(nullptr, filePath);
 
@@ -523,17 +524,17 @@ void TestE2E::testDecoderSignalEmissionOrder()
 
 void TestE2E::testDecoderMultipleFilesConsecutive()
 {
-    QStringList files = {"sample-3s.mp3", "sample-3s.aac", "gs-16b-2c-44100hz.ogg"};
+    QStringList files = {u"sample-3s.mp3"_s, u"sample-3s.aac"_s, u"gs-16b-2c-44100hz.ogg"_s};
 
     for (const QString &filename : files) {
         QString filePath = TestFixture::fixturePath(filename);
-        QVERIFY2(QFileInfo::exists(filePath), qPrintable(QString("File not found: %1").arg(filename)));
+        QVERIFY2(QFileInfo::exists(filePath), qPrintable(u"File not found: %1"_s.arg(filename)));
 
         auto result = decodeFileSync(filePath, 8000);
 
-        QVERIFY2(!result.hadError, qPrintable(QString("Failed to decode %1: %2").arg(filename).arg(result.errorMessage)));
+        QVERIFY2(!result.hadError, qPrintable(u"Failed to decode %1: %2"_s.arg(filename).arg(result.errorMessage)));
 
-        QVERIFY2(result.allSamples.size() > 0, qPrintable(QString("No samples decoded for %1").arg(filename)));
+        QVERIFY2(result.allSamples.size() > 0, qPrintable(u"No samples decoded for %1"_s.arg(filename)));
 
         qDebug() << "Successfully decoded" << filename;
     }
@@ -541,15 +542,15 @@ void TestE2E::testDecoderMultipleFilesConsecutive()
 
 void TestE2E::testDecoderNoMemoryLeaks()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3");
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: " + filePath));
+    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: "_L1 + filePath));
 
     for (int i = 0; i < 5; ++i) {
         auto result = decodeFileSync(filePath, 8000);
 
-        QVERIFY2(!result.hadError, qPrintable(QString("Iteration %1: decode failed: %2").arg(i).arg(result.errorMessage)));
+        QVERIFY2(!result.hadError, qPrintable(u"Iteration %1: decode failed: %2"_s.arg(i).arg(result.errorMessage)));
 
-        QVERIFY2(result.allSamples.size() > 0, qPrintable(QString("Iteration %1: no samples").arg(i)));
+        QVERIFY2(result.allSamples.size() > 0, qPrintable(u"Iteration %1: no samples"_s.arg(i)));
 
         qDebug() << "Iteration" << i << "completed, samples:" << result.allSamples.size();
     }
@@ -557,11 +558,11 @@ void TestE2E::testDecoderNoMemoryLeaks()
 
 void TestE2E::testSeamlessPlaybackTransition()
 {
-    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg");
-    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a");
+    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
+    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
 
-    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: " + track1));
-    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: " + track2));
+    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
+    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: "_L1 + track2));
 
     DragonPlayer player;
 
@@ -600,7 +601,7 @@ void TestE2E::testSeamlessPlaybackTransition()
 
     QVERIFY(!player.nextSource().isValid());
 
-    QVERIFY2(sourceSpy.count() >= 2, qPrintable(QString("Expected at least 2 source changes, got %1").arg(sourceSpy.count())));
+    QVERIFY2(sourceSpy.count() >= 2, qPrintable(u"Expected at least 2 source changes, got %1"_s.arg(sourceSpy.count())));
 
     qDebug() << "Seamless playback test passed:"
              << "trackChanged=" << trackChangedSpy.count() << "stateChanges=" << stateSpy.count() << "sourceChanges=" << sourceSpy.count();

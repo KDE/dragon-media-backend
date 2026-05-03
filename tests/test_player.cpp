@@ -13,11 +13,13 @@
 #include <QSignalSpy>
 #include <QUrl>
 
+using namespace Qt::StringLiterals;
+
 class TestPlayer : public QObject
 {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testConstruction();
     void testInitialState();
 
@@ -129,7 +131,7 @@ void TestPlayer::testSourceProperty()
 
     QVERIFY(!player.source().isValid());
 
-    QUrl testSource = QUrl::fromLocalFile("/path/to/audio.mp3");
+    QUrl testSource = QUrl::fromLocalFile("/path/to/audio.mp3"_L1);
     player.setSource(testSource);
     QVERIFY(player.source() == testSource);
 
@@ -160,7 +162,7 @@ void TestPlayer::testErrorProperty()
 
     QVERIFY(player.error() == DragonPlayer::Error::NoError);
 
-    QUrl invalidSource = QUrl("file:///nonexistent/file.mp3");
+    QUrl invalidSource = QUrl("file:///nonexistent/file.mp3"_L1);
     player.setSource(invalidSource);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError || player.status() == DragonPlayer::MediaStatus::NoMedia, 3000);
@@ -193,7 +195,7 @@ void TestPlayer::testSetSource()
 
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
-    QUrl source = QUrl::fromLocalFile("/tmp/test_audio.mp3");
+    QUrl source = QUrl::fromLocalFile("/tmp/test_audio.mp3"_L1);
     player.setSource(source);
 
     QVERIFY(statusSpy.count() >= 0);
@@ -218,7 +220,7 @@ void TestPlayer::testSetSourceInvalid()
 {
     DragonPlayer player;
 
-    QUrl invalid = QUrl::fromLocalFile("/nonexistent/path/audio.mp3");
+    QUrl invalid = QUrl::fromLocalFile("/nonexistent/path/audio.mp3"_L1);
     player.setSource(invalid);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError || player.status() == DragonPlayer::MediaStatus::InvalidMedia, 5000);
@@ -231,7 +233,7 @@ void TestPlayer::testPlay()
     player.play();
     QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
 
-    player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"));
+    player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTest::qWait(100);
     player.play();
     QVERIFY(true);
@@ -313,7 +315,7 @@ void TestPlayer::testSourceChangedSignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::sourceChanged);
 
-    QUrl newSource = QUrl::fromLocalFile("/tmp/test.mp3");
+    QUrl newSource = QUrl::fromLocalFile("/tmp/test.mp3"_L1);
     player.setSource(newSource);
 
     QTRY_VERIFY(spy.count() > 0);
@@ -328,7 +330,7 @@ void TestPlayer::testPlaybackStateChangedSignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::playbackStateChanged);
 
-    player.setSource(QUrl::fromLocalFile("/tmp/test.mp3"));
+    player.setSource(QUrl::fromLocalFile("/tmp/test.mp3"_L1));
     QTest::qWait(100);
 
     player.play();
@@ -343,7 +345,7 @@ void TestPlayer::testStatusChangedSignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::statusChanged);
 
-    QUrl invalidSource = QUrl::fromLocalFile("/nonexistent.mp3");
+    QUrl invalidSource = QUrl::fromLocalFile("/nonexistent.mp3"_L1);
     player.setSource(invalidSource);
 
     QTRY_VERIFY_WITH_TIMEOUT(spy.count() > 0, 3000);
@@ -358,7 +360,7 @@ void TestPlayer::testErrorChangedSignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::errorChanged);
 
-    QUrl invalidSource = QUrl::fromLocalFile("/nonexistent/file.mp3");
+    QUrl invalidSource = QUrl::fromLocalFile("/nonexistent/file.mp3"_L1);
     player.setSource(invalidSource);
 
     QTRY_VERIFY_WITH_TIMEOUT(spy.count() > 0 || player.error() != DragonPlayer::Error::NoError, 5000);
@@ -418,28 +420,28 @@ void TestPlayer::testStateMachineSequence()
 
     DragonPlayer player;
 
-    if (initialState == "PausedState") {
+    if (initialState == "PausedState"_L1) {
         player.pause();
         QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
     }
 
-    if (action == "play") {
+    if (action == "play"_L1) {
         player.play();
-    } else if (action == "pause") {
+    } else if (action == "pause"_L1) {
         player.pause();
-    } else if (action == "stop") {
+    } else if (action == "stop"_L1) {
         player.stop();
     }
 
-    if (action == "play" && initialState == "StoppedState") {
+    if (action == "play"_L1 && initialState == "StoppedState"_L1) {
         QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
-    } else if (action == "play" && initialState == "PausedState") {
+    } else if (action == "play"_L1 && initialState == "PausedState"_L1) {
         QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
-    } else if (expectedState == "PlayingState") {
+    } else if (expectedState == "PlayingState"_L1) {
         QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
-    } else if (expectedState == "PausedState") {
+    } else if (expectedState == "PausedState"_L1) {
         QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
-    } else if (expectedState == "StoppedState") {
+    } else if (expectedState == "StoppedState"_L1) {
         QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
     }
 }
@@ -533,7 +535,7 @@ void TestPlayer::testPositionTracking()
     QTest::qWait(100);
     QVERIFY(player.position() == 0);
 
-    player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"));
+    player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTest::qWait(500);
 
     int64_t pos = player.position();
@@ -560,7 +562,7 @@ void TestPlayer::testSeekBehavior()
     player.setPosition(-100);
     QCOMPARE(player.position(), 0);
 
-    player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"));
+    player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTest::qWait(200);
 
     posSpy.clear();
@@ -578,10 +580,10 @@ void TestPlayer::testMultipleSourceChanges()
     QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
-    player.setSource(QUrl::fromLocalFile("/nonexistent1.mp3"));
+    player.setSource(QUrl::fromLocalFile("/nonexistent1.mp3"_L1));
     QTRY_VERIFY(sourceSpy.count() >= 1);
 
-    player.setSource(QUrl::fromLocalFile("/nonexistent2.mp3"));
+    player.setSource(QUrl::fromLocalFile("/nonexistent2.mp3"_L1));
     QTRY_VERIFY(sourceSpy.count() >= 2);
 
     sourceSpy.clear();
@@ -601,7 +603,7 @@ void TestPlayer::testSignalEmissionOrder()
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
     QSignalSpy seekableSpy(&player, &DragonPlayer::seekableChanged);
 
-    player.setSource(QUrl::fromLocalFile("/tmp/test.mp3"));
+    player.setSource(QUrl::fromLocalFile("/tmp/test.mp3"_L1));
 
     QTRY_VERIFY_WITH_TIMEOUT(sourceSpy.count() > 0, 3000);
 
@@ -645,7 +647,7 @@ void TestPlayer::testSetPositionEmitsPositionChanged()
 
 void TestPlayer::testPositionTimerEmitsDuringPlayback()
 {
-    QString filePath = QString::fromLocal8Bit(DRAGON_SDL_TESTS_FIXTURES_DIR) + "/sample-3s.mp3";
+    QString filePath = QString::fromLocal8Bit(DRAGON_SDL_TESTS_FIXTURES_DIR) + "/sample-3s.mp3"_L1;
     if (!QFileInfo::exists(filePath)) {
         QSKIP("Audio fixture not available");
     }
@@ -670,7 +672,7 @@ void TestPlayer::testPositionTimerEmitsDuringPlayback()
 
 void TestPlayer::testSeekWithRealAudio()
 {
-    QString filePath = QString::fromLocal8Bit(DRAGON_SDL_TESTS_FIXTURES_DIR) + "/sample-3s.mp3";
+    QString filePath = QString::fromLocal8Bit(DRAGON_SDL_TESTS_FIXTURES_DIR) + "/sample-3s.mp3"_L1;
     if (!QFileInfo::exists(filePath)) {
         QSKIP("Audio fixture not available");
     }
@@ -690,7 +692,7 @@ void TestPlayer::testSeekWithRealAudio()
     QTest::qWait(200);
 
     int64_t pos = player.position();
-    QVERIFY2(std::llabs(pos - 1000) < 500, qPrintable(QString("Seek failed: expected ~1000ms, got %1ms").arg(pos)));
+    QVERIFY2(std::llabs(pos - 1000) < 500, qPrintable(u"Seek failed: expected ~1000ms, got %1ms"_s.arg(pos)));
 
     player.stop();
 }

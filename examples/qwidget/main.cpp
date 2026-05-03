@@ -7,11 +7,13 @@
 
 #include <QApplication>
 
+using namespace Qt::StringLiterals;
+
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    app.setOrganizationName(QStringLiteral("DragonSDL"));
-    app.setApplicationName(QStringLiteral("DragonSDLExample"));
+    app.setOrganizationName("DragonSDL"_L1);
+    app.setApplicationName("DragonSDLExample"_L1);
 
     MainWindow w;
     w.show();

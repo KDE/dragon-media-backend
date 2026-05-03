@@ -25,7 +25,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
     ~MainWindow() override;
 
-private slots:
+private Q_SLOTS:
     void openFile();
     void openMultipleFiles();
     void clearPlaylist();

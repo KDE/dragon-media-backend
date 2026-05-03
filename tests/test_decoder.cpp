@@ -18,6 +18,8 @@
 #include <thread>
 #include <vector>
 
+using namespace Qt::StringLiterals;
+
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -113,7 +115,7 @@ class TestDecoder : public QObject
 {
     Q_OBJECT
 
-private slots:
+private Q_SLOTS:
     void testConstruction();
     void testLocalFileDecoding();
     void testNetworkStreamDecoding();
@@ -152,7 +154,7 @@ void TestDecoder::testConstruction()
     DragonDecoder decoder(std::move(readCb), {});
     QVERIFY(true);
 
-    DragonDecoder decoder2(nullptr, QStringLiteral("/nonexistent/file.mp3"));
+    DragonDecoder decoder2(nullptr, "/nonexistent/file.mp3"_L1);
     QVERIFY(true);
 }
 
@@ -160,7 +162,7 @@ void TestDecoder::testLocalFileDecoding()
 {
     QVERIFY2(m_tempDir.isValid(), "Failed to create temp directory");
 
-    QString filePath = m_tempDir.filePath("test.wav");
+    QString filePath = m_tempDir.filePath("test.wav"_L1);
     QFile wavFile(filePath);
     QVERIFY(wavFile.open(QIODevice::WriteOnly));
     wavFile.write(createTestWavData(44100, 2, 100));
@@ -193,7 +195,7 @@ void TestDecoder::testLocalFileDecoding()
 
     if (errorSpy.count() > 0) {
         QString errorMsg = errorSpy.at(0).at(0).toString();
-        QFAIL(qPrintable(QString("Decoder error: %1").arg(errorMsg)));
+        QFAIL(qPrintable(u"Decoder error: %1"_s.arg(errorMsg)));
     }
 
     QVERIFY2(formatSpy.count() > 0, "formatReady signal should have been emitted");
@@ -244,7 +246,7 @@ void TestDecoder::testNetworkStreamDecoding()
 void TestDecoder::testFormatReadySignal()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_format.wav");
+    QString filePath = m_tempDir.filePath("test_format.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(48000, 1, 50));
@@ -271,7 +273,7 @@ void TestDecoder::testFormatReadySignal()
 void TestDecoder::testSamplesCallback()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_samples.wav");
+    QString filePath = m_tempDir.filePath("test_samples.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, 2, 200));
@@ -297,14 +299,14 @@ void TestDecoder::testSamplesCallback()
     QVERIFY2(capturedSamples.size() > 0, "No samples were decoded");
 
     for (const auto &f : capturedSamples) {
-        QVERIFY2(f >= -1.0f && f <= 1.0f, qPrintable(QString("Sample out of range: %1").arg(f)));
+        QVERIFY2(f >= -1.0f && f <= 1.0f, qPrintable(u"Sample out of range: %1"_s.arg(f)));
     }
 }
 
 void TestDecoder::testDurationSignal()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_duration.wav");
+    QString filePath = m_tempDir.filePath("test_duration.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, 2, 150));
@@ -330,7 +332,7 @@ void TestDecoder::testErrorSignal()
     auto readCb = [](std::span<uint8_t>) -> int {
         return -1;
     };
-    DragonDecoder decoder(std::move(readCb), "/nonexistent/path/audio.mp3");
+    DragonDecoder decoder(std::move(readCb), "/nonexistent/path/audio.mp3"_L1);
 
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
@@ -373,7 +375,7 @@ void TestDecoder::testEmptySource()
 void TestDecoder::testStopTokenCancellation()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_cancel.wav");
+    QString filePath = m_tempDir.filePath("test_cancel.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, 2, 500));
@@ -401,7 +403,7 @@ void TestDecoder::testStopTokenCancellation()
     stopSource.request_stop();
     t.join();
 
-    QVERIFY2(samplesBeforeCancel > 0, qPrintable(QString("Expected samples before cancel, got %1").arg(samplesBeforeCancel)));
+    QVERIFY2(samplesBeforeCancel > 0, qPrintable(u"Expected samples before cancel, got %1"_s.arg(samplesBeforeCancel)));
 }
 
 void TestDecoder::testDifferentSampleRates_data()
@@ -424,7 +426,7 @@ void TestDecoder::testDifferentSampleRates()
     QFETCH(int, durationMs);
 
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath(QString("test_sr_%1_ch_%2.wav").arg(sampleRate).arg(channels));
+    QString filePath = m_tempDir.filePath(u"test_sr_%1_ch_%2.wav"_s.arg(sampleRate).arg(channels));
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(sampleRate, channels, durationMs));
@@ -445,20 +447,20 @@ void TestDecoder::testDifferentSampleRates()
     });
     t.join();
 
-    QVERIFY2(formatSpy.count() > 0, qPrintable(QString("Format not detected for %1Hz/%2ch").arg(sampleRate).arg(channels)));
-    QVERIFY2(callbackCount.load() > 0, qPrintable(QString("No samples decoded for %1Hz/%2ch").arg(sampleRate).arg(channels)));
+    QVERIFY2(formatSpy.count() > 0, qPrintable(u"Format not detected for %1Hz/%2ch"_s.arg(sampleRate).arg(channels)));
+    QVERIFY2(callbackCount.load() > 0, qPrintable(u"No samples decoded for %1Hz/%2ch"_s.arg(sampleRate).arg(channels)));
 
     QList<QVariant> formatArgs = formatSpy.at(0);
     int decodedSampleRate = formatArgs.at(0).toInt();
     int decodedChannels = formatArgs.at(1).toInt();
-    QVERIFY2(decodedSampleRate == sampleRate, qPrintable(QString("Sample rate mismatch: expected %1, got %2").arg(sampleRate).arg(decodedSampleRate)));
-    QVERIFY2(decodedChannels == channels, qPrintable(QString("Channel mismatch: expected %1, got %2").arg(channels).arg(decodedChannels)));
+    QVERIFY2(decodedSampleRate == sampleRate, qPrintable(u"Sample rate mismatch: expected %1, got %2"_s.arg(sampleRate).arg(decodedSampleRate)));
+    QVERIFY2(decodedChannels == channels, qPrintable(u"Channel mismatch: expected %1, got %2"_s.arg(channels).arg(decodedChannels)));
 }
 
 void TestDecoder::testMonoToStereoConversion()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_mono.wav");
+    QString filePath = m_tempDir.filePath("test_mono.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, 1, 100));
@@ -489,8 +491,8 @@ void TestDecoder::testMultipleDecoderInstances()
 {
     QVERIFY(m_tempDir.isValid());
 
-    QString filePath1 = m_tempDir.filePath("test_multi_1.wav");
-    QString filePath2 = m_tempDir.filePath("test_multi_2.wav");
+    QString filePath1 = m_tempDir.filePath("test_multi_1.wav"_L1);
+    QString filePath2 = m_tempDir.filePath("test_multi_2.wav"_L1);
 
     QFile file1(filePath1);
     QVERIFY(file1.open(QIODevice::WriteOnly));
@@ -524,14 +526,14 @@ void TestDecoder::testMultipleDecoderInstances()
 
     int sr1 = formatSpy1.at(0).at(0).toInt();
     int sr2 = formatSpy2.at(0).at(0).toInt();
-    QVERIFY2(sr1 == 44100, qPrintable(QString("Expected 44100, got %1").arg(sr1)));
-    QVERIFY2(sr2 == 48000, qPrintable(QString("Expected 48000, got %1").arg(sr2)));
+    QVERIFY2(sr1 == 44100, qPrintable(u"Expected 44100, got %1"_s.arg(sr1)));
+    QVERIFY2(sr2 == 48000, qPrintable(u"Expected 48000, got %1"_s.arg(sr2)));
 }
 
 void TestDecoder::testCorruptDataHandling()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_corrupt.wav");
+    QString filePath = m_tempDir.filePath("test_corrupt.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
 
@@ -562,7 +564,7 @@ void TestDecoder::testResamplerBehavior()
 {
     QVERIFY(m_tempDir.isValid());
 
-    QString filePath = m_tempDir.filePath("test_8k_resample.wav");
+    QString filePath = m_tempDir.filePath("test_8k_resample.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(8000, 1, 200));
@@ -590,8 +592,8 @@ void TestDecoder::testResamplerBehavior()
     QVERIFY(!allSamples.empty());
 
     for (const auto &s : allSamples) {
-        QVERIFY2(!std::isnan(s) && !std::isinf(s), qPrintable(QString("Sample is NaN or Inf: %1").arg(s)));
-        QVERIFY2(s >= -2.0f && s <= 2.0f, qPrintable(QString("Sample out of range: %1").arg(s)));
+        QVERIFY2(!std::isnan(s) && !std::isinf(s), qPrintable(u"Sample is NaN or Inf: %1"_s.arg(s)));
+        QVERIFY2(s >= -2.0f && s <= 2.0f, qPrintable(u"Sample out of range: %1"_s.arg(s)));
     }
 }
 
@@ -609,7 +611,7 @@ void TestDecoder::testChannelConfiguration()
     QFETCH(int, channels);
 
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath(QString("test_ch_%1.wav").arg(channels));
+    QString filePath = m_tempDir.filePath(u"test_ch_%1.wav"_s.arg(channels));
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, channels, 100));
@@ -626,13 +628,13 @@ void TestDecoder::testChannelConfiguration()
 
     QVERIFY(formatSpy.count() > 0);
     int decodedChannels = formatSpy.at(0).at(1).toInt();
-    QVERIFY2(decodedChannels == channels, qPrintable(QString("Channel configuration mismatch: expected %1, got %2").arg(channels).arg(decodedChannels)));
+    QVERIFY2(decodedChannels == channels, qPrintable(u"Channel configuration mismatch: expected %1, got %2"_s.arg(channels).arg(decodedChannels)));
 }
 
 void TestDecoder::testSamplesCallbackInvoked()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_callback_invoked.wav");
+    QString filePath = m_tempDir.filePath("test_callback_invoked.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, 2, 100));
@@ -660,7 +662,7 @@ void TestDecoder::testSamplesCallbackInvoked()
 void TestDecoder::testCallbackThreadAffinity()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_thread.wav");
+    QString filePath = m_tempDir.filePath("test_thread.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, 2, 100));
@@ -694,7 +696,7 @@ void TestDecoder::testCallbackThreadAffinity()
 void TestDecoder::testCallbackNotSetIsSafe()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_no_callback.wav");
+    QString filePath = m_tempDir.filePath("test_no_callback.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, 2, 100));
@@ -716,7 +718,7 @@ void TestDecoder::testCallbackNotSetIsSafe()
 void TestDecoder::testCallbackEmptySpanNotFired()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_no_empty.wav");
+    QString filePath = m_tempDir.filePath("test_no_empty.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, 2, 100));
@@ -747,7 +749,7 @@ void TestDecoder::testCallbackEmptySpanNotFired()
 void TestDecoder::testCallbackSampleRateAndChannels()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_callback_params.wav");
+    QString filePath = m_tempDir.filePath("test_callback_params.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(48000, 1, 100));
@@ -783,9 +785,8 @@ void TestDecoder::testCallbackSampleRateAndChannels()
 
     std::lock_guard lock(paramsMutex);
     QVERIFY2(callbackSampleRate == formatSampleRate,
-             qPrintable(QString("Sample rate mismatch: callback=%1, formatReady=%2").arg(callbackSampleRate).arg(formatSampleRate)));
-    QVERIFY2(callbackChannels == formatChannels,
-             qPrintable(QString("Channel mismatch: callback=%1, formatReady=%2").arg(callbackChannels).arg(formatChannels)));
+             qPrintable(u"Sample rate mismatch: callback=%1, formatReady=%2"_s.arg(callbackSampleRate).arg(formatSampleRate)));
+    QVERIFY2(callbackChannels == formatChannels, qPrintable(u"Channel mismatch: callback=%1, formatReady=%2"_s.arg(callbackChannels).arg(formatChannels)));
     QVERIFY2(callbackSampleRate == 48000, "Callback should receive 48000Hz");
     QVERIFY2(callbackChannels == 1, "Callback should receive mono");
 }
@@ -793,7 +794,7 @@ void TestDecoder::testCallbackSampleRateAndChannels()
 void TestDecoder::testCallbackReentrant()
 {
     QVERIFY(m_tempDir.isValid());
-    QString filePath = m_tempDir.filePath("test_reentrant.wav");
+    QString filePath = m_tempDir.filePath("test_reentrant.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
     file.write(createTestWavData(44100, 2, 100));

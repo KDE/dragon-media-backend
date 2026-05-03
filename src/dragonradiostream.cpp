@@ -15,6 +15,7 @@
 #include <cstring>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 DragonRadioStream::DragonRadioStream(QObject *parent)
     : QObject(parent)
@@ -54,7 +55,7 @@ void DragonRadioStream::start()
     }
 
     QNetworkRequest request(m_url);
-    request.setRawHeader("Icy-Metadata", "1");
+    request.setRawHeader("Icy-Metadata"_ba, "1"_ba);
     m_reply = m_nam->get(request);
 
     connect(m_reply, &QNetworkReply::encrypted, this, &DragonRadioStream::onReplyEncrypted);
@@ -135,7 +136,7 @@ void DragonRadioStream::onReplyEncrypted()
 void DragonRadioStream::onReplyMetaDataChanged()
 {
     if (m_reply) {
-        const QByteArray metaintHeader = m_reply->rawHeader("icy-metaint");
+        const QByteArray metaintHeader = m_reply->rawHeader("icy-metaint"_ba);
         if (!metaintHeader.isEmpty()) {
             bool ok = false;
             const int metaint = metaintHeader.toInt(&ok);
@@ -190,7 +191,7 @@ void DragonRadioStream::onReplyError(QNetworkReply::NetworkError code)
     m_bufferCv.notify_all();
 
     if (!m_abort) {
-        Q_EMIT errorOccurred(u"Network error: %1"_s.arg(static_cast<int>(code)));
+        Q_EMIT errorOccurred(QString::fromLatin1("Network error: %1").arg(static_cast<int>(code)));
     }
 }
 
@@ -306,9 +307,9 @@ void DragonRadioStream::processMetadata(const QByteArray &metadata)
 
         if (!key.isEmpty()) {
             const QString value = QString::fromUtf8(val).trimmed();
-            if (key == QStringLiteral("StreamTitle")) {
+            if (key == "StreamTitle"_L1) {
                 icy.setStreamTitle(value);
-            } else if (key == QStringLiteral("StreamUrl")) {
+            } else if (key == "StreamUrl"_L1) {
                 icy.setStreamUrl(value);
             } else {
                 icy.insertCustomField(key, value);
