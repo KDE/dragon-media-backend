@@ -235,6 +235,17 @@ public:
                 audioOutput->setPositionOffset(currentPosition);
                 fftProcessor->setSampleRate(sampleRate);
                 setStatus(MediaStatus::LoadedMedia);
+
+                if (requestedPlaybackState == PlaybackState::PlayingState) {
+                    requestedPlaybackState = PlaybackState::StoppedState;
+                    setPlaybackState(PlaybackState::PlayingState);
+                } else if (requestedPlaybackState == PlaybackState::PausedState) {
+                    requestedPlaybackState = PlaybackState::StoppedState;
+                    if (audioOutput) {
+                        audioOutput->pause();
+                    }
+                    setPlaybackState(PlaybackState::PausedState);
+                }
             },
             Qt::QueuedConnection);
 
@@ -315,6 +326,15 @@ public:
             return;
         }
 
+        if (currentPlaybackState != PlaybackState::StoppedState) {
+            setPlaybackState(PlaybackState::StoppedState);
+        } else {
+            Q_EMIT q->playbackStateChanged(PlaybackState::StoppedState);
+            Q_EMIT q->stopped();
+        }
+
+        requestedPlaybackState = PlaybackState::StoppedState;
+
         setError(Error::NoError);
         setStatus(MediaStatus::LoadingMedia);
 
@@ -337,8 +357,6 @@ public:
 
         decodeStopSource = std::stop_source{};
         decoderCv.notify_one();
-
-        setPlaybackState(PlaybackState::PlayingState);
     }
 
     void setNextSource(const QUrl &next)
@@ -438,8 +456,14 @@ public:
             return;
         }
 
-        if (currentStatus == MediaStatus::EndOfMedia || currentStatus == MediaStatus::LoadedMedia) {
+        if (currentStatus == MediaStatus::LoadingMedia) {
+            requestedPlaybackState = PlaybackState::PlayingState;
+            return;
+        }
+
+        if (currentStatus == MediaStatus::EndOfMedia) {
             setSource(currentSource);
+            requestedPlaybackState = PlaybackState::PlayingState;
             return;
         }
 
@@ -448,6 +472,15 @@ public:
 
     void pause()
     {
+        if (currentPlaybackState == PlaybackState::PausedState) {
+            return;
+        }
+
+        if (currentStatus == MediaStatus::LoadingMedia) {
+            requestedPlaybackState = PlaybackState::PausedState;
+            return;
+        }
+
         if (audioOutput) {
             audioOutput->pause();
         }
@@ -457,6 +490,11 @@ public:
     void stop()
     {
         qDebug() << "PLAYER: stop()";
+
+        if (currentStatus == MediaStatus::LoadingMedia) {
+            requestedPlaybackState = PlaybackState::StoppedState;
+            return;
+        }
 
         {
             std::lock_guard lock(decoderMutex);
@@ -503,6 +541,11 @@ public:
         }
 
         setPlaybackState(PlaybackState::StoppedState);
+
+        if (currentStatus != MediaStatus::LoadedMedia) {
+            currentStatus = MediaStatus::LoadedMedia;
+        }
+        Q_EMIT q->statusChanged(MediaStatus::LoadedMedia);
     }
 
     void writeToQueues(std::span<const std::float32_t> pcm)
@@ -692,6 +735,7 @@ public:
     PlaybackState currentPlaybackState = PlaybackState::StoppedState;
     MediaStatus currentStatus = MediaStatus::NoMedia;
     Error currentError = Error::NoError;
+    PlaybackState requestedPlaybackState = PlaybackState::StoppedState;
     int64_t currentDuration = 0;
     float currentVolume = 1.0f;
     bool currentMuted = false;

@@ -344,6 +344,8 @@ void TestE2E::testPlayerStopActuallyStopsAudio()
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
+    player.play();
+
     QVERIFY2(player.isAudioActive(), "Audio should be active after starting playback");
     QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
 
@@ -364,6 +366,8 @@ void TestE2E::testPlayerPauseResumeSequence()
     player.setSource(QUrl::fromLocalFile(filePath));
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    player.play();
 
     QVERIFY2(player.isAudioActive(), "Audio should be active after starting playback");
     QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
@@ -567,7 +571,6 @@ void TestE2E::testSeamlessPlaybackTransition()
     DragonPlayer player;
 
     QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
     QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
     QSignalSpy nextSourceSpy(&player, &DragonPlayer::nextSourceChanged);
@@ -580,8 +583,12 @@ void TestE2E::testSeamlessPlaybackTransition()
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
+    player.play();
+
     QVERIFY2(player.isAudioActive(), "Audio device should be open during first track playback");
     QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
 

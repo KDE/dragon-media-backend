@@ -69,7 +69,30 @@ private Q_SLOTS:
     void testPositionTimerEmitsDuringPlayback();
     void testSeekWithRealAudio();
 
+    void testSetSourceDoesNotEmitPlayingState();
+    void testSetSourceWhilePlayingEmitsStoppedState();
+    void testPlayWithNoSourceIsNoOp();
+
+    void testPlayDuringLoadingDefers();
+    void testPauseDuringLoadingDefers();
+    void testStopDuringLoadingDefers();
+    void testDeferredStateResetOnNewSource();
+
+    void testPauseFromPlayingState();
+    void testStopFromPlayingStateEmitsLoadedMedia();
+    void testPlayFromPausedStateResumes();
+    void testMultiplePlayCallsIdempotent();
+
+    void testInvalidMediaStaysStopped();
+    void testSetSourceWhilePlayingStopsOldTrack();
+    void testEndOfMediaTransitionsToStoppedState();
+    void testPlayAtEndOfMediaRestarts();
+
+    void testSignalOrderOnSetSource();
+    void testSignalOrderOnStop();
+
 private:
+    QString fixture(const QString &filename) const;
     bool waitForSignal(QSignalSpy &spy, int timeoutMs = 5000);
 };
 
@@ -661,6 +684,9 @@ void TestPlayer::testPositionTimerEmitsDuringPlayback()
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
     QTest::qWait(300);
 
     QVERIFY2(posSpy.count() > 0, "positionChanged must be emitted periodically during playback");
@@ -695,6 +721,551 @@ void TestPlayer::testSeekWithRealAudio()
     QVERIFY2(std::llabs(pos - 1000) < 500, qPrintable(u"Seek failed: expected ~1000ms, got %1ms"_s.arg(pos)));
 
     player.stop();
+}
+
+QString TestPlayer::fixture(const QString &filename) const
+{
+    return QString::fromLocal8Bit(DRAGON_SDL_TESTS_FIXTURES_DIR) + "/"_L1 + filename;
+}
+
+void TestPlayer::testSetSourceDoesNotEmitPlayingState()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QCOMPARE(stateSpy.count(), 1);
+    auto state = stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>();
+    QCOMPARE(state, DragonPlayer::PlaybackState::StoppedState);
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayer::testSetSourceWhilePlayingEmitsStoppedState()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(stateSpy.count() >= 1, 5000);
+
+    auto firstState = stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>();
+    QCOMPARE(firstState, DragonPlayer::PlaybackState::StoppedState);
+
+    bool sawLoadingMedia = false;
+    for (const auto &args : statusSpy) {
+        auto status = args.at(0).value<DragonPlayer::MediaStatus>();
+        if (status == DragonPlayer::MediaStatus::LoadingMedia) {
+            sawLoadingMedia = true;
+            break;
+        }
+    }
+    QVERIFY2(sawLoadingMedia, "setSource() must emit LoadingMedia status");
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayer::testPlayWithNoSourceIsNoOp()
+{
+    DragonPlayer player;
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
+    player.play();
+
+    QCOMPARE(stateSpy.count(), 0);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayer::testPlayDuringLoadingDefers()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QCOMPARE(stateSpy.count(), 1);
+
+    player.play();
+
+    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QTRY_VERIFY(stateSpy.count() == 2);
+    QCOMPARE(stateSpy.at(1).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::PlayingState);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
+}
+
+void TestPlayer::testPauseDuringLoadingDefers()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QCOMPARE(stateSpy.count(), 1);
+
+    player.pause();
+
+    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QTRY_VERIFY(stateSpy.count() == 2);
+    QCOMPARE(stateSpy.at(1).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::PausedState);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
+}
+
+void TestPlayer::testStopDuringLoadingDefers()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QCOMPARE(stateSpy.count(), 1);
+
+    player.stop();
+
+    QCOMPARE(stateSpy.count(), 1);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayer::testDeferredStateResetOnNewSource()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    player.play();
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayer::testPauseFromPlayingState()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    player.pause();
+
+    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::PausedState);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
+    QVERIFY2(player.isAudioActive(), "Audio device should stay open after pause");
+
+    player.stop();
+}
+
+void TestPlayer::testStopFromPlayingStateEmitsLoadedMedia()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    player.stop();
+
+    QTRY_VERIFY(stateSpy.count() >= 1);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY2(!player.isAudioActive(), "Audio device should be closed after stop()");
+
+    bool sawLoadedMedia = false;
+    for (const auto &args : statusSpy) {
+        auto status = args.at(0).value<DragonPlayer::MediaStatus>();
+        if (status == DragonPlayer::MediaStatus::LoadedMedia) {
+            sawLoadedMedia = true;
+            break;
+        }
+    }
+    QVERIFY2(sawLoadedMedia, "stop() must emit statusChanged(LoadedMedia) per Qt contract");
+}
+
+void TestPlayer::testPlayFromPausedStateResumes()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QTest::qWait(300);
+    int64_t posBefore = player.position();
+
+    player.pause();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
+
+    QTest::qWait(200);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    player.play();
+
+    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::PlayingState);
+
+    QVERIFY2(player.position() >= posBefore, qPrintable(u"Position should not reset on resume: was %1, now %2"_s.arg(posBefore).arg(player.position())));
+
+    player.stop();
+}
+
+void TestPlayer::testMultiplePlayCallsIdempotent()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    player.play();
+    player.play();
+    player.play();
+    QTest::qWait(100);
+
+    QCOMPARE(stateSpy.count(), 0);
+
+    player.stop();
+}
+
+void TestPlayer::testInvalidMediaStaysStopped()
+{
+    DragonPlayer player;
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
+
+    player.setSource(QUrl::fromLocalFile("/nonexistent/file.mp3"_L1));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError, 5000);
+
+    for (const auto &args : stateSpy) {
+        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
+        QVERIFY2(state != DragonPlayer::PlaybackState::PlayingState, "Invalid media must never emit PlayingState");
+    }
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY(errorSpy.count() >= 1);
+}
+
+void TestPlayer::testSetSourceWhilePlayingStopsOldTrack()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(stateSpy.count() >= 1, 5000);
+
+    bool sawStoppedState = false;
+    for (const auto &args : stateSpy) {
+        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
+        if (state == DragonPlayer::PlaybackState::StoppedState) {
+            sawStoppedState = true;
+            break;
+        }
+    }
+    QVERIFY2(sawStoppedState, "setSource() while playing must emit StoppedState per Qt contract");
+
+    bool sawLoadingMedia = false;
+    for (const auto &args : statusSpy) {
+        auto status = args.at(0).value<DragonPlayer::MediaStatus>();
+        if (status == DragonPlayer::MediaStatus::LoadingMedia) {
+            sawLoadingMedia = true;
+            break;
+        }
+    }
+    QVERIFY2(sawLoadingMedia, "setSource() must emit LoadingMedia status");
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayer::testEndOfMediaTransitionsToStoppedState()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 15000);
+
+    bool sawStoppedState = false;
+    for (const auto &args : stateSpy) {
+        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
+        if (state == DragonPlayer::PlaybackState::StoppedState) {
+            sawStoppedState = true;
+            break;
+        }
+    }
+    QVERIFY2(sawStoppedState, "End of media must emit StoppedState");
+
+    bool sawEndOfMedia = false;
+    for (const auto &args : statusSpy) {
+        auto status = args.at(0).value<DragonPlayer::MediaStatus>();
+        if (status == DragonPlayer::MediaStatus::EndOfMedia) {
+            sawEndOfMedia = true;
+            break;
+        }
+    }
+    QVERIFY2(sawEndOfMedia, "End of media must emit EndOfMedia status");
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayer::testPlayAtEndOfMediaRestarts()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 15000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    player.play();
+
+    QTRY_VERIFY(stateSpy.count() >= 1);
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
+    QVERIFY2(player.position() < 500, qPrintable(u"Restarted position should be near beginning: %1"_s.arg(player.position())));
+
+    player.stop();
+}
+
+void TestPlayer::testSignalOrderOnSetSource()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    QStringList signalOrder;
+
+    QObject::connect(
+        &player,
+        &DragonPlayer::playbackStateChanged,
+        &player,
+        [&signalOrder](DragonPlayer::PlaybackState state) {
+            if (state == DragonPlayer::PlaybackState::StoppedState) {
+                signalOrder.append(u"stateChanged(StoppedState)"_s);
+            } else if (state == DragonPlayer::PlaybackState::PlayingState) {
+                signalOrder.append(u"stateChanged(PlayingState)"_s);
+            } else if (state == DragonPlayer::PlaybackState::PausedState) {
+                signalOrder.append(u"stateChanged(PausedState)"_s);
+            }
+        },
+        Qt::DirectConnection);
+
+    QObject::connect(
+        &player,
+        &DragonPlayer::statusChanged,
+        &player,
+        [&signalOrder](DragonPlayer::MediaStatus status) {
+            if (status == DragonPlayer::MediaStatus::LoadingMedia) {
+                signalOrder.append(u"statusChanged(LoadingMedia)"_s);
+            } else if (status == DragonPlayer::MediaStatus::LoadedMedia) {
+                signalOrder.append(u"statusChanged(LoadedMedia)"_s);
+            } else if (status == DragonPlayer::MediaStatus::NoMedia) {
+                signalOrder.append(u"statusChanged(NoMedia)"_s);
+            } else if (status == DragonPlayer::MediaStatus::EndOfMedia) {
+                signalOrder.append(u"statusChanged(EndOfMedia)"_s);
+            }
+        },
+        Qt::DirectConnection);
+
+    QObject::connect(
+        &player,
+        &DragonPlayer::sourceChanged,
+        &player,
+        [&signalOrder]() {
+            signalOrder.append(u"sourceChanged()"_s);
+        },
+        Qt::DirectConnection);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QVERIFY2(signalOrder.contains(u"statusChanged(LoadingMedia)"_s), "setSource() must emit LoadingMedia");
+
+    QVERIFY2(signalOrder.contains(u"stateChanged(StoppedState)"_s), "setSource() must emit stateChanged(StoppedState) per Qt contract");
+
+    int stoppedIdx = signalOrder.indexOf(u"stateChanged(StoppedState)"_s);
+    int loadingIdx = signalOrder.indexOf(u"statusChanged(LoadingMedia)"_s);
+    QVERIFY2(stoppedIdx >= 0 && loadingIdx >= 0 && stoppedIdx < loadingIdx,
+             "stateChanged(StoppedState) must come before statusChanged(LoadingMedia) per Qt order");
+}
+
+void TestPlayer::testSignalOrderOnStop()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QStringList signalOrder;
+
+    QObject::connect(
+        &player,
+        &DragonPlayer::playbackStateChanged,
+        &player,
+        [&signalOrder](DragonPlayer::PlaybackState state) {
+            if (state == DragonPlayer::PlaybackState::StoppedState) {
+                signalOrder.append(u"stateChanged(StoppedState)"_s);
+            }
+        },
+        Qt::DirectConnection);
+
+    QObject::connect(
+        &player,
+        &DragonPlayer::statusChanged,
+        &player,
+        [&signalOrder](DragonPlayer::MediaStatus status) {
+            if (status == DragonPlayer::MediaStatus::LoadedMedia) {
+                signalOrder.append(u"statusChanged(LoadedMedia)"_s);
+            }
+        },
+        Qt::DirectConnection);
+
+    QObject::connect(
+        &player,
+        &DragonPlayer::positionChanged,
+        &player,
+        [&signalOrder](int64_t pos) {
+            if (pos == 0) {
+                signalOrder.append(u"positionChanged(0)"_s);
+            }
+        },
+        Qt::DirectConnection);
+
+    player.stop();
+
+    QTRY_VERIFY(signalOrder.count() >= 1);
+
+    QVERIFY2(signalOrder.contains(u"stateChanged(StoppedState)"_s), "stop() must emit StoppedState");
+
+    QVERIFY2(signalOrder.contains(u"statusChanged(LoadedMedia)"_s), "stop() must emit statusChanged(LoadedMedia) per Qt contract");
 }
 
 bool TestPlayer::waitForSignal(QSignalSpy &spy, int timeoutMs)
