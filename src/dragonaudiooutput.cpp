@@ -25,6 +25,7 @@ DragonAudioOutput::DragonAudioOutput(QObject *parent)
     : QObject(parent)
 {
     const QString iconName = QGuiApplication::windowIcon().name();
+    SDL_SetHint(SDL_HINT_APP_NAME, QGuiApplication::applicationDisplayName().toUtf8().constData());
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_APP_ICON_NAME, iconName.isEmpty() ? "dragon-sdl" : iconName.toUtf8().constData());
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_ROLE, "music");
 

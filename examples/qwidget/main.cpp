@@ -12,10 +12,11 @@ using namespace Qt::StringLiterals;
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    app.setOrganizationName("DragonSDL"_L1);
-    app.setApplicationName("DragonSDLExample"_L1);
+    QApplication::setWindowIcon(QIcon::fromTheme("emblem-music-symbolic"_L1));
+    QApplication::setOrganizationName("DragonSDL"_L1);
+    QApplication::setApplicationName("Dragon SDL Example"_L1);
 
     MainWindow w;
     w.show();
-    return app.exec();
+    return QApplication::exec();
 }
