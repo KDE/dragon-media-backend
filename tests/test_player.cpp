@@ -70,6 +70,7 @@ private Q_SLOTS:
     void testSeekWithRealAudio();
 
     void testSetSourceDoesNotEmitPlayingState();
+    void testSetSourceDoesNotAutoStartAudio();
     void testSetSourceWhilePlayingEmitsStoppedState();
     void testPlayWithNoSourceIsNoOp();
 
@@ -750,6 +751,27 @@ void TestPlayer::testSetSourceDoesNotEmitPlayingState()
     QCOMPARE(state, DragonPlayer::PlaybackState::StoppedState);
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QVERIFY2(!player.isAudioActive(), "Audio device must NOT be open after setSource() without play() auto-play is a bug");
+}
+
+void TestPlayer::testSetSourceDoesNotAutoStartAudio()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY2(!player.isAudioActive(), "Audio device must NOT be open after setSource() auto-play is a bug (Finding 2)");
 }
 
 void TestPlayer::testSetSourceWhilePlayingEmitsStoppedState()
@@ -872,6 +894,8 @@ void TestPlayer::testStopDuringLoadingDefers()
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QVERIFY2(!player.isAudioActive(), "Audio device must NOT be open after stop() during loading");
 }
 
 void TestPlayer::testDeferredStateResetOnNewSource()

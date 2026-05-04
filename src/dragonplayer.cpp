@@ -229,22 +229,34 @@ public:
                     return;
                 }
                 qDebug() << "PLAYER: formatReady sr=" << sampleRate << "ch=" << channels;
-                if (!isGapless || !audioOutput->hasFormat(sampleRate, channels)) {
-                    audioOutput->start(sampleRate, channels);
-                }
+                currentSampleRate = sampleRate;
+                currentChannels = channels;
+
+                bool audioAlreadyRunning = isGapless && audioOutput->hasFormat(sampleRate, channels);
+
                 audioOutput->setPositionOffset(currentPosition);
                 fftProcessor->setSampleRate(sampleRate);
                 setStatus(MediaStatus::LoadedMedia);
 
                 if (requestedPlaybackState == PlaybackState::PlayingState) {
                     requestedPlaybackState = PlaybackState::StoppedState;
+                    if (!audioAlreadyRunning) {
+                        audioOutput->start(sampleRate, channels);
+                    }
                     setPlaybackState(PlaybackState::PlayingState);
                 } else if (requestedPlaybackState == PlaybackState::PausedState) {
                     requestedPlaybackState = PlaybackState::StoppedState;
+                    if (!audioAlreadyRunning) {
+                        audioOutput->start(sampleRate, channels);
+                    }
                     if (audioOutput) {
                         audioOutput->pause();
                     }
                     setPlaybackState(PlaybackState::PausedState);
+                } else {
+                    if (isGapless && currentPlaybackState == PlaybackState::PlayingState && !audioAlreadyRunning) {
+                        audioOutput->start(sampleRate, channels);
+                    }
                 }
             },
             Qt::QueuedConnection);
@@ -316,6 +328,8 @@ public:
         currentPosition = 0;
         currentDuration = 0;
         nextSource.clear();
+        currentSampleRate = 0;
+        currentChannels = 0;
 
         Q_EMIT q->sourceChanged();
         Q_EMIT q->nextSourceChanged();
@@ -467,6 +481,9 @@ public:
             return;
         }
 
+        if (audioOutput && !audioOutput->isDeviceOpen() && currentSampleRate > 0) {
+            audioOutput->start(currentSampleRate, currentChannels);
+        }
         setPlaybackState(PlaybackState::PlayingState);
     }
 
@@ -740,6 +757,8 @@ public:
     bool currentMuted = false;
     bool currentSeekable = false;
     bool currentIsLocal = false;
+    int currentSampleRate = 0;
+    int currentChannels = 0;
 
     uint64_t currentDecoderGeneration = 0;
 
