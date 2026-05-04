@@ -660,7 +660,6 @@ public:
         if (audioOutput) {
             audioOutput->setVolume(gain);
         }
-        Q_EMIT q->volumeChanged();
     }
 
     bool muted() const
