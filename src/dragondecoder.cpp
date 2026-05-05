@@ -12,6 +12,7 @@
 #include <cstring>
 #include <expected>
 #include <memory>
+#include <ranges>
 #include <span>
 
 #ifdef __cplusplus
@@ -79,6 +80,8 @@ struct AvCodecCtxDeleter {
     }
 };
 
+using CodecContextPtr = std::unique_ptr<AVCodecContext, AvCodecCtxDeleter>;
+
 struct SwrCtxDeleter {
     void operator()(SwrContext *ctx) const noexcept
     {
@@ -90,7 +93,7 @@ struct SwrCtxDeleter {
 
 struct DragonDecoder::DecodeSession {
     std::unique_ptr<AVFormatContext, AvFormatCtxDeleter> fmtCtx;
-    std::unique_ptr<AVCodecContext, AvCodecCtxDeleter> codecCtx;
+    CodecContextPtr codecCtx;
     std::unique_ptr<SwrContext, SwrCtxDeleter> swrCtx;
     const AVCodec *codec = nullptr;
     AVStream *audioStream = nullptr;
@@ -241,8 +244,7 @@ bool DragonDecoder::openContainer(AvioContextHandle handle, DecodeSession &sessi
         }
         rawFmtCtx->pb = handle.ctx;
 
-        int ret = avformat_open_input(&rawFmtCtx, nullptr, nullptr, nullptr);
-        if (ret < 0) {
+        if (const int err = avformat_open_input(&rawFmtCtx, nullptr, nullptr, nullptr); err < 0) {
             if (rawFmtCtx) {
                 rawFmtCtx->pb = nullptr;
                 avformat_free_context(rawFmtCtx);
@@ -270,8 +272,7 @@ bool DragonDecoder::findAudioStream(DecodeSession &session)
         return false;
     }
 
-    for (unsigned int i = 0; i < session.fmtCtx->nb_streams; ++i) {
-        AVStream *stream = session.fmtCtx->streams[i];
+    for (auto [i, stream] : std::views::enumerate(std::span{session.fmtCtx->streams, session.fmtCtx->nb_streams})) {
         if (const AVCodecParameters *par = stream->codecpar; par->codec_type == AVMEDIA_TYPE_AUDIO) {
             session.codec = avcodec_find_decoder(par->codec_id);
             if (session.codec) {
@@ -293,30 +294,26 @@ bool DragonDecoder::findAudioStream(DecodeSession &session)
 
 bool DragonDecoder::setupCodec(DecodeSession &session)
 {
-    AVCodecContext *rawCodecCtx = avcodec_alloc_context3(session.codec);
-    if (!rawCodecCtx) {
+    CodecContextPtr codecCtx{avcodec_alloc_context3(session.codec)};
+    if (!codecCtx) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
         Q_EMIT streamError(u"Failed to allocate codec context"_s);
         return false;
     }
 
-    int ret = avcodec_parameters_to_context(rawCodecCtx, session.audioStream->codecpar);
-    if (ret < 0) {
-        avcodec_free_context(&rawCodecCtx);
+    if (const int err = avcodec_parameters_to_context(codecCtx.get(), session.audioStream->codecpar); err < 0) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
         Q_EMIT streamError(u"avcodec_parameters_to_context failed"_s);
         return false;
     }
 
-    ret = avcodec_open2(rawCodecCtx, session.codec, nullptr);
-    if (ret < 0) {
-        avcodec_free_context(&rawCodecCtx);
+    if (const int err = avcodec_open2(codecCtx.get(), session.codec, nullptr); err < 0) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
         Q_EMIT streamError(u"avcodec_open2 failed"_s);
         return false;
     }
 
-    session.codecCtx.reset(rawCodecCtx);
+    session.codecCtx.reset(codecCtx.release());
     session.sampleRate = session.codecCtx->sample_rate;
     session.nbChannels = session.codecCtx->ch_layout.nb_channels;
     return true;
