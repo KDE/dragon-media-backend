@@ -61,6 +61,11 @@ void DragonFftProcessor::setSampleRate(int sampleRate)
     m_sampleRate = sampleRate;
 }
 
+void DragonFftProcessor::setFftMode(FftMode mode)
+{
+    m_fftMode.store(mode, std::memory_order_relaxed);
+}
+
 void DragonFftProcessor::reset()
 {
     m_prevBarFrequencies.fill(-80.0f);
@@ -87,7 +92,22 @@ DragonFftFrame DragonFftProcessor::takeLatestFrame()
 void DragonFftProcessor::processLoop(std::stop_token st)
 {
     int frameCount = 0;
+    FftMode prevMode = FftMode::Both;
+
     while (!st.stop_requested()) {
+        const FftMode mode = m_fftMode.load(std::memory_order_relaxed);
+
+        if (mode == FftMode::Off) {
+            prevMode = FftMode::Off;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+
+        if (prevMode == FftMode::Off && (mode == FftMode::BarsOnly || mode == FftMode::Both)) {
+            m_prevBarFrequencies.fill(-80.0f);
+        }
+        prevMode = mode;
+
         if (m_waitCv) {
             std::unique_lock lock(m_waitMutex);
             m_waitCv->wait_for(lock, std::chrono::milliseconds(50), [&] {
@@ -163,29 +183,35 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             return 20.0f * std::log10(std::max(maxMag, 1e-6f));
         };
 
-        std::array<std::float32_t, NUM_LOG_BINS> logBins{};
-        for (auto [i, bin] : std::views::enumerate(logBins)) {
-            const float t0 = static_cast<float>(i) / static_cast<float>(NUM_LOG_BINS);
-            const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_LOG_BINS);
-            bin = computeBin(t0, t1);
-        }
-
-        std::array<std::float32_t, NUM_BAR_BINS> barBins{};
-        for (auto [i, bin] : std::views::enumerate(barBins)) {
-            const float t0 = static_cast<float>(i) / static_cast<float>(NUM_BAR_BINS);
-            const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_BAR_BINS);
-            bin = computeBin(t0, t1);
-        }
-
-        constexpr float decayRate = 1.5f;
-        for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, barBins)) {
-            prev = std::max(curr, prev - decayRate);
-            curr = prev;
-        }
-
         DragonFftFrame frame;
-        frame.frequenciesDb.assign_range(logBins);
-        frame.barData.assign_range(barBins);
+
+        if (mode == FftMode::DetailedOnly || mode == FftMode::Both) {
+            std::array<std::float32_t, NUM_LOG_BINS> logBins{};
+            for (auto [i, bin] : std::views::enumerate(logBins)) {
+                const float t0 = static_cast<float>(i) / static_cast<float>(NUM_LOG_BINS);
+                const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_LOG_BINS);
+                bin = computeBin(t0, t1);
+            }
+            frame.frequenciesDb.assign_range(logBins);
+        }
+
+        if (mode == FftMode::BarsOnly || mode == FftMode::Both) {
+            std::array<std::float32_t, NUM_BAR_BINS> barBins{};
+            for (auto [i, bin] : std::views::enumerate(barBins)) {
+                const float t0 = static_cast<float>(i) / static_cast<float>(NUM_BAR_BINS);
+                const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_BAR_BINS);
+                bin = computeBin(t0, t1);
+            }
+
+            constexpr float decayRate = 1.5f;
+            for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, barBins)) {
+                prev = std::max(curr, prev - decayRate);
+                curr = prev;
+            }
+
+            frame.barData.assign_range(barBins);
+        }
+
         frame.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
 
         {
@@ -198,8 +224,15 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         }
 
         if (frameCount <= 3 || frameCount % 60 == 0) {
-            qDebug() << "FFT: frame emitted count=" << frameCount << "barData[0]=" << frame.barData[0] << "barData[11]=" << frame.barData[11]
-                     << "barData[23]=" << frame.barData[23];
+            if (!frame.barData.empty()) {
+                qDebug() << "FFT: frame emitted count=" << frameCount << "mode=" << mode << "barData[0]=" << frame.barData[0]
+                         << "barData[11]=" << frame.barData[11] << "barData[23]=" << frame.barData[23];
+            } else if (!frame.frequenciesDb.empty()) {
+                qDebug() << "FFT: frame emitted count=" << frameCount << "mode=" << mode << "freqDb[0]=" << frame.frequenciesDb[0]
+                         << "freqDb[256]=" << frame.frequenciesDb[256];
+            } else {
+                qDebug() << "FFT: frame emitted count=" << frameCount << "mode=" << mode;
+            }
         }
     }
 }

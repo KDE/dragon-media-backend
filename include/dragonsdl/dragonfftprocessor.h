@@ -6,10 +6,12 @@
 #pragma once
 
 #include "dragonfftframe.h"
+#include "dragonplayer.h"
 #include "dragonsdl_export.h"
 #include <stdfloat>
 
 #include <array>
+#include <atomic>
 #include <complex>
 #include <condition_variable>
 #include <cstddef>
@@ -49,11 +51,16 @@ public:
     void setWaitCv(std::condition_variable *cv);
     void setSampleRate(int sampleRate);
 
+    using FftMode = DragonPlayer::FftMode;
+
+    void setFftMode(FftMode mode);
+
     void setFrameCallback(FrameCallback cb);
 
     void processLoop(std::stop_token st);
 
     [[nodiscard]] DragonFftFrame takeLatestFrame();
+
     void reset();
 
     static void applyHannWindow(std::span<std::float32_t> data);
@@ -63,6 +70,7 @@ private:
     std::condition_variable *m_waitCv = nullptr;
     std::mutex m_waitMutex;
     int m_sampleRate = 44100;
+    std::atomic<FftMode> m_fftMode{FftMode::Off};
 
     std::unique_ptr<kissfft<float>> m_fft;
     std::array<std::float32_t, FFT_SIZE> m_inputWindow;

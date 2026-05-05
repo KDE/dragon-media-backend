@@ -56,6 +56,7 @@ public:
         fftProcessor = std::make_unique<DragonFftProcessor>();
         fftProcessor->setQueue(fftQueue.get());
         fftProcessor->setWaitCv(audioOutput->fftCv());
+        fftProcessor->setFftMode(DragonFftProcessor::FftMode::Off);
 
         fftProcessor->setFrameCallback([this](DragonFftFrame frame) {
             QMetaObject::invokeMethod(
@@ -696,6 +697,23 @@ public:
         Q_EMIT q->mutedChanged(m);
     }
 
+    FftMode fftMode() const
+    {
+        return currentFftMode;
+    }
+
+    void setFftMode(FftMode mode)
+    {
+        if (currentFftMode == mode) {
+            return;
+        }
+        currentFftMode = mode;
+        if (fftProcessor) {
+            fftProcessor->setFftMode(mode);
+        }
+        Q_EMIT q->fftModeChanged(mode);
+    }
+
     int64_t position() const
     {
         if (audioOutput && audioOutput->isDeviceOpen()) {
@@ -759,6 +777,7 @@ public:
     bool currentIsLocal = false;
     int currentSampleRate = 0;
     int currentChannels = 0;
+    FftMode currentFftMode = FftMode::Off;
 
     uint64_t currentDecoderGeneration = 0;
 
@@ -820,6 +839,10 @@ bool DragonPlayer::isAudioActive() const
 {
     return d->isAudioActive();
 }
+DragonPlayer::FftMode DragonPlayer::fftMode() const
+{
+    return d->fftMode();
+}
 
 void DragonPlayer::setMuted(bool muted)
 {
@@ -841,6 +864,11 @@ void DragonPlayer::setNextSource(const QUrl &nextSource)
 void DragonPlayer::setPosition(int64_t posMs)
 {
     d->setPosition(posMs);
+}
+
+void DragonPlayer::setFftMode(FftMode mode)
+{
+    d->setFftMode(mode);
 }
 
 void DragonPlayer::play()

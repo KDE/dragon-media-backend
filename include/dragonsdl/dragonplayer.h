@@ -49,6 +49,14 @@ public:
     };
     Q_ENUM(Error)
 
+    enum class FftMode {
+        Off,
+        BarsOnly,
+        DetailedOnly,
+        Both
+    };
+    Q_ENUM(FftMode)
+
     explicit DragonPlayer(QObject *parent = nullptr);
     ~DragonPlayer() override;
 
@@ -67,6 +75,7 @@ public:
     Q_PROPERTY(int64_t duration READ duration NOTIFY durationChanged)
     Q_PROPERTY(int64_t position READ position WRITE setPosition NOTIFY positionChanged)
     Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged)
+    Q_PROPERTY(FftMode fftMode READ fftMode WRITE setFftMode NOTIFY fftModeChanged)
 
     [[nodiscard]] bool muted() const;
     [[nodiscard]] float volume() const;
@@ -81,6 +90,8 @@ public:
 
     [[nodiscard]] bool isAudioActive() const;
 
+    [[nodiscard]] FftMode fftMode() const;
+
 Q_SIGNALS:
     void mutedChanged(bool muted);
     void volumeChanged();
@@ -93,6 +104,7 @@ Q_SIGNALS:
     void durationChanged(int64_t durationMs);
     void positionChanged(int64_t positionMs);
     void seekableChanged(bool seekable);
+    void fftModeChanged(DragonPlayer::FftMode mode);
 
     void playing();
     void paused();
@@ -108,6 +120,8 @@ public Q_SLOTS:
     void setSource(const QUrl &source);
     void setNextSource(const QUrl &nextSource);
     void setPosition(int64_t positionMs);
+    void setFftMode(FftMode mode);
+
     void play();
     void pause();
     void stop();

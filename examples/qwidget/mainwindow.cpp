@@ -11,6 +11,7 @@
 #include <dragonsdl/dragonplayer.h>
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -118,6 +119,9 @@ void MainWindow::setupUi()
     m_visualizer->setFixedHeight(DragonVisualizer::PreferredHeight);
     vLayout->addWidget(m_visualizer);
 
+    m_fftCheckBox = new QCheckBox(tr("Enable FFT visualization"), this);
+    vLayout->addWidget(m_fftCheckBox);
+
     vLayout->addStretch();
     mainLayout->addWidget(leftPanel, 2);
 
@@ -191,6 +195,9 @@ void MainWindow::connectPlayer()
     });
 
     connect(m_player, &DragonPlayer::fftFrameReady, this, &MainWindow::updateFftFrame);
+    connect(m_fftCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+        m_player->setFftMode(checked ? DragonPlayer::FftMode::BarsOnly : DragonPlayer::FftMode::Off);
+    });
 
     connect(m_player, &DragonPlayer::currentPlayingForRadiosChanged, this, &MainWindow::updateIcyMetadata);
 }
@@ -370,6 +377,9 @@ QString MainWindow::formatTime(int64_t ms)
 
 void MainWindow::updateFftFrame(const DragonFftFrame &frame)
 {
+    if (!m_fftCheckBox->isChecked()) {
+        return;
+    }
     m_visualizer->updateBarData(frame.barData);
 }
 

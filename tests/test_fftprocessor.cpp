@@ -47,6 +47,11 @@ private Q_SLOTS:
     void testFrameTimestamp();
     void testSampleRateChange();
 
+    void testFftModeOff();
+    void testFftModeBarsOnly();
+    void testFftModeDetailedOnly();
+    void testFftModeSwitch();
+
 private:
     std::vector<std::float32_t> createSineWave(float frequency, int sampleRate, int numSamples);
     std::vector<std::float32_t> createSilence(int numSamples);
@@ -169,6 +174,7 @@ void TestFftProcessor::testProcessLoopSineWave()
     DragonFftProcessor processor;
     processor.setQueue(&queue);
     processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     std::atomic<bool> callbackInvoked{false};
     processor.setFrameCallback([&](DragonFftFrame) {
@@ -222,6 +228,7 @@ void TestFftProcessor::testProcessLoopSilence()
     DragonFftProcessor processor;
     processor.setQueue(&queue);
     processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
@@ -270,6 +277,7 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     DragonFftProcessor processor;
     processor.setQueue(&queue);
     processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     std::vector<DragonFftFrame> frames;
     std::mutex framesMutex;
@@ -322,6 +330,7 @@ void TestFftProcessor::testFrameCallbackInvoked()
     DragonFftProcessor processor;
     processor.setQueue(&queue);
     processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     std::atomic<int> callbackCount{0};
     processor.setFrameCallback([&](DragonFftFrame) {
@@ -363,6 +372,7 @@ void TestFftProcessor::testPeakHoldDecay()
     DragonFftProcessor processor;
     processor.setQueue(&queue);
     processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     std::vector<std::float32_t> peakValues;
     std::mutex mutex;
@@ -417,6 +427,7 @@ void TestFftProcessor::testBarDataSizeValidation()
     DragonFftProcessor processor;
     processor.setQueue(&queue);
     processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
@@ -473,6 +484,7 @@ void TestFftProcessor::testFrequencyDetectionAccuracy()
     DragonFftProcessor processor;
     processor.setQueue(&queue);
     processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
@@ -525,6 +537,7 @@ void TestFftProcessor::testFrameTimestamp()
     DragonFftProcessor processor;
     processor.setQueue(&queue);
     processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     std::optional<std::chrono::microseconds> firstTimestamp;
 
@@ -556,6 +569,7 @@ void TestFftProcessor::testSampleRateChange()
     processor.setQueue(&queue);
 
     processor.setSampleRate(44100);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     auto sine44k = createSineWave(1000.0f, 44100, static_cast<int>(DragonFftProcessor::FFT_SIZE));
     [[maybe_unused]] const auto written = queue.try_write(sine44k.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
@@ -585,6 +599,228 @@ void TestFftProcessor::testSampleRateChange()
 
     auto frame = processor.takeLatestFrame();
     QVERIFY2(!frame.frequenciesDb.empty(), "Frame should be produced after sample rate change");
+}
+
+void TestFftProcessor::testFftModeOff()
+{
+    constexpr int sampleRate = 44100;
+    auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+
+    [[maybe_unused]] const auto written = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+        size_t i = 0;
+        for (std::float32_t &v : b1) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+        for (std::float32_t &v : b2) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+    });
+
+    DragonFftProcessor processor;
+    processor.setQueue(&queue);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Off);
+
+    std::atomic<int> callbackCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        callbackCount.fetch_add(1);
+    });
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    QTest::qWait(300);
+
+    stopSource.request_stop();
+    processorThread.join();
+
+    QVERIFY2(callbackCount.load() == 0, qPrintable(QString("Off mode should produce zero frames, got %1"_L1).arg(callbackCount.load())));
+}
+
+void TestFftProcessor::testFftModeBarsOnly()
+{
+    constexpr int sampleRate = 44100;
+    auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    [[maybe_unused]] const auto written = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+        size_t i = 0;
+        for (std::float32_t &v : b1) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+        for (std::float32_t &v : b2) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+    });
+
+    DragonFftProcessor processor;
+    processor.setQueue(&queue);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
+
+    std::atomic<bool> callbackInvoked{false};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        callbackInvoked.store(true);
+    });
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    QTest::qWait(100);
+
+    stopSource.request_stop();
+    processorThread.join();
+
+    auto frame = processor.takeLatestFrame();
+    QVERIFY2(!frame.barData.empty(), "BarsOnly mode should produce barData");
+    QVERIFY2(frame.barData.size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS),
+             qPrintable(QString("barData should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_BAR_BINS).arg(frame.barData.size())));
+    QVERIFY2(frame.frequenciesDb.empty(), "BarsOnly mode should not produce frequenciesDb");
+    QVERIFY2(callbackInvoked.load(), "Callback should have been invoked");
+}
+
+void TestFftProcessor::testFftModeDetailedOnly()
+{
+    constexpr int sampleRate = 44100;
+    auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    [[maybe_unused]] const auto written = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+        size_t i = 0;
+        for (std::float32_t &v : b1) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+        for (std::float32_t &v : b2) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+    });
+
+    DragonFftProcessor processor;
+    processor.setQueue(&queue);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::DetailedOnly);
+
+    std::atomic<bool> callbackInvoked{false};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        callbackInvoked.store(true);
+    });
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    QTest::qWait(100);
+
+    stopSource.request_stop();
+    processorThread.join();
+
+    auto frame = processor.takeLatestFrame();
+    QVERIFY2(!frame.frequenciesDb.empty(), "DetailedOnly mode should produce frequenciesDb");
+    QVERIFY2(frame.frequenciesDb.size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS),
+             qPrintable(QString("frequenciesDb should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_LOG_BINS).arg(frame.frequenciesDb.size())));
+    QVERIFY2(frame.barData.empty(), "DetailedOnly mode should not produce barData");
+    QVERIFY2(callbackInvoked.load(), "Callback should have been invoked");
+}
+
+void TestFftProcessor::testFftModeSwitch()
+{
+    constexpr int sampleRate = 44100;
+    auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+
+    DragonFftProcessor processor;
+    processor.setQueue(&queue);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
+
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1);
+    });
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    [[maybe_unused]] const auto written1 = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+        size_t i = 0;
+        for (std::float32_t &v : b1) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+        for (std::float32_t &v : b2) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+    });
+
+    QTest::qWait(100);
+    int framesPhase1 = frameCount.load();
+    QVERIFY2(framesPhase1 >= 1, qPrintable(QString("Both mode should produce at least 1 frame, got %1"_L1).arg(framesPhase1)));
+
+    processor.setFftMode(DragonFftProcessor::FftMode::Off);
+    int framesPhase2Start = frameCount.load();
+
+    [[maybe_unused]] const auto written2 = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+        size_t i = 0;
+        for (std::float32_t &v : b1) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+        for (std::float32_t &v : b2) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+    });
+
+    QTest::qWait(300);
+    int framesPhase2End = frameCount.load();
+    QVERIFY2(framesPhase2End == framesPhase2Start,
+             qPrintable(QString("Off mode should not produce new frames: started at %1, ended at %2"_L1).arg(framesPhase2Start).arg(framesPhase2End)));
+
+    processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
+    [[maybe_unused]] const auto written3 = queue.try_write(sineWave.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+        size_t i = 0;
+        for (std::float32_t &v : b1) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+        for (std::float32_t &v : b2) {
+            if (i < sineWave.size())
+                v = sineWave[i++];
+        }
+    });
+
+    QTest::qWait(200);
+    int framesPhase3 = frameCount.load();
+    QVERIFY2(framesPhase3 > framesPhase2End,
+             qPrintable(QString("BarsOnly mode should resume producing frames: had %1, now %2"_L1).arg(framesPhase2End).arg(framesPhase3)));
+
+    stopSource.request_stop();
+    processorThread.join();
+
+    auto frame = processor.takeLatestFrame();
+    QVERIFY2(!frame.barData.empty(), "Latest frame should have barData after switching to BarsOnly");
+    QVERIFY2(frame.frequenciesDb.empty(), "Latest frame should not have frequenciesDb in BarsOnly mode");
 }
 
 QTEST_MAIN(TestFftProcessor)
