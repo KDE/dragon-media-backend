@@ -244,11 +244,13 @@ bool DragonDecoder::openContainer(AvioContextHandle handle, DecodeSession &sessi
         }
         rawFmtCtx->pb = handle.ctx;
 
-        if (const int err = avformat_open_input(&rawFmtCtx, nullptr, nullptr, nullptr); err < 0) {
+        if (const int err = avformat_open_input(&rawFmtCtx, "", nullptr, nullptr); err < 0) {
             if (rawFmtCtx) {
                 rawFmtCtx->pb = nullptr;
                 avformat_free_context(rawFmtCtx);
             }
+            m_hadFatalError.store(true, std::memory_order_relaxed);
+            Q_EMIT streamError(u"avformat_open_input failed for network stream"_s);
             return false;
         }
     } else {
@@ -322,7 +324,7 @@ bool DragonDecoder::setupCodec(DecodeSession &session)
 bool DragonDecoder::setupResampler(DecodeSession &session)
 {
     SwrContext *rawSwrCtx = nullptr;
-    AVChannelLayout outLayout = session.codecCtx->ch_layout;
+    const AVChannelLayout outLayout = session.codecCtx->ch_layout;
     int ret = swr_alloc_set_opts2(&rawSwrCtx,
                                   &outLayout,
                                   AV_SAMPLE_FMT_FLT,

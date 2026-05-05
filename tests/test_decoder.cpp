@@ -328,10 +328,7 @@ void TestDecoder::testDurationSignal()
 
 void TestDecoder::testErrorSignal()
 {
-    auto readCb = [](std::span<uint8_t>) -> int {
-        return -1;
-    };
-    DragonDecoder decoder(std::move(readCb), "/nonexistent/path/audio.mp3"_L1);
+    DragonDecoder decoder(nullptr, "/nonexistent/path/audio.mp3"_L1);
 
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
     QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
