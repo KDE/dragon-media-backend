@@ -7,7 +7,7 @@
 #include <QtTest>
 #include <stdfloat>
 
-#include <dragonsdl/dragondecoder.h>
+#include <../src/dragondecoder.h>
 
 #include <atomic>
 #include <chrono>
@@ -22,7 +22,6 @@ using namespace Qt::StringLiterals;
 
 extern "C" {
 #include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
 }
 
 class MockReadCallback

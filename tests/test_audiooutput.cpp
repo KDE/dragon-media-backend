@@ -8,7 +8,7 @@
 #include <stdfloat>
 
 #include <LockFreeSpscQueue.h>
-#include <dragonsdl/dragonaudiooutput.h>
+#include <dragonaudiooutput.h>
 
 #include <atomic>
 #include <thread>

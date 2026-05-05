@@ -8,9 +8,9 @@
 
 using namespace Qt::StringLiterals;
 
+#include "dragonfftprocessor.h"
 #include <LockFreeSpscQueue.h>
 #include <dragonsdl/dragonfftframe.h>
-#include <dragonsdl/dragonfftprocessor.h>
 
 #include <algorithm>
 #include <atomic>

@@ -6,9 +6,8 @@
 #include <QtCore>
 #include <QtNetwork>
 #include <QtTest>
-#include <stdfloat>
 
-#include <dragonsdl/dragonradiostream.h>
+#include "dragonradiostream.h"
 
 #include <QHash>
 #include <atomic>

@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "dragonfftframe.h"
-#include "dragonplayer.h"
+#include "../include/dragonsdl/dragonfftframe.h"
+#include "../include/dragonsdl/dragonplayer.h"
 #include "dragonsdl_export.h"
 #include <stdfloat>
 

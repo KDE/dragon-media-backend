@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#include <dragonsdl/dragonaudiooutput.h>
+#include <dragonaudiooutput.h>
 #include <stdfloat>
 
 #include <SDL3/SDL_hints.h>

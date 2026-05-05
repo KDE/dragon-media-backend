@@ -91,10 +91,10 @@ set(SOURCES
 
 set(HEADERS
     include/dragonsdl/dragonplayer.h
-    include/dragonsdl/dragondecoder.h
-    include/dragonsdl/dragonaudiooutput.h
-    include/dragonsdl/dragonradiostream.h
-    include/dragonsdl/dragonfftprocessor.h
+        src/dragondecoder.h
+        src/dragonaudiooutput.h
+        src/dragonradiostream.h
+        src/dragonfftprocessor.h
     include/dragonsdl/dragonfftframe.h
     include/dragonsdl/dragonicymetadata.h
 )
@@ -147,6 +147,7 @@ endif()
 option(BUILD_TESTING "Build tests" ON)
 if(BUILD_TESTING)
     enable_testing()
+    include_directories("src")
     find_package(Qt6 REQUIRED COMPONENTS Core Test)
 
 

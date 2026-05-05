@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#include <dragonsdl/dragonaudiooutput.h>
-#include <dragonsdl/dragondecoder.h>
-#include <dragonsdl/dragonfftprocessor.h>
+#include <dragonaudiooutput.h>
+#include <dragondecoder.h>
+#include <dragonfftprocessor.h>
+#include <dragonradiostream.h>
 #include <dragonsdl/dragonplayer.h>
-#include <dragonsdl/dragonradiostream.h>
 
 #include <LockFreeSpscQueue.h>
 

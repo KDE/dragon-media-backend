@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#include <dragonsdl/dragonfftprocessor.h>
+#include <dragonfftprocessor.h>
 #include <stdfloat>
 
 #include <LockFreeSpscQueue.h>

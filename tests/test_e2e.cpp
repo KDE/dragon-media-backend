@@ -9,12 +9,11 @@
 #include <QtTest>
 #include <stdfloat>
 
-#include <dragonsdl/dragondecoder.h>
+#include "dragondecoder.h"
 #include <dragonsdl/dragonplayer.h>
 
 #include <algorithm>
 #include <cmath>
-#include <filesystem>
 #include <stop_token>
 #include <thread>
 #include <vector>
