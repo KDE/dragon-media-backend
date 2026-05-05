@@ -16,7 +16,10 @@
 #include <QIcon>
 #include <QString>
 
+#include <algorithm>
+#include <functional>
 #include <pthread.h>
+#include <ranges>
 #include <thread>
 
 using namespace Qt::StringLiterals;
@@ -334,17 +337,30 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
 
     if (auto *fftQueue = self->m_fftQueue.load(std::memory_order_acquire)) {
         const size_t totalSamples = block1.size() + block2.size();
-        size_t srcIdx = 0;
+        const size_t frameCount = totalSamples / channels;
+
         auto getSrc = [&](size_t idx) -> std::float32_t {
             return idx < block1.size() ? block1[idx] : block2[idx - block1.size()];
         };
 
-        [[maybe_unused]] const size_t fftWritten = fftQueue->try_write(totalSamples, [&](std::span<std::float32_t> fb1, std::span<std::float32_t> fb2) {
-            for (size_t i = 0; i < fb1.size() && srcIdx < totalSamples; ++i, ++srcIdx) {
-                fb1[i] = getSrc(srcIdx);
-            }
-            for (size_t i = 0; i < fb2.size() && srcIdx < totalSamples; ++i, ++srcIdx) {
-                fb2[i] = getSrc(srcIdx);
+        [[maybe_unused]] const size_t fftWritten = fftQueue->try_write(frameCount, [&](std::span<std::float32_t> fb1, std::span<std::float32_t> fb2) {
+            size_t monoIdx = 0;
+            auto writeMono = [&](float val) {
+                if (monoIdx < fb1.size()) {
+                    fb1[monoIdx] = val;
+                } else {
+                    fb2[monoIdx - fb1.size()] = val;
+                }
+                ++monoIdx;
+            };
+
+            for (size_t frame = 0; frame < frameCount; ++frame) {
+                const auto base = frame * channels;
+                auto channelSamples = std::views::iota(0, channels) | std::views::transform([&](int c) {
+                                          return getSrc(base + c);
+                                      });
+                const float mono = std::ranges::fold_left(channelSamples, 0.0f, std::plus{}) / static_cast<float>(channels);
+                writeMono(mono);
             }
         });
     }
