@@ -8,7 +8,48 @@
 #include <QPaintEvent>
 #include <QPainter>
 #include <algorithm>
+#include <array>
 #include <cmath>
+
+namespace
+{
+constexpr uint32_t viridisBase[] = {
+    0xff440154, 0xff481567, 0xff482677, 0xff453781, 0xff404788, 0xff39568c, 0xff33638d, 0xff2d708e, 0xff287d8e, 0xff238a8d,
+    0xff1f968b, 0xff20a387, 0xff29af7f, 0xff3cbd72, 0xff55c667, 0xff75d054, 0xff95d840, 0xffb8de29, 0xffdce319, 0xfffde725,
+};
+
+constexpr std::array<QRgb, 256> generateViridisLUT()
+{
+    std::array<QRgb, 256> lut{};
+    constexpr size_t baseCount = std::size(viridisBase);
+
+    for (size_t i = 0; i < 256; ++i) {
+        const float t = static_cast<float>(i) / 255.0f;
+        const float scaled = t * static_cast<float>(baseCount - 1);
+        const int idx = static_cast<int>(scaled);
+        const float factor = scaled - static_cast<float>(idx);
+
+        const uint32_t c1 = viridisBase[std::clamp(idx, 0, static_cast<int>(baseCount) - 2)];
+        const uint32_t c2 = viridisBase[std::clamp(idx + 1, 1, static_cast<int>(baseCount) - 1)];
+
+        const auto channel = [](uint32_t c, int shift) {
+            return static_cast<int>((c >> shift) & 0xFF);
+        };
+        const auto lerp = [factor](int v1, int v2) {
+            return static_cast<int>(static_cast<float>(v1) + factor * static_cast<float>(v2 - v1));
+        };
+
+        const int r = lerp(channel(c1, 16), channel(c2, 16));
+        const int g = lerp(channel(c1, 8), channel(c2, 8));
+        const int b = lerp(channel(c1, 0), channel(c2, 0));
+
+        lut[i] = qRgb(r, g, b);
+    }
+    return lut;
+}
+
+constexpr std::array<QRgb, 256> ViridisLUT = generateViridisLUT();
+}
 
 DragonSpectrogram::DragonSpectrogram(QWidget *parent)
     : QWidget(parent)
@@ -25,36 +66,8 @@ QRgb DragonSpectrogram::dbToColor(float db)
     float t = (db + 80.0f) / 80.0f;
     t = std::clamp(t, 0.0f, 1.0f);
 
-    int r = 0, g = 0, b = 0;
-
-    if (t < 0.2f) {
-        const float s = t / 0.2f;
-        r = 0;
-        g = 0;
-        b = static_cast<int>(s * 128);
-    } else if (t < 0.4f) {
-        const float s = (t - 0.2f) / 0.2f;
-        r = 0;
-        g = static_cast<int>(s * 255);
-        b = 128 + static_cast<int>(s * 127);
-    } else if (t < 0.6f) {
-        const float s = (t - 0.4f) / 0.2f;
-        r = 0;
-        g = 255;
-        b = static_cast<int>((1.0f - s) * 255);
-    } else if (t < 0.8f) {
-        const float s = (t - 0.6f) / 0.2f;
-        r = static_cast<int>(s * 255);
-        g = 255;
-        b = 0;
-    } else {
-        const float s = (t - 0.8f) / 0.2f;
-        r = 255;
-        g = static_cast<int>((1.0f - s) * 255);
-        b = 0;
-    }
-
-    return qRgb(r, g, b);
+    const uint8_t idx = static_cast<uint8_t>(t * 255.0f);
+    return ViridisLUT[idx];
 }
 
 void DragonSpectrogram::updateFrequencies(const std::vector<float> &frequenciesDb)
