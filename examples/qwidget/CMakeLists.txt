@@ -11,6 +11,8 @@ add_executable(dragon-sdl-qwidget-example
     dragonplaylist.h
     dragonvisualizer.cpp
     dragonvisualizer.h
+    dragonspectrogram.cpp
+    dragonspectrogram.h
 )
 
 target_link_libraries(dragon-sdl-qwidget-example PRIVATE

@@ -12,6 +12,7 @@
 class DragonPlayer;
 class DragonPlaylist;
 class DragonVisualizer;
+class DragonSpectrogram;
 class QCheckBox;
 class QPushButton;
 class QSlider;
@@ -51,6 +52,7 @@ private:
     DragonPlayer *m_player = nullptr;
     DragonPlaylist *m_playlist = nullptr;
     DragonVisualizer *m_visualizer = nullptr;
+    DragonSpectrogram *m_spectrogram = nullptr;
 
     QPushButton *m_playButton = nullptr;
     QPushButton *m_stopButton = nullptr;

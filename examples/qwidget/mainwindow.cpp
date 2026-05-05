@@ -5,6 +5,7 @@
 
 #include "mainwindow.h"
 #include "dragonplaylist.h"
+#include "dragonspectrogram.h"
 #include "dragonvisualizer.h"
 
 #include <dragonsdl/dragonfftframe.h>
@@ -36,6 +37,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_player = new DragonPlayer(this);
     m_playlist = new DragonPlaylist(m_player, this);
     m_visualizer = new DragonVisualizer(this);
+    m_spectrogram = new DragonSpectrogram(this);
     setupUi();
     connectPlayer();
 }
@@ -119,6 +121,9 @@ void MainWindow::setupUi()
     m_visualizer->setFixedHeight(DragonVisualizer::PreferredHeight);
     vLayout->addWidget(m_visualizer);
 
+    m_spectrogram->setFixedHeight(DragonSpectrogram::PreferredHeight);
+    vLayout->addWidget(m_spectrogram);
+
     m_fftCheckBox = new QCheckBox(tr("Enable FFT visualization"), this);
     vLayout->addWidget(m_fftCheckBox);
 
@@ -196,7 +201,7 @@ void MainWindow::connectPlayer()
 
     connect(m_player, &DragonPlayer::fftFrameReady, this, &MainWindow::updateFftFrame);
     connect(m_fftCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-        m_player->setFftMode(checked ? DragonPlayer::FftMode::BarsOnly : DragonPlayer::FftMode::Off);
+        m_player->setFftMode(checked ? DragonPlayer::FftMode::Both : DragonPlayer::FftMode::Off);
     });
 
     connect(m_player, &DragonPlayer::currentPlayingForRadiosChanged, this, &MainWindow::updateIcyMetadata);
@@ -381,6 +386,7 @@ void MainWindow::updateFftFrame(const DragonFftFrame &frame)
         return;
     }
     m_visualizer->updateBarData(frame.barData);
+    m_spectrogram->updateFrequencies(frame.frequenciesDb);
 }
 
 void MainWindow::updateIcyMetadata(const DragonIcyMetadata &metadata)
