@@ -10,6 +10,7 @@
 #include <QScopeGuard>
 
 #include <cstring>
+#include <expected>
 #include <memory>
 #include <span>
 
@@ -153,7 +154,7 @@ struct DragonDecoder::AvioInitResult {
 
 DragonDecoder::DragonDecoder(ReadCallback readCb, const QString &filePath, QObject *parent)
     : QObject(parent)
-    , m_readCb(std::move(readCb))
+    , m_networkCallback(std::move(readCb))
     , m_filePath(filePath)
 {
 }
@@ -166,11 +167,11 @@ void DragonDecoder::decodeLoop(std::stop_token st)
 
     DecodeSession session;
 
-    auto [ok, avio] = initializeAvio();
-    if (!ok) {
+    auto avio = initializeAvio();
+    if (!avio) {
         return;
     }
-    if (!openContainer(std::move(avio), session)) {
+    if (!openContainer(std::move(*avio), session)) {
         return;
     }
     if (!findAudioStream(session)) {
@@ -196,21 +197,25 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     qDebug() << "DECODER: decodeLoop finished total packets=" << session.packetCount << "total frames=" << session.frameCount;
 }
 
-DragonDecoder::AvioInitResult DragonDecoder::initializeAvio()
+enum class AvioError {
+    AllocateFailed,
+    CreateFailed
+};
+std::expected<DragonDecoder::AvioContextHandle, AvioError> DragonDecoder::initializeAvio()
 {
-    if (!m_readCb || !m_filePath.isEmpty()) {
-        return {true, AvioContextHandle{}};
+    if (!m_networkCallback || !m_filePath.isEmpty()) {
+        return AvioContextHandle{};
     }
 
     uint8_t *ioBuffer = static_cast<uint8_t *>(av_malloc(IO_BUFFER_SIZE));
     if (!ioBuffer) {
         Q_EMIT streamError(u"Failed to allocate AVIOContext buffer"_s);
-        return {false, AvioContextHandle{}};
+        return std::unexpected(AvioError::AllocateFailed);
     }
 
     auto readPacket = [](void *opaque, uint8_t *buf, int bufSize) -> int {
         auto *self = static_cast<DragonDecoder *>(opaque);
-        int ret = self->m_readCb(std::span(buf, static_cast<size_t>(bufSize)));
+        const int ret = self->m_networkCallback(std::span(buf, static_cast<size_t>(bufSize)));
         return ret == 0 ? AVERROR_EOF : ret;
     };
 
@@ -219,17 +224,17 @@ DragonDecoder::AvioInitResult DragonDecoder::initializeAvio()
         av_free(ioBuffer);
         m_hadFatalError.store(true, std::memory_order_relaxed);
         Q_EMIT streamError(u"Failed to create AVIOContext"_s);
-        return {false, AvioContextHandle{}};
+        return std::unexpected(AvioError::CreateFailed);
     }
 
-    return {true, AvioContextHandle(avioCtx)};
+    return AvioContextHandle(avioCtx);
 }
 
 bool DragonDecoder::openContainer(AvioContextHandle handle, DecodeSession &session)
 {
     AVFormatContext *rawFmtCtx = nullptr;
 
-    if (m_filePath.isEmpty()) {
+    if (m_networkCallback) {
         rawFmtCtx = avformat_alloc_context();
         if (!rawFmtCtx) {
             return false;
@@ -245,8 +250,7 @@ bool DragonDecoder::openContainer(AvioContextHandle handle, DecodeSession &sessi
             return false;
         }
     } else {
-        int ret = avformat_open_input(&rawFmtCtx, m_filePath.toUtf8().constData(), nullptr, nullptr);
-        if (ret < 0) {
+        if (const int err = avformat_open_input(&rawFmtCtx, m_filePath.toUtf8().constData(), nullptr, nullptr); err < 0) {
             m_hadFatalError.store(true, std::memory_order_relaxed);
             Q_EMIT streamError(u"avformat_open_input failed for %1"_s.arg(m_filePath));
             return false;
@@ -260,8 +264,7 @@ bool DragonDecoder::openContainer(AvioContextHandle handle, DecodeSession &sessi
 
 bool DragonDecoder::findAudioStream(DecodeSession &session)
 {
-    int ret = avformat_find_stream_info(session.fmtCtx.get(), nullptr);
-    if (ret < 0) {
+    if (const int err = avformat_find_stream_info(session.fmtCtx.get(), nullptr); err < 0) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
         Q_EMIT streamError(u"avformat_find_stream_info failed"_s);
         return false;
@@ -269,8 +272,7 @@ bool DragonDecoder::findAudioStream(DecodeSession &session)
 
     for (unsigned int i = 0; i < session.fmtCtx->nb_streams; ++i) {
         AVStream *stream = session.fmtCtx->streams[i];
-        const AVCodecParameters *par = stream->codecpar;
-        if (par->codec_type == AVMEDIA_TYPE_AUDIO) {
+        if (const AVCodecParameters *par = stream->codecpar; par->codec_type == AVMEDIA_TYPE_AUDIO) {
             session.codec = avcodec_find_decoder(par->codec_id);
             if (session.codec) {
                 session.audioStreamIndex = static_cast<int>(i);

@@ -12,10 +12,13 @@
 #include <QString>
 
 #include <cstdint>
+#include <expected>
 #include <functional>
 #include <span>
 #include <stop_token>
 #include <vector>
+
+enum class AvioError;
 
 struct AVIOContext;
 
@@ -55,7 +58,7 @@ Q_SIGNALS:
     void stateChanged(bool buffering, double progress);
 
 private:
-    ReadCallback m_readCb;
+    ReadCallback m_networkCallback;
     QString m_filePath;
     mutable std::vector<std::float32_t> m_pcmBuffer;
 
@@ -69,7 +72,7 @@ private:
     struct AvioContextHandle;
     struct AvioInitResult;
 
-    AvioInitResult initializeAvio();
+    std::expected<AvioContextHandle, AvioError> initializeAvio();
 
     bool openContainer(AvioContextHandle handle, DecodeSession &session);
     bool findAudioStream(DecodeSession &session);

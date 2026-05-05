@@ -209,7 +209,7 @@ public:
 
         DragonDecoder::ReadCallback readCb;
         if (!isLocal) {
-            readCb = [this](std::span<uint8_t> buf) -> int {
+            readCb = [this](const std::span<uint8_t> buf) -> int {
                 return radioStream ? radioStream->read(buf, decodeStopSource.get_token()) : -1;
             };
         }
