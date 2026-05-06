@@ -756,10 +756,13 @@ public:
         if (!wasOn && nowOn) {
             ensureFftInfrastructure();
 
+            if (audioOutput && fftQueue) {
+                audioOutput->setFftQueue(fftQueue.get());
+            }
+
             fftProcessor->setFftMode(mode);
 
             startFftThread();
-
         } else if (wasOn && !nowOn) {
             if (audioOutput) {
                 audioOutput->setFftQueue(nullptr);

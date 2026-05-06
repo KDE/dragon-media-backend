@@ -91,6 +91,12 @@ private Q_SLOTS:
     void testSignalOrderOnSetSource();
     void testSignalOrderOnStop();
 
+    void testLazyFftInitialization();
+    void testFftModeToggleCreatesInfrastructure();
+    void testFftInfrastructurePersistsAcrossTrackChanges();
+    void testFftOffSkipsInfrastructureOnTrackChange();
+    void testFftModeBothEmitsDetailedAndBarFrames();
+
 private:
     QString fixture(const QString &filename) const;
     bool waitForSignal(QSignalSpy &spy, int timeoutMs = 5000);
@@ -1289,6 +1295,151 @@ void TestPlayer::testSignalOrderOnStop()
     QVERIFY2(signalOrder.contains(u"stateChanged(StoppedState)"_s), "stop() must emit StoppedState");
 
     QVERIFY2(signalOrder.contains(u"statusChanged(LoadedMedia)"_s), "stop() must emit statusChanged(LoadedMedia) per Qt contract");
+}
+
+void TestPlayer::testLazyFftInitialization()
+{
+    DragonPlayer player;
+
+    QCOMPARE(player.fftMode(), DragonPlayer::FftMode::Off);
+
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    player.play();
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QTest::qWait(500);
+
+    player.stop();
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayer::testFftModeToggleCreatesInfrastructure()
+{
+    QString filePath = fixture("gs-16b-2c-44100hz.ogg"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+
+    int frameCount = 0;
+    QObject::connect(
+        &player,
+        &DragonPlayer::fftFrameReady,
+        &player,
+        [&frameCount]() {
+            ++frameCount;
+        },
+        Qt::QueuedConnection);
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    player.play();
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+
+    QTest::qWait(100);
+    int initialCount = frameCount;
+
+    QVERIFY2(initialCount > 0, "FFT should be producing frames when mode is BarsOnly");
+
+    player.setFftMode(DragonPlayer::FftMode::Off);
+    frameCount = 0;
+    QTest::qWait(300);
+    int framesAfterOff = frameCount;
+
+    QTest::qWait(200);
+    int framesAfterMoreWait = frameCount;
+
+    QVERIFY2(framesAfterMoreWait - framesAfterOff < 3, "FFT should stop producing frames when mode is Off");
+
+    frameCount = 0;
+    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+    QTest::qWait(500);
+    QVERIFY2(frameCount > 0, "FFT frames should resume when re-enabled");
+
+    player.stop();
+}
+
+void TestPlayer::testFftInfrastructurePersistsAcrossTrackChanges()
+{
+    QString filePath1 = fixture("sample-3s.mp3"_L1);
+    QString filePath2 = fixture("gs-16b-2c-44100hz.ogg"_L1);
+    if (!QFileInfo::exists(filePath1) || !QFileInfo::exists(filePath2)) {
+        QSKIP("Audio fixtures not available");
+    }
+
+    DragonPlayer player;
+
+    player.setFftMode(DragonPlayer::FftMode::Both);
+
+    player.setSource(QUrl::fromLocalFile(filePath1));
+    player.play();
+
+    QSignalSpy fftSpy(&player, &DragonPlayer::fftFrameReady);
+    QTRY_VERIFY_WITH_TIMEOUT(fftSpy.size() > 0, 3000);
+
+    fftSpy.clear();
+    player.setSource(QUrl::fromLocalFile(filePath2));
+    player.play();
+
+    QTRY_VERIFY_WITH_TIMEOUT(fftSpy.size() > 0, 5000);
+
+    player.stop();
+}
+
+void TestPlayer::testFftOffSkipsInfrastructureOnTrackChange()
+{
+    QString filePath1 = fixture("sample-3s.mp3"_L1);
+    QString filePath2 = fixture("gs-16b-2c-44100hz.ogg"_L1);
+    if (!QFileInfo::exists(filePath1) || !QFileInfo::exists(filePath2)) {
+        QSKIP("Audio fixtures not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath1));
+    player.play();
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QTest::qWait(500);
+
+    player.setSource(QUrl::fromLocalFile(filePath2));
+    player.play();
+    QTest::qWait(500);
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
+
+    player.stop();
+}
+
+void TestPlayer::testFftModeBothEmitsDetailedAndBarFrames()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+    player.setSource(QUrl::fromLocalFile(filePath));
+    player.play();
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+
+    QSignalSpy fftSpy(&player, &DragonPlayer::fftFrameReady);
+    player.setFftMode(DragonPlayer::FftMode::Both);
+
+    QTRY_VERIFY_WITH_TIMEOUT(fftSpy.size() >= 5, 3000);
+
+    for (int i = 0; i < fftSpy.size(); ++i) {
+        QVariant frameVariant = fftSpy.at(i).at(0);
+        QVERIFY(frameVariant.isValid());
+    }
+
+    player.stop();
 }
 
 bool TestPlayer::waitForSignal(QSignalSpy &spy, int timeoutMs)
