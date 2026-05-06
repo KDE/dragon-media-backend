@@ -91,7 +91,7 @@ void DragonVisualizer::paintEvent(QPaintEvent *event)
     constexpr int BarSpacing = 2;
     const int totalSpacing = static_cast<int>((numBars + 1) * BarSpacing);
     const int availableWidth = width - totalSpacing;
-    const int barWidth = availableWidth / static_cast<int>(numBars);
+    const float barWidthF = static_cast<float>(availableWidth) / static_cast<float>(numBars);
 
     QLinearGradient gradient(0, height, 0, 0);
     gradient.setColorAt(0.0, QColor(0, 200, 80));
@@ -102,28 +102,28 @@ void DragonVisualizer::paintEvent(QPaintEvent *event)
     constexpr int PeakIndicatorHeight = 2;
 
     for (size_t i = 0; i < numBars; ++i) {
-        const int x = BarSpacing + static_cast<int>(i) * (barWidth + BarSpacing);
+        const float x = BarSpacing + static_cast<float>(i) * (barWidthF + static_cast<float>(BarSpacing));
 
         const float normalizedValue = dbToNormalized(m_displayData[i]);
         const int barHeight = static_cast<int>(normalizedValue * (height - 4));
 
-        const int barX = x;
+        const float barX = x;
         const int barY = height - 2 - barHeight;
 
         if (barHeight > 0) {
-            QRect barRect(barX, barY, barWidth, barHeight);
+            QRectF barRect(barX, static_cast<float>(barY), barWidthF, static_cast<float>(barHeight));
 
             QBrush barBrush(gradient);
             painter.fillRect(barRect, barBrush);
 
             painter.setPen(QPen(QColor(255, 255, 255, 40), 1));
-            painter.drawLine(barX, barY + 2, barX, height - 2);
+            painter.drawLine(QPointF(barX, barY + 2), QPointF(barX, height - 2));
         }
 
         const float normalizedPeak = dbToNormalized(m_peakData[i]);
         if (normalizedPeak > 0.01f) {
             const int peakY = height - 2 - static_cast<int>(normalizedPeak * (height - 4));
-            painter.fillRect(barX, peakY, barWidth, PeakIndicatorHeight, QColor(255, 255, 255, 180));
+            painter.fillRect(QRectF(barX, static_cast<float>(peakY), barWidthF, static_cast<float>(PeakIndicatorHeight)), QColor(255, 255, 255, 180));
         }
     }
 
