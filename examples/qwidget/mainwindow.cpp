@@ -151,9 +151,9 @@ void MainWindow::setupUi()
     m_statusLabel = new QLabel(tr("Ready"), this);
     statusBar()->addWidget(m_statusLabel, 1);
 
-    m_sdlDiagLabel = new QLabel(tr("SDL: 0 KB"), this);
-    m_decodeDiagLabel = new QLabel(tr("Decode: 0 KB"), this);
-    m_fftDiagLabel = new QLabel(tr("FFT: 0 KB"), this);
+    m_sdlDiagLabel = new QLabel(tr("SDL: 0"), this);
+    m_decodeDiagLabel = new QLabel(tr("Decode: 0"), this);
+    m_fftDiagLabel = new QLabel(tr("FFT: 0"), this);
     statusBar()->addPermanentWidget(m_sdlDiagLabel);
     statusBar()->addPermanentWidget(m_decodeDiagLabel);
     statusBar()->addPermanentWidget(m_fftDiagLabel);
@@ -162,16 +162,13 @@ void MainWindow::setupUi()
     auto *diagTimer = new QTimer(this);
     connect(diagTimer, &QTimer::timeout, this, [this, diagnostics]() {
         const int sdlBytes = diagnostics->sdlAudioBufferBytes();
-        const int sdlKb = (sdlBytes > 0) ? sdlBytes / 1024 : 0;
-        m_sdlDiagLabel->setText(tr("SDL: %1 KB").arg(sdlKb));
+        m_sdlDiagLabel->setText(tr("SDL: %1").arg(sdlBytes));
 
         const std::size_t decodeSamples = diagnostics->decodeQueueSize();
-        const int decodeKb = static_cast<int>((decodeSamples * sizeof(float)) / 1024);
-        m_decodeDiagLabel->setText(tr("Decode: %1 KB").arg(decodeKb));
+        m_decodeDiagLabel->setText(tr("Decode: %1").arg(decodeSamples));
 
         const std::size_t fftSamples = diagnostics->fftQueueSize();
-        const int fftKb = static_cast<int>((fftSamples * sizeof(float)) / 1024);
-        m_fftDiagLabel->setText(tr("FFT: %1 KB").arg(fftKb));
+        m_fftDiagLabel->setText(tr("FFT: %1").arg(fftSamples));
     });
     diagTimer->start(500);
 }
