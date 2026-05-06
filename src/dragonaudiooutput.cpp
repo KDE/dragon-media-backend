@@ -286,7 +286,7 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     };
     Guard guard{&self->m_activeCallbacks};
 
-    auto *session = self->m_session.load(std::memory_order_acquire);
+    const auto *session = self->m_session.load(std::memory_order_acquire);
     if (!session) {
         return;
     }
