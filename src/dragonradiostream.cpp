@@ -43,6 +43,7 @@ void DragonRadioStream::start()
 
     m_abort = false;
     m_error = false;
+    m_finished = false;
     m_icyMetaint = 0;
     m_icyBytesRead = 0;
     m_icyPendingData.clear();
@@ -96,11 +97,15 @@ int DragonRadioStream::read(std::span<uint8_t> buf, std::stop_token st)
     std::unique_lock lock(m_bufferMutex);
 
     m_bufferCv.wait(lock, st, [this] {
-        return !m_networkBuffer.empty() || m_abort.load() || m_error.load();
+        return !m_networkBuffer.empty() || m_abort.load() || m_error.load() || m_finished.load();
     });
 
     if (st.stop_requested() || m_abort || m_error) {
         return -1;
+    }
+
+    if (m_finished && m_networkBuffer.empty()) {
+        return 0;
     }
 
     int bytesRead = 0;
@@ -176,11 +181,18 @@ void DragonRadioStream::onReplyFinished()
         return;
     }
 
-    QTimer::singleShot(2000, this, [this]() {
-        if (!m_abort) {
-            start();
-        }
-    });
+    if (m_reply && m_reply->error() != QNetworkReply::NoError) {
+        qDebug() << "DragonRadioStream reply finished with error, will reconnect";
+        QTimer::singleShot(2000, this, [this]() {
+            if (!m_abort) {
+                start();
+            }
+        });
+    } else {
+        qDebug() << "DragonRadioStream reply finished successfully, no reconnect needed";
+        m_finished = true;
+        m_bufferCv.notify_all();
+    }
 }
 
 void DragonRadioStream::onReplyError(QNetworkReply::NetworkError code)

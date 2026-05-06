@@ -76,6 +76,7 @@ private:
 
     std::atomic<bool> m_abort{false};
     std::atomic<bool> m_error{false};
+    std::atomic<bool> m_finished{false};
 
     int m_icyMetaint = 0;
     int m_icyBytesRead = 0;

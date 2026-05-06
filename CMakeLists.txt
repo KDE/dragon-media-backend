@@ -212,4 +212,19 @@ if(BUILD_TESTING)
         DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
     )
     add_test(NAME test_e2e COMMAND test_e2e)
+
+    add_executable(test_network_playback tests/test_network_playback.cpp)
+    target_link_libraries(test_network_playback PRIVATE
+        dragon-sdl
+        Qt6::Test
+        Qt6::Network
+        SDL3::SDL3
+        PkgConfig::FFmpeg
+        spsc_queue
+        kissfft::kissfft
+    )
+    target_compile_definitions(test_network_playback PRIVATE
+        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
+    add_test(NAME test_network_playback COMMAND test_network_playback)
 endif()

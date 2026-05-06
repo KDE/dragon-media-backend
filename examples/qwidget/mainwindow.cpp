@@ -17,6 +17,7 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenuBar>
@@ -52,6 +53,7 @@ void MainWindow::setupUi()
     auto *fileMenu = menuBar()->addMenu(tr("&File"));
     fileMenu->addAction(tr("&Open File..."), QKeySequence::Open, this, &MainWindow::openFile);
     fileMenu->addAction(tr("Open &Multiple Files..."), this, &MainWindow::openMultipleFiles);
+    fileMenu->addAction(tr("Add &Network URL..."), this, &MainWindow::addNetworkUrl);
     fileMenu->addSeparator();
     fileMenu->addAction(tr("&Clear Playlist"), this, &MainWindow::clearPlaylist);
     fileMenu->addSeparator();
@@ -243,6 +245,25 @@ void MainWindow::openMultipleFiles()
 void MainWindow::clearPlaylist()
 {
     m_playlist->clear();
+}
+
+void MainWindow::addNetworkUrl()
+{
+    QSettings settings;
+    const QString lastUrl = settings.value("lastNetworkUrl"_L1, "https://"_L1).toString();
+
+    bool ok = false;
+    const QString url = QInputDialog::getText(this, tr("Add Network URL"), tr("Enter the URL of the network stream:"), QLineEdit::Normal, lastUrl, &ok);
+
+    if (ok && !url.isEmpty()) {
+        QUrl networkUrl(url);
+        if (networkUrl.isValid()) {
+            m_playlist->addTrack(networkUrl);
+            settings.setValue("lastNetworkUrl"_L1, url);
+        } else {
+            m_statusLabel->setText(tr("Invalid URL: %1").arg(url));
+        }
+    }
 }
 
 void MainWindow::playKexp()

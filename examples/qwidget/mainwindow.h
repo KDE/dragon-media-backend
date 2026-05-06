@@ -30,6 +30,7 @@ public:
 private Q_SLOTS:
     void openFile();
     void openMultipleFiles();
+    void addNetworkUrl();
     void clearPlaylist();
     void playKexp();
     void playPlaylistItem(int index);

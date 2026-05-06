@@ -33,7 +33,12 @@ public:
 
     static QStringList availableFixtures()
     {
-        return {u"sample-3s.mp3"_s, u"sample-3s.aac"_s, u"gs-16b-2c-44100hz.ogg"_s, u"gs-16b-1c-44100hz.flac"_s, u"gs-16b-2c-44100hz.m4a"_s};
+        return {u"sample-3s.mp3"_s,
+                u"sample-3s.aac"_s,
+                u"gs-16b-2c-44100hz.ogg"_s,
+                u"gs-16b-1c-44100hz.flac"_s,
+                u"gs-16b-2c-44100hz.m4a"_s,
+                u"gs-16b-1c-44100hz.wma"_s};
     }
 };
 
@@ -47,6 +52,7 @@ private Q_SLOTS:
     void testDecoderOggFile();
     void testDecoderFlacFile();
     void testDecoderM4aFile();
+    void testDecoderWmaFile();
 
     void testDecoderAllFormats_data();
     void testDecoderAllFormats();
@@ -230,6 +236,24 @@ void TestE2E::testDecoderM4aFile()
     qDebug() << "M4A: sampleRate=" << result.sampleRate << "channels=" << result.channels << "samples=" << result.allSamples.size();
 }
 
+void TestE2E::testDecoderWmaFile()
+{
+    QString filePath = TestFixture::fixturePath("gs-16b-1c-44100hz.wma"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("WMA file not found: "_L1 + filePath));
+
+    auto result = decodeFileSync(filePath);
+
+    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
+    QVERIFY(result.sampleRate > 0);
+    QVERIFY(result.channels > 0);
+    QVERIFY(result.allSamples.size() > 0);
+
+    QVERIFY2(result.sampleRate == 44100, qPrintable(u"Expected 44100Hz, got %1"_s.arg(result.sampleRate)));
+    QVERIFY2(result.channels == 1, qPrintable(u"Expected 1 channel (mono), got %1"_s.arg(result.channels)));
+
+    qDebug() << "WMA: sampleRate=" << result.sampleRate << "channels=" << result.channels << "samples=" << result.allSamples.size();
+}
+
 void TestE2E::testDecoderAllFormats_data()
 {
     QTest::addColumn<QString>("filename");
@@ -241,6 +265,7 @@ void TestE2E::testDecoderAllFormats_data()
     QTest::newRow("ogg_44k_stereo") << u"gs-16b-2c-44100hz.ogg"_s << 44100 << 2;
     QTest::newRow("flac_44k_mono") << u"gs-16b-1c-44100hz.flac"_s << 44100 << 1;
     QTest::newRow("m4a_44k_stereo") << u"gs-16b-2c-44100hz.m4a"_s << 44100 << 2;
+    QTest::newRow("wma_44k_mono") << u"gs-16b-1c-44100hz.wma"_s << 44100 << 1;
 }
 
 void TestE2E::testDecoderAllFormats()
