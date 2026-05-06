@@ -6,8 +6,23 @@
 #include "mainwindow.h"
 
 #include <QApplication>
+#include <QLoggingCategory>
 
 using namespace Qt::StringLiterals;
+
+static void enableDebugOutput()
+{
+    QLoggingCategory::setFilterRules("*.debug=true"_L1);
+}
+
+struct EnableDebugOutput {
+    EnableDebugOutput()
+    {
+        enableDebugOutput();
+    }
+};
+
+static const EnableDebugOutput enableDebugOutputInstance;
 
 int main(int argc, char *argv[])
 {
