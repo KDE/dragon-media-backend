@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
+#include "dragondiagnostics.h"
 #include <dragonaudiooutput.h>
 #include <dragondecoder.h>
 #include <dragonfftprocessor.h>
@@ -10,6 +11,8 @@
 #include <dragonsdl/dragonplayer.h>
 
 #include <LockFreeSpscQueue.h>
+
+#include <SDL3/SDL_audio.h>
 
 #include "dragonsdl_logging.h"
 #include <QMetaObject>
@@ -33,6 +36,8 @@ static inline void setCurrentThreadName(const char *name)
 class DragonPlayer::DragonPlayerPrivate
 {
     static constexpr size_t kBufferCapacity = 65536;
+
+    friend class DragonDiagnostics;
 
 public:
     explicit DragonPlayerPrivate(DragonPlayer *player)
@@ -849,6 +854,44 @@ public:
     QTimer *positionTimer = nullptr;
     int64_t currentPosition = 0;
 };
+
+DragonDiagnostics::DragonDiagnostics(DragonPlayer &player)
+    : m_player(player)
+{
+}
+
+int DragonDiagnostics::sdlAudioBufferBytes() const
+{
+    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    if (!priv || !priv->audioOutput) {
+        return -1;
+    }
+
+    DragonAudioOutput::AudioSession *session = priv->audioOutput->m_session.load(std::memory_order_acquire);
+    if (!session || !session->stream) {
+        return -1;
+    }
+
+    return SDL_GetAudioStreamQueued(session->stream);
+}
+
+std::size_t DragonDiagnostics::decodeQueueSize() const
+{
+    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    if (!priv || !priv->audioQueue) {
+        return 0;
+    }
+    return priv->audioQueue->get_num_items_ready();
+}
+
+std::size_t DragonDiagnostics::fftQueueSize() const
+{
+    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    if (!priv || !priv->fftQueue) {
+        return 0;
+    }
+    return priv->fftQueue->get_num_items_ready();
+}
 
 DragonPlayer::DragonPlayer(QObject *parent)
     : QObject(parent)

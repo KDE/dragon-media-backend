@@ -74,6 +74,8 @@ Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();
 
+    friend class DragonDiagnostics;
+
 private:
     struct AudioSession {
         SDL_AudioStream *stream = nullptr;
@@ -81,6 +83,7 @@ private:
         int sampleRate = 44100;
         SDL_AudioDeviceID deviceId = 0;
     };
+
     std::atomic<AudioSession *> m_session{nullptr};
 
     std::atomic<LockFreeSpscQueue<std::float32_t> *> m_audioQueue{nullptr};

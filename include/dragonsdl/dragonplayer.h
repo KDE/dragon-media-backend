@@ -130,6 +130,8 @@ public Q_SLOTS:
     void saveUndoPosition(int64_t positionMs);
     void restoreUndoPosition();
 
+    friend class DragonDiagnostics;
+
 private:
     class DragonPlayerPrivate;
     std::unique_ptr<DragonPlayerPrivate> d;
