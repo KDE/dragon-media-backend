@@ -151,7 +151,7 @@ void MainWindow::setupUi()
     m_statusLabel = new QLabel(tr("Ready"), this);
     statusBar()->addWidget(m_statusLabel, 1);
 
-    m_sdlDiagLabel = new QLabel(tr("SDL: 0"), this);
+    m_sdlDiagLabel = new QLabel(tr("SDL: 0 ms"), this);
     m_decodeDiagLabel = new QLabel(tr("Decode: 0"), this);
     m_fftDiagLabel = new QLabel(tr("FFT: 0"), this);
     statusBar()->addPermanentWidget(m_sdlDiagLabel);
@@ -161,8 +161,12 @@ void MainWindow::setupUi()
     auto *diagnostics = new DragonDiagnostics(*m_player);
     auto *diagTimer = new QTimer(this);
     connect(diagTimer, &QTimer::timeout, this, [this, diagnostics]() {
-        const int sdlBytes = diagnostics->sdlAudioBufferBytes();
-        m_sdlDiagLabel->setText(tr("SDL: %1").arg(sdlBytes));
+        const int sdlMs = diagnostics->sdlAudioBufferMs();
+        if (sdlMs >= 0) {
+            m_sdlDiagLabel->setText(tr("SDL: %1 ms").arg(sdlMs));
+        } else {
+            m_sdlDiagLabel->setText(tr("SDL: --"));
+        }
 
         const std::size_t decodeSamples = diagnostics->decodeQueueSize();
         m_decodeDiagLabel->setText(tr("Decode: %1").arg(decodeSamples));

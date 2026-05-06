@@ -16,7 +16,7 @@ class DRAGONSDL_EXPORT DragonDiagnostics
 public:
     explicit DragonDiagnostics(DragonPlayer &player);
 
-    [[nodiscard]] int sdlAudioBufferBytes() const;
+    [[nodiscard]] int sdlAudioBufferMs() const;
 
     [[nodiscard]] std::size_t decodeQueueSize() const;
 

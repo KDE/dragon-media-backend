@@ -132,6 +132,7 @@ set(SOURCES
     src/dragonfftprocessor.cpp
     src/dragonradiostream.cpp
     src/dragonicymetadata.cpp
+    src/dragondiagnostics.cpp
     ${dragonsdl_SOURCES}
 )
 
