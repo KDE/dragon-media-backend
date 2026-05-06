@@ -344,23 +344,28 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
         };
 
         [[maybe_unused]] const size_t fftWritten = fftQueue->try_write(frameCount, [&](std::span<std::float32_t> fb1, std::span<std::float32_t> fb2) {
-            size_t monoIdx = 0;
-            auto writeMono = [&](float val) {
-                if (monoIdx < fb1.size()) {
-                    fb1[monoIdx] = val;
-                } else {
-                    fb2[monoIdx - fb1.size()] = val;
-                }
-                ++monoIdx;
-            };
+            const size_t fftWriteCapacity = fb1.size() + fb2.size();
+            const size_t framesToWrite = std::min(frameCount, fftWriteCapacity);
 
-            for (size_t frame = 0; frame < frameCount; ++frame) {
+            const auto computeMono = [&](const size_t frame) -> float {
                 const auto base = frame * channels;
-                auto channelSamples = std::views::iota(0, channels) | std::views::transform([&](int c) {
+                auto channelSamples = std::views::iota(0, channels) | std::views::transform([&](const int c) {
                                           return getSrc(base + c);
                                       });
-                const float mono = std::ranges::fold_left(channelSamples, 0.0f, std::plus{}) / static_cast<float>(channels);
-                writeMono(mono);
+                return std::ranges::fold_left(channelSamples, 0.0f, std::plus{}) / static_cast<float>(channels);
+            };
+
+            const size_t fb1Count = std::min(framesToWrite, fb1.size());
+
+            for (size_t i = 0; i < fb1Count; ++i) {
+                fb1[i] = computeMono(i);
+            }
+            for (size_t i = fb1Count; i < framesToWrite; ++i) {
+                fb2[i - fb1Count] = computeMono(i);
+            }
+
+            if (fftWriteCapacity < frameCount) {
+                qDebug() << "Not enough capacity for all frames, skipping" << frameCount - fftWriteCapacity << "frames";
             }
         });
     }
