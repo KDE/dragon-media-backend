@@ -6,6 +6,8 @@
 #include <QtCore>
 #include <QtTest>
 
+#include "logging_timestamp_init.h"
+
 #include <dragonsdl/dragonfftframe.h>
 #include <dragonsdl/dragonplayer.h>
 

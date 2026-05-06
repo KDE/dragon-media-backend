@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
+#include "../src/logging_timestamp.h"
 #include "mainwindow.h"
 
 #include <QApplication>
@@ -23,6 +24,7 @@ static void enableDebugOutput()
 struct EnableDebugOutput {
     EnableDebugOutput()
     {
+        dragonsdl_install_timestamped_handler();
         enableDebugOutput();
     }
 };

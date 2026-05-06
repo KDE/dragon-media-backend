@@ -7,6 +7,8 @@
 #include <QtNetwork>
 #include <QtTest>
 
+#include "logging_timestamp_init.h"
+
 #include "dragonradiostream.h"
 
 #include <QHash>

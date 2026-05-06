@@ -9,6 +9,8 @@
 #include <QtTest>
 #include <stdfloat>
 
+#include "logging_timestamp_init.h"
+
 #include "dragondecoder.h"
 #include <dragonsdl/dragonplayer.h>
 

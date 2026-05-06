@@ -6,6 +6,8 @@
 #include <QtTest>
 #include <stdfloat>
 
+#include "logging_timestamp_init.h"
+
 using namespace Qt::StringLiterals;
 
 #include "dragonfftprocessor.h"

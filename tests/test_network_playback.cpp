@@ -10,6 +10,8 @@
 #include <QtNetwork>
 #include <QtTest>
 
+#include "logging_timestamp_init.h"
+
 #include <dragonsdl/dragonplayer.h>
 
 using namespace Qt::StringLiterals;

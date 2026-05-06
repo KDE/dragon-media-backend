@@ -1,0 +1,5 @@
+org.kde.dragonsdl.player dragon-sdl (player core) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonsdlPlayer]
+org.kde.dragonsdl.decoder dragon-sdl (ffmpeg decoder) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonsdlDecoder]
+org.kde.dragonsdl.audio dragon-sdl (SDL audio output) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonsdlAudio]
+org.kde.dragonsdl.fft dragon-sdl (FFT processor) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonsdlFft]
+org.kde.dragonsdl.network dragon-sdl (radio stream) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonsdlNetwork]
