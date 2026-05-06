@@ -6,7 +6,7 @@
 #include <dragondecoder.h>
 #include <stdfloat>
 
-#include <QDebug>
+#include "dragonsdl_decoder_logging.h"
 #include <QScopeGuard>
 
 #include <cstring>
@@ -197,7 +197,7 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     flushDecoder(session);
     flushResampler(session);
 
-    qDebug() << "DECODER: decodeLoop finished total packets=" << session.packetCount << "total frames=" << session.frameCount;
+    qCDebug(dragonsdlDecoder) << "decodeLoop finished total packets=" << session.packetCount << "total frames=" << session.frameCount;
 }
 
 enum class AvioError {
@@ -353,15 +353,15 @@ bool DragonDecoder::setupResampler(DecodeSession &session)
 
 void DragonDecoder::emitFormatAndDuration(const DecodeSession &session)
 {
-    qDebug() << "DECODER: formatReady sr=" << session.sampleRate << "ch=" << session.nbChannels << "codec=" << session.codec->name;
+    qCDebug(dragonsdlDecoder) << "formatReady sr=" << session.sampleRate << "ch=" << session.nbChannels << "codec=" << session.codec->name;
     Q_EMIT formatReady(session.sampleRate, session.nbChannels);
 
     if (session.fmtCtx->duration != AV_NOPTS_VALUE) {
         const int64_t durationMs = session.fmtCtx->duration / (AV_TIME_BASE / 1000);
-        qDebug() << "DECODER: duration=" << durationMs << "ms";
+        qCDebug(dragonsdlDecoder) << "duration=" << durationMs << "ms";
         Q_EMIT durationChanged(durationMs);
     } else {
-        qDebug() << "DECODER: duration unknown";
+        qCDebug(dragonsdlDecoder) << "duration unknown";
     }
 }
 
@@ -393,10 +393,10 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
     int ret = av_read_frame(session.fmtCtx.get(), session.pkt.get());
     if (ret < 0) {
         if (ret == AVERROR_EOF) {
-            qDebug() << "DECODER: EOF reached after" << session.packetCount << "packets," << session.frameCount << "frames";
+            qCDebug(dragonsdlDecoder) << "EOF reached after" << session.packetCount << "packets," << session.frameCount << "frames";
             return false;
         }
-        qDebug() << "DECODER: av_read_frame transient error" << ret;
+        qCDebug(dragonsdlDecoder) << "av_read_frame transient error" << ret;
         av_packet_unref(session.pkt.get());
         return true;
     }
@@ -453,7 +453,7 @@ void DragonDecoder::drainDecoderFrames(DecodeSession &session, bool canEmitFirst
         uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(m_pcmBuffer.data())};
         int converted = swr_convert(session.swrCtx.get(), outData, maxOutSamples, const_cast<const uint8_t **>(session.frame->data), session.frame->nb_samples);
         if (converted < 0) {
-            qWarning() << "swr_convert failed";
+            qCWarning(dragonsdlDecoder) << "swr_convert failed";
             continue;
         }
 
@@ -462,7 +462,7 @@ void DragonDecoder::drainDecoderFrames(DecodeSession &session, bool canEmitFirst
             ++session.frameCount;
             if (canEmitFirstFrame && session.firstFrame) {
                 session.firstFrame = false;
-                qDebug() << "DECODER: first frame" << totalSamples << "samples";
+                qCDebug(dragonsdlDecoder) << "first frame" << totalSamples << "samples";
                 Q_EMIT stateChanged(false, 1.0);
             }
             if (m_samplesCallback) {
@@ -486,7 +486,7 @@ void DragonDecoder::runMainDecodeLoop(DecodeSession &session, std::stop_token st
 
 void DragonDecoder::flushDecoder(DecodeSession &session)
 {
-    qDebug() << "DECODER: flushing decoder...";
+    qCDebug(dragonsdlDecoder) << "flushing decoder...";
     avcodec_send_packet(session.codecCtx.get(), nullptr);
     drainDecoderFrames(session, false);
 }
@@ -503,7 +503,7 @@ void DragonDecoder::flushResampler(DecodeSession &session)
         int converted = swr_convert(session.swrCtx.get(), outData, delaySamples, nullptr, 0);
         if (converted > 0) {
             int totalSamples = converted * session.nbChannels;
-            qDebug() << "DECODER: swr flush samplesDecoded" << totalSamples << "samples";
+            qCDebug(dragonsdlDecoder) << "swr flush samplesDecoded" << totalSamples << "samples";
             if (m_samplesCallback) {
                 m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), session.sampleRate, session.nbChannels);
             }

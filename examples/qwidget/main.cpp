@@ -12,7 +12,12 @@ using namespace Qt::StringLiterals;
 
 static void enableDebugOutput()
 {
-    QLoggingCategory::setFilterRules("*.debug=true"_L1);
+    QLoggingCategory::setFilterRules(
+        QStringLiteral("org.kde.dragonsdl.*.debug=true\n"
+                       "qt.qpa.*=false\n"
+                       "qt.network.*=false\n"
+                       "qt.dbus*=false\n"
+                       "qt.svg*=false"));
 }
 
 struct EnableDebugOutput {

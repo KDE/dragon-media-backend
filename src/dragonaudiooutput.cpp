@@ -11,7 +11,7 @@
 
 #include <LockFreeSpscQueue.h>
 
-#include <QDebug>
+#include "dragonsdl_audio_logging.h"
 #include <QGuiApplication>
 #include <QIcon>
 #include <QString>
@@ -33,7 +33,7 @@ DragonAudioOutput::DragonAudioOutput(QObject *parent)
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_ROLE, "music");
 
     if (!SDL_Init(SDL_INIT_AUDIO)) {
-        qCritical() << "SDL_Init(SDL_INIT_AUDIO) failed:" << SDL_GetError();
+        qCCritical(dragonsdlAudio) << "SDL_Init(SDL_INIT_AUDIO) failed:" << SDL_GetError();
         Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
     }
 }
@@ -56,10 +56,10 @@ void DragonAudioOutput::setFftQueue(LockFreeSpscQueue<std::float32_t> *queue)
 
 void DragonAudioOutput::start(int sampleRate, int channels)
 {
-    qDebug() << "DragonAudioOutput::start" << sampleRate << channels;
+    qCDebug(dragonsdlAudio) << "start" << sampleRate << channels;
 
     if (m_session.load(std::memory_order_acquire) != nullptr) {
-        qDebug() << "AUDIO_OUT: start() called while already started stopping old session";
+        qCDebug(dragonsdlAudio) << "start() called while already started stopping old session";
         stop();
     }
 
@@ -73,7 +73,7 @@ void DragonAudioOutput::start(int sampleRate, int channels)
 
     SDL_AudioStream *stream = SDL_CreateAudioStream(&spec, nullptr);
     if (!stream) {
-        qCritical() << "SDL_CreateAudioStream failed:" << SDL_GetError();
+        qCCritical(dragonsdlAudio) << "SDL_CreateAudioStream failed:" << SDL_GetError();
         delete session;
         Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
         return;
@@ -82,7 +82,7 @@ void DragonAudioOutput::start(int sampleRate, int channels)
 
     SDL_AudioDeviceID deviceId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
     if (deviceId == 0) {
-        qCritical() << "SDL_OpenAudioDevice failed:" << SDL_GetError();
+        qCCritical(dragonsdlAudio) << "SDL_OpenAudioDevice failed:" << SDL_GetError();
         SDL_DestroyAudioStream(stream);
         delete session;
         Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
@@ -91,7 +91,7 @@ void DragonAudioOutput::start(int sampleRate, int channels)
     session->deviceId = deviceId;
 
     if (!SDL_BindAudioStreams(deviceId, &stream, 1)) {
-        qCritical() << "SDL_BindAudioStreams failed:" << SDL_GetError();
+        qCCritical(dragonsdlAudio) << "SDL_BindAudioStreams failed:" << SDL_GetError();
         SDL_CloseAudioDevice(deviceId);
         SDL_DestroyAudioStream(stream);
         delete session;
@@ -101,9 +101,9 @@ void DragonAudioOutput::start(int sampleRate, int channels)
 
     SDL_SetAudioStreamGain(stream, m_muted ? 0.0f : m_volume);
 
-    qDebug() << "AUDIO_OUT: registering get callback on stream";
+    qCDebug(dragonsdlAudio) << "registering get callback on stream";
     if (!SDL_SetAudioStreamGetCallback(stream, &DragonAudioOutput::audioStreamCallback, this)) {
-        qCritical() << "AUDIO_OUT: SDL_SetAudioStreamGetCallback FAILED:" << SDL_GetError();
+        qCCritical(dragonsdlAudio) << "SDL_SetAudioStreamGetCallback FAILED:" << SDL_GetError();
         SDL_CloseAudioDevice(deviceId);
         SDL_DestroyAudioStream(stream);
         delete session;
@@ -111,12 +111,12 @@ void DragonAudioOutput::start(int sampleRate, int channels)
         return;
     }
 
-    qDebug() << "AUDIO_OUT: get callback registered successfully";
+    qCDebug(dragonsdlAudio) << "get callback registered successfully";
 
     SDL_ResumeAudioDevice(deviceId);
 
     m_session.store(session, std::memory_order_release);
-    qDebug() << "SDL audio device started";
+    qCDebug(dragonsdlAudio) << "SDL audio device started";
 }
 
 void DragonAudioOutput::pause()
@@ -139,7 +139,7 @@ void DragonAudioOutput::resume()
 
 void DragonAudioOutput::stop()
 {
-    qDebug() << "AUDIO_OUT: stop()";
+    qCDebug(dragonsdlAudio) << "stop()";
 
     auto *oldSession = m_session.exchange(nullptr, std::memory_order_acq_rel);
 
@@ -149,7 +149,7 @@ void DragonAudioOutput::stop()
             SDL_CloseAudioDevice(oldSession->deviceId);
         }
         if (oldSession->stream) {
-            qDebug() << "AUDIO_OUT: stop() destroying stream";
+            qCDebug(dragonsdlAudio) << "stop() destroying stream";
             SDL_DestroyAudioStream(oldSession->stream);
         }
     }
@@ -157,7 +157,7 @@ void DragonAudioOutput::stop()
     int spinCount = 0;
     while (m_activeCallbacks.load(std::memory_order_acquire) > 0) {
         if (++spinCount > 100000) {
-            qWarning() << "AUDIO_OUT: timeout waiting for audio callbacks to finish";
+            qCWarning(dragonsdlAudio) << "timeout waiting for audio callbacks to finish";
             break;
         }
         std::this_thread::yield();
@@ -165,7 +165,7 @@ void DragonAudioOutput::stop()
 
     delete oldSession;
 
-    qDebug() << "AUDIO_OUT: stop() complete";
+    qCDebug(dragonsdlAudio) << "stop() complete";
 }
 
 void DragonAudioOutput::reset()
@@ -321,8 +321,8 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     const size_t itemsRead = scope.get_items_read();
 
     if (itemsRead == 0) {
-        qDebug() << "AUDIO_CB: STARVATION additional=" << additional_amount << "queueReady=" << queueReady << "floatsNeeded=" << floatsNeeded
-                 << "itemsRead=0";
+        qCDebug(dragonsdlAudio) << "STARVATION additional=" << additional_amount << "queueReady=" << queueReady << "floatsNeeded=" << floatsNeeded
+                                << "itemsRead=0";
         return;
     }
 
@@ -365,7 +365,7 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
             }
 
             if (fftWriteCapacity < frameCount) {
-                qDebug() << "Not enough capacity for all frames, skipping" << frameCount - fftWriteCapacity << "frames";
+                qCDebug(dragonsdlAudio) << "Not enough capacity for all frames, skipping" << frameCount - fftWriteCapacity << "frames";
             }
         });
     }

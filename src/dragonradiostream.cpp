@@ -5,7 +5,7 @@
 
 #include <dragonradiostream.h>
 
-#include <QDebug>
+#include "dragonsdl_network_logging.h"
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -39,7 +39,7 @@ void DragonRadioStream::setUrl(const QUrl &url)
 
 void DragonRadioStream::start()
 {
-    qDebug() << "DragonRadioStream::start" << m_url.toString();
+    qCDebug(dragonsdlNetwork) << "start" << m_url.toString();
 
     m_abort = false;
     m_error = false;
@@ -147,7 +147,7 @@ void DragonRadioStream::onReplyMetaDataChanged()
             const int metaint = metaintHeader.toInt(&ok);
             if (ok && metaint > 0) {
                 m_icyMetaint = metaint;
-                qDebug() << "ICY metadata interval:" << m_icyMetaint;
+                qCDebug(dragonsdlNetwork) << "ICY metadata interval:" << m_icyMetaint;
             }
         }
     }
@@ -174,7 +174,7 @@ void DragonRadioStream::onReplyReadyRead()
 
 void DragonRadioStream::onReplyFinished()
 {
-    qDebug() << "DragonRadioStream reply finished";
+    qCDebug(dragonsdlNetwork) << "reply finished";
     m_watchdogTimer->stop();
 
     if (m_abort) {
@@ -182,14 +182,14 @@ void DragonRadioStream::onReplyFinished()
     }
 
     if (m_reply && m_reply->error() != QNetworkReply::NoError) {
-        qDebug() << "DragonRadioStream reply finished with error, will reconnect";
+        qCDebug(dragonsdlNetwork) << "reply finished with error, will reconnect";
         QTimer::singleShot(2000, this, [this]() {
             if (!m_abort) {
                 start();
             }
         });
     } else {
-        qDebug() << "DragonRadioStream reply finished successfully, no reconnect needed";
+        qCDebug(dragonsdlNetwork) << "reply finished successfully, no reconnect needed";
         m_finished = true;
         m_bufferCv.notify_all();
     }
@@ -197,7 +197,7 @@ void DragonRadioStream::onReplyFinished()
 
 void DragonRadioStream::onReplyError(QNetworkReply::NetworkError code)
 {
-    qWarning() << "DragonRadioStream error:" << code;
+    qCWarning(dragonsdlNetwork) << "error:" << code;
     m_watchdogTimer->stop();
     m_error = true;
     m_bufferCv.notify_all();
@@ -213,7 +213,7 @@ void DragonRadioStream::onWatchdogTimeout()
         return;
     }
 
-    qDebug() << "DragonRadioStream watchdog timeout reconnecting";
+    qCDebug(dragonsdlNetwork) << "watchdog timeout reconnecting";
     start();
 }
 

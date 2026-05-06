@@ -11,7 +11,7 @@
 
 #include <LockFreeSpscQueue.h>
 
-#include <QDebug>
+#include "dragonsdl_logging.h"
 #include <QMetaObject>
 #include <QTimer>
 
@@ -243,10 +243,10 @@ public:
             q,
             [this, generation, isGapless](int sampleRate, int channels) {
                 if (currentDecoderGeneration != generation) {
-                    qDebug() << "PLAYER: ignoring stale formatReady (gen" << generation << "!= current" << currentDecoderGeneration << ")";
+                    qCDebug(dragonsdlPlayer) << "ignoring stale formatReady (gen" << generation << "!= current" << currentDecoderGeneration << ")";
                     return;
                 }
-                qDebug() << "PLAYER: formatReady sr=" << sampleRate << "ch=" << channels;
+                qCDebug(dragonsdlPlayer) << "formatReady sr=" << sampleRate << "ch=" << channels;
                 currentSampleRate = sampleRate;
                 currentChannels = channels;
 
@@ -295,7 +295,7 @@ public:
             &DragonDecoder::streamError,
             q,
             [this](const QString &msg) {
-                qDebug() << "Decoder error:" << msg;
+                qCDebug(dragonsdlPlayer) << "Decoder error:" << msg;
                 setError(currentIsLocal ? Error::FormatError : Error::NetworkError);
             },
             Qt::QueuedConnection);
@@ -305,7 +305,7 @@ public:
 
     void setSource(const QUrl &source)
     {
-        qDebug() << "PLAYER: setSource(" << source.toString() << ")";
+        qCDebug(dragonsdlPlayer) << "setSource(" << source.toString() << ")";
 
         {
             std::lock_guard lock(decoderMutex);
@@ -450,7 +450,7 @@ public:
 
     void stopPipeline()
     {
-        qDebug() << "PLAYER: stopPipeline() full teardown";
+        qCDebug(dragonsdlPlayer) << "stopPipeline() full teardown";
 
         decodeStopSource.request_stop();
 
@@ -491,7 +491,7 @@ public:
             radioStream.reset();
         }
 
-        qDebug() << "PLAYER: stopPipeline() teardown complete";
+        qCDebug(dragonsdlPlayer) << "stopPipeline() teardown complete";
     }
 
     void play()
@@ -548,7 +548,7 @@ public:
 
     void stop()
     {
-        qDebug() << "PLAYER: stop()";
+        qCDebug(dragonsdlPlayer) << "stop()";
 
         if (currentStatus == MediaStatus::LoadingMedia) {
             requestedPlaybackState = PlaybackState::StoppedState;
@@ -558,7 +558,7 @@ public:
         {
             std::lock_guard lock(decoderMutex);
             if (activeDecoder && audioOutput && !audioOutput->isDeviceOpen()) {
-                qDebug() << "PLAYER: stop() decoder exists but audio not open yet, ignoring stale stop";
+                qCDebug(dragonsdlPlayer) << "stop() decoder exists but audio not open yet, ignoring stale stop";
                 return;
             }
         }

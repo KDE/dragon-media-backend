@@ -9,7 +9,7 @@
 #include <LockFreeSpscQueue.h>
 #include <kissfft.hh>
 
-#include <QDebug>
+#include "dragonsdl_fft_logging.h"
 
 #include <algorithm>
 #include <array>
@@ -225,13 +225,13 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 
         if (frameCount <= 3 || frameCount % 60 == 0) {
             if (!frame.barData.empty()) {
-                qDebug() << "FFT: frame emitted count=" << frameCount << "mode=" << mode << "barData[0]=" << frame.barData[0]
-                         << "barData[11]=" << frame.barData[11] << "barData[23]=" << frame.barData[23];
+                qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode << "barData[0]=" << frame.barData[0]
+                                      << "barData[11]=" << frame.barData[11] << "barData[23]=" << frame.barData[23];
             } else if (!frame.frequenciesDb.empty()) {
-                qDebug() << "FFT: frame emitted count=" << frameCount << "mode=" << mode << "freqDb[0]=" << frame.frequenciesDb[0]
-                         << "freqDb[256]=" << frame.frequenciesDb[256];
+                qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode << "freqDb[0]=" << frame.frequenciesDb[0]
+                                      << "freqDb[256]=" << frame.frequenciesDb[256];
             } else {
-                qDebug() << "FFT: frame emitted count=" << frameCount << "mode=" << mode;
+                qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode;
             }
         }
     }

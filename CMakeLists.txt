@@ -27,6 +27,7 @@ set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
 include(KDEInstallDirs)
 include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
+include(ECMQtDeclareLoggingCategory)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -Werror")
@@ -89,6 +90,41 @@ FetchContent_MakeAvailable(spsc_queue_src)
 
 set(CMAKE_AUTOMOC ON)
 
+ecm_qt_declare_logging_category(dragonsdl_SOURCES
+    HEADER "dragonsdl_logging.h"
+    IDENTIFIER "dragonsdlPlayer"
+    CATEGORY_NAME "org.kde.dragonsdl.player"
+    DEFAULT_SEVERITY Info
+)
+
+ecm_qt_declare_logging_category(dragonsdl_SOURCES
+    HEADER "dragonsdl_decoder_logging.h"
+    IDENTIFIER "dragonsdlDecoder"
+    CATEGORY_NAME "org.kde.dragonsdl.decoder"
+    DEFAULT_SEVERITY Info
+)
+
+ecm_qt_declare_logging_category(dragonsdl_SOURCES
+    HEADER "dragonsdl_audio_logging.h"
+    IDENTIFIER "dragonsdlAudio"
+    CATEGORY_NAME "org.kde.dragonsdl.audio"
+    DEFAULT_SEVERITY Info
+)
+
+ecm_qt_declare_logging_category(dragonsdl_SOURCES
+    HEADER "dragonsdl_fft_logging.h"
+    IDENTIFIER "dragonsdlFft"
+    CATEGORY_NAME "org.kde.dragonsdl.fft"
+    DEFAULT_SEVERITY Info
+)
+
+ecm_qt_declare_logging_category(dragonsdl_SOURCES
+    HEADER "dragonsdl_network_logging.h"
+    IDENTIFIER "dragonsdlNetwork"
+    CATEGORY_NAME "org.kde.dragonsdl.network"
+    DEFAULT_SEVERITY Info
+)
+
 set(SOURCES
     src/dragonplayer.cpp
     src/dragondecoder.cpp
@@ -96,6 +132,7 @@ set(SOURCES
     src/dragonfftprocessor.cpp
     src/dragonradiostream.cpp
     src/dragonicymetadata.cpp
+    ${dragonsdl_SOURCES}
 )
 
 set(HEADERS
@@ -147,6 +184,8 @@ install(TARGETS dragon-sdl
 )
 
 install(DIRECTORY include/dragonsdl DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+
+install(FILES dragonsdl.categories DESTINATION ${KDE_INSTALL_DATAROOTDIR}"/qlogging-categories6")
 
 option(BUILD_EXAMPLES "Build examples" ON)
 if(BUILD_EXAMPLES AND Qt6Widgets_FOUND)
