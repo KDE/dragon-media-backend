@@ -71,6 +71,11 @@ private:
 
     QListWidget *m_playlistWidget = nullptr;
     QLabel *m_statusLabel = nullptr;
+
+    QLabel *m_sdlDiagLabel = nullptr;
+    QLabel *m_decodeDiagLabel = nullptr;
+    QLabel *m_fftDiagLabel = nullptr;
+
     bool m_seeking = false;
     int64_t m_durationMs = 0;
     DragonIcyMetadata m_lastIcyMetadata;
