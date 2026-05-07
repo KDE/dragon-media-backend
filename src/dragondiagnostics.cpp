@@ -62,3 +62,21 @@ std::size_t DragonDiagnostics::fftQueueSize() const
     }
     return priv->fftQueue->get_num_items_ready();
 }
+
+bool DragonDiagnostics::decodeLoopActive() const
+{
+    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    if (!priv) {
+        return false;
+    }
+    return priv->decodePipeline.decodeLoopActive();
+}
+
+bool DragonDiagnostics::hasActiveDecoder() const
+{
+    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    if (!priv) {
+        return false;
+    }
+    return priv->decodePipeline.isActive();
+}

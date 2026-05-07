@@ -133,6 +133,7 @@ set(SOURCES
     src/dragonradiostream.cpp
     src/dragonicymetadata.cpp
     src/dragondiagnostics.cpp
+    src/dragondecodepipeline.cpp
     ${dragonsdl_SOURCES}
 )
 

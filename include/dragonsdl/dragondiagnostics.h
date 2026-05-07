@@ -22,6 +22,10 @@ public:
 
     [[nodiscard]] std::size_t fftQueueSize() const;
 
+    [[nodiscard]] bool decodeLoopActive() const;
+
+    [[nodiscard]] bool hasActiveDecoder() const;
+
 private:
     DragonPlayer &m_player;
 };
