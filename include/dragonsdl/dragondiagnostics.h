@@ -18,6 +18,10 @@ public:
 
     [[nodiscard]] int sdlAudioBufferMs() const;
 
+    [[nodiscard]] int sdlAudioBufferUs() const;
+
+    [[nodiscard]] int sdlAudioBufferFrames() const;
+
     [[nodiscard]] std::size_t decodeQueueSize() const;
 
     [[nodiscard]] std::size_t fftQueueSize() const;

@@ -18,6 +18,7 @@ class QPushButton;
 class QSlider;
 class QLabel;
 class QListWidget;
+class QLCDNumber;
 
 class MainWindow : public QMainWindow
 {
@@ -72,9 +73,12 @@ private:
     QListWidget *m_playlistWidget = nullptr;
     QLabel *m_statusLabel = nullptr;
 
-    QLabel *m_sdlDiagLabel = nullptr;
-    QLabel *m_decodeDiagLabel = nullptr;
-    QLabel *m_fftDiagLabel = nullptr;
+    QLCDNumber *m_sdlDiagLabel = nullptr;
+    QLCDNumber *m_decodeDiagLabel = nullptr;
+    QLCDNumber *m_fftDiagLabel = nullptr;
+    QLabel *m_sdlLabel = nullptr;
+    QLabel *m_decodeLabel = nullptr;
+    QLabel *m_fftLabel = nullptr;
 
     bool m_seeking = false;
     int64_t m_durationMs = 0;

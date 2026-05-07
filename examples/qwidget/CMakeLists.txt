@@ -3,6 +3,8 @@
 
 set(CMAKE_AUTOMOC ON)
 
+find_package(KF6I18n REQUIRED)
+
 add_executable(dragon-sdl-qwidget-example
     main.cpp
     mainwindow.cpp
@@ -20,4 +22,5 @@ target_link_libraries(dragon-sdl-qwidget-example PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
+    KF6::I18n
 )

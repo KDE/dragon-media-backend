@@ -33,6 +33,7 @@ void DragonPlaylist::addTrack(const QUrl &url)
     if (m_currentIndex < 0) {
         m_currentIndex = 0;
         m_player->setSource(url);
+        m_player->play();
         Q_EMIT currentIndexChanged(0);
     }
     updatePlayerQueue();
@@ -51,6 +52,7 @@ void DragonPlaylist::addTracks(const QList<QUrl> &urls)
     if (wasEmpty) {
         m_currentIndex = 0;
         m_player->setSource(m_tracks.first());
+        m_player->play();
         Q_EMIT currentIndexChanged(0);
     }
 
@@ -122,6 +124,7 @@ void DragonPlaylist::playNext()
     }
     m_currentIndex++;
     m_player->setSource(m_tracks[m_currentIndex]);
+    m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
     updatePlayerQueue();
 }
@@ -133,6 +136,7 @@ void DragonPlaylist::playPrevious()
     }
     m_currentIndex--;
     m_player->setSource(m_tracks[m_currentIndex]);
+    m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
     updatePlayerQueue();
 }
@@ -144,6 +148,7 @@ void DragonPlaylist::setCurrentIndex(int index)
     }
     m_currentIndex = index;
     m_player->setSource(m_tracks[m_currentIndex]);
+    m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
     updatePlayerQueue();
 }

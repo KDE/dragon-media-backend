@@ -9,6 +9,8 @@
 #include <QApplication>
 #include <QLoggingCategory>
 
+#include <KLocalizedString>
+
 using namespace Qt::StringLiterals;
 
 static void enableDebugOutput()
@@ -33,6 +35,8 @@ static const EnableDebugOutput enableDebugOutputInstance;
 
 int main(int argc, char *argv[])
 {
+    KLocalizedString::setApplicationDomain(QByteArrayLiteral("dragon-sdl-qwidget-example"));
+
     QApplication app(argc, argv);
     QApplication::setWindowIcon(QIcon::fromTheme("emblem-music-symbolic"_L1));
     QApplication::setOrganizationName("DragonSDL"_L1);

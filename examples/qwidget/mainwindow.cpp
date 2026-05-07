@@ -15,6 +15,9 @@
 #include <QApplication>
 #include <QCheckBox>
 #include <QDir>
+#include <QLCDNumber>
+
+#include <KLocalizedString>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -49,17 +52,17 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::setupUi()
 {
-    setWindowTitle(tr("Dragon SDL Media Player"));
+    setWindowTitle(i18n("Dragon SDL Media Player"));
     resize(700, 400);
 
-    auto *fileMenu = menuBar()->addMenu(tr("&File"));
-    fileMenu->addAction(tr("&Open File..."), QKeySequence::Open, this, &MainWindow::openFile);
-    fileMenu->addAction(tr("Open &Multiple Files..."), this, &MainWindow::openMultipleFiles);
-    fileMenu->addAction(tr("Add &Network URL..."), this, &MainWindow::addNetworkUrl);
+    auto *fileMenu = menuBar()->addMenu(i18n("&File"));
+    fileMenu->addAction(i18n("&Open File..."), QKeySequence::Open, this, &MainWindow::openFile);
+    fileMenu->addAction(i18n("Open &Multiple Files..."), this, &MainWindow::openMultipleFiles);
+    fileMenu->addAction(i18n("Add &Network URL..."), this, &MainWindow::addNetworkUrl);
     fileMenu->addSeparator();
-    fileMenu->addAction(tr("&Clear Playlist"), this, &MainWindow::clearPlaylist);
+    fileMenu->addAction(i18n("&Clear Playlist"), this, &MainWindow::clearPlaylist);
     fileMenu->addSeparator();
-    fileMenu->addAction(tr("&Quit"), QKeySequence::Quit, this, &QWidget::close);
+    fileMenu->addAction(i18n("&Quit"), QKeySequence::Quit, this, &QWidget::close);
 
     auto *central = new QWidget(this);
     auto *mainLayout = new QHBoxLayout(central);
@@ -73,19 +76,19 @@ void MainWindow::setupUi()
     auto *hBtnLayout = new QHBoxLayout();
     m_prevButton = new QPushButton(this);
     m_prevButton->setIcon(style()->standardIcon(QStyle::SP_MediaSkipBackward));
-    m_prevButton->setToolTip(tr("Previous"));
+    m_prevButton->setToolTip(i18n("Previous"));
     m_playButton = new QPushButton(this);
     m_playButton->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
-    m_playButton->setToolTip(tr("Play"));
+    m_playButton->setToolTip(i18n("Play"));
     m_pauseButton = new QPushButton(this);
     m_pauseButton->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
-    m_pauseButton->setToolTip(tr("Pause"));
+    m_pauseButton->setToolTip(i18n("Pause"));
     m_stopButton = new QPushButton(this);
     m_stopButton->setIcon(style()->standardIcon(QStyle::SP_MediaStop));
-    m_stopButton->setToolTip(tr("Stop"));
+    m_stopButton->setToolTip(i18n("Stop"));
     m_nextButton = new QPushButton(this);
     m_nextButton->setIcon(style()->standardIcon(QStyle::SP_MediaSkipForward));
-    m_nextButton->setToolTip(tr("Next"));
+    m_nextButton->setToolTip(i18n("Next"));
 
     hBtnLayout->addWidget(m_prevButton);
     hBtnLayout->addWidget(m_playButton);
@@ -93,8 +96,8 @@ void MainWindow::setupUi()
     hBtnLayout->addWidget(m_stopButton);
     hBtnLayout->addWidget(m_nextButton);
     hBtnLayout->addStretch();
-    m_kexpButton = new QPushButton(tr("Play KEXP"), this);
-    m_kexpButton->setToolTip(tr("Play KEXP Radio Stream"));
+    m_kexpButton = new QPushButton(i18n("Play KEXP"), this);
+    m_kexpButton->setToolTip(i18n("Play KEXP Radio Stream"));
     hBtnLayout->addWidget(m_kexpButton);
     vLayout->addLayout(hBtnLayout);
 
@@ -108,7 +111,7 @@ void MainWindow::setupUi()
     vLayout->addLayout(hSeekLayout);
 
     auto *hVolLayout = new QHBoxLayout();
-    auto *volLabel = new QLabel(tr("Volume:"), this);
+    auto *volLabel = new QLabel(i18n("Volume:"), this);
     volLabel->setMinimumWidth(60);
     m_volumeSlider = new QSlider(Qt::Horizontal, this);
     m_volumeSlider->setRange(0, 100);
@@ -119,7 +122,7 @@ void MainWindow::setupUi()
     hVolLayout->addStretch();
     vLayout->addLayout(hVolLayout);
 
-    auto *visualizerLabel = new QLabel(tr("Visualizer"), this);
+    auto *visualizerLabel = new QLabel(i18n("Visualizer"), this);
     visualizerLabel->setStyleSheet(u"font-weight: bold;"_s);
     vLayout->addWidget(visualizerLabel);
     m_visualizer->setFixedHeight(DragonVisualizer::PreferredHeight);
@@ -128,7 +131,7 @@ void MainWindow::setupUi()
     m_spectrogram->setFixedHeight(DragonSpectrogram::PreferredHeight);
     vLayout->addWidget(m_spectrogram);
 
-    m_fftCheckBox = new QCheckBox(tr("Enable FFT visualization"), this);
+    m_fftCheckBox = new QCheckBox(i18n("Enable FFT visualization"), this);
     vLayout->addWidget(m_fftCheckBox);
 
     vLayout->addStretch();
@@ -136,7 +139,7 @@ void MainWindow::setupUi()
 
     auto *rightPanel = new QWidget(this);
     auto *rightLayout = new QVBoxLayout(rightPanel);
-    auto *playlistLabel = new QLabel(tr("Playlist"), this);
+    auto *playlistLabel = new QLabel(i18n("Playlist"), this);
     playlistLabel->setStyleSheet(u"font-weight: bold;"_s);
     rightLayout->addWidget(playlistLabel);
 
@@ -148,31 +151,50 @@ void MainWindow::setupUi()
 
     setCentralWidget(central);
 
-    m_statusLabel = new QLabel(tr("Ready"), this);
+    m_statusLabel = new QLabel(i18n("Ready"), this);
     statusBar()->addWidget(m_statusLabel, 1);
 
-    m_sdlDiagLabel = new QLabel(tr("SDL: 0 ms"), this);
-    m_decodeDiagLabel = new QLabel(tr("Decode: 0"), this);
-    m_fftDiagLabel = new QLabel(tr("FFT: 0"), this);
-    statusBar()->addPermanentWidget(m_sdlDiagLabel);
-    statusBar()->addPermanentWidget(m_decodeDiagLabel);
-    statusBar()->addPermanentWidget(m_fftDiagLabel);
+    m_sdlDiagLabel = new QLCDNumber(5, this);
+    m_sdlDiagLabel->setSegmentStyle(QLCDNumber::Flat);
+    m_sdlDiagLabel->setMinimumWidth(60);
+    m_decodeDiagLabel = new QLCDNumber(5, this);
+    m_decodeDiagLabel->setSegmentStyle(QLCDNumber::Flat);
+    m_decodeDiagLabel->setMinimumWidth(60);
+    m_fftDiagLabel = new QLCDNumber(5, this);
+    m_fftDiagLabel->setSegmentStyle(QLCDNumber::Flat);
+    m_fftDiagLabel->setMinimumWidth(60);
+
+    m_sdlLabel = new QLabel(i18n("SDL fr:"), this);
+    m_decodeLabel = new QLabel(i18n("Decode:"), this);
+    m_fftLabel = new QLabel(i18n("FFT:"), this);
+
+    auto *diagContainer = new QWidget(this);
+    auto *diagLayout = new QHBoxLayout(diagContainer);
+    diagLayout->setContentsMargins(4, 0, 4, 0);
+    diagLayout->setSpacing(8);
+    diagLayout->addWidget(m_sdlLabel);
+    diagLayout->addWidget(m_sdlDiagLabel);
+    diagLayout->addWidget(m_decodeLabel);
+    diagLayout->addWidget(m_decodeDiagLabel);
+    diagLayout->addWidget(m_fftLabel);
+    diagLayout->addWidget(m_fftDiagLabel);
+    statusBar()->addPermanentWidget(diagContainer);
 
     auto *diagnostics = new DragonDiagnostics(*m_player);
     auto *diagTimer = new QTimer(this);
     connect(diagTimer, &QTimer::timeout, this, [this, diagnostics]() {
-        const int sdlMs = diagnostics->sdlAudioBufferMs();
-        if (sdlMs >= 0) {
-            m_sdlDiagLabel->setText(tr("SDL: %1 ms").arg(sdlMs));
+        const int sdlFrames = diagnostics->sdlAudioBufferFrames();
+        if (sdlFrames >= 0) {
+            m_sdlDiagLabel->display(sdlFrames);
         } else {
-            m_sdlDiagLabel->setText(tr("SDL: --"));
+            m_sdlDiagLabel->display(0);
         }
 
         const std::size_t decodeSamples = diagnostics->decodeQueueSize();
-        m_decodeDiagLabel->setText(tr("Decode: %1").arg(decodeSamples));
+        m_decodeDiagLabel->display(static_cast<int>(decodeSamples));
 
         const std::size_t fftSamples = diagnostics->fftQueueSize();
-        m_fftDiagLabel->setText(tr("FFT: %1").arg(fftSamples));
+        m_fftDiagLabel->display(static_cast<int>(fftSamples));
     });
     diagTimer->start(500);
 }
@@ -221,11 +243,11 @@ void MainWindow::connectPlayer()
     connect(m_player, &DragonPlayer::statusChanged, this, &MainWindow::updateStatus);
     connect(m_player, &DragonPlayer::errorChanged, this, [this](DragonPlayer::Error error) {
         if (error != DragonPlayer::Error::NoError)
-            m_statusLabel->setText(tr("Error: %1").arg(static_cast<int>(error)));
+            m_statusLabel->setText(i18n("Error: %1").arg(static_cast<int>(error)));
     });
 
     connect(m_player, &DragonPlayer::trackChanged, this, [this]() {
-        m_statusLabel->setText(tr("Playing (seamless transition)"));
+        m_statusLabel->setText(i18n("Playing (seamless transition)"));
     });
 
     connect(m_player, &DragonPlayer::fftFrameReady, this, &MainWindow::updateFftFrame);
@@ -242,7 +264,7 @@ void MainWindow::openFile()
     const QString lastDir = settings.value("lastOpenDir"_L1, QDir::homePath()).toString();
 
     const QString file =
-        QFileDialog::getOpenFileName(this, tr("Open Audio File"), lastDir, tr("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
+        QFileDialog::getOpenFileName(this, i18n("Open Audio File"), lastDir, i18n("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
 
     if (!file.isEmpty()) {
         m_playlist->clear();
@@ -257,7 +279,7 @@ void MainWindow::openMultipleFiles()
     const QString lastDir = settings.value("lastOpenDir"_L1, QDir::homePath()).toString();
 
     const QStringList files =
-        QFileDialog::getOpenFileNames(this, tr("Open Audio Files"), lastDir, tr("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
+        QFileDialog::getOpenFileNames(this, i18n("Open Audio Files"), lastDir, i18n("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
 
     if (!files.isEmpty()) {
         QList<QUrl> urls;
@@ -280,7 +302,7 @@ void MainWindow::addNetworkUrl()
     const QString lastUrl = settings.value("lastNetworkUrl"_L1, "https://"_L1).toString();
 
     bool ok = false;
-    const QString url = QInputDialog::getText(this, tr("Add Network URL"), tr("Enter the URL of the network stream:"), QLineEdit::Normal, lastUrl, &ok);
+    const QString url = QInputDialog::getText(this, i18n("Add Network URL"), i18n("Enter the URL of the network stream:"), QLineEdit::Normal, lastUrl, &ok);
 
     if (ok && !url.isEmpty()) {
         QUrl networkUrl(url);
@@ -288,7 +310,7 @@ void MainWindow::addNetworkUrl()
             m_playlist->addTrack(networkUrl);
             settings.setValue("lastNetworkUrl"_L1, url);
         } else {
-            m_statusLabel->setText(tr("Invalid URL: %1").arg(url));
+            m_statusLabel->setText(i18n("Invalid URL: %1").arg(url));
         }
     }
 }
@@ -317,21 +339,21 @@ void MainWindow::updatePlaybackState()
     switch (state) {
     case DragonPlayer::PlaybackState::PlayingState:
         if (m_lastIcyMetadata.hasStreamTitle()) {
-            m_statusLabel->setText(tr("Playing: %1").arg(m_lastIcyMetadata.streamTitle()));
+            m_statusLabel->setText(i18n("Playing: %1").arg(m_lastIcyMetadata.streamTitle()));
         } else {
-            m_statusLabel->setText(tr("Playing"));
+            m_statusLabel->setText(i18n("Playing"));
         }
         break;
     case DragonPlayer::PlaybackState::PausedState:
         if (m_lastIcyMetadata.hasStreamTitle()) {
-            m_statusLabel->setText(tr("Paused: %1").arg(m_lastIcyMetadata.streamTitle()));
+            m_statusLabel->setText(i18n("Paused: %1").arg(m_lastIcyMetadata.streamTitle()));
         } else {
-            m_statusLabel->setText(tr("Paused"));
+            m_statusLabel->setText(i18n("Paused"));
         }
         break;
     case DragonPlayer::PlaybackState::StoppedState:
         m_lastIcyMetadata.clear();
-        m_statusLabel->setText(tr("Stopped"));
+        m_statusLabel->setText(i18n("Stopped"));
         break;
     }
 }
@@ -367,29 +389,29 @@ void MainWindow::updateStatus()
     const auto status = m_player->status();
     switch (status) {
     case DragonPlayer::MediaStatus::NoMedia:
-        m_statusLabel->setText(tr("No media"));
+        m_statusLabel->setText(i18n("No media"));
         break;
     case DragonPlayer::MediaStatus::LoadingMedia:
         m_lastIcyMetadata.clear();
-        m_statusLabel->setText(tr("Loading..."));
+        m_statusLabel->setText(i18n("Loading..."));
         break;
     case DragonPlayer::MediaStatus::LoadedMedia:
-        m_statusLabel->setText(tr("Loaded"));
+        m_statusLabel->setText(i18n("Loaded"));
         break;
     case DragonPlayer::MediaStatus::BufferingMedia:
-        m_statusLabel->setText(tr("Buffering..."));
+        m_statusLabel->setText(i18n("Buffering..."));
         break;
     case DragonPlayer::MediaStatus::StalledMedia:
-        m_statusLabel->setText(tr("Stalled"));
+        m_statusLabel->setText(i18n("Stalled"));
         break;
     case DragonPlayer::MediaStatus::BufferedMedia:
-        m_statusLabel->setText(tr("Buffered"));
+        m_statusLabel->setText(i18n("Buffered"));
         break;
     case DragonPlayer::MediaStatus::EndOfMedia:
-        m_statusLabel->setText(tr("Finished"));
+        m_statusLabel->setText(i18n("Finished"));
         break;
     case DragonPlayer::MediaStatus::InvalidMedia:
-        m_statusLabel->setText(tr("Invalid media"));
+        m_statusLabel->setText(i18n("Invalid media"));
         break;
     }
 }
@@ -441,6 +463,6 @@ void MainWindow::updateIcyMetadata(const DragonIcyMetadata &metadata)
 {
     m_lastIcyMetadata = metadata;
     if (metadata.hasStreamTitle()) {
-        m_statusLabel->setText(tr("Playing: %1").arg(metadata.streamTitle()));
+        m_statusLabel->setText(i18n("Playing: %1").arg(metadata.streamTitle()));
     }
 }

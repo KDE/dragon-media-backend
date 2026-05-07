@@ -45,6 +45,52 @@ int DragonDiagnostics::sdlAudioBufferMs() const
     return static_cast<int>((static_cast<int64_t>(frames) * 1000) / spec.freq);
 }
 
+int DragonDiagnostics::sdlAudioBufferUs() const
+{
+    DragonPlayerPrivate *priv = m_player.d.get();
+    if (!priv || !priv->audioOutput) {
+        return -1;
+    }
+
+    DragonAudioOutput::AudioSession *session = priv->audioOutput->m_session.load(std::memory_order_acquire);
+    if (!session || !session->stream) {
+        return -1;
+    }
+
+    const int frames = SDL_GetAudioStreamQueued(session->stream);
+    if (frames <= 0) {
+        return 0;
+    }
+
+    SDL_AudioDeviceID deviceId = SDL_GetAudioStreamDevice(session->stream);
+    SDL_AudioSpec spec;
+    if (!SDL_GetAudioDeviceFormat(deviceId, &spec, nullptr)) {
+        return -1;
+    }
+
+    if (spec.freq <= 0) {
+        return -1;
+    }
+
+    return static_cast<int>((static_cast<int64_t>(frames) * 1000000) / spec.freq);
+}
+
+int DragonDiagnostics::sdlAudioBufferFrames() const
+{
+    DragonPlayerPrivate *priv = m_player.d.get();
+    if (!priv || !priv->audioOutput) {
+        return -1;
+    }
+
+    DragonAudioOutput::AudioSession *session = priv->audioOutput->m_session.load(std::memory_order_acquire);
+    if (!session || !session->stream) {
+        return -1;
+    }
+
+    const int frames = SDL_GetAudioStreamQueued(session->stream);
+    return frames > 0 ? frames : 0;
+}
+
 std::size_t DragonDiagnostics::decodeQueueSize() const
 {
     DragonPlayerPrivate *priv = m_player.d.get();
