@@ -27,361 +27,289 @@ static inline void setCurrentThreadName(const char *name)
     pthread_setname_np(pthread_self(), name);
 }
 
-class DragonDecodePipeline::Impl
-{
-public:
-    explicit Impl(DragonPlayer *player)
-        : q(player)
-    {
-        startDecodeThread();
-    }
-
-    ~Impl()
-    {
-        stop();
-    }
-
-    void startDecodeThread()
-    {
-        decodeThread = std::jthread([this](std::stop_token st) {
-            setCurrentThreadName("dragon-decode");
-            while (!st.stop_requested()) {
-                std::unique_lock lock(decoderMutex);
-                decoderCv.wait(lock, [this, &st]() {
-                    return activeDecoder != nullptr || st.stop_requested();
-                });
-                if (st.stop_requested())
-                    break;
-
-                DragonDecoder *decoder = activeDecoder.get();
-                decodeLoopActive = true;
-                lock.unlock();
-
-                decoder->decodeLoop(decodeStopSource.get_token());
-                const bool hadFatalError = decoder->hasFatalError();
-
-                lock.lock();
-                decodeLoopActive = false;
-                const bool wasStopped = decodeStopSource.stop_requested();
-
-                activeDecoder.reset();
-
-                lock.unlock();
-                decoderCv.notify_all();
-
-                if (st.stop_requested())
-                    break;
-
-                if (wasStopped) {
-                    continue;
-                }
-
-                if (hadFatalError) {
-                    if (finishedCallback) {
-                        finishedCallback(true, false);
-                    }
-                    continue;
-                }
-
-                std::unique_lock plock(decoderMutex);
-                if (preWarmedDecoder) {
-                    activeDecoder = std::move(preWarmedDecoder);
-                    QUrl newSource = nextSource;
-                    nextSource.clear();
-
-                    plock.unlock();
-
-                    if (gaplessTransitionCallback) {
-                        gaplessTransitionCallback(newSource);
-                    }
-                } else {
-                    plock.unlock();
-
-                    if (finishedCallback) {
-                        finishedCallback(false, wasStopped);
-                    }
-                }
-            }
-        });
-    }
-
-    void stop()
-    {
-        decodeStopSource.request_stop();
-        decodeThread.request_stop();
-
-        if (preWarmThread.joinable()) {
-            preWarmThread.request_stop();
-        }
-
-        decoderCv.notify_all();
-
-        if (decodeThread.joinable()) {
-            decodeThread.join();
-        }
-        if (preWarmThread.joinable()) {
-            preWarmThread.join();
-        }
-
-        {
-            std::lock_guard lock(decoderMutex);
-            activeDecoder.reset();
-            preWarmedDecoder.reset();
-            decodeLoopActive = false;
-        }
-
-        if (radioStream) {
-            radioStream->stop();
-            radioStream.reset();
-        }
-    }
-
-    void setSource(const QUrl &source, uint64_t generation)
-    {
-        {
-            std::lock_guard lock(decoderMutex);
-            preWarmedDecoder.reset();
-        }
-        if (preWarmThread.joinable()) {
-            preWarmThread.request_stop();
-            preWarmThread.join();
-        }
-
-        decodeStopSource.request_stop();
-
-        {
-            std::unique_lock lock(decoderMutex);
-            decoderCv.wait(lock, [this]() {
-                return !decodeLoopActive;
-            });
-            activeDecoder.reset();
-        }
-
-        auto decoder = createDecoder(source, false, generation);
-        if (!decoder) {
-            return;
-        }
-
-        {
-            std::lock_guard lock(decoderMutex);
-            activeDecoder = std::move(decoder);
-        }
-
-        decodeStopSource = std::stop_source{};
-        decoderCv.notify_one();
-    }
-
-    void setNextSource(const QUrl &next, uint64_t generation)
-    {
-        nextSource = next;
-
-        {
-            std::lock_guard lock(decoderMutex);
-            preWarmedDecoder.reset();
-        }
-        if (preWarmThread.joinable()) {
-            preWarmThread.request_stop();
-            preWarmThread.join();
-        }
-
-        if (next.isEmpty() || !next.isLocalFile()) {
-            return;
-        }
-
-        preWarmThread = std::jthread([this, next, generation](std::stop_token st) {
-            setCurrentThreadName("dragon-prewarm");
-            auto decoder = createDecoder(next, true, generation);
-            if (st.stop_requested()) {
-                return;
-            }
-            if (decoder) {
-                std::lock_guard lock(decoderMutex);
-                if (!st.stop_requested()) {
-                    preWarmedDecoder = std::move(decoder);
-                }
-            }
-        });
-    }
-
-    bool isActive() const
-    {
-        std::lock_guard lock(decoderMutex);
-        return activeDecoder != nullptr;
-    }
-
-    bool hasFatalError() const
-    {
-        std::lock_guard lock(decoderMutex);
-        return activeDecoder && activeDecoder->hasFatalError();
-    }
-
-    void requestSeek(int64_t posMs)
-    {
-        std::lock_guard lock(decoderMutex);
-        if (activeDecoder) {
-            activeDecoder->requestSeek(posMs);
-        }
-    }
-
-    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless, uint64_t generation)
-    {
-        const bool isLocal = source.isLocalFile();
-
-        if (!isLocal) {
-            if (radioStream) {
-                radioStream->stop();
-                radioStream.reset();
-            }
-            radioStream = std::make_unique<DragonRadioStream>();
-            radioStream->setUrl(source);
-
-            QObject::connect(radioStream.get(), &DragonRadioStream::errorOccurred, q, [this](const QString &) {
-                if (errorCallback) {
-                    errorCallback(QStringLiteral("Network error"));
-                }
-            });
-
-            QObject::connect(radioStream.get(), &DragonRadioStream::metadataReady, q, [this](const DragonIcyMetadata &metadata) {
-                Q_EMIT q->currentPlayingForRadiosChanged(metadata);
-            });
-
-            radioStream->start();
-        } else if (radioStream) {
-            radioStream->stop();
-            radioStream.reset();
-        }
-
-        DragonDecoder::ReadCallback readCb;
-        if (!isLocal) {
-            readCb = [this](const std::span<uint8_t> buf) -> int {
-                return radioStream ? radioStream->read(buf, decodeStopSource.get_token()) : -1;
-            };
-        }
-
-        auto decoder = std::make_unique<DragonDecoder>(std::move(readCb), isLocal ? source.toLocalFile() : QString{});
-
-        decoder->setSamplesCallback([this](std::span<const std::float32_t> data, int, int) {
-            if (samplesCallback) {
-                samplesCallback(data, decodeStopSource.get_token());
-            }
-        });
-
-        QObject::connect(
-            decoder.get(),
-            &DragonDecoder::formatReady,
-            q,
-            [this, generation, isGapless](int sampleRate, int channels) {
-                if (this->generation != generation) {
-                    qCDebug(dragonsdlPlayer) << "ignoring stale formatReady (gen" << generation << "!= current" << this->generation << ")";
-                    return;
-                }
-                qCDebug(dragonsdlPlayer) << "formatReady sr=" << sampleRate << "ch=" << channels;
-                if (formatReadyCallback) {
-                    formatReadyCallback(sampleRate, channels, isGapless);
-                }
-            },
-            Qt::QueuedConnection);
-
-        QObject::connect(
-            decoder.get(),
-            &DragonDecoder::durationChanged,
-            q,
-            [this](int64_t durationMs) {
-                if (durationCallback) {
-                    durationCallback(durationMs);
-                }
-            },
-            Qt::QueuedConnection);
-
-        QObject::connect(
-            decoder.get(),
-            &DragonDecoder::streamError,
-            q,
-            [this](const QString &msg) {
-                qCDebug(dragonsdlPlayer) << "Decoder error:" << msg;
-                if (errorCallback) {
-                    errorCallback(msg);
-                }
-            },
-            Qt::QueuedConnection);
-
-        return decoder;
-    }
-
-    const std::unique_ptr<DragonDecoder> &getActiveDecoder() const
-    {
-        return activeDecoder;
-    }
-    bool isDecodeLoopActive() const
-    {
-        return decodeLoopActive;
-    }
-
-    FormatReadyCallback formatReadyCallback;
-    DurationCallback durationCallback;
-    SamplesCallback samplesCallback;
-    ErrorCallback errorCallback;
-    FinishedCallback finishedCallback;
-    GaplessTransitionCallback gaplessTransitionCallback;
-
-    DragonPlayer *q = nullptr;
-    uint64_t generation = 0;
-    QUrl nextSource;
-
-    std::jthread decodeThread;
-    std::stop_source decodeStopSource;
-    mutable std::mutex decoderMutex;
-    std::condition_variable decoderCv;
-    bool decodeLoopActive = false;
-    std::unique_ptr<DragonDecoder> activeDecoder;
-    std::unique_ptr<DragonDecoder> preWarmedDecoder;
-
-    std::jthread preWarmThread;
-
-    std::unique_ptr<DragonRadioStream> radioStream;
-};
-
 DragonDecodePipeline::DragonDecodePipeline(DragonPlayer *player)
-    : d(std::make_unique<Impl>(player))
+    : q(player)
 {
+    startDecodeThread();
 }
 
-DragonDecodePipeline::~DragonDecodePipeline() = default;
-
-void DragonDecodePipeline::setSource(const QUrl &source, uint64_t generation)
+DragonDecodePipeline::~DragonDecodePipeline()
 {
-    d->generation = generation;
-    d->setSource(source, generation);
+    stop();
 }
 
-void DragonDecodePipeline::setNextSource(const QUrl &next, uint64_t generation)
+void DragonDecodePipeline::startDecodeThread()
 {
-    d->setNextSource(next, generation);
+    m_decodeThread = std::jthread([this](std::stop_token st) {
+        setCurrentThreadName("dragon-decode");
+        while (!st.stop_requested()) {
+            std::unique_lock lock(m_decoderMutex);
+            m_decoderCv.wait(lock, [this, &st]() {
+                return m_activeDecoder != nullptr || st.stop_requested();
+            });
+            if (st.stop_requested())
+                break;
+
+            DragonDecoder *decoder = m_activeDecoder.get();
+            m_decodeLoopActive = true;
+            lock.unlock();
+
+            decoder->decodeLoop(m_decodeStopSource.get_token());
+            const bool hadFatalError = decoder->hasFatalError();
+
+            lock.lock();
+            m_decodeLoopActive = false;
+            const bool wasStopped = m_decodeStopSource.stop_requested();
+
+            m_activeDecoder.reset();
+
+            lock.unlock();
+            m_decoderCv.notify_all();
+
+            if (st.stop_requested())
+                break;
+
+            if (wasStopped) {
+                continue;
+            }
+
+            if (hadFatalError) {
+                if (m_finishedCallback) {
+                    m_finishedCallback(true, false);
+                }
+                continue;
+            }
+
+            std::unique_lock plock(m_decoderMutex);
+            if (m_preWarmedDecoder) {
+                m_activeDecoder = std::move(m_preWarmedDecoder);
+                QUrl newSource = m_nextSource;
+                m_nextSource.clear();
+
+                plock.unlock();
+
+                if (m_gaplessTransitionCallback) {
+                    m_gaplessTransitionCallback(newSource);
+                }
+            } else {
+                plock.unlock();
+
+                if (m_finishedCallback) {
+                    m_finishedCallback(false, wasStopped);
+                }
+            }
+        }
+    });
 }
 
 void DragonDecodePipeline::stop()
 {
-    d->stop();
+    m_decodeStopSource.request_stop();
+    m_decodeThread.request_stop();
+
+    if (m_preWarmThread.joinable()) {
+        m_preWarmThread.request_stop();
+    }
+
+    m_decoderCv.notify_all();
+
+    if (m_decodeThread.joinable()) {
+        m_decodeThread.join();
+    }
+    if (m_preWarmThread.joinable()) {
+        m_preWarmThread.join();
+    }
+
+    {
+        std::lock_guard lock(m_decoderMutex);
+        m_activeDecoder.reset();
+        m_preWarmedDecoder.reset();
+        m_decodeLoopActive = false;
+    }
+
+    if (m_radioStream) {
+        m_radioStream->stop();
+        m_radioStream.reset();
+    }
 }
 
-void DragonDecodePipeline::requestSeek(int64_t posMs)
+void DragonDecodePipeline::setSource(const QUrl &source, uint64_t generation)
 {
-    d->requestSeek(posMs);
+    m_generation = generation;
+
+    {
+        std::lock_guard lock(m_decoderMutex);
+        m_preWarmedDecoder.reset();
+    }
+    if (m_preWarmThread.joinable()) {
+        m_preWarmThread.request_stop();
+        m_preWarmThread.join();
+    }
+
+    m_decodeStopSource.request_stop();
+
+    {
+        std::unique_lock lock(m_decoderMutex);
+        m_decoderCv.wait(lock, [this]() {
+            return !m_decodeLoopActive;
+        });
+        m_activeDecoder.reset();
+    }
+
+    auto decoder = createDecoder(source, false, generation);
+    if (!decoder) {
+        return;
+    }
+
+    {
+        std::lock_guard lock(m_decoderMutex);
+        m_activeDecoder = std::move(decoder);
+    }
+
+    m_decodeStopSource = std::stop_source{};
+    m_decoderCv.notify_one();
+}
+
+void DragonDecodePipeline::setNextSource(const QUrl &next, uint64_t generation)
+{
+    m_nextSource = next;
+
+    {
+        std::lock_guard lock(m_decoderMutex);
+        m_preWarmedDecoder.reset();
+    }
+    if (m_preWarmThread.joinable()) {
+        m_preWarmThread.request_stop();
+        m_preWarmThread.join();
+    }
+
+    if (next.isEmpty() || !next.isLocalFile()) {
+        return;
+    }
+
+    m_preWarmThread = std::jthread([this, next, generation](std::stop_token st) {
+        setCurrentThreadName("dragon-prewarm");
+        auto decoder = createDecoder(next, true, generation);
+        if (st.stop_requested()) {
+            return;
+        }
+        if (decoder) {
+            std::lock_guard lock(m_decoderMutex);
+            if (!st.stop_requested()) {
+                m_preWarmedDecoder = std::move(decoder);
+            }
+        }
+    });
 }
 
 bool DragonDecodePipeline::isActive() const
 {
-    return d->isActive();
+    std::lock_guard lock(m_decoderMutex);
+    return m_activeDecoder != nullptr;
 }
 
 bool DragonDecodePipeline::hasFatalError() const
 {
-    return d->hasFatalError();
+    std::lock_guard lock(m_decoderMutex);
+    return m_activeDecoder && m_activeDecoder->hasFatalError();
+}
+
+void DragonDecodePipeline::requestSeek(int64_t posMs)
+{
+    std::lock_guard lock(m_decoderMutex);
+    if (m_activeDecoder) {
+        m_activeDecoder->requestSeek(posMs);
+    }
+}
+
+std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &source, bool isGapless, uint64_t generation)
+{
+    const bool isLocal = source.isLocalFile();
+
+    if (!isLocal) {
+        if (m_radioStream) {
+            m_radioStream->stop();
+            m_radioStream.reset();
+        }
+        m_radioStream = std::make_unique<DragonRadioStream>();
+        m_radioStream->setUrl(source);
+
+        QObject::connect(m_radioStream.get(), &DragonRadioStream::errorOccurred, q, [this](const QString &) {
+            if (m_errorCallback) {
+                m_errorCallback(QStringLiteral("Network error"));
+            }
+        });
+
+        QObject::connect(m_radioStream.get(), &DragonRadioStream::metadataReady, q, [this](const DragonIcyMetadata &metadata) {
+            Q_EMIT q->currentPlayingForRadiosChanged(metadata);
+        });
+
+        m_radioStream->start();
+    } else if (m_radioStream) {
+        m_radioStream->stop();
+        m_radioStream.reset();
+    }
+
+    DragonDecoder::ReadCallback readCb;
+    if (!isLocal) {
+        readCb = [this](const std::span<uint8_t> buf) -> int {
+            return m_radioStream ? m_radioStream->read(buf, m_decodeStopSource.get_token()) : -1;
+        };
+    }
+
+    auto decoder = std::make_unique<DragonDecoder>(std::move(readCb), isLocal ? source.toLocalFile() : QString{});
+
+    decoder->setSamplesCallback([this](std::span<const std::float32_t> data, int, int) {
+        if (m_samplesCallback) {
+            m_samplesCallback(data, m_decodeStopSource.get_token());
+        }
+    });
+
+    QObject::connect(
+        decoder.get(),
+        &DragonDecoder::formatReady,
+        q,
+        [this, generation, isGapless](int sampleRate, int channels) {
+            if (m_generation != generation) {
+                qCDebug(dragonsdlPlayer) << "ignoring stale formatReady (gen" << generation << "!= current" << m_generation << ")";
+                return;
+            }
+            qCDebug(dragonsdlPlayer) << "formatReady sr=" << sampleRate << "ch=" << channels;
+            if (m_formatReadyCallback) {
+                m_formatReadyCallback(sampleRate, channels, isGapless);
+            }
+        },
+        Qt::QueuedConnection);
+
+    QObject::connect(
+        decoder.get(),
+        &DragonDecoder::durationChanged,
+        q,
+        [this](int64_t durationMs) {
+            if (m_durationCallback) {
+                m_durationCallback(durationMs);
+            }
+        },
+        Qt::QueuedConnection);
+
+    QObject::connect(
+        decoder.get(),
+        &DragonDecoder::streamError,
+        q,
+        [this](const QString &msg) {
+            qCDebug(dragonsdlPlayer) << "Decoder error:" << msg;
+            if (m_errorCallback) {
+                m_errorCallback(msg);
+            }
+        },
+        Qt::QueuedConnection);
+
+    return decoder;
 }
 
 uint64_t DragonDecodePipeline::generation() const
 {
-    return d->generation;
+    return m_generation;
 }
 
 void DragonDecodePipeline::setCallbacks(FormatReadyCallback format,
@@ -391,20 +319,20 @@ void DragonDecodePipeline::setCallbacks(FormatReadyCallback format,
                                         FinishedCallback finished,
                                         GaplessTransitionCallback gapless)
 {
-    d->formatReadyCallback = std::move(format);
-    d->durationCallback = std::move(duration);
-    d->samplesCallback = std::move(samples);
-    d->errorCallback = std::move(error);
-    d->finishedCallback = std::move(finished);
-    d->gaplessTransitionCallback = std::move(gapless);
+    m_formatReadyCallback = std::move(format);
+    m_durationCallback = std::move(duration);
+    m_samplesCallback = std::move(samples);
+    m_errorCallback = std::move(error);
+    m_finishedCallback = std::move(finished);
+    m_gaplessTransitionCallback = std::move(gapless);
 }
 
 const std::unique_ptr<DragonDecoder> &DragonDecodePipeline::activeDecoder() const
 {
-    return d->getActiveDecoder();
+    return m_activeDecoder;
 }
 
 bool DragonDecodePipeline::decodeLoopActive() const
 {
-    return d->isDecodeLoopActive();
+    return m_decodeLoopActive;
 }

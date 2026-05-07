@@ -13,6 +13,7 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <thread>
 #include <vector>
 
 template<typename T>
@@ -54,6 +55,25 @@ public:
     [[nodiscard]] bool hasInfrastructure() const;
 
 private:
-    class Impl;
-    std::unique_ptr<Impl> d;
+    static constexpr size_t kBufferCapacity = 65536;
+
+    void ensureInfrastructureInternal();
+    void teardownInternal();
+    void startThread();
+    void stopThread();
+    void setModeInternal(DragonPlayer::FftMode mode);
+    void restartWithNewQueueInternal(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv);
+
+    std::unique_ptr<DragonFftProcessor> m_fftProcessor;
+
+    std::jthread m_fftThread;
+
+    LockFreeSpscQueue<std::float32_t> *m_fftQueue = nullptr;
+    std::vector<std::float32_t> *m_fftBuffer = nullptr;
+    std::condition_variable *m_waitCv = nullptr;
+
+    DragonPlayer::FftMode m_currentMode = DragonPlayer::FftMode::Off;
+    bool m_infrastructureCreated = false;
+
+    FrameCallback m_frameCallback;
 };

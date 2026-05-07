@@ -646,12 +646,12 @@ void DragonPlayer::stop()
 
     d->fftPipeline.stop();
 
-    setPlaybackState(d.get(), DragonPlayer::PlaybackState::StoppedState);
+    setPlaybackState(d.get(), PlaybackState::StoppedState);
 
-    if (d->currentStatus != DragonPlayer::MediaStatus::LoadedMedia) {
-        d->currentStatus = DragonPlayer::MediaStatus::LoadedMedia;
+    if (d->currentStatus != MediaStatus::LoadedMedia) {
+        d->currentStatus = MediaStatus::LoadedMedia;
     }
-    Q_EMIT statusChanged(DragonPlayer::MediaStatus::LoadedMedia);
+    Q_EMIT statusChanged(MediaStatus::LoadedMedia);
 }
 
 void DragonPlayer::seek(int64_t posMs)

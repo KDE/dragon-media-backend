@@ -6,11 +6,14 @@
 #pragma once
 
 #include <QUrl>
+#include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <stop_token>
+#include <thread>
 
 class DragonPlayer;
 class DragonDecoder;
@@ -55,6 +58,29 @@ public:
     bool decodeLoopActive() const;
 
 private:
-    class Impl;
-    std::unique_ptr<Impl> d;
+    void startDecodeThread();
+    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless, uint64_t generation);
+
+    FormatReadyCallback m_formatReadyCallback;
+    DurationCallback m_durationCallback;
+    SamplesCallback m_samplesCallback;
+    ErrorCallback m_errorCallback;
+    FinishedCallback m_finishedCallback;
+    GaplessTransitionCallback m_gaplessTransitionCallback;
+
+    DragonPlayer *q = nullptr;
+    uint64_t m_generation = 0;
+    QUrl m_nextSource;
+
+    std::jthread m_decodeThread;
+    std::stop_source m_decodeStopSource;
+    mutable std::mutex m_decoderMutex;
+    std::condition_variable m_decoderCv;
+    bool m_decodeLoopActive = false;
+    std::unique_ptr<DragonDecoder> m_activeDecoder;
+    std::unique_ptr<DragonDecoder> m_preWarmedDecoder;
+
+    std::jthread m_preWarmThread;
+
+    std::unique_ptr<DragonRadioStream> m_radioStream;
 };
