@@ -208,7 +208,7 @@ public:
                 audioOutput->setFftQueue(nullptr);
             }
         } else {
-            fftPipeline.ensureInfrastructure(&fftBuffer, audioOutput->fftCv());
+            fftPipeline.ensureInfrastructure(&fftBuffer, audioOutput->fftCv(), currentFftMode);
 
             fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(fftBuffer));
             if (audioOutput) {
@@ -513,7 +513,7 @@ public:
         currentFftMode = mode;
 
         if (!wasOn && nowOn) {
-            fftPipeline.ensureInfrastructure(&fftBuffer, audioOutput->fftCv());
+            fftPipeline.ensureInfrastructure(&fftBuffer, audioOutput->fftCv(), mode);
 
             if (!fftQueue) {
                 fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(fftBuffer));
@@ -524,8 +524,6 @@ public:
             }
 
             fftPipeline.setQueue(fftQueue.get());
-
-            fftPipeline.setMode(mode);
 
             if (fftPipeline.isRunning()) {
                 fftPipeline.restartWithNewQueue(fftQueue.get(), audioOutput->fftCv());
