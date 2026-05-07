@@ -6,9 +6,9 @@
 #pragma once
 
 #include "dragondecodepipeline.h"
+#include "dragonfftpipeline.h"
 #include <dragonaudiooutput.h>
 #include <dragondecoder.h>
-#include <dragonfftprocessor.h>
 #include <dragonsdl/dragonplayer.h>
 
 #include <LockFreeSpscQueue.h>
@@ -66,6 +66,7 @@ public:
         });
 
         wirePipelineCallbacks();
+        wireFftCallbacks();
     }
 
     void wirePipelineCallbacks()
@@ -91,6 +92,18 @@ public:
             });
     }
 
+    void wireFftCallbacks()
+    {
+        fftPipeline.setFrameCallback([this](DragonFftFrame frame) {
+            QMetaObject::invokeMethod(
+                q,
+                [this, f = std::move(frame)]() mutable {
+                    Q_EMIT q->fftFrameReady(f);
+                },
+                Qt::QueuedConnection);
+        });
+    }
+
     void onFormatReady(int sampleRate, int channels, bool isGapless)
     {
         qCDebug(dragonsdlPlayer) << "formatReady sr=" << sampleRate << "ch=" << channels;
@@ -100,9 +113,9 @@ public:
         bool audioAlreadyRunning = isGapless && audioOutput->hasFormat(sampleRate, channels);
 
         audioOutput->setPositionOffset(currentPosition);
-        if (fftProcessor) {
-            fftProcessor->setSampleRate(sampleRate);
-        }
+
+        fftPipeline.setSampleRate(sampleRate);
+
         setStatus(DragonPlayer::MediaStatus::LoadedMedia);
 
         if (requestedPlaybackState == DragonPlayer::PlaybackState::PlayingState) {
@@ -163,10 +176,7 @@ public:
                         audioOutput->stop();
                         audioOutput->reset();
                     }
-                    if (fftThread.joinable()) {
-                        fftThread.request_stop();
-                        fftThread.join();
-                    }
+                    fftPipeline.stop();
                     setStatus(DragonPlayer::MediaStatus::EndOfMedia);
                     setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
                 },
@@ -179,44 +189,6 @@ public:
         stopPipeline();
     }
 
-    void ensureFftInfrastructure()
-    {
-        if (fftProcessor) {
-            return;
-        }
-
-        fftBuffer.resize(kBufferCapacity);
-
-        fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(fftBuffer));
-
-        audioOutput->setFftQueue(fftQueue.get());
-
-        fftProcessor = std::make_unique<DragonFftProcessor>();
-        fftProcessor->setQueue(fftQueue.get());
-        fftProcessor->setWaitCv(audioOutput->fftCv());
-        fftProcessor->setFftMode(currentFftMode);
-
-        fftProcessor->setFrameCallback([this](DragonFftFrame frame) {
-            QMetaObject::invokeMethod(
-                q,
-                [this, f = std::move(frame)]() mutable {
-                    Q_EMIT q->fftFrameReady(f);
-                },
-                Qt::QueuedConnection);
-        });
-    }
-
-    void startFftThread()
-    {
-        if (fftThread.joinable()) {
-            return;
-        }
-        fftThread = std::jthread([this](std::stop_token st) {
-            setCurrentThreadName("dragon-fft");
-            fftProcessor->processLoop(std::move(st));
-        });
-    }
-
     void setSource(const QUrl &source)
     {
         qCDebug(dragonsdlPlayer) << "setSource(" << source.toString() << ")";
@@ -227,11 +199,8 @@ public:
         }
 
         if (currentFftMode == DragonPlayer::FftMode::Off) {
-            if (fftThread.joinable()) {
-                fftThread.request_stop();
-                fftThread.join();
-            }
-            fftProcessor.reset();
+            fftPipeline.stop();
+            fftPipeline.teardown();
             fftQueue.reset();
             fftBuffer.clear();
             fftBuffer.shrink_to_fit();
@@ -239,22 +208,14 @@ public:
                 audioOutput->setFftQueue(nullptr);
             }
         } else {
-            ensureFftInfrastructure();
-
-            if (fftThread.joinable()) {
-                fftThread.request_stop();
-                fftThread.join();
-            }
+            fftPipeline.ensureInfrastructure(&fftBuffer, audioOutput->fftCv());
 
             fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(fftBuffer));
             if (audioOutput) {
                 audioOutput->setFftQueue(fftQueue.get());
             }
-            fftProcessor->setQueue(fftQueue.get());
-            fftProcessor->setWaitCv(audioOutput->fftCv());
-            fftProcessor->reset();
 
-            startFftThread();
+            fftPipeline.restartWithNewQueue(fftQueue.get(), audioOutput->fftCv());
         }
 
         audioQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(audioBuffer));
@@ -311,11 +272,7 @@ public:
 
         decodePipeline.stop();
 
-        fftThread.request_stop();
-
-        if (fftThread.joinable()) {
-            fftThread.join();
-        }
+        fftPipeline.stop();
 
         if (audioOutput) {
             audioOutput->stop();
@@ -399,10 +356,7 @@ public:
             audioOutput->reset();
         }
 
-        if (fftThread.joinable()) {
-            fftThread.request_stop();
-            fftThread.join();
-        }
+        fftPipeline.stop();
 
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
 
@@ -559,24 +513,32 @@ public:
         currentFftMode = mode;
 
         if (!wasOn && nowOn) {
-            ensureFftInfrastructure();
+            fftPipeline.ensureInfrastructure(&fftBuffer, audioOutput->fftCv());
 
-            if (audioOutput && fftQueue) {
+            if (!fftQueue) {
+                fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(fftBuffer));
+            }
+
+            if (audioOutput) {
                 audioOutput->setFftQueue(fftQueue.get());
             }
 
-            fftProcessor->setFftMode(mode);
+            fftPipeline.setQueue(fftQueue.get());
 
-            startFftThread();
+            fftPipeline.setMode(mode);
+
+            if (fftPipeline.isRunning()) {
+                fftPipeline.restartWithNewQueue(fftQueue.get(), audioOutput->fftCv());
+            } else {
+                fftPipeline.start();
+            }
         } else if (wasOn && !nowOn) {
             if (audioOutput) {
                 audioOutput->setFftQueue(nullptr);
             }
-            if (fftProcessor) {
-                fftProcessor->setFftMode(mode);
-            }
-        } else if (nowOn && fftProcessor) {
-            fftProcessor->setFftMode(mode);
+            fftPipeline.setMode(mode);
+        } else if (nowOn && fftPipeline.hasInfrastructure()) {
+            fftPipeline.setMode(mode);
         }
 
         Q_EMIT q->fftModeChanged(mode);
@@ -607,6 +569,7 @@ public:
     DragonPlayer *q;
 
     DragonDecodePipeline decodePipeline;
+    DragonFftPipeline fftPipeline;
 
     std::vector<std::float32_t> fftBuffer;
     std::vector<std::float32_t> audioBuffer;
@@ -614,9 +577,6 @@ public:
     std::unique_ptr<LockFreeSpscQueue<std::float32_t>> audioQueue;
 
     std::unique_ptr<DragonAudioOutput> audioOutput;
-    std::unique_ptr<DragonFftProcessor> fftProcessor;
-
-    std::jthread fftThread;
 
     QUrl currentSource;
     QUrl nextSource;

@@ -134,6 +134,7 @@ set(SOURCES
     src/dragonicymetadata.cpp
     src/dragondiagnostics.cpp
     src/dragondecodepipeline.cpp
+    src/dragonfftpipeline.cpp
     ${dragonsdl_SOURCES}
 )
 
