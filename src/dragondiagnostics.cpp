@@ -17,7 +17,7 @@ DragonDiagnostics::DragonDiagnostics(DragonPlayer &player)
 
 int DragonDiagnostics::sdlAudioBufferMs() const
 {
-    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player.d.get();
     if (!priv || !priv->audioOutput) {
         return -1;
     }
@@ -47,7 +47,7 @@ int DragonDiagnostics::sdlAudioBufferMs() const
 
 std::size_t DragonDiagnostics::decodeQueueSize() const
 {
-    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player.d.get();
     if (!priv || !priv->audioQueue) {
         return 0;
     }
@@ -56,7 +56,7 @@ std::size_t DragonDiagnostics::decodeQueueSize() const
 
 std::size_t DragonDiagnostics::fftQueueSize() const
 {
-    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player.d.get();
     if (!priv || !priv->fftQueue) {
         return 0;
     }
@@ -65,7 +65,7 @@ std::size_t DragonDiagnostics::fftQueueSize() const
 
 bool DragonDiagnostics::decodeLoopActive() const
 {
-    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player.d.get();
     if (!priv) {
         return false;
     }
@@ -74,7 +74,7 @@ bool DragonDiagnostics::decodeLoopActive() const
 
 bool DragonDiagnostics::hasActiveDecoder() const
 {
-    DragonPlayer::DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player.d.get();
     if (!priv) {
         return false;
     }
