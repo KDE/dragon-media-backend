@@ -7,7 +7,9 @@
 
 #include "dragonsdl_export.h"
 
+#include <atomic>
 #include <cstddef>
+#include <cstdint>
 
 class DragonPlayer;
 
@@ -30,6 +32,12 @@ public:
 
     [[nodiscard]] bool hasActiveDecoder() const;
 
+    [[nodiscard]] float audioCallbackHz() const;
+
 private:
     DragonPlayer &m_player;
+
+    mutable std::atomic<uint64_t> m_callbackCount{0};
+    mutable std::atomic<uint64_t> m_callbackTimestampUs{0};
+    mutable std::atomic<float> m_callbackHz{0.0f};
 };

@@ -74,6 +74,8 @@ Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();
 
+    void audioCallbackInvoked();
+
     friend class DragonDiagnostics;
 
 private:

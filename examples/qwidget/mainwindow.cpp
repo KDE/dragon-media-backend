@@ -164,7 +164,7 @@ void MainWindow::setupUi()
     m_fftDiagLabel->setSegmentStyle(QLCDNumber::Flat);
     m_fftDiagLabel->setMinimumWidth(60);
 
-    m_sdlLabel = new QLabel(i18n("SDL fr:"), this);
+    m_sdlLabel = new QLabel(i18n("Hz:"), this);
     m_decodeLabel = new QLabel(i18n("Decode:"), this);
     m_fftLabel = new QLabel(i18n("FFT:"), this);
 
@@ -183,12 +183,8 @@ void MainWindow::setupUi()
     auto *diagnostics = new DragonDiagnostics(*m_player);
     auto *diagTimer = new QTimer(this);
     connect(diagTimer, &QTimer::timeout, this, [this, diagnostics]() {
-        const int sdlFrames = diagnostics->sdlAudioBufferFrames();
-        if (sdlFrames >= 0) {
-            m_sdlDiagLabel->display(sdlFrames);
-        } else {
-            m_sdlDiagLabel->display(0);
-        }
+        const float callbackHz = diagnostics->audioCallbackHz();
+        m_sdlDiagLabel->display(static_cast<int>(callbackHz));
 
         const std::size_t decodeSamples = diagnostics->decodeQueueSize();
         m_decodeDiagLabel->display(static_cast<int>(decodeSamples));
