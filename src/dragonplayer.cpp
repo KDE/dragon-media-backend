@@ -615,10 +615,15 @@ void DragonPlayer::play()
 
     qCDebug(dragonsdlPlayer) << "play() status is " << static_cast<int>(d->currentStatus) << ", starting audio synchronously";
 
-    if (d->audioOutput && !d->audioOutput->isDeviceOpen() && d->currentSampleRate > 0) {
-        d->audioOutput->start(d->currentSampleRate, d->currentChannels);
+    if (d->currentSampleRate > 0) {
+        if (d->audioOutput && !d->audioOutput->isDeviceOpen()) {
+            d->audioOutput->start(d->currentSampleRate, d->currentChannels);
+        }
+        setPlaybackState(d.get(), DragonPlayer::PlaybackState::PlayingState);
+    } else {
+        qCDebug(dragonsdlPlayer) << "play() sampleRate not known, deferring to onFormatReady";
+        d->requestedPlaybackState = DragonPlayer::PlaybackState::PlayingState;
     }
-    setPlaybackState(d.get(), DragonPlayer::PlaybackState::PlayingState);
 }
 
 void DragonPlayer::pause()
