@@ -643,7 +643,7 @@ void DragonPlayer::stop()
         return;
     }
 
-    d->decodePipeline.stop();
+    d->decodePipeline.stopSession();
     ++d->currentDecoderGeneration;
 
     if (d->audioOutput) {

@@ -32,6 +32,9 @@ public:
 
     void setSource(const QUrl &source, uint64_t generation);
     void setNextSource(const QUrl &next, uint64_t generation);
+
+    void stopSession();
+
     void stop();
 
     bool isActive() const;

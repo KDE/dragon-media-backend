@@ -102,6 +102,27 @@ void DragonDecodePipeline::startDecodeThread()
     });
 }
 
+void DragonDecodePipeline::stopSession()
+{
+    m_decodeStopSource.request_stop();
+
+    if (m_preWarmThread.joinable()) {
+        m_preWarmThread.request_stop();
+    }
+
+    {
+        std::unique_lock lock(m_decoderMutex);
+        m_decoderCv.wait(lock, [this]() {
+            return !m_decodeLoopActive;
+        });
+        m_activeDecoder.reset();
+    }
+
+    if (m_preWarmThread.joinable()) {
+        m_preWarmThread.join();
+    }
+}
+
 void DragonDecodePipeline::stop()
 {
     m_decodeStopSource.request_stop();
@@ -136,6 +157,10 @@ void DragonDecodePipeline::stop()
 void DragonDecodePipeline::setSource(const QUrl &source, uint64_t generation)
 {
     m_generation = generation;
+
+    if (!m_decodeThread.joinable()) {
+        startDecodeThread();
+    }
 
     {
         std::lock_guard lock(m_decoderMutex);
