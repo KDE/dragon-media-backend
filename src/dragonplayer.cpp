@@ -417,6 +417,7 @@ DragonPlayer::FftMode DragonPlayer::fftMode() const
 
 void DragonPlayer::setMuted(bool muted)
 {
+    qCDebug(dragonsdlPlayer) << "setMuted(" << muted << ")";
     if (d->currentMuted == muted) {
         return;
     }
@@ -429,6 +430,7 @@ void DragonPlayer::setMuted(bool muted)
 
 void DragonPlayer::setVolume(float gain)
 {
+    qCDebug(dragonsdlPlayer) << "setVolume(" << gain << ")";
     d->currentVolume = gain;
     if (d->audioOutput) {
         d->audioOutput->setVolume(gain);
@@ -510,6 +512,7 @@ void DragonPlayer::setSource(const QUrl &source)
 
 void DragonPlayer::setNextSource(const QUrl &nextSource)
 {
+    qCDebug(dragonsdlPlayer) << "setNextSource(" << nextSource.toString() << ")";
     d->nextSource = nextSource;
     Q_EMIT nextSourceChanged();
 
@@ -518,6 +521,7 @@ void DragonPlayer::setNextSource(const QUrl &nextSource)
 
 void DragonPlayer::setPosition(int64_t posMs)
 {
+    qCDebug(dragonsdlPlayer) << "setPosition(" << posMs << ")";
     posMs = std::clamp(posMs, int64_t{0}, std::max(d->currentDuration, int64_t{0}));
     d->currentPosition = posMs;
 
@@ -532,6 +536,7 @@ void DragonPlayer::setPosition(int64_t posMs)
 
 void DragonPlayer::setFftMode(FftMode mode)
 {
+    qCDebug(dragonsdlPlayer) << "setFftMode(" << mode << ")";
     if (d->currentFftMode == mode) {
         return;
     }
@@ -572,6 +577,7 @@ void DragonPlayer::setFftMode(FftMode mode)
 
 void DragonPlayer::play()
 {
+    qCDebug(dragonsdlPlayer) << "play()";
     if (d->currentSource.isEmpty()) {
         return;
     }
@@ -607,6 +613,7 @@ void DragonPlayer::play()
 
 void DragonPlayer::pause()
 {
+    qCDebug(dragonsdlPlayer) << "pause()";
     if (d->currentPlaybackState == DragonPlayer::PlaybackState::PausedState) {
         return;
     }
@@ -656,16 +663,19 @@ void DragonPlayer::stop()
 
 void DragonPlayer::seek(int64_t posMs)
 {
+    qCDebug(dragonsdlPlayer) << "seek(" << posMs << ")";
     setPosition(posMs);
 }
 
 void DragonPlayer::saveUndoPosition(int64_t posMs)
 {
+    qCDebug(dragonsdlPlayer) << "saveUndoPosition(" << posMs << ")";
     d->undoPosition = posMs;
 }
 
 void DragonPlayer::restoreUndoPosition()
 {
+    qCDebug(dragonsdlPlayer) << "restoreUndoPosition()";
     if (d->undoPosition > 0) {
         setPosition(d->undoPosition);
     }
