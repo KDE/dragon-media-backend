@@ -47,7 +47,13 @@ void onFormatReady(DragonPlayerPrivate *d, int sampleRate, int channels, bool is
         Q_EMIT d->q->statusChanged(DragonPlayer::MediaStatus::LoadedMedia);
     }
 
+    int reqState = static_cast<int>(d->requestedPlaybackState);
+    qCDebug(dragonsdlPlayer) << "onFormatReady requestedPlaybackState=" << reqState << " isGapless=" << isGapless
+                             << " audioAlreadyRunning=" << audioAlreadyRunning << " currentPlaybackState=" << static_cast<int>(d->currentPlaybackState)
+                             << " currentStatus=" << static_cast<int>(d->currentStatus)
+                             << " isDeviceOpen=" << (d->audioOutput ? d->audioOutput->isDeviceOpen() : false) << " hasQueue=" << (d->audioQueue != nullptr);
     if (d->requestedPlaybackState == DragonPlayer::PlaybackState::PlayingState) {
+        qCDebug(dragonsdlPlayer) << "onFormatReady entering PlayingState branch, calling audioOutput->start()";
         d->requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
         if (!audioAlreadyRunning) {
             d->audioOutput->start(sampleRate, channels);
@@ -595,15 +601,19 @@ void DragonPlayer::play()
     }
 
     if (d->currentStatus == DragonPlayer::MediaStatus::LoadingMedia) {
+        qCDebug(dragonsdlPlayer) << "play() status is LoadingMedia, deferring to onFormatReady (setting requestedPlaybackState=Playing)";
         d->requestedPlaybackState = DragonPlayer::PlaybackState::PlayingState;
         return;
     }
 
     if (d->currentStatus == DragonPlayer::MediaStatus::EndOfMedia) {
+        qCDebug(dragonsdlPlayer) << "play() status is EndOfMedia, reloading source";
         setSource(d->currentSource);
         d->requestedPlaybackState = DragonPlayer::PlaybackState::PlayingState;
         return;
     }
+
+    qCDebug(dragonsdlPlayer) << "play() status is " << static_cast<int>(d->currentStatus) << ", starting audio synchronously";
 
     if (d->audioOutput && !d->audioOutput->isDeviceOpen() && d->currentSampleRate > 0) {
         d->audioOutput->start(d->currentSampleRate, d->currentChannels);
