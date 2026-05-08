@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#include "../src/logging_timestamp.h"
+#include "logging_timestamp.h"
 #include "mainwindow.h"
 
 #include <QApplication>

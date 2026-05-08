@@ -17,6 +17,10 @@ add_executable(dragon-sdl-qwidget-example
     dragonspectrogram.h
 )
 
+target_include_directories(dragon-sdl-qwidget-example PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+)
+
 target_link_libraries(dragon-sdl-qwidget-example PRIVATE
     dragon-sdl
     Qt6::Core

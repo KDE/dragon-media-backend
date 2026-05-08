@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "../include/dragonsdl/dragonfftframe.h"
+#include <dragonsdl/dragonfftframe.h>
 #include <dragonsdl/dragonplayer.h>
 
 #include <condition_variable>

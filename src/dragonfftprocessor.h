@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include "../include/dragonsdl/dragonfftframe.h"
-#include "../include/dragonsdl/dragonplayer.h"
+#include "dragonsdl/dragonfftframe.h"
+#include "dragonsdl/dragonplayer.h"
 #include "dragonsdl_export.h"
 #include <stdfloat>
 
@@ -14,13 +14,11 @@
 #include <atomic>
 #include <complex>
 #include <condition_variable>
-#include <cstddef>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <span>
 #include <stop_token>
-#include <vector>
 
 template<typename T>
 class LockFreeSpscQueue;

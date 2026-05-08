@@ -9,7 +9,7 @@
 
 #include "logging_timestamp_init.h"
 
-#include <../src/dragondecoder.h>
+#include "dragondecoder.h"
 
 #include <atomic>
 #include <chrono>

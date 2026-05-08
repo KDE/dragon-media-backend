@@ -6,7 +6,7 @@
  * Uses static initialization to install the handler before main() runs.
  */
 
-#include "../src/logging_timestamp.h"
+#include "logging_timestamp.h"
 
 static struct InstallTimestampedHandler {
     InstallTimestampedHandler()
