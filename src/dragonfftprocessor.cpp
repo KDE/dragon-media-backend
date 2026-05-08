@@ -103,35 +103,14 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             continue;
         }
 
-        if (prevMode == FftMode::Off && (mode == FftMode::BarsOnly || mode == FftMode::Both)) {
+        if (prevMode == FftMode::Off && (mode == FftMode::BarsOnly || mode == FftMode::Both))
             m_prevBarFrequencies.fill(-80.0f);
-        }
         prevMode = mode;
 
-        if (m_waitCv) {
-            std::unique_lock lock(m_waitMutex);
-            m_waitCv->wait_for(lock, std::chrono::milliseconds(50), [&] {
-                return !m_fftQueue || m_fftQueue->get_num_items_ready() >= FFT_SIZE || st.stop_requested();
-            });
-        }
-
-        if (st.stop_requested())
-            break;
-        if (!m_fftQueue || m_fftQueue->get_num_items_ready() < FFT_SIZE)
+        if (!waitForSamples(st))
             continue;
-
-        auto scope = m_fftQueue->prepare_read(FFT_SIZE);
-        assert(scope.get_items_read() == FFT_SIZE);
-        ++frameCount;
-
-        auto block1 = scope.get_block1();
-        auto block2 = scope.get_block2();
-        auto [_, out1] = std::ranges::copy(block1, m_inputWindow.begin());
-        std::ranges::copy(block2, out1);
-
-        if (st.stop_requested()) {
+        if (!readSamplesIntoWindow(st))
             break;
-        }
 
         applyHannWindow(m_inputWindow);
 
@@ -139,100 +118,147 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         transformReal(m_inputWindow, fftOut);
 
         const float binToFreq = static_cast<float>(m_sampleRate) / static_cast<float>(FFT_SIZE);
-
-        auto getMag = [&](const int idx) -> float {
-            if (idx < 0 || idx >= static_cast<int>(fftOut.size())) {
-                return 0.0f;
-            }
-            float mag;
-            if (idx == 0) {
-                mag = std::abs(fftOut[0].real()) / static_cast<float>(FFT_SIZE);
-            } else {
-                mag = std::abs(fftOut[static_cast<size_t>(idx)]) / static_cast<float>(FFT_SIZE);
-            }
-
-            const float freq = static_cast<float>(idx) * binToFreq;
-            const float tilt = std::sqrt(std::max(freq, MIN_FREQ) / MIN_FREQ);
-            return mag * tilt;
-        };
-
-        const float melMin = hzToMel(MIN_FREQ);
-        const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate) / 2.0f));
-
-        auto computeBin = [&](float t0, float t1) -> float {
-            const float freq0 = melToHz(melMin + t0 * (melMax - melMin));
-            const float freq1 = melToHz(melMin + t1 * (melMax - melMin));
-
-            const float binIdx0 = freq0 / binToFreq;
-            const float binIdx1 = freq1 / binToFreq;
-
-            const int startBin = static_cast<int>(std::floor(binIdx0));
-            const int endBin = static_cast<int>(std::ceil(binIdx1));
-
-            float maxMag = 0.0f;
-            if (endBin <= startBin + 1) {
-                const float frac = binIdx0 - static_cast<float>(startBin);
-                maxMag = std::lerp(getMag(startBin), getMag(startBin + 1), frac);
-            } else {
-                auto binRange = std::views::iota(startBin, std::min(endBin, static_cast<int>(fftOut.size())));
-                if (!std::ranges::empty(binRange)) {
-                    maxMag = std::ranges::max(binRange | std::views::transform(getMag));
-                }
-            }
-
-            return 20.0f * std::log10(std::max(maxMag, 1e-6f));
-        };
-
         DragonFftFrame frame;
 
-        if (mode == FftMode::DetailedOnly || mode == FftMode::Both) {
-            std::array<std::float32_t, NUM_LOG_BINS> logBins{};
-            for (auto [i, bin] : std::views::enumerate(logBins)) {
-                const float t0 = static_cast<float>(i) / static_cast<float>(NUM_LOG_BINS);
-                const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_LOG_BINS);
-                bin = computeBin(t0, t1);
-            }
-            frame.frequenciesDb.assign_range(logBins);
-        }
-
-        if (mode == FftMode::BarsOnly || mode == FftMode::Both) {
-            std::array<std::float32_t, NUM_BAR_BINS> barBins{};
-            for (auto [i, bin] : std::views::enumerate(barBins)) {
-                const float t0 = static_cast<float>(i) / static_cast<float>(NUM_BAR_BINS);
-                const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_BAR_BINS);
-                bin = computeBin(t0, t1);
-            }
-
-            constexpr float decayRate = 1.5f;
-            for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, barBins)) {
-                prev = std::max(curr, prev - decayRate);
-                curr = prev;
-            }
-
-            frame.barData.assign_range(barBins);
-        }
+        if (mode == FftMode::DetailedOnly || mode == FftMode::Both)
+            fillDetailedBins(frame, fftOut, binToFreq);
+        if (mode == FftMode::BarsOnly || mode == FftMode::Both)
+            fillBarBins(frame, fftOut, binToFreq);
 
         frame.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
 
-        {
-            std::lock_guard lock(m_frameMutex);
-            m_latestFrame = frame;
-        }
+        emitFrame(frame, ++frameCount, mode);
+    }
+}
 
-        if (m_frameCallback) {
-            m_frameCallback(frame);
-        }
+bool DragonFftProcessor::waitForSamples(std::stop_token st)
+{
+    if (m_waitCv) {
+        std::unique_lock lock(m_waitMutex);
+        m_waitCv->wait_for(lock, std::chrono::milliseconds(50), [&] {
+            return !m_fftQueue || m_fftQueue->get_num_items_ready() >= FFT_SIZE || st.stop_requested();
+        });
+    }
+    if (st.stop_requested())
+        return false;
+    return m_fftQueue && m_fftQueue->get_num_items_ready() >= FFT_SIZE;
+}
 
-        if (frameCount <= 3 || frameCount % 60 == 0) {
-            if (!frame.barData.empty()) {
-                qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode << "barData[0]=" << frame.barData[0]
-                                      << "barData[11]=" << frame.barData[11] << "barData[23]=" << frame.barData[23];
-            } else if (!frame.frequenciesDb.empty()) {
-                qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode << "freqDb[0]=" << frame.frequenciesDb[0]
-                                      << "freqDb[256]=" << frame.frequenciesDb[256];
-            } else {
-                qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode;
-            }
+bool DragonFftProcessor::readSamplesIntoWindow(std::stop_token st)
+{
+    auto scope = m_fftQueue->prepare_read(FFT_SIZE);
+    assert(scope.get_items_read() == FFT_SIZE);
+
+    auto [_, out1] = std::ranges::copy(scope.get_block1(), m_inputWindow.begin());
+    std::ranges::copy(scope.get_block2(), out1);
+
+    return !st.stop_requested();
+}
+
+float DragonFftProcessor::getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, int idx) const
+{
+    if (idx < 0 || idx >= static_cast<int>(fftOut.size()))
+        return 0.0f;
+
+    float mag;
+    if (idx == 0) {
+        mag = std::abs(fftOut[0].real()) / static_cast<float>(FFT_SIZE);
+    } else {
+        mag = std::abs(fftOut[static_cast<size_t>(idx)]) / static_cast<float>(FFT_SIZE);
+    }
+
+    const float freq = static_cast<float>(idx) * binToFreq;
+    const float tilt = std::sqrt(std::max(freq, MIN_FREQ) / MIN_FREQ);
+    return mag * tilt;
+}
+
+float DragonFftProcessor::computeMelBin(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut,
+                                        float binToFreq,
+                                        float melMin,
+                                        float melMax,
+                                        float t0,
+                                        float t1) const
+{
+    const float freq0 = melToHz(melMin + t0 * (melMax - melMin));
+    const float freq1 = melToHz(melMin + t1 * (melMax - melMin));
+
+    const float binIdx0 = freq0 / binToFreq;
+    const float binIdx1 = freq1 / binToFreq;
+
+    const int startBin = static_cast<int>(std::floor(binIdx0));
+    const int endBin = static_cast<int>(std::ceil(binIdx1));
+
+    float maxMag = 0.0f;
+    if (endBin <= startBin + 1) {
+        const float frac = binIdx0 - static_cast<float>(startBin);
+        maxMag = std::lerp(getMagnitude(fftOut, binToFreq, startBin), getMagnitude(fftOut, binToFreq, startBin + 1), frac);
+    } else {
+        const int clampedEnd = std::min(endBin, static_cast<int>(fftOut.size()));
+        auto binRange = std::views::iota(startBin, clampedEnd);
+        if (!std::ranges::empty(binRange)) {
+            maxMag = std::ranges::max(binRange | std::views::transform([&](int i) {
+                                          return getMagnitude(fftOut, binToFreq, i);
+                                      }));
+        }
+    }
+
+    return 20.0f * std::log10(std::max(maxMag, 1e-6f));
+}
+
+void DragonFftProcessor::fillDetailedBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq) const
+{
+    const float melMin = hzToMel(MIN_FREQ);
+    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate) / 2.0f));
+
+    std::array<std::float32_t, NUM_LOG_BINS> logBins{};
+    for (auto [i, bin] : std::views::enumerate(logBins)) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(NUM_LOG_BINS);
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_LOG_BINS);
+        bin = computeMelBin(fftOut, binToFreq, melMin, melMax, t0, t1);
+    }
+    frame.frequenciesDb.assign_range(logBins);
+}
+
+void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq)
+{
+    const float melMin = hzToMel(MIN_FREQ);
+    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate) / 2.0f));
+
+    std::array<std::float32_t, NUM_BAR_BINS> barBins{};
+    for (auto [i, bin] : std::views::enumerate(barBins)) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(NUM_BAR_BINS);
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_BAR_BINS);
+        bin = computeMelBin(fftOut, binToFreq, melMin, melMax, t0, t1);
+    }
+
+    constexpr float decayRate = 1.5f;
+    for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, barBins)) {
+        prev = std::max(curr, prev - decayRate);
+        curr = prev;
+    }
+
+    frame.barData.assign_range(barBins);
+}
+
+void DragonFftProcessor::emitFrame(const DragonFftFrame &frame, int frameCount, FftMode mode)
+{
+    {
+        std::lock_guard lock(m_frameMutex);
+        m_latestFrame = frame;
+    }
+
+    if (m_frameCallback)
+        m_frameCallback(frame);
+
+    if (frameCount <= 3 || frameCount % 60 == 0) {
+        if (!frame.barData.empty()) {
+            qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode << "barData[0]=" << frame.barData[0]
+                                  << "barData[11]=" << frame.barData[11] << "barData[23]=" << frame.barData[23];
+        } else if (!frame.frequenciesDb.empty()) {
+            qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode << "freqDb[0]=" << frame.frequenciesDb[0]
+                                  << "freqDb[256]=" << frame.frequenciesDb[256];
+        } else {
+            qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode;
         }
     }
 }

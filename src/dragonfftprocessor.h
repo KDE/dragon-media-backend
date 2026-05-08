@@ -76,6 +76,21 @@ private:
 
     void transformReal(std::span<const std::float32_t, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output);
 
+    bool waitForSamples(std::stop_token st);
+
+    bool readSamplesIntoWindow(std::stop_token st);
+
+    [[nodiscard]] float getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, int idx) const;
+
+    [[nodiscard]] float
+    computeMelBin(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float melMin, float melMax, float t0, float t1) const;
+
+    void fillDetailedBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq) const;
+
+    void fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq);
+
+    void emitFrame(const DragonFftFrame &frame, int frameCount, FftMode mode);
+
     FrameCallback m_frameCallback;
 
     std::mutex m_frameMutex;
