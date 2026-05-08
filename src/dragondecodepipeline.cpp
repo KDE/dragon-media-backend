@@ -10,6 +10,7 @@
 #include <dragonsdl/dragonicymetadata.h>
 #include <dragonsdl/dragonplayer.h>
 
+#include "dragonsdl_decode_logging.h"
 #include "dragonsdl_logging.h"
 
 #include <QMetaObject>
@@ -40,40 +41,54 @@ DragonDecodePipeline::~DragonDecodePipeline()
 
 void DragonDecodePipeline::startDecodeThread()
 {
+    qCDebug(dragonsdlDecode) << "startDecodeThread() creating new decode thread";
     m_decodeThread = std::jthread([this](std::stop_token st) {
         setCurrentThreadName("dragon-decode");
+        qCDebug(dragonsdlDecode) << "decode thread started";
         while (!st.stop_requested()) {
             std::unique_lock lock(m_decoderMutex);
+            qCDebug(dragonsdlDecode) << "decode thread waiting for decoder... activeDecoder=" << (m_activeDecoder != nullptr);
             m_decoderCv.wait(lock, [this, &st]() {
                 return m_activeDecoder != nullptr || st.stop_requested();
             });
-            if (st.stop_requested())
+            qCDebug(dragonsdlDecode) << "decode thread woke up activeDecoder=" << (m_activeDecoder != nullptr)
+                                     << " outerStopRequested=" << st.stop_requested();
+            if (st.stop_requested()) {
+                qCDebug(dragonsdlDecode) << "decode thread outer loop stop requested, breaking";
                 break;
+            }
 
             DragonDecoder *decoder = m_activeDecoder.get();
             m_decodeLoopActive = true;
             lock.unlock();
+            qCDebug(dragonsdlDecode) << "decode thread starting decodeLoop for decoder" << decoder;
 
             decoder->decodeLoop(m_decodeStopSource.get_token());
+            qCDebug(dragonsdlDecode) << "decode thread decodeLoop finished";
             const bool hadFatalError = decoder->hasFatalError();
 
             lock.lock();
             m_decodeLoopActive = false;
             const bool wasStopped = m_decodeStopSource.stop_requested();
+            qCDebug(dragonsdlDecode) << "decode thread loopInactive, wasStopped=" << wasStopped << " hadFatalError=" << hadFatalError;
 
             m_activeDecoder.reset();
 
             lock.unlock();
             m_decoderCv.notify_all();
 
-            if (st.stop_requested())
+            if (st.stop_requested()) {
+                qCDebug(dragonsdlDecode) << "decode thread outer stop after loop, breaking";
                 break;
+            }
 
             if (wasStopped) {
+                qCDebug(dragonsdlDecode) << "decode thread session was stopped, continue to wait for new decoder";
                 continue;
             }
 
             if (hadFatalError) {
+                qCDebug(dragonsdlDecode) << "decode thread fatal error, invoking finished callback";
                 if (m_finishedCallback) {
                     m_finishedCallback(true, false);
                 }
@@ -88,43 +103,53 @@ void DragonDecodePipeline::startDecodeThread()
 
                 plock.unlock();
 
+                qCDebug(dragonsdlDecode) << "decode thread gapless transition, invoking callback";
                 if (m_gaplessTransitionCallback) {
                     m_gaplessTransitionCallback(newSource);
                 }
             } else {
                 plock.unlock();
 
+                qCDebug(dragonsdlDecode) << "decode thread no pre-warmed decoder, invoking finished callback";
                 if (m_finishedCallback) {
                     m_finishedCallback(false, wasStopped);
                 }
             }
         }
+        qCDebug(dragonsdlDecode) << "decode thread exiting outer loop";
     });
 }
 
 void DragonDecodePipeline::stopSession()
 {
+    qCDebug(dragonsdlDecode) << "stopSession() called requesting decode session stop";
     m_decodeStopSource.request_stop();
 
     if (m_preWarmThread.joinable()) {
+        qCDebug(dragonsdlDecode) << "stopSession() cancelling pre-warm thread";
         m_preWarmThread.request_stop();
     }
 
     {
         std::unique_lock lock(m_decoderMutex);
+        qCDebug(dragonsdlDecode) << "stopSession() waiting for decodeLoopActive=false (current=" << m_decodeLoopActive << ")";
         m_decoderCv.wait(lock, [this]() {
             return !m_decodeLoopActive;
         });
+        qCDebug(dragonsdlDecode) << "stopSession() decode loop finished";
         m_activeDecoder.reset();
     }
 
     if (m_preWarmThread.joinable()) {
+        qCDebug(dragonsdlDecode) << "stopSession() joining pre-warm thread";
         m_preWarmThread.join();
     }
+    qCDebug(dragonsdlDecode) << "stopSession() complete, thread still alive";
 }
 
 void DragonDecodePipeline::stop()
 {
+    qCDebug(dragonsdlDecode) << "stop() called FULL teardown";
     m_decodeStopSource.request_stop();
     m_decodeThread.request_stop();
 
@@ -135,7 +160,9 @@ void DragonDecodePipeline::stop()
     m_decoderCv.notify_all();
 
     if (m_decodeThread.joinable()) {
+        qCDebug(dragonsdlDecode) << "stop() joining decode thread";
         m_decodeThread.join();
+        qCDebug(dragonsdlDecode) << "stop() decode thread joined";
     }
     if (m_preWarmThread.joinable()) {
         m_preWarmThread.join();
@@ -152,13 +179,17 @@ void DragonDecodePipeline::stop()
         m_radioStream->stop();
         m_radioStream.reset();
     }
+    qCDebug(dragonsdlDecode) << "stop() full teardown complete";
 }
 
 void DragonDecodePipeline::setSource(const QUrl &source, uint64_t generation)
 {
+    qCDebug(dragonsdlDecode) << "setSource(" << source.toString() << ") gen=" << generation;
     m_generation = generation;
 
+    qCDebug(dragonsdlDecode) << "setSource thread joinable=" << m_decodeThread.joinable();
     if (!m_decodeThread.joinable()) {
+        qCDebug(dragonsdlDecode) << "setSource thread is dead, restarting it";
         startDecodeThread();
     }
 
@@ -171,18 +202,23 @@ void DragonDecodePipeline::setSource(const QUrl &source, uint64_t generation)
         m_preWarmThread.join();
     }
 
+    qCDebug(dragonsdlDecode) << "setSource requesting decode session stop";
     m_decodeStopSource.request_stop();
 
     {
         std::unique_lock lock(m_decoderMutex);
+        qCDebug(dragonsdlDecode) << "setSource waiting for decodeLoopActive=false (current=" << m_decodeLoopActive << ")";
         m_decoderCv.wait(lock, [this]() {
             return !m_decodeLoopActive;
         });
+        qCDebug(dragonsdlDecode) << "setSource decode loop inactive, resetting activeDecoder";
         m_activeDecoder.reset();
     }
 
+    qCDebug(dragonsdlDecode) << "setSource creating new decoder";
     auto decoder = createDecoder(source, false, generation);
     if (!decoder) {
+        qCDebug(dragonsdlDecode) << "setSource decoder creation FAILED";
         return;
     }
 
@@ -191,8 +227,10 @@ void DragonDecodePipeline::setSource(const QUrl &source, uint64_t generation)
         m_activeDecoder = std::move(decoder);
     }
 
+    qCDebug(dragonsdlDecode) << "setSource new decoder installed, creating fresh stop source and notifying";
     m_decodeStopSource = std::stop_source{};
     m_decoderCv.notify_one();
+    qCDebug(dragonsdlDecode) << "setSource notify_one() called, returning";
 }
 
 void DragonDecodePipeline::setNextSource(const QUrl &next, uint64_t generation)

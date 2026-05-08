@@ -125,6 +125,13 @@ ecm_qt_declare_logging_category(dragonsdl_SOURCES
     DEFAULT_SEVERITY Info
 )
 
+ecm_qt_declare_logging_category(dragonsdl_SOURCES
+    HEADER "dragonsdl_decode_logging.h"
+    IDENTIFIER "dragonsdlDecode"
+    CATEGORY_NAME "org.kde.dragonsdl.decode"
+    DEFAULT_SEVERITY Info
+)
+
 set(SOURCES
     src/dragonplayer.cpp
     src/dragondecoder.cpp
