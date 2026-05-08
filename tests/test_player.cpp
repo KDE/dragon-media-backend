@@ -93,6 +93,11 @@ private Q_SLOTS:
     void testSignalOrderOnSetSource();
     void testSignalOrderOnStop();
 
+    void testDeferredPlayIntentDuringFormatResolution();
+    void testSetSourceThenPlayFirstTrack();
+    void testPlayNextTrackWhilePlaying();
+    void testPlayRapidNextNext();
+
     void testLazyFftInitialization();
     void testFftModeToggleCreatesInfrastructure();
     void testFftInfrastructurePersistsAcrossTrackChanges();
@@ -816,7 +821,7 @@ void TestPlayer::testSetSourceWhilePlayingEmitsStoppedState()
     QVERIFY2(sawLoadingMedia, "setSource() must emit LoadingMedia status");
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
 }
 
 void TestPlayer::testPlayWithNoSourceIsNoOp()
@@ -923,7 +928,7 @@ void TestPlayer::testDeferredStateResetOnNewSource()
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
-    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
 }
 
 void TestPlayer::testPauseFromPlayingState()
@@ -1297,6 +1302,102 @@ void TestPlayer::testSignalOrderOnStop()
     QVERIFY2(signalOrder.contains(u"stateChanged(StoppedState)"_s), "stop() must emit StoppedState");
 
     QVERIFY2(signalOrder.contains(u"statusChanged(LoadedMedia)"_s), "stop() must emit statusChanged(LoadedMedia) per Qt contract");
+}
+
+void TestPlayer::testDeferredPlayIntentDuringFormatResolution()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    player.play();
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::LoadedMedia);
+
+    QVERIFY(player.isAudioActive());
+
+    player.stop();
+}
+
+void TestPlayer::testSetSourceThenPlayFirstTrack()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    player.play();
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 5000);
+    QVERIFY(player.isAudioActive());
+
+    player.stop();
+}
+
+void TestPlayer::testPlayNextTrackWhilePlaying()
+{
+    QString filePath1 = fixture("sample-3s.mp3"_L1);
+    QString filePath2 = fixture("gs-16b-2c-44100hz.ogg"_L1);
+    if (!QFileInfo::exists(filePath1) || !QFileInfo::exists(filePath2)) {
+        QSKIP("Audio fixtures not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath1));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY(player.isAudioActive());
+
+    player.stop();
+    player.setSource(QUrl::fromLocalFile(filePath2));
+    player.play();
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QVERIFY(player.isAudioActive());
+
+    player.stop();
+}
+
+void TestPlayer::testPlayRapidNextNext()
+{
+    QString filePath1 = fixture("sample-3s.mp3"_L1);
+    QString filePath2 = fixture("gs-16b-2c-44100hz.ogg"_L1);
+    QString filePath3 = fixture("sample-3s.aac"_L1);
+    if (!QFileInfo::exists(filePath1) || !QFileInfo::exists(filePath2) || !QFileInfo::exists(filePath3)) {
+        QSKIP("Audio fixtures not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath1));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    player.stop();
+    player.setSource(QUrl::fromLocalFile(filePath2));
+    player.play();
+
+    player.stop();
+    player.setSource(QUrl::fromLocalFile(filePath3));
+    player.play();
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QVERIFY(player.isAudioActive());
+
+    player.stop();
 }
 
 void TestPlayer::testLazyFftInitialization()

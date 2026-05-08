@@ -498,8 +498,6 @@ void DragonPlayer::setSource(const QUrl &source)
         Q_EMIT stopped();
     }
 
-    d->requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
-
     if (d->currentError != DragonPlayer::Error::NoError) {
         d->currentError = DragonPlayer::Error::NoError;
         Q_EMIT errorChanged(DragonPlayer::Error::NoError);
@@ -588,6 +586,8 @@ void DragonPlayer::play()
         return;
     }
 
+    d->requestedPlaybackState = DragonPlayer::PlaybackState::PlayingState;
+
     if (d->currentPlaybackState == DragonPlayer::PlaybackState::PlayingState) {
         return;
     }
@@ -601,40 +601,35 @@ void DragonPlayer::play()
     }
 
     if (d->currentStatus == DragonPlayer::MediaStatus::LoadingMedia) {
-        qCDebug(dragonsdlPlayer) << "play() status is LoadingMedia, deferring to onFormatReady (setting requestedPlaybackState=Playing)";
-        d->requestedPlaybackState = DragonPlayer::PlaybackState::PlayingState;
+        qCDebug(dragonsdlPlayer) << "play() status is LoadingMedia, deferring to onFormatReady";
         return;
     }
 
     if (d->currentStatus == DragonPlayer::MediaStatus::EndOfMedia) {
         qCDebug(dragonsdlPlayer) << "play() status is EndOfMedia, reloading source";
         setSource(d->currentSource);
-        d->requestedPlaybackState = DragonPlayer::PlaybackState::PlayingState;
         return;
     }
 
     qCDebug(dragonsdlPlayer) << "play() status is " << static_cast<int>(d->currentStatus) << ", starting audio synchronously";
 
-    if (d->currentSampleRate > 0) {
-        if (d->audioOutput && !d->audioOutput->isDeviceOpen()) {
-            d->audioOutput->start(d->currentSampleRate, d->currentChannels);
-        }
-        setPlaybackState(d.get(), DragonPlayer::PlaybackState::PlayingState);
-    } else {
-        qCDebug(dragonsdlPlayer) << "play() sampleRate not known, deferring to onFormatReady";
-        d->requestedPlaybackState = DragonPlayer::PlaybackState::PlayingState;
+    if (d->audioOutput && !d->audioOutput->isDeviceOpen() && d->currentSampleRate > 0) {
+        d->audioOutput->start(d->currentSampleRate, d->currentChannels);
     }
+    setPlaybackState(d.get(), DragonPlayer::PlaybackState::PlayingState);
 }
 
 void DragonPlayer::pause()
 {
     qCDebug(dragonsdlPlayer) << "pause()";
+    d->requestedPlaybackState = DragonPlayer::PlaybackState::PausedState;
+
     if (d->currentPlaybackState == DragonPlayer::PlaybackState::PausedState) {
         return;
     }
 
     if (d->currentStatus == DragonPlayer::MediaStatus::LoadingMedia) {
-        d->requestedPlaybackState = DragonPlayer::PlaybackState::PausedState;
+        qCDebug(dragonsdlPlayer) << "pause() status is LoadingMedia, deferring to onFormatReady";
         return;
     }
 
@@ -648,8 +643,10 @@ void DragonPlayer::stop()
 {
     qCDebug(dragonsdlPlayer) << "stop()";
 
+    d->requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
+
     if (d->currentStatus == DragonPlayer::MediaStatus::LoadingMedia) {
-        d->requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
+        qCDebug(dragonsdlPlayer) << "stop() status is LoadingMedia, intent captured";
         return;
     }
 
