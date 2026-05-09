@@ -14,6 +14,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <mutex>
 
 template<typename T>
 class LockFreeSpscQueue;
@@ -101,4 +102,6 @@ private:
     bool m_muted = false;
 
     std::atomic<int> m_activeCallbacks{0};
+    std::condition_variable m_callbackDoneCv;
+    std::mutex m_callbackDoneMutex;
 };

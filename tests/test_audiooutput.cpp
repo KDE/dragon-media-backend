@@ -13,6 +13,7 @@
 #include <dragonaudiooutput.h>
 
 #include <atomic>
+#include <chrono>
 #include <thread>
 #include <vector>
 
@@ -42,6 +43,10 @@ private Q_SLOTS:
     void testPositionTrackingWithData();
     void testQueueBehavior();
     void testStartWhileAlreadyStarted();
+
+    void testStopWithActiveCallbacks();
+    void testRapidStartStopCycles();
+    void testStopDuringStarvation();
 
 private:
     void fillQueue(LockFreeSpscQueue<std::float32_t> *queue, const std::vector<std::float32_t> &data);
@@ -310,6 +315,76 @@ void TestAudioOutput::testStartWhileAlreadyStarted()
     QVERIFY(output.hasFormat(48000, 2));
 
     output.stop();
+}
+
+void TestAudioOutput::testStopWithActiveCallbacks()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    QVERIFY(output.isDeviceOpen());
+
+    fillQueue(&queue, std::vector<std::float32_t>(8192, 0.5f));
+
+    QTest::qWait(20);
+
+    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.3f));
+
+    output.stop();
+    QVERIFY(!output.isDeviceOpen());
+
+    output.reset();
+    QVERIFY(output.positionMs() == 0);
+}
+
+void TestAudioOutput::testRapidStartStopCycles()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    for (int i = 0; i < 10; ++i) {
+        output.start(44100, 2);
+        QVERIFY(output.isDeviceOpen());
+
+        fillQueue(&queue, std::vector<std::float32_t>(2048, 0.5f));
+
+        QTest::qWait(5);
+
+        fillQueue(&queue, std::vector<std::float32_t>(2048, 0.3f));
+
+        output.stop();
+        QVERIFY(!output.isDeviceOpen());
+        output.reset();
+    }
+
+    QVERIFY(true);
+}
+
+void TestAudioOutput::testStopDuringStarvation()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    QVERIFY(output.isDeviceOpen());
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    output.stop();
+    QVERIFY(!output.isDeviceOpen());
+
+    output.reset();
+    QVERIFY(output.positionMs() == 0);
 }
 
 void TestAudioOutput::fillQueue(LockFreeSpscQueue<std::float32_t> *queue, const std::vector<std::float32_t> &data)

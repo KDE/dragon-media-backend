@@ -17,6 +17,7 @@
 #include <QString>
 
 #include <algorithm>
+#include <chrono>
 #include <functional>
 #include <pthread.h>
 #include <ranges>
@@ -154,13 +155,11 @@ void DragonAudioOutput::stop()
         }
     }
 
-    int spinCount = 0;
-    while (m_activeCallbacks.load(std::memory_order_acquire) > 0) {
-        if (++spinCount > 100000) {
-            qCWarning(dragonsdlAudio) << "timeout waiting for audio callbacks to finish";
-            break;
-        }
-        std::this_thread::yield();
+    {
+        std::unique_lock lock(m_callbackDoneMutex);
+        m_callbackDoneCv.wait_for(lock, std::chrono::milliseconds(500), [this]() {
+            return m_activeCallbacks.load(std::memory_order_acquire) == 0;
+        });
     }
 
     delete oldSession;
@@ -278,13 +277,14 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
 
     self->m_activeCallbacks.fetch_add(1, std::memory_order_relaxed);
     struct Guard {
-        std::atomic<int> *counter;
+        DragonAudioOutput *self;
         ~Guard()
         {
-            counter->fetch_sub(1, std::memory_order_relaxed);
+            self->m_activeCallbacks.fetch_sub(1, std::memory_order_relaxed);
+            self->m_callbackDoneCv.notify_one();
         }
     };
-    Guard guard{&self->m_activeCallbacks};
+    Guard guard{self};
 
     Q_EMIT self->audioCallbackInvoked();
 
