@@ -213,7 +213,7 @@ void DragonAudioOutput::setQueueReady(bool ready)
     m_queueReady.store(ready, std::memory_order_release);
 }
 
-void DragonAudioOutput::setPositionOffset(int64_t offsetMs, bool flush)
+void DragonAudioOutput::setPositionOffset(int64_t offsetMs, bool flush, bool resetCounter)
 {
     m_positionOffsetMs.store(offsetMs, std::memory_order_relaxed);
     if (m_pausedPositionMs.load(std::memory_order_relaxed) >= 0) {
@@ -221,6 +221,9 @@ void DragonAudioOutput::setPositionOffset(int64_t offsetMs, bool flush)
     }
     if (flush) {
         m_flushPending.store(true, std::memory_order_release);
+    }
+    if (resetCounter) {
+        m_positionResetPending.store(true, std::memory_order_release);
     }
 }
 
@@ -348,6 +351,10 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     auto *queue = self->m_audioQueue.load(std::memory_order_acquire);
     if (!queue) {
         return;
+    }
+
+    if (self->m_positionResetPending.exchange(false, std::memory_order_acq_rel)) {
+        self->m_totalSamplesWritten.store(0, std::memory_order_relaxed);
     }
 
     if (self->m_flushPending.exchange(false, std::memory_order_acq_rel)) {

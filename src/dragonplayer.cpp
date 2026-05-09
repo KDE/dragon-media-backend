@@ -123,7 +123,7 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
     currentSeekable = currentIsLocal;
     currentDuration = 0;
 
-    audioOutput->setPositionOffset(0, false);
+    audioOutput->setPositionOffset(0, false, true);
 
     Q_EMIT q->trackChanged();
     Q_EMIT q->sourceChanged();

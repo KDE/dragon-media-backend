@@ -54,7 +54,7 @@ public:
     [[nodiscard]] bool isQueueReady() const;
     void setQueueReady(bool ready);
 
-    void setPositionOffset(int64_t offsetMs, bool flush = true);
+    void setPositionOffset(int64_t offsetMs, bool flush = true, bool resetCounter = false);
 
     void clearStream();
 
@@ -75,7 +75,6 @@ public:
     [[nodiscard]] int64_t totalSamplesWritten() const;
 
     [[nodiscard]] bool hasFormat(int sampleRate, int channels) const;
-
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();
@@ -97,13 +96,14 @@ private:
     std::atomic<LockFreeSpscQueue<std::float32_t> *> m_audioQueue{nullptr};
     std::atomic<LockFreeSpscQueue<std::float32_t> *> m_fftQueue{nullptr};
     std::condition_variable m_fftWaitCv;
-
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};
 
     std::atomic<int64_t> m_pausedPositionMs{-1};
 
     std::atomic<bool> m_flushPending{false};
+
+    std::atomic<bool> m_positionResetPending{false};
 
     std::atomic<bool> m_queueReady{true};
 
