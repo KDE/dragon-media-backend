@@ -52,7 +52,7 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
     switch (requestedPlaybackState) {
     case DragonPlayer::PlaybackState::PlayingState:
         requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
-        if (!audioOutput->isDeviceOpen()) {
+        if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
             audioOutput->start(sampleRate, channels);
         } else {
             audioOutput->resume();
@@ -62,7 +62,7 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
 
     case DragonPlayer::PlaybackState::PausedState:
         requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
-        if (!audioOutput->isDeviceOpen()) {
+        if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
             audioOutput->start(sampleRate, channels, true);
         } else {
             audioOutput->pause();
