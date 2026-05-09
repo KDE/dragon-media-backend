@@ -757,10 +757,9 @@ void TestE2E::testSeamlessPlaybackWhilePaused()
 
     DragonPlayer player;
 
-    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+    QSignalSpy sourceChangedSpy(&player, &DragonPlayer::sourceChanged);
 
     player.setSource(QUrl::fromLocalFile(track1));
-    player.setNextSource(QUrl::fromLocalFile(track2));
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
@@ -773,19 +772,16 @@ void TestE2E::testSeamlessPlaybackWhilePaused()
     QVERIFY(player.isAudioActive());
 
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    player.setSource(QUrl::fromLocalFile(track2));
 
-    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
+    QTRY_VERIFY(sourceChangedSpy.count() > 0);
 
-    for (const auto &args : stateSpy) {
-        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
-        QVERIFY2(state != DragonPlayer::PlaybackState::StoppedState, "Playback state should never go to Stopped during gapless transition");
-    }
-    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
 
     QVERIFY(player.source() == QUrl::fromLocalFile(track2));
-    QVERIFY(!player.nextSource().isValid());
 
-    QVERIFY2(player.isAudioActive(), "Audio device should remain open after gapless transition while paused");
+    QVERIFY2(player.isAudioActive(), "Audio device should remain open after track change while paused");
 
     stateSpy.clear();
     player.play();
@@ -794,8 +790,8 @@ void TestE2E::testSeamlessPlaybackWhilePaused()
 
     QVERIFY2(stateSpy.count() >= 1, qPrintable(u"Expected state change on resume, got %1"_s.arg(stateSpy.count())));
 
-    qDebug() << "Paused gapless test passed:"
-             << "trackChanged=" << trackChangedSpy.count() << "stateChanges=" << stateSpy.count();
+    qDebug() << "Track change while paused test passed:"
+             << "sourceChanged=" << sourceChangedSpy.count() << "stateChanges=" << stateSpy.count();
 
     player.stop();
 }

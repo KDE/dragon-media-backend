@@ -133,6 +133,9 @@ void DragonAudioOutput::pause()
     m_pausedPositionMs.store(positionMs(), std::memory_order_relaxed);
 
     if (auto *session = m_session.load(std::memory_order_acquire)) {
+        if (session->deviceId != 0) {
+            SDL_PauseAudioDevice(session->deviceId);
+        }
         if (session->stream) {
             SDL_SetAudioStreamGain(session->stream, 0.0f);
         }

@@ -56,6 +56,8 @@ private Q_SLOTS:
 
     void testStartPaused();
 
+    void testPauseResumeCycle();
+
 private:
     void fillQueue(LockFreeSpscQueue<std::float32_t> *queue, const std::vector<std::float32_t> &data);
 };
@@ -519,6 +521,43 @@ void TestAudioOutput::testStartPaused()
     output.resume();
     QVERIFY(output.isDeviceOpen());
     QVERIFY(output.hasFormat(44100, 2));
+
+    output.stop();
+    QVERIFY(!output.isDeviceOpen());
+}
+
+void TestAudioOutput::testPauseResumeCycle()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    QVERIFY(output.isDeviceOpen());
+
+    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    QTest::qWait(100);
+
+    const int64_t posBefore = output.positionMs();
+    const int64_t writtenBefore = output.totalSamplesWritten();
+
+    output.pause();
+    QVERIFY(output.isDeviceOpen());
+
+    QTest::qWait(200);
+
+    QCOMPARE(output.positionMs(), posBefore);
+
+    const int64_t writtenAfterPause = output.totalSamplesWritten();
+    QVERIFY2(writtenAfterPause <= writtenBefore + 2048, "Pause should stop or significantly reduce sample consumption");
+
+    QTest::qWait(200);
+    QCOMPARE(output.totalSamplesWritten(), writtenAfterPause);
+
+    output.resume();
+    QVERIFY(output.isDeviceOpen());
 
     output.stop();
     QVERIFY(!output.isDeviceOpen());
