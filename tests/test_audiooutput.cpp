@@ -52,6 +52,8 @@ private Q_SLOTS:
     void testQueueReadyApi();
     void testFlushOpensGate();
 
+    void testSetPositionOffsetWithoutFlush();
+
     void testStartPaused();
 
 private:
@@ -460,6 +462,39 @@ void TestAudioOutput::testFlushOpensGate()
     QVERIFY2(output.isQueueReady(), "SDL callback should have processed flush and opened the gate");
 
     QCOMPARE(queue.get_num_items_ready(), size_t(0));
+
+    output.stop();
+    QVERIFY(!output.isDeviceOpen());
+}
+
+void TestAudioOutput::testSetPositionOffsetWithoutFlush()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    QVERIFY(output.isDeviceOpen());
+
+    fillQueue(&queue, std::vector<std::float32_t>(32768, 0.5f));
+    QTest::qWait(50);
+
+    const int64_t samplesBefore = output.totalSamplesWritten();
+    QVERIFY2(samplesBefore > 0, "Some samples should have been consumed by now");
+    const size_t queueSizeBefore = queue.get_num_items_ready();
+    QVERIFY2(queueSizeBefore > 0, "Queue should still have items");
+
+    output.setPositionOffset(0, false);
+
+    QTest::qWait(100);
+
+    const int64_t samplesAfter = output.totalSamplesWritten();
+    QVERIFY2(samplesAfter > samplesBefore, "totalSamplesWritten should increase, not reset, when flush=false");
+
+    const size_t queueSizeAfter = queue.get_num_items_ready();
+    QVERIFY2(queueSizeAfter > 0, "Queue should not be drained when flush=false");
 
     output.stop();
     QVERIFY(!output.isDeviceOpen());

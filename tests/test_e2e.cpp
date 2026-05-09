@@ -85,6 +85,8 @@ private Q_SLOTS:
     void testGaplessGenerationCheck();
     void testNonGaplessEofWithFftOn();
 
+    void testSameFormatSeamlessTransition();
+
 private:
     struct DecodeResult {
         int sampleRate = 0;
@@ -905,6 +907,57 @@ void TestE2E::testNonGaplessEofWithFftOn()
     int framesAfterRestart = frameCount;
 
     QVERIFY2(framesAfterRestart > framesAfterDrain, "FFT frames should resume after play() at EndOfMedia");
+
+    player.stop();
+}
+
+void TestE2E::testSameFormatSeamlessTransition()
+{
+    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
+    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
+
+    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
+    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: "_L1 + track2));
+
+    DragonPlayer player;
+
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+
+    player.setSource(QUrl::fromLocalFile(track1));
+    player.setNextSource(QUrl::fromLocalFile(track2));
+
+    QVERIFY(player.nextSource() == QUrl::fromLocalFile(track2));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY(player.isAudioActive());
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
+    bool audioEverInactive = false;
+    QTimer pollTimer;
+    QObject::connect(&pollTimer, &QTimer::timeout, [&]() {
+        if (!player.isAudioActive()) {
+            audioEverInactive = true;
+        }
+    });
+    pollTimer.start(10);
+
+    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
+
+    pollTimer.stop();
+
+    for (const auto &args : stateSpy) {
+        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
+        QVERIFY2(state != DragonPlayer::PlaybackState::StoppedState, "Playback state should never stop during same-format seamless transition");
+    }
+
+    QVERIFY(player.source() == QUrl::fromLocalFile(track2));
+    QVERIFY(!player.nextSource().isValid());
+
+    QVERIFY2(!audioEverInactive, "Audio device should remain active continuously during same-format gapless transition");
 
     player.stop();
 }

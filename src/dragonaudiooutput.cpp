@@ -210,13 +210,15 @@ void DragonAudioOutput::setQueueReady(bool ready)
     m_queueReady.store(ready, std::memory_order_release);
 }
 
-void DragonAudioOutput::setPositionOffset(int64_t offsetMs)
+void DragonAudioOutput::setPositionOffset(int64_t offsetMs, bool flush)
 {
     m_positionOffsetMs.store(offsetMs, std::memory_order_relaxed);
     if (m_pausedPositionMs.load(std::memory_order_relaxed) >= 0) {
         m_pausedPositionMs.store(offsetMs, std::memory_order_relaxed);
     }
-    m_flushPending.store(true, std::memory_order_release);
+    if (flush) {
+        m_flushPending.store(true, std::memory_order_release);
+    }
 }
 
 void DragonAudioOutput::clearStream()

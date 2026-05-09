@@ -54,7 +54,7 @@ public:
     [[nodiscard]] bool isQueueReady() const;
     void setQueueReady(bool ready);
 
-    void setPositionOffset(int64_t offsetMs);
+    void setPositionOffset(int64_t offsetMs, bool flush = true);
 
     void clearStream();
 
@@ -91,6 +91,7 @@ private:
         int sampleRate = 44100;
         SDL_AudioDeviceID deviceId = 0;
     };
+
     std::atomic<AudioSession *> m_session{nullptr};
 
     std::atomic<LockFreeSpscQueue<std::float32_t> *> m_audioQueue{nullptr};
