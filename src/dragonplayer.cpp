@@ -141,10 +141,10 @@ void DragonPlayerPrivate::onDecodeFinished(bool hadFatalError)
         QMetaObject::invokeMethod(
             q,
             [this]() {
-                if (audioOutput) {
-                    audioOutput->stop();
-                    audioOutput->reset();
+                if (audioOutput && audioOutput->isDeviceOpen()) {
+                    audioOutput->pause();
                 }
+
                 fftPipeline.stop();
 
                 if (currentStatus != DragonPlayer::MediaStatus::EndOfMedia) {
@@ -393,7 +393,7 @@ bool DragonPlayer::seekable() const
 }
 bool DragonPlayer::isAudioActive() const
 {
-    return d->audioOutput ? d->audioOutput->isDeviceOpen() : false;
+    return d->audioOutput && d->audioOutput->isDeviceOpen() && d->currentPlaybackState != DragonPlayer::PlaybackState::StoppedState;
 }
 DragonPlayer::FftMode DragonPlayer::fftMode() const
 {
