@@ -1,0 +1,35 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find required dependencies
+find_dependency(Qt6 COMPONENTS Core Network Gui REQUIRED)
+find_dependency(SDL3 REQUIRED)
+find_dependency(kissfft COMPONENTS float REQUIRED)
+
+# Set up FFmpeg via pkg_check_modules
+include(FindPkgConfig)
+pkg_check_modules(FFmpeg REQUIRED
+    libavformat
+    libavcodec
+    libswresample
+    libavutil
+)
+
+# Create PkgConfig::FFmpeg interface target that links to all FFmpeg library targets
+# (pkg_check_modules creates targets like FFmpeg_libavformat, FFmpeg_libavcodec, etc.)
+if(NOT TARGET PkgConfig::FFmpeg)
+    add_library(PkgConfig::FFmpeg INTERFACE IMPORTED)
+    # Link to all the FFmpeg library targets created by pkg_check_modules
+    # The targets are named <prefix>_<libname>, e.g., FFmpeg_libavformat
+    foreach(_lib IN ITEMS avformat avcodec swresample avutil)
+        if(TARGET FFmpeg_${_lib})
+            target_link_libraries(PkgConfig::FFmpeg INTERFACE FFmpeg_${_lib})
+        endif()
+    endforeach()
+endif()
+
+# Include the targets file
+include("${CMAKE_CURRENT_LIST_DIR}/dragon-sdl-targets.cmake")
+
+check_required_components(dragon-sdl)

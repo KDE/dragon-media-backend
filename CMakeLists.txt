@@ -49,6 +49,15 @@ pkg_check_modules(FFmpeg IMPORTED_TARGET REQUIRED
     libavutil
 )
 
+if(NOT TARGET PkgConfig::FFmpeg)
+    add_library(PkgConfig::FFmpeg INTERFACE IMPORTED)
+    foreach(_lib IN ITEMS avformat avcodec swresample avutil)
+        if(TARGET FFmpeg_${_lib})
+            target_link_libraries(PkgConfig::FFmpeg INTERFACE FFmpeg_${_lib})
+        endif()
+    endforeach()
+endif()
+
 pkg_check_modules(KISSFFT_PC IMPORTED_TARGET kissfft-float)
 if(KISSFFT_PC_FOUND)
     message(STATUS "Found kissfft via pkg-config")
@@ -167,13 +176,16 @@ target_include_directories(dragon-sdl PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_include_directories(dragon-sdl PRIVATE
+    $<BUILD_INTERFACE:${spsc_queue_src_SOURCE_DIR}>
+)
+
 target_link_libraries(dragon-sdl
     PUBLIC
         Qt6::Core
         Qt6::Network
         SDL3::SDL3
-        kissfft::kissfft
-        spsc_queue
+        kissfft::kissfft-float
         PkgConfig::FFmpeg
     PRIVATE
         Qt6::Gui
@@ -186,6 +198,10 @@ generate_export_header(dragon-sdl
     EXPORT_FILE_NAME dragonsdl_export.h
 )
 
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dragonsdl_export.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/dragonsdl
+)
+
 install(TARGETS dragon-sdl
     EXPORT dragon-sdl-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -195,7 +211,33 @@ install(TARGETS dragon-sdl
 
 install(DIRECTORY include/dragonsdl DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(FILES dragonsdl.categories DESTINATION ${KDE_INSTALL_DATAROOTDIR}"/qlogging-categories6")
+install(FILES dragonsdl.categories DESTINATION ${KDE_INSTALL_DATAROOTDIR}/qlogging-categories6)
+
+include(CMakePackageConfigHelpers)
+
+install(EXPORT dragon-sdl-targets
+    FILE dragon-sdl-targets.cmake
+    NAMESPACE dragon-sdl::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dragon-sdl
+)
+
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/dragon-sdl-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/dragon-sdl-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dragon-sdl
+)
+
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/dragon-sdl-config-version.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/dragon-sdl-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/dragon-sdl-config-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dragon-sdl
+)
 
 option(BUILD_EXAMPLES "Build examples" ON)
 if(BUILD_EXAMPLES AND Qt6Widgets_FOUND)

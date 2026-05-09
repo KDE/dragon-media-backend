@@ -92,7 +92,7 @@ DragonFftFrame DragonFftProcessor::takeLatestFrame()
 void DragonFftProcessor::processLoop(std::stop_token st)
 {
     int frameCount = 0;
-    FftMode prevMode = FftMode::Both;
+    auto prevMode = FftMode::Both;
 
     while (!st.stop_requested()) {
         const FftMode mode = m_fftMode.load(std::memory_order_relaxed);
@@ -103,8 +103,9 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             continue;
         }
 
-        if (prevMode == FftMode::Off && (mode == FftMode::BarsOnly || mode == FftMode::Both))
+        if (prevMode == FftMode::Off && (mode == FftMode::BarsOnly || mode == FftMode::Both)) {
             m_prevBarFrequencies.fill(-80.0f);
+        }
         prevMode = mode;
 
         if (!waitForSamples(st))
@@ -120,11 +121,12 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         const float binToFreq = static_cast<float>(m_sampleRate) / static_cast<float>(FFT_SIZE);
         DragonFftFrame frame;
 
-        if (mode == FftMode::DetailedOnly || mode == FftMode::Both)
+        if (mode == FftMode::DetailedOnly || mode == FftMode::Both) {
             fillDetailedBins(frame, fftOut, binToFreq);
-        if (mode == FftMode::BarsOnly || mode == FftMode::Both)
+        }
+        if (mode == FftMode::BarsOnly || mode == FftMode::Both) {
             fillBarBins(frame, fftOut, binToFreq);
-
+        }
         frame.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
 
         emitFrame(frame, ++frameCount, mode);
@@ -155,7 +157,7 @@ bool DragonFftProcessor::readSamplesIntoWindow(std::stop_token st)
     return !st.stop_requested();
 }
 
-float DragonFftProcessor::getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, int idx) const
+float DragonFftProcessor::getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, const float binToFreq, const int idx) const
 {
     if (idx < 0 || idx >= static_cast<int>(fftOut.size()))
         return 0.0f;
