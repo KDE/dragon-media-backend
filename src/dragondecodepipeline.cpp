@@ -380,19 +380,34 @@ uint64_t DragonDecodePipeline::generation() const
     return m_generation;
 }
 
-void DragonDecodePipeline::setCallbacks(FormatReadyCallback format,
-                                        DurationCallback duration,
-                                        SamplesCallback samples,
-                                        ErrorCallback error,
-                                        FinishedCallback finished,
-                                        GaplessTransitionCallback gapless)
+void DragonDecodePipeline::setFormatReadyCallback(FormatReadyCallback callback)
 {
-    m_formatReadyCallback = std::move(format);
-    m_durationCallback = std::move(duration);
-    m_samplesCallback = std::move(samples);
-    m_errorCallback = std::move(error);
-    m_finishedCallback = std::move(finished);
-    m_gaplessTransitionCallback = std::move(gapless);
+    m_formatReadyCallback = std::move(callback);
+}
+
+void DragonDecodePipeline::setDurationCallback(DurationCallback callback)
+{
+    m_durationCallback = std::move(callback);
+}
+
+void DragonDecodePipeline::setSamplesCallback(SamplesCallback callback)
+{
+    m_samplesCallback = std::move(callback);
+}
+
+void DragonDecodePipeline::setErrorCallback(ErrorCallback callback)
+{
+    m_errorCallback = std::move(callback);
+}
+
+void DragonDecodePipeline::setFinishedCallback(FinishedCallback callback)
+{
+    m_finishedCallback = std::move(callback);
+}
+
+void DragonDecodePipeline::setGaplessTransitionCallback(GaplessTransitionCallback callback)
+{
+    m_gaplessTransitionCallback = std::move(callback);
 }
 
 const std::unique_ptr<DragonDecoder> &DragonDecodePipeline::activeDecoder() const

@@ -50,12 +50,12 @@ public:
     using FinishedCallback = std::function<void(bool hadFatalError, bool wasStopped)>;
     using GaplessTransitionCallback = std::function<void(const QUrl &newSource)>;
 
-    void setCallbacks(FormatReadyCallback format,
-                      DurationCallback duration,
-                      SamplesCallback samples,
-                      ErrorCallback error,
-                      FinishedCallback finished,
-                      GaplessTransitionCallback gapless);
+    void setFormatReadyCallback(FormatReadyCallback callback);
+    void setDurationCallback(DurationCallback callback);
+    void setSamplesCallback(SamplesCallback callback);
+    void setErrorCallback(ErrorCallback callback);
+    void setFinishedCallback(FinishedCallback callback);
+    void setGaplessTransitionCallback(GaplessTransitionCallback callback);
 
     const std::unique_ptr<DragonDecoder> &activeDecoder() const;
     bool decodeLoopActive() const;

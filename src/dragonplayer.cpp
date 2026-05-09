@@ -186,31 +186,35 @@ void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, con
 
 void DragonPlayerPrivate::wirePipelineCallbacks()
 {
-    decodePipeline.setCallbacks(
-        [this](int sr, int ch, bool isGapless) {
-            onFormatReady(sr, ch, isGapless);
-        },
-        [this](int64_t dur) {
-            if (currentDuration != dur) {
-                currentDuration = dur;
-                Q_EMIT q->durationChanged(dur);
-            }
-        },
-        [this](auto samples, const std::stop_token &st) {
-            writeToQueues(samples, st);
-        },
-        [this](const QString &) {
-            if (currentError != (currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError)) {
-                currentError = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
-                Q_EMIT q->errorChanged(currentError);
-            }
-        },
-        [this](bool hadFatalError, bool) {
-            onDecodeFinished(hadFatalError);
-        },
-        [this](const QUrl &newSource) {
-            onGaplessTransition(newSource);
-        });
+    decodePipeline.setFormatReadyCallback([this](int sr, int ch, bool isGapless) {
+        onFormatReady(sr, ch, isGapless);
+    });
+
+    decodePipeline.setDurationCallback([this](int64_t dur) {
+        if (currentDuration != dur) {
+            currentDuration = dur;
+            Q_EMIT q->durationChanged(dur);
+        }
+    });
+
+    decodePipeline.setSamplesCallback([this](auto samples, const std::stop_token &st) {
+        writeToQueues(samples, st);
+    });
+
+    decodePipeline.setErrorCallback([this](const QString &) {
+        if (currentError != (currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError)) {
+            currentError = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
+            Q_EMIT q->errorChanged(currentError);
+        }
+    });
+
+    decodePipeline.setFinishedCallback([this](bool hadFatalError, bool) {
+        onDecodeFinished(hadFatalError);
+    });
+
+    decodePipeline.setGaplessTransitionCallback([this](const QUrl &newSource) {
+        onGaplessTransition(newSource);
+    });
 }
 
 void DragonPlayerPrivate::wireFftCallbacks()
