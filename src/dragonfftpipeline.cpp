@@ -127,14 +127,10 @@ void DragonFftPipeline::setModeInternal(DragonPlayer::FftMode mode)
     }
 }
 
-void DragonFftPipeline::restartWithNewQueueInternal(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv)
+void DragonFftPipeline::restartWithQueueInternal(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv)
 {
     m_fftQueue = queue;
     m_waitCv = cv;
-
-    if (m_fftProcessor) {
-        m_fftProcessor->setQueue(nullptr);
-    }
 
     stopThread();
 
@@ -146,7 +142,7 @@ void DragonFftPipeline::restartWithNewQueueInternal(LockFreeSpscQueue<std::float
 
     startThread();
 
-    qCDebug(dragonsdlFft) << "FFT restarted with new queue";
+    qCDebug(dragonsdlFft) << "FFT restarted with queue";
 }
 
 void DragonFftPipeline::ensureInfrastructure(std::vector<std::float32_t> *buffer, std::condition_variable *waitCv, DragonPlayer::FftMode mode)
@@ -215,9 +211,9 @@ bool DragonFftPipeline::isRunning() const
     return m_fftThread.joinable();
 }
 
-void DragonFftPipeline::restartWithNewQueue(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv)
+void DragonFftPipeline::restartWithQueue(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv)
 {
-    restartWithNewQueueInternal(queue, cv);
+    restartWithQueueInternal(queue, cv);
 }
 
 void DragonFftPipeline::setFrameCallback(FrameCallback cb)

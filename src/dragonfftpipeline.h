@@ -47,7 +47,7 @@ public:
     void stop();
     [[nodiscard]] bool isRunning() const;
 
-    void restartWithNewQueue(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv);
+    void restartWithQueue(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv);
 
     using FrameCallback = std::function<void(DragonFftFrame)>;
     void setFrameCallback(FrameCallback cb);
@@ -62,7 +62,7 @@ private:
     void startThread();
     void stopThread();
     void setModeInternal(DragonPlayer::FftMode mode);
-    void restartWithNewQueueInternal(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv);
+    void restartWithQueueInternal(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv);
 
     std::unique_ptr<DragonFftProcessor> m_fftProcessor;
 

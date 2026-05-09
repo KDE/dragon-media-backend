@@ -464,14 +464,14 @@ void DragonPlayer::setSource(const QUrl &source)
     } else {
         d->fftPipeline.ensureInfrastructure(&d->fftBuffer, d->audioOutput->fftCv(), d->currentFftMode);
 
-        auto oldFftQueue = std::move(d->fftQueue);
-
-        d->fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(d->fftBuffer));
-        if (d->audioOutput) {
-            d->audioOutput->setFftQueue(d->fftQueue.get());
+        if (!d->fftQueue) {
+            d->fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(d->fftBuffer));
+            if (d->audioOutput) {
+                d->audioOutput->setFftQueue(d->fftQueue.get());
+            }
         }
 
-        d->fftPipeline.restartWithNewQueue(d->fftQueue.get(), d->audioOutput->fftCv());
+        d->fftPipeline.restartWithQueue(d->fftQueue.get(), d->audioOutput->fftCv());
     }
 
     d->currentSource = source;
@@ -566,7 +566,7 @@ void DragonPlayer::setFftMode(FftMode mode)
         d->fftPipeline.setQueue(d->fftQueue.get());
 
         if (d->fftPipeline.isRunning()) {
-            d->fftPipeline.restartWithNewQueue(d->fftQueue.get(), d->audioOutput->fftCv());
+            d->fftPipeline.restartWithQueue(d->fftQueue.get(), d->audioOutput->fftCv());
         } else {
             d->fftPipeline.start();
         }
