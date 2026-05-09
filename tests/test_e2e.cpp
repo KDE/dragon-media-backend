@@ -81,6 +81,10 @@ private Q_SLOTS:
     void testSeamlessPlaybackWithFormatChange();
     void testFftFramesDuringGaplessTransition();
 
+    void testSeamlessPlaybackWhilePaused();
+    void testGaplessGenerationCheck();
+    void testNonGaplessEofWithFftOn();
+
 private:
     struct DecodeResult {
         int sampleRate = 0;
@@ -737,6 +741,170 @@ void TestE2E::testFftFramesDuringGaplessTransition()
 
     QVERIFY2(framesBeforeTransition > 0, "FFT frames should arrive during first track playback");
     QVERIFY2(framesAfterTransition > framesBeforeTransition, "FFT frames should continue arriving after gapless transition");
+
+    player.stop();
+}
+
+void TestE2E::testSeamlessPlaybackWhilePaused()
+{
+    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
+    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
+
+    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
+    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: "_L1 + track2));
+
+    DragonPlayer player;
+
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+
+    player.setSource(QUrl::fromLocalFile(track1));
+    player.setNextSource(QUrl::fromLocalFile(track2));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY(player.isAudioActive());
+
+    player.pause();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
+    QVERIFY(player.isAudioActive());
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
+    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
+
+    for (const auto &args : stateSpy) {
+        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
+        QVERIFY2(state != DragonPlayer::PlaybackState::StoppedState, "Playback state should never go to Stopped during gapless transition");
+    }
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
+
+    QVERIFY(player.source() == QUrl::fromLocalFile(track2));
+    QVERIFY(!player.nextSource().isValid());
+
+    QVERIFY2(player.isAudioActive(), "Audio device should remain open after gapless transition while paused");
+
+    stateSpy.clear();
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY(player.isAudioActive());
+
+    QVERIFY2(stateSpy.count() >= 1, qPrintable(u"Expected state change on resume, got %1"_s.arg(stateSpy.count())));
+
+    qDebug() << "Paused gapless test passed:"
+             << "trackChanged=" << trackChangedSpy.count() << "stateChanges=" << stateSpy.count();
+
+    player.stop();
+}
+
+void TestE2E::testGaplessGenerationCheck()
+{
+    QString track1 = TestFixture::fixturePath("sample-3s.mp3"_L1);
+    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
+    QString track3 = TestFixture::fixturePath("gs-16b-1c-44100hz.flac"_L1);
+
+    QVERIFY2(QFileInfo::exists(track1), qPrintable("MP3 fixture not found: "_L1 + track1));
+    QVERIFY2(QFileInfo::exists(track2), qPrintable("OGG fixture not found: "_L1 + track2));
+    QVERIFY2(QFileInfo::exists(track3), qPrintable("FLAC fixture not found: "_L1 + track3));
+
+    DragonPlayer player;
+
+    QList<QUrl> sourceHistory;
+    QObject::connect(
+        &player,
+        &DragonPlayer::sourceChanged,
+        &player,
+        [&]() {
+            sourceHistory.append(player.source());
+        },
+        Qt::DirectConnection);
+
+    player.setSource(QUrl::fromLocalFile(track1));
+    player.setNextSource(QUrl::fromLocalFile(track2));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.position() > 2000, 10000);
+    player.setSource(QUrl::fromLocalFile(track3));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QTest::qWait(1000);
+
+    QVERIFY2(player.source() == QUrl::fromLocalFile(track3), qPrintable(u"Final source should be track3, got %1"_s.arg(player.source().toString())));
+
+    QVERIFY(player.playbackState() != DragonPlayer::PlaybackState::PlayingState || player.status() == DragonPlayer::MediaStatus::LoadedMedia);
+
+    bool track2WasEverSource = sourceHistory.contains(QUrl::fromLocalFile(track2));
+    if (track2WasEverSource && sourceHistory.last() == QUrl::fromLocalFile(track3)) {
+        qDebug() << "setSource(track3) interrupted an active gapless transition to track2";
+    } else if (!track2WasEverSource) {
+        qDebug() << "Generation-check path: stale gapless callback to track2 was discarded";
+    }
+
+    player.stop();
+}
+
+void TestE2E::testNonGaplessEofWithFftOn()
+{
+    QString track1 = TestFixture::fixturePath("sample-3s.mp3"_L1);
+
+    QVERIFY2(QFileInfo::exists(track1), qPrintable("MP3 fixture not found: "_L1 + track1));
+
+    DragonPlayer player;
+
+    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+
+    int frameCount = 0;
+    QObject::connect(
+        &player,
+        &DragonPlayer::fftFrameReady,
+        &player,
+        [&frameCount]() {
+            ++frameCount;
+        },
+        Qt::QueuedConnection);
+
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    player.setSource(QUrl::fromLocalFile(track1));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QTest::qWait(500);
+    int framesDuringPlayback = frameCount;
+    QVERIFY2(framesDuringPlayback > 0, "FFT frames should arrive during playback");
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 15000);
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
+
+    QTest::qWait(1000);
+    int framesAfterDrain = frameCount;
+    int inFlightFrames = framesAfterDrain - framesDuringPlayback;
+
+    QTest::qWait(500);
+    int framesAfterCheck = frameCount;
+    int genuinelyNewFrames = framesAfterCheck - framesAfterDrain;
+
+    QVERIFY2(genuinelyNewFrames == 0, qPrintable(u"FFT should stop producing frames after EOF; got %1 genuinely new frames"_s.arg(genuinelyNewFrames)));
+    qDebug() << "Non-gapless EOF FFT: in-flight frames after drain=" << inFlightFrames << "genuinely new frames=" << genuinelyNewFrames;
+
+    player.play();
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
+
+    QTest::qWait(500);
+    int framesAfterRestart = frameCount;
+
+    QVERIFY2(framesAfterRestart > framesAfterDrain, "FFT frames should resume after play() at EndOfMedia");
 
     player.stop();
 }

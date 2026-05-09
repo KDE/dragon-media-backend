@@ -138,7 +138,7 @@ bool DragonFftProcessor::waitForSamples(std::stop_token st)
     if (m_waitCv) {
         std::unique_lock lock(m_waitMutex);
         m_waitCv->wait_for(lock, std::chrono::milliseconds(50), [&] {
-            return !m_fftQueue || m_fftQueue->get_num_items_ready() >= FFT_SIZE || st.stop_requested();
+            return st.stop_requested() || !m_fftQueue || m_fftQueue->get_num_items_ready() >= FFT_SIZE;
         });
     }
     if (st.stop_requested())
@@ -148,6 +148,9 @@ bool DragonFftProcessor::waitForSamples(std::stop_token st)
 
 bool DragonFftProcessor::readSamplesIntoWindow(std::stop_token st)
 {
+    if (st.stop_requested() || !m_fftQueue) {
+        return false;
+    }
     auto scope = m_fftQueue->prepare_read(FFT_SIZE);
     assert(scope.get_items_read() == FFT_SIZE);
 

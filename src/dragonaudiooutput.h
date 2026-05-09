@@ -95,6 +95,8 @@ private:
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};
 
+    std::atomic<int64_t> m_pausedPositionMs{-1};
+
     std::atomic<bool> m_flushPending{false};
 
     float m_volume = 1.0f;

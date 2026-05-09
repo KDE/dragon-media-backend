@@ -90,6 +90,9 @@ void DragonFftPipeline::stopThread()
 {
     if (m_fftThread.joinable()) {
         m_fftThread.request_stop();
+        if (m_waitCv) {
+            m_waitCv->notify_all();
+        }
         m_fftThread.join();
         qCDebug(dragonsdlFft) << "FFT thread stopped";
     }
@@ -128,6 +131,10 @@ void DragonFftPipeline::restartWithNewQueueInternal(LockFreeSpscQueue<std::float
 {
     m_fftQueue = queue;
     m_waitCv = cv;
+
+    if (m_fftProcessor) {
+        m_fftProcessor->setQueue(nullptr);
+    }
 
     stopThread();
 

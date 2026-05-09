@@ -57,7 +57,7 @@ void DragonAudioOutput::setFftQueue(LockFreeSpscQueue<std::float32_t> *queue)
 
 void DragonAudioOutput::start(int sampleRate, int channels, bool startPaused)
 {
-    qCDebug(dragonsdlAudio) << "start" << sampleRate << channels;
+    qCDebug(dragonsdlAudio) << "start" << sampleRate << channels << "startPaused=" << startPaused;
 
     if (m_session.load(std::memory_order_acquire) != nullptr) {
         qCDebug(dragonsdlAudio) << "start() called while already started stopping old session";
@@ -65,6 +65,12 @@ void DragonAudioOutput::start(int sampleRate, int channels, bool startPaused)
     }
 
     m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+
+    if (startPaused) {
+        m_pausedPositionMs.store(m_positionOffsetMs.load(std::memory_order_relaxed), std::memory_order_relaxed);
+    } else {
+        m_pausedPositionMs.store(-1, std::memory_order_relaxed);
+    }
 
     auto *session = new AudioSession;
     session->channels = channels;
@@ -124,18 +130,25 @@ void DragonAudioOutput::start(int sampleRate, int channels, bool startPaused)
 
 void DragonAudioOutput::pause()
 {
+    m_pausedPositionMs.store(positionMs(), std::memory_order_relaxed);
+
     if (auto *session = m_session.load(std::memory_order_acquire)) {
-        if (session->deviceId != 0) {
-            SDL_PauseAudioDevice(session->deviceId);
+        if (session->stream) {
+            SDL_SetAudioStreamGain(session->stream, 0.0f);
         }
     }
 }
 
 void DragonAudioOutput::resume()
 {
+    m_pausedPositionMs.store(-1, std::memory_order_relaxed);
+
     if (auto *session = m_session.load(std::memory_order_acquire)) {
         if (session->deviceId != 0) {
             SDL_ResumeAudioDevice(session->deviceId);
+        }
+        if (session->stream) {
+            SDL_SetAudioStreamGain(session->stream, m_muted ? 0.0f : m_volume);
         }
     }
 }
@@ -143,6 +156,8 @@ void DragonAudioOutput::resume()
 void DragonAudioOutput::stop()
 {
     qCDebug(dragonsdlAudio) << "stop()";
+
+    m_pausedPositionMs.store(-1, std::memory_order_relaxed);
 
     auto *oldSession = m_session.exchange(nullptr, std::memory_order_acq_rel);
 
@@ -173,11 +188,15 @@ void DragonAudioOutput::reset()
 {
     m_totalSamplesWritten.store(0, std::memory_order_relaxed);
     m_positionOffsetMs.store(0, std::memory_order_relaxed);
+    m_pausedPositionMs.store(-1, std::memory_order_relaxed);
 }
 
 void DragonAudioOutput::setPositionOffset(int64_t offsetMs)
 {
     m_positionOffsetMs.store(offsetMs, std::memory_order_relaxed);
+    if (m_pausedPositionMs.load(std::memory_order_relaxed) >= 0) {
+        m_pausedPositionMs.store(offsetMs, std::memory_order_relaxed);
+    }
     m_flushPending.store(true, std::memory_order_release);
 }
 
@@ -224,7 +243,9 @@ void DragonAudioOutput::setMuted(bool muted)
     }
     m_muted = muted;
     if (auto *session = m_session.load(std::memory_order_acquire); session && session->stream) {
-        SDL_SetAudioStreamGain(session->stream, muted ? 0.0f : m_volume);
+        if (m_pausedPositionMs.load(std::memory_order_relaxed) < 0) {
+            SDL_SetAudioStreamGain(session->stream, muted ? 0.0f : m_volume);
+        }
     }
     Q_EMIT volumeChanged();
 }
@@ -236,6 +257,11 @@ void DragonAudioOutput::setStreamName(const QString &name)
 
 int64_t DragonAudioOutput::positionMs() const
 {
+    int64_t pausedPos = m_pausedPositionMs.load(std::memory_order_relaxed);
+    if (pausedPos >= 0) {
+        return pausedPos;
+    }
+
     auto *session = m_session.load(std::memory_order_acquire);
     if (!session || session->channels <= 0 || session->sampleRate <= 0) {
         return m_positionOffsetMs.load(std::memory_order_relaxed);
