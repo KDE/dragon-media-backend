@@ -54,6 +54,8 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
         requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
         if (!audioOutput->isDeviceOpen()) {
             audioOutput->start(sampleRate, channels);
+        } else {
+            audioOutput->resume();
         }
         setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
         break;
@@ -104,7 +106,6 @@ void DragonPlayerPrivate::onFormatReady(int sampleRate, int channels, bool isGap
         return;
     }
 
-    audioOutput->setPositionOffset(currentPosition);
     applyRequestedState(sampleRate, channels);
 }
 
@@ -170,6 +171,13 @@ void DragonPlayerPrivate::onDecodeFinished(bool hadFatalError)
 void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st)
 {
     if (pcm.empty()) {
+        return;
+    }
+
+    while (audioOutput && !audioOutput->isQueueReady() && !st.stop_requested()) {
+        std::this_thread::sleep_for(std::chrono::microseconds(500));
+    }
+    if (st.stop_requested()) {
         return;
     }
 
@@ -437,9 +445,12 @@ void DragonPlayer::setSource(const QUrl &source)
     qCDebug(dragonsdlPlayer) << "setSource(" << source.toString() << ")";
 
     if (d->audioOutput) {
-        d->audioOutput->stop();
-        d->audioOutput->reset();
+        d->audioOutput->silence();
+        d->audioOutput->setQueueReady(false);
+        d->audioOutput->setPositionOffset(0);
     }
+
+    d->decodePipeline.stopSession();
 
     if (d->currentFftMode == DragonPlayer::FftMode::Off) {
         d->fftPipeline.stop();
@@ -463,11 +474,6 @@ void DragonPlayer::setSource(const QUrl &source)
         d->fftPipeline.restartWithNewQueue(d->fftQueue.get(), d->audioOutput->fftCv());
     }
 
-    d->decodePipeline.stopSession();
-
-    d->audioQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(d->audioBuffer));
-    d->audioOutput->setQueue(d->audioQueue.get());
-
     d->currentSource = source;
     d->currentPosition = 0;
     d->currentDuration = 0;
@@ -479,6 +485,10 @@ void DragonPlayer::setSource(const QUrl &source)
     Q_EMIT nextSourceChanged();
 
     if (source.isEmpty()) {
+        if (d->audioOutput) {
+            d->audioOutput->stop();
+            d->audioOutput->reset();
+        }
         d->setStatus(DragonPlayer::MediaStatus::NoMedia);
         d->setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
         return;

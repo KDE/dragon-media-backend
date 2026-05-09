@@ -48,6 +48,10 @@ private Q_SLOTS:
     void testRapidStartStopCycles();
     void testStopDuringStarvation();
 
+    void testSilence();
+    void testQueueReadyApi();
+    void testFlushOpensGate();
+
     void testStartPaused();
 
 private:
@@ -387,6 +391,78 @@ void TestAudioOutput::testStopDuringStarvation()
 
     output.reset();
     QVERIFY(output.positionMs() == 0);
+}
+
+void TestAudioOutput::testSilence()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    QVERIFY(output.isDeviceOpen());
+
+    output.silence();
+    QVERIFY(output.isDeviceOpen());
+
+    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    QTest::qWait(100);
+
+    QVERIFY(output.isDeviceOpen());
+
+    output.stop();
+    QVERIFY(!output.isDeviceOpen());
+}
+
+void TestAudioOutput::testQueueReadyApi()
+{
+    DragonAudioOutput output;
+
+    QVERIFY(output.isQueueReady());
+
+    output.setQueueReady(false);
+    QVERIFY(!output.isQueueReady());
+
+    output.setQueueReady(true);
+    QVERIFY(output.isQueueReady());
+
+    output.setQueueReady(true);
+    QVERIFY(output.isQueueReady());
+    output.setQueueReady(false);
+    QVERIFY(!output.isQueueReady());
+    output.setQueueReady(false);
+    QVERIFY(!output.isQueueReady());
+}
+
+void TestAudioOutput::testFlushOpensGate()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    QVERIFY(output.isDeviceOpen());
+
+    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    QTest::qWait(50);
+
+    output.setQueueReady(false);
+    QVERIFY(!output.isQueueReady());
+
+    output.setPositionOffset(0);
+
+    QTest::qWait(100);
+
+    QVERIFY2(output.isQueueReady(), "SDL callback should have processed flush and opened the gate");
+
+    QCOMPARE(queue.get_num_items_ready(), size_t(0));
+
+    output.stop();
+    QVERIFY(!output.isDeviceOpen());
 }
 
 void TestAudioOutput::testStartPaused()

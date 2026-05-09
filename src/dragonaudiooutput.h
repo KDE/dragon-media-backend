@@ -47,7 +47,12 @@ public:
 
     void resume();
 
+    void silence();
+
     void reset();
+
+    [[nodiscard]] bool isQueueReady() const;
+    void setQueueReady(bool ready);
 
     void setPositionOffset(int64_t offsetMs);
 
@@ -62,6 +67,7 @@ public:
 
     [[nodiscard]] bool muted() const;
     void setMuted(bool muted);
+
     void setStreamName(const QString &name);
 
     [[nodiscard]] int64_t positionMs() const;
@@ -85,7 +91,6 @@ private:
         int sampleRate = 44100;
         SDL_AudioDeviceID deviceId = 0;
     };
-
     std::atomic<AudioSession *> m_session{nullptr};
 
     std::atomic<LockFreeSpscQueue<std::float32_t> *> m_audioQueue{nullptr};
@@ -98,6 +103,8 @@ private:
     std::atomic<int64_t> m_pausedPositionMs{-1};
 
     std::atomic<bool> m_flushPending{false};
+
+    std::atomic<bool> m_queueReady{true};
 
     float m_volume = 1.0f;
     bool m_muted = false;

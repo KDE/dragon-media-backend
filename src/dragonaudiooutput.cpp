@@ -153,6 +153,15 @@ void DragonAudioOutput::resume()
     }
 }
 
+void DragonAudioOutput::silence()
+{
+    if (auto *session = m_session.load(std::memory_order_acquire)) {
+        if (session->stream) {
+            SDL_SetAudioStreamGain(session->stream, 0.0f);
+        }
+    }
+}
+
 void DragonAudioOutput::stop()
 {
     qCDebug(dragonsdlAudio) << "stop()";
@@ -189,6 +198,16 @@ void DragonAudioOutput::reset()
     m_totalSamplesWritten.store(0, std::memory_order_relaxed);
     m_positionOffsetMs.store(0, std::memory_order_relaxed);
     m_pausedPositionMs.store(-1, std::memory_order_relaxed);
+}
+
+bool DragonAudioOutput::isQueueReady() const
+{
+    return m_queueReady.load(std::memory_order_acquire);
+}
+
+void DragonAudioOutput::setQueueReady(bool ready)
+{
+    m_queueReady.store(ready, std::memory_order_release);
 }
 
 void DragonAudioOutput::setPositionOffset(int64_t offsetMs)
@@ -332,6 +351,7 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
             auto drain = queue->prepare_read(ready);
         }
         self->m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+        self->m_queueReady.store(true, std::memory_order_release);
         return;
     }
 
