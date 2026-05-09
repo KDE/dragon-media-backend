@@ -103,10 +103,15 @@ void DragonDecodePipeline::startDecodeThread()
 
                 plock.unlock();
 
-                qCDebug(dragonsdlDecode) << "decode thread gapless transition, invoking callback";
-                if (m_gaplessTransitionCallback) {
-                    m_gaplessTransitionCallback(newSource);
-                }
+                qCDebug(dragonsdlDecode) << "decode thread gapless transition, queuing callback";
+                QMetaObject::invokeMethod(
+                    q,
+                    [this, newSource]() {
+                        if (m_gaplessTransitionCallback) {
+                            m_gaplessTransitionCallback(newSource);
+                        }
+                    },
+                    Qt::QueuedConnection);
             } else {
                 plock.unlock();
 

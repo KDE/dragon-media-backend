@@ -110,6 +110,11 @@ void DragonPlayerPrivate::onFormatReady(int sampleRate, int channels, bool isGap
 
 void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
 {
+    if (decodePipeline.generation() != currentDecoderGeneration) {
+        qCDebug(dragonsdlPlayer) << "ignoring stale gapless transition (generation mismatch)";
+        return;
+    }
+
     currentSource = newSource;
     nextSource.clear();
     currentPosition = 0;
