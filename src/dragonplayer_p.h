@@ -18,7 +18,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <span>
 #include <stdfloat>
+#include <stop_token>
 #include <vector>
 
 class DragonDiagnostics;
@@ -27,6 +29,23 @@ struct DragonPlayerPrivate {
     static constexpr size_t kBufferCapacity = 65536;
 
     friend class DragonDiagnostics;
+
+    void init();
+
+    void onFormatReady(int sampleRate, int channels, bool isGapless);
+    void onGaplessTransition(const QUrl &newSource);
+    void onDecodeFinished(bool hadFatalError);
+
+    void writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st);
+
+    void setPlaybackState(DragonPlayer::PlaybackState state);
+    void setStatus(DragonPlayer::MediaStatus status);
+    void setError(DragonPlayer::Error error);
+
+    void stopPipeline();
+
+    void wirePipelineCallbacks();
+    void wireFftCallbacks();
 
     DragonPlayer *q;
 
