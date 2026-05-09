@@ -67,7 +67,7 @@ private:
     LockFreeSpscQueue<std::float32_t> *m_fftQueue = nullptr;
     std::condition_variable *m_waitCv = nullptr;
     std::mutex m_waitMutex;
-    int m_sampleRate = 44100;
+    std::atomic<int> m_sampleRate{44100};
     std::atomic<FftMode> m_fftMode{FftMode::Off};
 
     std::unique_ptr<kissfft<float>> m_fft;

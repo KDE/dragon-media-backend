@@ -58,7 +58,7 @@ void DragonFftProcessor::setWaitCv(std::condition_variable *cv)
 
 void DragonFftProcessor::setSampleRate(int sampleRate)
 {
-    m_sampleRate = sampleRate;
+    m_sampleRate.store(sampleRate, std::memory_order_relaxed);
 }
 
 void DragonFftProcessor::setFftMode(FftMode mode)
@@ -118,7 +118,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         std::array<std::complex<float>, FFT_SIZE / 2> fftOut;
         transformReal(m_inputWindow, fftOut);
 
-        const float binToFreq = static_cast<float>(m_sampleRate) / static_cast<float>(FFT_SIZE);
+        const float binToFreq = static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / static_cast<float>(FFT_SIZE);
         DragonFftFrame frame;
 
         if (mode == FftMode::DetailedOnly || mode == FftMode::Both) {
@@ -210,7 +210,7 @@ float DragonFftProcessor::computeMelBin(std::span<const std::complex<float>, FFT
 void DragonFftProcessor::fillDetailedBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq) const
 {
     const float melMin = hzToMel(MIN_FREQ);
-    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate) / 2.0f));
+    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
 
     std::array<std::float32_t, NUM_LOG_BINS> logBins{};
     for (auto [i, bin] : std::views::enumerate(logBins)) {
@@ -224,7 +224,7 @@ void DragonFftProcessor::fillDetailedBins(DragonFftFrame &frame, std::span<const
 void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq)
 {
     const float melMin = hzToMel(MIN_FREQ);
-    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate) / 2.0f));
+    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
 
     std::array<std::float32_t, NUM_BAR_BINS> barBins{};
     for (auto [i, bin] : std::views::enumerate(barBins)) {
