@@ -52,7 +52,7 @@ private Q_SLOTS:
     void testQueueReadyApi();
     void testFlushOpensGate();
 
-    void testSetPositionOffsetWithoutFlush();
+    void testGaplessTransition();
 
     void testStartPaused();
 
@@ -457,7 +457,7 @@ void TestAudioOutput::testFlushOpensGate()
     output.setQueueReady(false);
     QVERIFY(!output.isQueueReady());
 
-    output.setPositionOffset(0);
+    output.setPositionOffset(0, DragonAudioOutput::PositionResetMode::NormalTrackChange);
 
     QTest::qWait(100);
 
@@ -469,7 +469,7 @@ void TestAudioOutput::testFlushOpensGate()
     QVERIFY(!output.isDeviceOpen());
 }
 
-void TestAudioOutput::testSetPositionOffsetWithoutFlush()
+void TestAudioOutput::testGaplessTransition()
 {
     DragonAudioOutput output;
 
@@ -480,26 +480,26 @@ void TestAudioOutput::testSetPositionOffsetWithoutFlush()
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
 
-    fillQueue(&queue, std::vector<std::float32_t>(32768, 0.5f));
-    QTest::qWait(50);
+    fillQueue(&queue, std::vector<std::float32_t>(65536, 0.5f));
+    QTest::qWait(300);
 
     const int64_t samplesBefore = output.totalSamplesWritten();
-    QVERIFY2(samplesBefore > 0, "Some samples should have been consumed by now");
+    QVERIFY2(samplesBefore > 10000, "Counter should have grown large after 300ms of playback");
     const size_t queueSizeBefore = queue.get_num_items_ready();
     QVERIFY2(queueSizeBefore > 0, "Queue should still have items");
 
-    output.setPositionOffset(0, false);
+    output.setPositionOffset(0, DragonAudioOutput::PositionResetMode::GaplessTransition);
 
     QTest::qWait(100);
 
-    const int64_t samplesAfter = output.totalSamplesWritten();
-    QVERIFY2(samplesAfter > samplesBefore, "totalSamplesWritten should increase, not reset, when flush=false");
-
     const size_t queueSizeAfter = queue.get_num_items_ready();
-    QVERIFY2(queueSizeAfter > 0, "Queue should not be drained when flush=false");
+    QVERIFY2(queueSizeAfter > 0, "Queue should not be drained during GaplessTransition");
 
     output.stop();
     QVERIFY(!output.isDeviceOpen());
+
+    const int64_t samplesAfter = output.totalSamplesWritten();
+    QVERIFY2(samplesAfter < 20000, "totalSamplesWritten should be small after GaplessTransition reset");
 }
 
 void TestAudioOutput::testStartPaused()

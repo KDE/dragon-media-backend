@@ -54,14 +54,19 @@ public:
     [[nodiscard]] bool isQueueReady() const;
     void setQueueReady(bool ready);
 
-    void setPositionOffset(int64_t offsetMs, bool flush = true, bool resetCounter = false);
+    enum class PositionResetMode {
+        Seek,
+        GaplessTransition,
+        NormalTrackChange
+    };
+
+    void setPositionOffset(int64_t offsetMs, PositionResetMode mode = PositionResetMode::NormalTrackChange);
 
     void clearStream();
 
     [[nodiscard]] bool isDeviceOpen() const;
 
     static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
-
     [[nodiscard]] float volume() const;
     void setVolume(float linearGain);
 
@@ -75,6 +80,7 @@ public:
     [[nodiscard]] int64_t totalSamplesWritten() const;
 
     [[nodiscard]] bool hasFormat(int sampleRate, int channels) const;
+
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();
@@ -96,6 +102,7 @@ private:
     std::atomic<LockFreeSpscQueue<std::float32_t> *> m_audioQueue{nullptr};
     std::atomic<LockFreeSpscQueue<std::float32_t> *> m_fftQueue{nullptr};
     std::condition_variable m_fftWaitCv;
+
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};
 

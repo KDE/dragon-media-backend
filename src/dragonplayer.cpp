@@ -123,7 +123,7 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
     currentSeekable = currentIsLocal;
     currentDuration = 0;
 
-    audioOutput->setPositionOffset(0, false, true);
+    audioOutput->setPositionOffset(0, DragonAudioOutput::PositionResetMode::GaplessTransition);
 
     Q_EMIT q->trackChanged();
     Q_EMIT q->sourceChanged();
@@ -447,7 +447,7 @@ void DragonPlayer::setSource(const QUrl &source)
     if (d->audioOutput) {
         d->audioOutput->silence();
         d->audioOutput->setQueueReady(false);
-        d->audioOutput->setPositionOffset(0);
+        d->audioOutput->setPositionOffset(0, DragonAudioOutput::PositionResetMode::NormalTrackChange);
     }
 
     d->decodePipeline.stopSession();
@@ -535,7 +535,7 @@ void DragonPlayer::setPosition(int64_t posMs)
     d->decodePipeline.requestSeek(posMs);
 
     if (d->audioOutput) {
-        d->audioOutput->setPositionOffset(posMs);
+        d->audioOutput->setPositionOffset(posMs, DragonAudioOutput::PositionResetMode::Seek);
         d->audioOutput->clearStream();
     }
     Q_EMIT positionChanged(posMs);
