@@ -78,6 +78,9 @@ private Q_SLOTS:
     void testDecoderMultipleFilesConsecutive();
     void testDecoderNoMemoryLeaks();
 
+    void testSeamlessPlaybackWithFormatChange();
+    void testFftFramesDuringGaplessTransition();
+
 private:
     struct DecodeResult {
         int sampleRate = 0;
@@ -638,6 +641,102 @@ void TestE2E::testSeamlessPlaybackTransition()
 
     qDebug() << "Seamless playback test passed:"
              << "trackChanged=" << trackChangedSpy.count() << "stateChanges=" << stateSpy.count() << "sourceChanges=" << sourceSpy.count();
+
+    player.stop();
+}
+
+void TestE2E::testSeamlessPlaybackWithFormatChange()
+{
+    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
+    QString track2 = TestFixture::fixturePath("gs-16b-1c-44100hz.flac"_L1);
+
+    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
+    QVERIFY2(QFileInfo::exists(track2), qPrintable("FLAC fixture not found: "_L1 + track2));
+
+    DragonPlayer player;
+
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+    QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
+    QSignalSpy nextSourceSpy(&player, &DragonPlayer::nextSourceChanged);
+
+    player.setSource(QUrl::fromLocalFile(track1));
+    player.setNextSource(QUrl::fromLocalFile(track2));
+
+    QVERIFY(player.nextSource() == QUrl::fromLocalFile(track2));
+    QVERIFY(nextSourceSpy.count() >= 1);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY(player.isAudioActive());
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
+    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
+
+    for (const auto &args : stateSpy) {
+        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
+        QVERIFY2(state != DragonPlayer::PlaybackState::StoppedState, "Playback state should never stop during seamless transition");
+    }
+
+    for (const auto &args : statusSpy) {
+        auto status = args.at(0).value<DragonPlayer::MediaStatus>();
+        QVERIFY2(status != DragonPlayer::MediaStatus::EndOfMedia, "EndOfMedia should not be emitted during seamless transition");
+    }
+
+    QVERIFY(player.source() == QUrl::fromLocalFile(track2));
+
+    QVERIFY(!player.nextSource().isValid());
+
+    QVERIFY2(player.isAudioActive(), "Audio device should remain active after format-change gapless transition");
+
+    player.stop();
+}
+
+void TestE2E::testFftFramesDuringGaplessTransition()
+{
+    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
+    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
+
+    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
+    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: "_L1 + track2));
+
+    DragonPlayer player;
+
+    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+
+    int frameCount = 0;
+    QObject::connect(
+        &player,
+        &DragonPlayer::fftFrameReady,
+        &player,
+        [&frameCount]() {
+            ++frameCount;
+        },
+        Qt::QueuedConnection);
+
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+
+    player.setSource(QUrl::fromLocalFile(track1));
+    player.setNextSource(QUrl::fromLocalFile(track2));
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QTest::qWait(500);
+    int framesBeforeTransition = frameCount;
+
+    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
+
+    QTest::qWait(500);
+    int framesAfterTransition = frameCount;
+
+    QVERIFY2(framesBeforeTransition > 0, "FFT frames should arrive during first track playback");
+    QVERIFY2(framesAfterTransition > framesBeforeTransition, "FFT frames should continue arriving after gapless transition");
 
     player.stop();
 }

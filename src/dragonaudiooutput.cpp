@@ -55,7 +55,7 @@ void DragonAudioOutput::setFftQueue(LockFreeSpscQueue<std::float32_t> *queue)
     m_fftQueue.store(queue, std::memory_order_release);
 }
 
-void DragonAudioOutput::start(int sampleRate, int channels)
+void DragonAudioOutput::start(int sampleRate, int channels, bool startPaused)
 {
     qCDebug(dragonsdlAudio) << "start" << sampleRate << channels;
 
@@ -114,7 +114,9 @@ void DragonAudioOutput::start(int sampleRate, int channels)
 
     qCDebug(dragonsdlAudio) << "get callback registered successfully";
 
-    SDL_ResumeAudioDevice(deviceId);
+    if (!startPaused) {
+        SDL_ResumeAudioDevice(deviceId);
+    }
 
     m_session.store(session, std::memory_order_release);
     qCDebug(dragonsdlAudio) << "SDL audio device started";

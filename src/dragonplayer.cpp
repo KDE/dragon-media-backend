@@ -47,12 +47,12 @@ size_t writeToQueueWithBackpressure(LockFreeSpscQueue<std::float32_t> &queue, st
 }
 }
 
-void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, bool isGapless, bool audioAlreadyRunning)
+void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
 {
     switch (requestedPlaybackState) {
     case DragonPlayer::PlaybackState::PlayingState:
         requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
-        if (!audioAlreadyRunning) {
+        if (!audioOutput->isDeviceOpen()) {
             audioOutput->start(sampleRate, channels);
         }
         setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
@@ -60,32 +60,24 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, bool
 
     case DragonPlayer::PlaybackState::PausedState:
         requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
-        if (!audioAlreadyRunning) {
-            audioOutput->start(sampleRate, channels);
-        }
-        if (audioOutput) {
+        if (!audioOutput->isDeviceOpen()) {
+            audioOutput->start(sampleRate, channels, true);
+        } else {
             audioOutput->pause();
         }
         setPlaybackState(DragonPlayer::PlaybackState::PausedState);
         break;
 
     case DragonPlayer::PlaybackState::StoppedState:
-        if (isGapless && currentPlaybackState == DragonPlayer::PlaybackState::PlayingState && !audioAlreadyRunning) {
-            audioOutput->start(sampleRate, channels);
-        }
         break;
     }
 }
 
 void DragonPlayerPrivate::onFormatReady(int sampleRate, int channels, bool isGapless)
 {
-    qCDebug(dragonsdlPlayer) << "formatReady sr=" << sampleRate << "ch=" << channels;
+    qCDebug(dragonsdlPlayer) << "formatReady sr=" << sampleRate << "ch=" << channels << " isGapless=" << isGapless;
     currentSampleRate = sampleRate;
     currentChannels = channels;
-
-    bool audioAlreadyRunning = isGapless && audioOutput->hasFormat(sampleRate, channels);
-
-    audioOutput->setPositionOffset(currentPosition);
 
     fftPipeline.setSampleRate(sampleRate);
 
@@ -94,13 +86,26 @@ void DragonPlayerPrivate::onFormatReady(int sampleRate, int channels, bool isGap
         Q_EMIT q->statusChanged(DragonPlayer::MediaStatus::LoadedMedia);
     }
 
-    int reqState = static_cast<int>(requestedPlaybackState);
-    qCDebug(dragonsdlPlayer) << "onFormatReady requestedPlaybackState=" << reqState << " isGapless=" << isGapless
-                             << " audioAlreadyRunning=" << audioAlreadyRunning << " currentPlaybackState=" << static_cast<int>(currentPlaybackState)
-                             << " currentStatus=" << static_cast<int>(currentStatus) << " isDeviceOpen=" << (audioOutput ? audioOutput->isDeviceOpen() : false)
-                             << " hasQueue=" << (audioQueue != nullptr);
+    if (isGapless) {
+        if (currentPlaybackState == DragonPlayer::PlaybackState::PlayingState) {
+            if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
+                audioOutput->start(sampleRate, channels);
+            }
+            return;
+        }
 
-    applyRequestedState(sampleRate, channels, isGapless, audioAlreadyRunning);
+        if (currentPlaybackState == DragonPlayer::PlaybackState::PausedState) {
+            if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
+                audioOutput->start(sampleRate, channels, true);
+            }
+            return;
+        }
+
+        return;
+    }
+
+    audioOutput->setPositionOffset(currentPosition);
+    applyRequestedState(sampleRate, channels);
 }
 
 void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)

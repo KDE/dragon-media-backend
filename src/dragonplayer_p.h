@@ -36,7 +36,7 @@ struct DragonPlayerPrivate {
     void onGaplessTransition(const QUrl &newSource);
     void onDecodeFinished(bool hadFatalError);
 
-    void applyRequestedState(int sampleRate, int channels, bool isGapless, bool audioAlreadyRunning);
+    void applyRequestedState(int sampleRate, int channels);
 
     void writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st);
 

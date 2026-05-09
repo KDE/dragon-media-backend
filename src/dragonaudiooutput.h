@@ -39,7 +39,7 @@ public:
         return &m_fftWaitCv;
     }
 
-    void start(int sampleRate, int channels);
+    void start(int sampleRate, int channels, bool startPaused = false);
 
     void stop();
 
@@ -62,7 +62,6 @@ public:
 
     [[nodiscard]] bool muted() const;
     void setMuted(bool muted);
-
     void setStreamName(const QString &name);
 
     [[nodiscard]] int64_t positionMs() const;
