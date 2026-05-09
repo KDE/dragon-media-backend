@@ -177,7 +177,7 @@ target_include_directories(dragon-sdl PRIVATE
 )
 
 target_include_directories(dragon-sdl PRIVATE
-    $<BUILD_INTERFACE:${spsc_queue_src_SOURCE_DIR}>
+    ${spsc_queue_src_SOURCE_DIR}/include
 )
 
 target_link_libraries(dragon-sdl
