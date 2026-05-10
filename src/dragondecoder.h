@@ -55,8 +55,6 @@ Q_SIGNALS:
 
     void streamError(const QString &message);
 
-    void stateChanged(bool buffering, double progress);
-
 private:
     ReadCallback m_networkCallback;
     QString m_filePath;

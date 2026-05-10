@@ -30,7 +30,7 @@ static inline void setCurrentThreadName(const char *name)
 
 DragonDecodePipeline::DragonDecodePipeline(DragonPlayer *player)
     : QObject(player)
-    , q(player)
+    , m_player(player)
 {
     startDecodeThread();
 }
@@ -296,10 +296,7 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
             Q_EMIT errorOccurred(QStringLiteral("Network error"));
         });
 
-        connect(m_radioStream.get(), &DragonRadioStream::metadataReady, q, [this](const DragonIcyMetadata &metadata) {
-            Q_EMIT q->currentPlayingForRadiosChanged(metadata);
-        });
-
+        connect(m_radioStream.get(), &DragonRadioStream::metadataReady, m_player, &DragonPlayer::currentPlayingForRadiosChanged);
         m_radioStream->start();
     } else if (m_radioStream) {
         m_radioStream->stop();

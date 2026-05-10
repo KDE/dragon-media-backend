@@ -463,7 +463,6 @@ void DragonDecoder::drainDecoderFrames(DecodeSession &session, bool canEmitFirst
             if (canEmitFirstFrame && session.firstFrame) {
                 session.firstFrame = false;
                 qCDebug(dragonsdlDecoder) << "first frame" << totalSamples << "samples";
-                Q_EMIT stateChanged(false, 1.0);
             }
             if (m_samplesCallback) {
                 m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), session.sampleRate, session.nbChannels);

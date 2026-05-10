@@ -65,7 +65,7 @@ private:
 
     SamplesCallback m_samplesCallback;
 
-    DragonPlayer *q = nullptr;
+    DragonPlayer *m_player = nullptr;
     uint64_t m_generation = 0;
     QUrl m_nextSource;
 
