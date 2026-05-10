@@ -47,6 +47,29 @@ size_t writeToQueueWithBackpressure(LockFreeSpscQueue<std::float32_t> &queue, st
 }
 }
 
+DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player)
+    : QObject(player)
+    , q(player)
+    , decodePipeline(player)
+    , currentPlaybackState(DragonPlayer::PlaybackState::StoppedState)
+    , currentStatus(DragonPlayer::MediaStatus::NoMedia)
+    , currentError(DragonPlayer::Error::NoError)
+    , requestedPlaybackState(DragonPlayer::PlaybackState::StoppedState)
+    , currentDuration(0)
+    , currentVolume(1.0f)
+    , currentMuted(false)
+    , currentSeekable(false)
+    , currentIsLocal(false)
+    , currentSampleRate(0)
+    , currentChannels(0)
+    , currentFftMode(DragonPlayer::FftMode::Off)
+    , currentDecoderGeneration(0)
+    , undoPosition(0)
+    , positionTimer(nullptr)
+    , currentPosition(0)
+{
+}
+
 void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
 {
     switch (requestedPlaybackState) {
@@ -158,6 +181,23 @@ void DragonPlayerPrivate::onDecodeFinished(bool hadFatalError)
     }
 }
 
+void DragonPlayerPrivate::onDurationChanged(int64_t dur)
+{
+    if (currentDuration != dur) {
+        currentDuration = dur;
+        Q_EMIT q->durationChanged(dur);
+    }
+}
+
+void DragonPlayerPrivate::onErrorOccurred(const QString &)
+{
+    auto err = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
+    if (currentError != err) {
+        currentError = err;
+        Q_EMIT q->errorChanged(currentError);
+    }
+}
+
 void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st)
 {
     if (pcm.empty()) {
@@ -180,57 +220,15 @@ void DragonPlayerPrivate::connectPipelineSignals()
         writeToQueues(samples, st);
     });
 
-    QObject::connect(
-        &decodePipeline,
-        &DragonDecodePipeline::formatReady,
-        q,
-        [this](int sr, int ch, bool isGapless) {
-            onFormatReady(sr, ch, isGapless);
-        },
-        Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::formatReady, this, &DragonPlayerPrivate::onFormatReady, Qt::QueuedConnection);
 
-    QObject::connect(
-        &decodePipeline,
-        &DragonDecodePipeline::durationChanged,
-        q,
-        [this](int64_t dur) {
-            if (currentDuration != dur) {
-                currentDuration = dur;
-                Q_EMIT q->durationChanged(dur);
-            }
-        },
-        Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::durationChanged, this, &DragonPlayerPrivate::onDurationChanged, Qt::QueuedConnection);
 
-    QObject::connect(
-        &decodePipeline,
-        &DragonDecodePipeline::errorOccurred,
-        q,
-        [this](const QString &) {
-            auto err = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
-            if (currentError != err) {
-                currentError = err;
-                Q_EMIT q->errorChanged(currentError);
-            }
-        },
-        Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::errorOccurred, this, &DragonPlayerPrivate::onErrorOccurred, Qt::QueuedConnection);
 
-    QObject::connect(
-        &decodePipeline,
-        &DragonDecodePipeline::finished,
-        q,
-        [this](bool hadFatalError) {
-            onDecodeFinished(hadFatalError);
-        },
-        Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::finished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
 
-    QObject::connect(
-        &decodePipeline,
-        &DragonDecodePipeline::gaplessTransition,
-        q,
-        [this](const QUrl &newSource) {
-            onGaplessTransition(newSource);
-        },
-        Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::gaplessTransition, this, &DragonPlayerPrivate::onGaplessTransition, Qt::QueuedConnection);
 }
 
 void DragonPlayerPrivate::wireFftCallbacks()
@@ -352,32 +350,7 @@ void DragonPlayerPrivate::init()
 DragonPlayer::DragonPlayer(QObject *parent)
     : QObject(parent)
 {
-    d.reset(new DragonPlayerPrivate{.q = this,
-                                    .decodePipeline = DragonDecodePipeline(this),
-                                    .fftPipeline = DragonFftPipeline(),
-                                    .fftBuffer = {},
-                                    .audioBuffer = {},
-                                    .fftQueue = nullptr,
-                                    .audioQueue = nullptr,
-                                    .audioOutput = nullptr,
-                                    .currentSource = {},
-                                    .nextSource = {},
-                                    .currentPlaybackState = DragonPlayer::PlaybackState::StoppedState,
-                                    .currentStatus = DragonPlayer::MediaStatus::NoMedia,
-                                    .currentError = DragonPlayer::Error::NoError,
-                                    .requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState,
-                                    .currentDuration = 0,
-                                    .currentVolume = 1.0f,
-                                    .currentMuted = false,
-                                    .currentSeekable = false,
-                                    .currentIsLocal = false,
-                                    .currentSampleRate = 0,
-                                    .currentChannels = 0,
-                                    .currentFftMode = DragonPlayer::FftMode::Off,
-                                    .currentDecoderGeneration = 0,
-                                    .undoPosition = 0,
-                                    .positionTimer = nullptr,
-                                    .currentPosition = 0});
+    d = std::make_unique<DragonPlayerPrivate>(this);
     d->init();
 }
 

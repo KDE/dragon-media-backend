@@ -12,6 +12,7 @@
 
 #include <LockFreeSpscQueue.h>
 
+#include <QObject>
 #include <QTimer>
 #include <QUrl>
 
@@ -25,17 +26,32 @@
 
 class DragonDiagnostics;
 
-struct DragonPlayerPrivate {
+class DragonPlayerPrivate : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit DragonPlayerPrivate(DragonPlayer *player);
+
+private:
     static constexpr size_t kBufferCapacity = 65536;
 
     friend class DragonDiagnostics;
+    friend class DragonPlayer;
 
     void init();
 
+    DragonPlayer *q = nullptr;
+
     void onFormatReady(int sampleRate, int channels, bool isGapless);
+
+private Q_SLOTS:
+    void onDurationChanged(int64_t dur);
+    void onErrorOccurred(const QString &msg);
     void onGaplessTransition(const QUrl &newSource);
     void onDecodeFinished(bool hadFatalError);
 
+private:
     void applyRequestedState(int sampleRate, int channels);
 
     void writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st);
@@ -48,8 +64,6 @@ struct DragonPlayerPrivate {
 
     void connectPipelineSignals();
     void wireFftCallbacks();
-
-    DragonPlayer *q;
 
     DragonDecodePipeline decodePipeline;
     DragonFftPipeline fftPipeline;
