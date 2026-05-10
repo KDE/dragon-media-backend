@@ -63,6 +63,10 @@ private:
     void startDecodeThread();
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless, uint64_t generation);
 
+    bool waitForDecoderAssignment(std::stop_token st);
+    std::pair<bool, bool> executeDecodeSession(DragonDecoder *decoder, std::stop_token st);
+    bool processDecodeCompletion(bool wasStopped, bool hadFatalError, std::stop_token st);
+
     SamplesCallback m_samplesCallback;
 
     DragonPlayer *m_player = nullptr;
