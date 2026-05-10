@@ -51,22 +51,6 @@ DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player)
     : QObject(player)
     , q(player)
     , decodePipeline(player)
-    , currentPlaybackState(DragonPlayer::PlaybackState::StoppedState)
-    , currentStatus(DragonPlayer::MediaStatus::NoMedia)
-    , currentError(DragonPlayer::Error::NoError)
-    , requestedPlaybackState(DragonPlayer::PlaybackState::StoppedState)
-    , currentDuration(0)
-    , currentVolume(1.0f)
-    , currentMuted(false)
-    , currentSeekable(false)
-    , currentIsLocal(false)
-    , currentSampleRate(0)
-    , currentChannels(0)
-    , currentFftMode(DragonPlayer::FftMode::Off)
-    , currentDecoderGeneration(0)
-    , undoPosition(0)
-    , positionTimer(nullptr)
-    , currentPosition(0)
 {
 }
 
@@ -331,15 +315,15 @@ void DragonPlayerPrivate::init()
     audioOutput->setQueue(audioQueue.get());
     audioOutput->setFftQueue(nullptr);
 
-    QObject::connect(audioOutput.get(), &DragonAudioOutput::errorOccurred, q, [this](const QString &) {
+    QObject::connect(audioOutput.get(), &DragonAudioOutput::errorOccurred, this, [this](const QString &) {
         setError(DragonPlayer::Error::ResourceError);
     });
 
     QObject::connect(audioOutput.get(), &DragonAudioOutput::volumeChanged, q, &DragonPlayer::volumeChanged);
 
-    positionTimer = new QTimer(q);
+    positionTimer = new QTimer(this);
     positionTimer->setInterval(100);
-    QObject::connect(positionTimer, &QTimer::timeout, q, [this]() {
+    QObject::connect(positionTimer, &QTimer::timeout, this, [this]() {
         Q_EMIT q->positionChanged(audioOutput && audioOutput->isDeviceOpen() ? audioOutput->positionMs() : currentPosition);
     });
 
