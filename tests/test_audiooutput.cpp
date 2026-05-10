@@ -58,6 +58,12 @@ private Q_SLOTS:
 
     void testPauseResumeCycle();
 
+    void testIsPausedBasic();
+    void testIsPausedAfterStop();
+
+    void testSeekWhilePaused();
+    void testPositionStabilityDuringPause();
+
 private:
     void fillQueue(LockFreeSpscQueue<std::float32_t> *queue, const std::vector<std::float32_t> &data);
 };
@@ -543,8 +549,11 @@ void TestAudioOutput::testPauseResumeCycle()
     const int64_t posBefore = output.positionMs();
     const int64_t writtenBefore = output.totalSamplesWritten();
 
+    QVERIFY(!output.isPaused());
+
     output.pause();
     QVERIFY(output.isDeviceOpen());
+    QVERIFY(output.isPaused());
 
     QTest::qWait(200);
 
@@ -558,9 +567,118 @@ void TestAudioOutput::testPauseResumeCycle()
 
     output.resume();
     QVERIFY(output.isDeviceOpen());
+    QVERIFY(!output.isPaused());
 
     output.stop();
     QVERIFY(!output.isDeviceOpen());
+}
+
+void TestAudioOutput::testIsPausedBasic()
+{
+    DragonAudioOutput output;
+
+    QVERIFY(!output.isPaused());
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    QVERIFY(output.isDeviceOpen());
+    QVERIFY(!output.isPaused());
+
+    output.pause();
+    QVERIFY(output.isPaused());
+
+    output.resume();
+    QVERIFY(!output.isPaused());
+
+    output.stop();
+}
+
+void TestAudioOutput::testIsPausedAfterStop()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    output.pause();
+    QVERIFY(output.isPaused());
+
+    output.stop();
+    QVERIFY(!output.isPaused());
+    QVERIFY(!output.isDeviceOpen());
+}
+
+void TestAudioOutput::testSeekWhilePaused()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+    QVERIFY(output.isDeviceOpen());
+
+    fillQueue(&queue, std::vector<std::float32_t>(22050, 0.5f));
+    QTest::qWait(200);
+
+    output.pause();
+    QVERIFY(output.isPaused());
+
+    QTest::qWait(100);
+
+    const int64_t posAtPause = output.positionMs();
+    QVERIFY2(posAtPause >= 100 && posAtPause <= 300, "Position at pause should be ~100-300ms after 200ms wait");
+
+    const int64_t seekTargetMs = 30000;
+    output.setPositionOffset(seekTargetMs, DragonAudioOutput::PositionResetMode::Seek);
+
+    const int64_t posAfterSeek = output.positionMs();
+    QCOMPARE(posAfterSeek, seekTargetMs);
+
+    output.resume();
+    QVERIFY(!output.isPaused());
+
+    const int64_t posAfterResume = output.positionMs();
+    QVERIFY2(qAbs(posAfterResume - seekTargetMs) < 100, "Position after resume should be close to seek target");
+
+    output.stop();
+}
+
+void TestAudioOutput::testPositionStabilityDuringPause()
+{
+    DragonAudioOutput output;
+
+    std::vector<std::float32_t> buffer(65536);
+    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    output.setQueue(&queue);
+
+    output.start(44100, 2);
+
+    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    QTest::qWait(100);
+
+    output.pause();
+    const int64_t posAtPause = output.positionMs();
+
+    for (int i = 0; i < 5; ++i) {
+        QTest::qWait(100);
+        const int64_t currentPos = output.positionMs();
+        QCOMPARE(currentPos, posAtPause);
+    }
+
+    output.resume();
+    QTest::qWait(100);
+
+    const int64_t posAfterResume = output.positionMs();
+    QVERIFY(posAfterResume >= posAtPause);
+
+    output.stop();
 }
 
 void TestAudioOutput::fillQueue(LockFreeSpscQueue<std::float32_t> *queue, const std::vector<std::float32_t> &data)

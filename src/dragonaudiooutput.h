@@ -66,7 +66,10 @@ public:
 
     [[nodiscard]] bool isDeviceOpen() const;
 
+    [[nodiscard]] bool isPaused() const;
+
     static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
+
     [[nodiscard]] float volume() const;
     void setVolume(float linearGain);
 
@@ -105,8 +108,6 @@ private:
 
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};
-
-    std::atomic<int64_t> m_pausedPositionMs{-1};
 
     std::atomic<bool> m_flushPending{false};
 
