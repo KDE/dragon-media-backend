@@ -49,6 +49,8 @@ private:
     void setupUi();
     void connectPlayer();
 
+    bool eventFilter(QObject *obj, QEvent *event) override;
+
     [[nodiscard]] static QString formatTime(int64_t ms);
 
     DragonPlayer *m_player = nullptr;

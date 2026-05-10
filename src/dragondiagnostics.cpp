@@ -11,15 +11,16 @@
 
 #include <LockFreeSpscQueue.h>
 
-DragonDiagnostics::DragonDiagnostics(DragonPlayer &player)
-    : m_player(player)
+DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
+    : QObject(player)
+    , m_player(player)
 {
-    DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player->d.get();
     if (priv && priv->audioOutput) {
         QObject::connect(
             priv->audioOutput.get(),
             &DragonAudioOutput::audioCallbackInvoked,
-            &m_player,
+            this,
             [this]() {
                 const uint64_t count = m_callbackCount.fetch_add(1, std::memory_order_relaxed) + 1;
                 if ((count % 50) == 0) {
@@ -40,7 +41,7 @@ DragonDiagnostics::DragonDiagnostics(DragonPlayer &player)
 
 int DragonDiagnostics::sdlAudioBufferMs() const
 {
-    DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player->d.get();
     if (!priv || !priv->audioOutput) {
         return -1;
     }
@@ -70,7 +71,7 @@ int DragonDiagnostics::sdlAudioBufferMs() const
 
 int DragonDiagnostics::sdlAudioBufferUs() const
 {
-    DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player->d.get();
     if (!priv || !priv->audioOutput) {
         return -1;
     }
@@ -100,7 +101,7 @@ int DragonDiagnostics::sdlAudioBufferUs() const
 
 int DragonDiagnostics::sdlAudioBufferFrames() const
 {
-    DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player->d.get();
     if (!priv || !priv->audioOutput) {
         return -1;
     }
@@ -116,7 +117,7 @@ int DragonDiagnostics::sdlAudioBufferFrames() const
 
 std::size_t DragonDiagnostics::decodeQueueSize() const
 {
-    DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player->d.get();
     if (!priv || !priv->audioQueue) {
         return 0;
     }
@@ -125,7 +126,7 @@ std::size_t DragonDiagnostics::decodeQueueSize() const
 
 std::size_t DragonDiagnostics::fftQueueSize() const
 {
-    DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player->d.get();
     if (!priv || !priv->fftQueue) {
         return 0;
     }
@@ -134,7 +135,7 @@ std::size_t DragonDiagnostics::fftQueueSize() const
 
 bool DragonDiagnostics::decodeLoopActive() const
 {
-    DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player->d.get();
     if (!priv) {
         return false;
     }
@@ -143,7 +144,7 @@ bool DragonDiagnostics::decodeLoopActive() const
 
 bool DragonDiagnostics::hasActiveDecoder() const
 {
-    DragonPlayerPrivate *priv = m_player.d.get();
+    DragonPlayerPrivate *priv = m_player->d.get();
     if (!priv) {
         return false;
     }

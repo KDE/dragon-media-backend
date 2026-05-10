@@ -25,6 +25,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMenuBar>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QSettings>
 #include <QSlider>
@@ -106,6 +107,7 @@ void MainWindow::setupUi()
     m_timeLabel->setMinimumWidth(100);
     m_seekSlider = new QSlider(Qt::Horizontal, this);
     m_seekSlider->setRange(0, 0);
+    m_seekSlider->installEventFilter(this);
     hSeekLayout->addWidget(m_timeLabel);
     hSeekLayout->addWidget(m_seekSlider, 1);
     vLayout->addLayout(hSeekLayout);
@@ -180,7 +182,7 @@ void MainWindow::setupUi()
     diagLayout->addWidget(m_fftDiagLabel);
     statusBar()->addPermanentWidget(diagContainer);
 
-    auto *diagnostics = new DragonDiagnostics(*m_player);
+    auto *diagnostics = new DragonDiagnostics(m_player);
     auto *diagTimer = new QTimer(this);
     connect(diagTimer, &QTimer::timeout, this, [this, diagnostics]() {
         const float callbackHz = diagnostics->audioCallbackHz();
@@ -224,7 +226,12 @@ void MainWindow::connectPlayer()
     connect(m_seekSlider, &QSlider::sliderPressed, this, [this]() {
         m_seeking = true;
     });
-    connect(m_seekSlider, &QSlider::sliderReleased, this, &MainWindow::setPositionFromSlider);
+    connect(m_seekSlider, &QSlider::sliderMoved, this, [this](int position) {
+        m_player->seek(static_cast<int64_t>(position));
+    });
+    connect(m_seekSlider, &QSlider::sliderReleased, this, [this]() {
+        m_seeking = false;
+    });
     connect(m_player, &DragonPlayer::positionChanged, this, &MainWindow::updatePosition);
     connect(m_player, &DragonPlayer::durationChanged, this, &MainWindow::updateDuration);
 
@@ -373,6 +380,22 @@ void MainWindow::setPositionFromSlider()
 {
     m_seeking = false;
     m_player->seek(static_cast<int64_t>(m_seekSlider->value()));
+}
+
+bool MainWindow::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == m_seekSlider && event->type() == QEvent::MouseButtonPress) {
+        auto *mouseEvent = static_cast<QMouseEvent *>(event);
+        const QRect sliderRect = m_seekSlider->rect();
+        const int mouseX = static_cast<int>(mouseEvent->position().x());
+        const double ratio = static_cast<double>(mouseX) / sliderRect.width();
+        const int min = m_seekSlider->minimum();
+        const int max = m_seekSlider->maximum();
+        const int targetValue = min + static_cast<int>(ratio * (max - min));
+        m_player->seek(static_cast<int64_t>(targetValue));
+        return false;
+    }
+    return QMainWindow::eventFilter(obj, event);
 }
 
 void MainWindow::setVolumeFromSlider(int value)
