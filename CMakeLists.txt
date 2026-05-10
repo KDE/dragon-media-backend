@@ -98,6 +98,8 @@ set(SPSC_QUEUE_BUILD_BENCHMARK_COMPARE OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(spsc_queue_src)
 
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOMOC_RELY_ON_EXPORTS ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 ecm_qt_declare_logging_category(dragonsdl_SOURCES
     HEADER "dragonsdl_logging.h"

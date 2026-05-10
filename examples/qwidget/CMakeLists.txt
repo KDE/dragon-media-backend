@@ -1,7 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
+# AUTOMOC and INCLUDE_CURRENT_DIR are already set at the top level,
+# but we set them explicitly here for clarity and independence from parent.
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 find_package(KF6I18n REQUIRED)
 
