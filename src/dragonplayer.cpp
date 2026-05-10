@@ -593,6 +593,12 @@ void DragonPlayer::play()
 
     qCDebug(dragonsdlPlayer) << "play() status is " << static_cast<int>(d->currentStatus) << ", starting audio synchronously";
 
+    if (!d->decodePipeline.isActive() && !d->currentSource.isEmpty()) {
+        qCDebug(dragonsdlPlayer) << "play() decoder not active, restarting decode pipeline";
+        setSource(d->currentSource);
+        return;
+    }
+
     if (d->audioOutput && !d->audioOutput->isDeviceOpen() && d->currentSampleRate > 0) {
         d->audioOutput->start(d->currentSampleRate, d->currentChannels);
     }

@@ -84,6 +84,7 @@ private Q_SLOTS:
     void testStopFromPlayingStateEmitsLoadedMedia();
     void testPlayFromPausedStateResumes();
     void testMultiplePlayCallsIdempotent();
+    void testPlayAfterStopRestartsDecoder();
 
     void testInvalidMediaStaysStopped();
     void testSetSourceWhilePlayingStopsOldTrack();
@@ -1044,6 +1045,47 @@ void TestPlayer::testMultiplePlayCallsIdempotent()
     QTest::qWait(100);
 
     QCOMPARE(stateSpy.count(), 0);
+
+    player.stop();
+}
+
+void TestPlayer::testPlayAfterStopRestartsDecoder()
+{
+    QString filePath = fixture("sample-3s.mp3"_L1);
+    if (!QFileInfo::exists(filePath)) {
+        QSKIP("Audio fixture not available");
+    }
+
+    DragonPlayer player;
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    player.play();
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
+
+    QTest::qWait(300);
+    QVERIFY2(player.status() == DragonPlayer::MediaStatus::LoadedMedia, "Decoder should be active and loaded");
+
+    QSignalSpy stoppedSpy(&player, &DragonPlayer::stopped);
+    player.stop();
+    QTRY_VERIFY_WITH_TIMEOUT(stoppedSpy.count() >= 1, 3000);
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY(player.status() == DragonPlayer::MediaStatus::LoadedMedia);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy playingSpy(&player, &DragonPlayer::playing);
+    player.play();
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(playingSpy.count() >= 1, 5000);
+
+    bool foundPlayingState = false;
+    for (const auto &args : stateSpy) {
+        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
+        if (state == DragonPlayer::PlaybackState::PlayingState) {
+            foundPlayingState = true;
+        }
+    }
+    QVERIFY2(foundPlayingState, "Must have transitioned to PlayingState after play()");
 
     player.stop();
 }
