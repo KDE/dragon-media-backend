@@ -207,7 +207,14 @@ void DragonAudioOutput::setPositionOffset(int64_t offsetMs, PositionResetMode mo
 
     if (isPaused()) {
         if (mode == PositionResetMode::Seek || mode == PositionResetMode::NormalTrackChange) {
+            if (auto *queue = m_audioQueue.load(std::memory_order_acquire)) {
+                const size_t ready = queue->get_num_items_ready();
+                if (ready > 0) {
+                    auto drain = queue->prepare_read(ready);
+                }
+            }
             clearStream();
+            m_queueReady.store(true, std::memory_order_release);
         }
         m_totalSamplesWritten.store(0, std::memory_order_relaxed);
         return;

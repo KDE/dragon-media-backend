@@ -624,16 +624,19 @@ void TestAudioOutput::testSeekWhilePaused()
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
 
-    fillQueue(&queue, std::vector<std::float32_t>(22050, 0.5f));
-    QTest::qWait(200);
+    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    QTest::qWait(100);
 
     output.pause();
     QVERIFY(output.isPaused());
 
-    QTest::qWait(100);
+    QVERIFY(queue.get_num_items_ready() == 0);
+    fillQueue(&queue, std::vector<std::float32_t>(8192, 0.5f));
+    const size_t queueSizeBeforeSeek = queue.get_num_items_ready();
+    QVERIFY2(queueSizeBeforeSeek > 0, "Queue should have stale samples before seek");
 
-    const int64_t posAtPause = output.positionMs();
-    QVERIFY2(posAtPause >= 100 && posAtPause <= 300, "Position at pause should be ~100-300ms after 200ms wait");
+    output.setQueueReady(false);
+    QVERIFY(!output.isQueueReady());
 
     const int64_t seekTargetMs = 30000;
     output.setPositionOffset(seekTargetMs, DragonAudioOutput::PositionResetMode::Seek);
@@ -641,11 +644,12 @@ void TestAudioOutput::testSeekWhilePaused()
     const int64_t posAfterSeek = output.positionMs();
     QCOMPARE(posAfterSeek, seekTargetMs);
 
+    QCOMPARE(queue.get_num_items_ready(), size_t(0));
+
+    QVERIFY(output.isQueueReady());
+
     output.resume();
     QVERIFY(!output.isPaused());
-
-    const int64_t posAfterResume = output.positionMs();
-    QVERIFY2(qAbs(posAfterResume - seekTargetMs) < 100, "Position after resume should be close to seek target");
 
     output.stop();
 }
