@@ -29,7 +29,8 @@ static inline void setCurrentThreadName(const char *name)
 }
 
 DragonDecodePipeline::DragonDecodePipeline(DragonPlayer *player)
-    : q(player)
+    : QObject(player)
+    , q(player)
 {
     startDecodeThread();
 }
@@ -88,10 +89,8 @@ void DragonDecodePipeline::startDecodeThread()
             }
 
             if (hadFatalError) {
-                qCDebug(dragonsdlDecode) << "decode thread fatal error, invoking finished callback";
-                if (m_finishedCallback) {
-                    m_finishedCallback(true, false);
-                }
+                qCDebug(dragonsdlDecode) << "decode thread fatal error, emitting finished signal";
+                Q_EMIT finished(true);
                 continue;
             }
 
@@ -103,22 +102,13 @@ void DragonDecodePipeline::startDecodeThread()
 
                 plock.unlock();
 
-                qCDebug(dragonsdlDecode) << "decode thread gapless transition, queuing callback";
-                QMetaObject::invokeMethod(
-                    q,
-                    [this, newSource]() {
-                        if (m_gaplessTransitionCallback) {
-                            m_gaplessTransitionCallback(newSource);
-                        }
-                    },
-                    Qt::QueuedConnection);
+                qCDebug(dragonsdlDecode) << "decode thread gapless transition, emitting signal";
+                Q_EMIT gaplessTransition(newSource);
             } else {
                 plock.unlock();
 
-                qCDebug(dragonsdlDecode) << "decode thread no pre-warmed decoder, invoking finished callback";
-                if (m_finishedCallback) {
-                    m_finishedCallback(false, wasStopped);
-                }
+                qCDebug(dragonsdlDecode) << "decode thread no pre-warmed decoder, emitting finished signal";
+                Q_EMIT finished(false);
             }
         }
         qCDebug(dragonsdlDecode) << "decode thread exiting outer loop";
@@ -302,13 +292,11 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         m_radioStream = std::make_unique<DragonRadioStream>();
         m_radioStream->setUrl(source);
 
-        QObject::connect(m_radioStream.get(), &DragonRadioStream::errorOccurred, q, [this](const QString &) {
-            if (m_errorCallback) {
-                m_errorCallback(QStringLiteral("Network error"));
-            }
+        connect(m_radioStream.get(), &DragonRadioStream::errorOccurred, this, [this](const QString &) {
+            Q_EMIT errorOccurred(QStringLiteral("Network error"));
         });
 
-        QObject::connect(m_radioStream.get(), &DragonRadioStream::metadataReady, q, [this](const DragonIcyMetadata &metadata) {
+        connect(m_radioStream.get(), &DragonRadioStream::metadataReady, q, [this](const DragonIcyMetadata &metadata) {
             Q_EMIT q->currentPlayingForRadiosChanged(metadata);
         });
 
@@ -333,42 +321,29 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         }
     });
 
-    QObject::connect(
+    connect(
         decoder.get(),
         &DragonDecoder::formatReady,
-        q,
+        this,
         [this, generation, isGapless](int sampleRate, int channels) {
             if (m_generation != generation) {
                 qCDebug(dragonsdlPlayer) << "ignoring stale formatReady (gen" << generation << "!= current" << m_generation << ")";
                 return;
             }
             qCDebug(dragonsdlPlayer) << "formatReady sr=" << sampleRate << "ch=" << channels;
-            if (m_formatReadyCallback) {
-                m_formatReadyCallback(sampleRate, channels, isGapless);
-            }
+            Q_EMIT formatReady(sampleRate, channels, isGapless);
         },
         Qt::QueuedConnection);
 
-    QObject::connect(
-        decoder.get(),
-        &DragonDecoder::durationChanged,
-        q,
-        [this](int64_t durationMs) {
-            if (m_durationCallback) {
-                m_durationCallback(durationMs);
-            }
-        },
-        Qt::QueuedConnection);
+    connect(decoder.get(), &DragonDecoder::durationChanged, this, &DragonDecodePipeline::durationChanged, Qt::QueuedConnection);
 
-    QObject::connect(
+    connect(
         decoder.get(),
         &DragonDecoder::streamError,
-        q,
+        this,
         [this](const QString &msg) {
             qCDebug(dragonsdlPlayer) << "Decoder error:" << msg;
-            if (m_errorCallback) {
-                m_errorCallback(msg);
-            }
+            Q_EMIT errorOccurred(msg);
         },
         Qt::QueuedConnection);
 
@@ -380,34 +355,9 @@ uint64_t DragonDecodePipeline::generation() const
     return m_generation;
 }
 
-void DragonDecodePipeline::setFormatReadyCallback(FormatReadyCallback callback)
-{
-    m_formatReadyCallback = std::move(callback);
-}
-
-void DragonDecodePipeline::setDurationCallback(DurationCallback callback)
-{
-    m_durationCallback = std::move(callback);
-}
-
 void DragonDecodePipeline::setSamplesCallback(SamplesCallback callback)
 {
     m_samplesCallback = std::move(callback);
-}
-
-void DragonDecodePipeline::setErrorCallback(ErrorCallback callback)
-{
-    m_errorCallback = std::move(callback);
-}
-
-void DragonDecodePipeline::setFinishedCallback(FinishedCallback callback)
-{
-    m_finishedCallback = std::move(callback);
-}
-
-void DragonDecodePipeline::setGaplessTransitionCallback(GaplessTransitionCallback callback)
-{
-    m_gaplessTransitionCallback = std::move(callback);
 }
 
 const std::unique_ptr<DragonDecoder> &DragonDecodePipeline::activeDecoder() const

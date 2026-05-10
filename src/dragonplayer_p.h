@@ -46,7 +46,7 @@ struct DragonPlayerPrivate {
 
     void stopPipeline();
 
-    void wirePipelineCallbacks();
+    void connectPipelineSignals();
     void wireFftCallbacks();
 
     DragonPlayer *q;

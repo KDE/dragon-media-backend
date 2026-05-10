@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <QObject>
 #include <QUrl>
 #include <condition_variable>
 #include <cstdint>
@@ -19,8 +20,9 @@ class DragonPlayer;
 class DragonDecoder;
 class DragonRadioStream;
 
-class DragonDecodePipeline
+class DragonDecodePipeline : public QObject
 {
+    Q_OBJECT
 public:
     explicit DragonDecodePipeline(DragonPlayer *player);
     ~DragonDecodePipeline();
@@ -43,33 +45,25 @@ public:
 
     void requestSeek(int64_t posMs);
 
-    using FormatReadyCallback = std::function<void(int sampleRate, int channels, bool isGapless)>;
-    using DurationCallback = std::function<void(int64_t durationMs)>;
     using SamplesCallback = std::function<void(std::span<const std::float32_t> samples, const std::stop_token &st)>;
-    using ErrorCallback = std::function<void(const QString &message)>;
-    using FinishedCallback = std::function<void(bool hadFatalError, bool wasStopped)>;
-    using GaplessTransitionCallback = std::function<void(const QUrl &newSource)>;
 
-    void setFormatReadyCallback(FormatReadyCallback callback);
-    void setDurationCallback(DurationCallback callback);
     void setSamplesCallback(SamplesCallback callback);
-    void setErrorCallback(ErrorCallback callback);
-    void setFinishedCallback(FinishedCallback callback);
-    void setGaplessTransitionCallback(GaplessTransitionCallback callback);
 
     const std::unique_ptr<DragonDecoder> &activeDecoder() const;
     bool decodeLoopActive() const;
+
+Q_SIGNALS:
+    void formatReady(int sampleRate, int channels, bool isGapless);
+    void durationChanged(int64_t durationMs);
+    void errorOccurred(const QString &message);
+    void finished(bool hadFatalError);
+    void gaplessTransition(const QUrl &newSource);
 
 private:
     void startDecodeThread();
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless, uint64_t generation);
 
-    FormatReadyCallback m_formatReadyCallback;
-    DurationCallback m_durationCallback;
     SamplesCallback m_samplesCallback;
-    ErrorCallback m_errorCallback;
-    FinishedCallback m_finishedCallback;
-    GaplessTransitionCallback m_gaplessTransitionCallback;
 
     DragonPlayer *q = nullptr;
     uint64_t m_generation = 0;
