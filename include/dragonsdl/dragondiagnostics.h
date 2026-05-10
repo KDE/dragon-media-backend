@@ -9,16 +9,17 @@
 
 #include <QObject>
 
-#include <atomic>
-#include <cstddef>
-#include <cstdint>
+#include <memory>
 
 class DragonPlayer;
+
+class DragonDiagnosticsPrivate;
 
 class DRAGONSDL_EXPORT DragonDiagnostics : public QObject
 {
 public:
     explicit DragonDiagnostics(DragonPlayer *player);
+    ~DragonDiagnostics() override;
 
     [[nodiscard]] int sdlAudioBufferMs() const;
 
@@ -37,9 +38,5 @@ public:
     [[nodiscard]] float audioCallbackHz() const;
 
 private:
-    DragonPlayer *m_player;
-
-    mutable std::atomic<uint64_t> m_callbackCount{0};
-    mutable std::atomic<uint64_t> m_callbackTimestampUs{0};
-    mutable std::atomic<float> m_callbackHz{0.0f};
+    std::unique_ptr<DragonDiagnosticsPrivate> d;
 };

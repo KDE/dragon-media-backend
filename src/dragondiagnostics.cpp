@@ -11,37 +11,57 @@
 
 #include <LockFreeSpscQueue.h>
 
+#include <atomic>
+#include <cstdint>
+
+class DragonDiagnosticsPrivate
+{
+public:
+    explicit DragonDiagnosticsPrivate(DragonPlayer *player)
+        : m_player(player)
+    {
+    }
+
+    DragonPlayer *m_player;
+
+    std::atomic<std::uint64_t> m_callbackCount{0};
+    std::atomic<std::uint64_t> m_callbackTimestampUs{0};
+    std::atomic<float> m_callbackHz{0.0f};
+};
+
 DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
     : QObject(player)
-    , m_player(player)
+    , d(std::make_unique<DragonDiagnosticsPrivate>(player))
 {
-    DragonPlayerPrivate *priv = m_player->d.get();
+    DragonPlayerPrivate *priv = d->m_player->d.get();
     if (priv && priv->audioOutput) {
         QObject::connect(
             priv->audioOutput.get(),
             &DragonAudioOutput::audioCallbackInvoked,
             this,
             [this]() {
-                const uint64_t count = m_callbackCount.fetch_add(1, std::memory_order_relaxed) + 1;
+                const uint64_t count = d->m_callbackCount.fetch_add(1, std::memory_order_relaxed) + 1;
                 if ((count % 50) == 0) {
                     const uint64_t now = SDL_GetTicksNS() / 1000ULL;
-                    const uint64_t lastTime = m_callbackTimestampUs.load(std::memory_order_relaxed);
+                    const uint64_t lastTime = d->m_callbackTimestampUs.load(std::memory_order_relaxed);
                     if (lastTime > 0) {
                         const uint64_t deltaUs = now - lastTime;
                         if (deltaUs > 0) {
-                            m_callbackHz.store(50000000.0f / static_cast<float>(deltaUs), std::memory_order_relaxed);
+                            d->m_callbackHz.store(50000000.0f / static_cast<float>(deltaUs), std::memory_order_relaxed);
                         }
                     }
-                    m_callbackTimestampUs.store(now, std::memory_order_relaxed);
+                    d->m_callbackTimestampUs.store(now, std::memory_order_relaxed);
                 }
             },
             Qt::DirectConnection);
     }
 }
 
+DragonDiagnostics::~DragonDiagnostics() = default;
+
 int DragonDiagnostics::sdlAudioBufferMs() const
 {
-    DragonPlayerPrivate *priv = m_player->d.get();
+    DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->audioOutput) {
         return -1;
     }
@@ -71,7 +91,7 @@ int DragonDiagnostics::sdlAudioBufferMs() const
 
 int DragonDiagnostics::sdlAudioBufferUs() const
 {
-    DragonPlayerPrivate *priv = m_player->d.get();
+    DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->audioOutput) {
         return -1;
     }
@@ -101,7 +121,7 @@ int DragonDiagnostics::sdlAudioBufferUs() const
 
 int DragonDiagnostics::sdlAudioBufferFrames() const
 {
-    DragonPlayerPrivate *priv = m_player->d.get();
+    DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->audioOutput) {
         return -1;
     }
@@ -117,7 +137,7 @@ int DragonDiagnostics::sdlAudioBufferFrames() const
 
 std::size_t DragonDiagnostics::decodeQueueSize() const
 {
-    DragonPlayerPrivate *priv = m_player->d.get();
+    DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->audioQueue) {
         return 0;
     }
@@ -126,7 +146,7 @@ std::size_t DragonDiagnostics::decodeQueueSize() const
 
 std::size_t DragonDiagnostics::fftQueueSize() const
 {
-    DragonPlayerPrivate *priv = m_player->d.get();
+    DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->fftQueue) {
         return 0;
     }
@@ -135,7 +155,7 @@ std::size_t DragonDiagnostics::fftQueueSize() const
 
 bool DragonDiagnostics::decodeLoopActive() const
 {
-    DragonPlayerPrivate *priv = m_player->d.get();
+    DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv) {
         return false;
     }
@@ -144,7 +164,7 @@ bool DragonDiagnostics::decodeLoopActive() const
 
 bool DragonDiagnostics::hasActiveDecoder() const
 {
-    DragonPlayerPrivate *priv = m_player->d.get();
+    DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv) {
         return false;
     }
@@ -153,5 +173,5 @@ bool DragonDiagnostics::hasActiveDecoder() const
 
 float DragonDiagnostics::audioCallbackHz() const
 {
-    return m_callbackHz.load(std::memory_order_relaxed);
+    return d->m_callbackHz.load(std::memory_order_relaxed);
 }
