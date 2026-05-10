@@ -75,9 +75,11 @@ private:
     QListWidget *m_playlistWidget = nullptr;
     QLabel *m_statusLabel = nullptr;
 
+    QLCDNumber *m_sdlµsDiagLabel = nullptr;
     QLCDNumber *m_sdlDiagLabel = nullptr;
     QLCDNumber *m_decodeDiagLabel = nullptr;
     QLCDNumber *m_fftDiagLabel = nullptr;
+    QLabel *m_sdlµsLabel = nullptr;
     QLabel *m_sdlLabel = nullptr;
     QLabel *m_decodeLabel = nullptr;
     QLabel *m_fftLabel = nullptr;

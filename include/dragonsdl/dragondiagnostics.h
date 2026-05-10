@@ -21,8 +21,6 @@ public:
     explicit DragonDiagnostics(DragonPlayer *player);
     ~DragonDiagnostics() override;
 
-    [[nodiscard]] int sdlAudioBufferMs() const;
-
     [[nodiscard]] int sdlAudioBufferUs() const;
 
     [[nodiscard]] int sdlAudioBufferFrames() const;

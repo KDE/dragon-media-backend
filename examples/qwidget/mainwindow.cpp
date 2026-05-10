@@ -156,6 +156,9 @@ void MainWindow::setupUi()
     m_statusLabel = new QLabel(i18n("Ready"), this);
     statusBar()->addWidget(m_statusLabel, 1);
 
+    m_sdlµsDiagLabel = new QLCDNumber(5, this);
+    m_sdlµsDiagLabel->setSegmentStyle(QLCDNumber::Flat);
+    m_sdlµsDiagLabel->setMinimumWidth(60);
     m_sdlDiagLabel = new QLCDNumber(5, this);
     m_sdlDiagLabel->setSegmentStyle(QLCDNumber::Flat);
     m_sdlDiagLabel->setMinimumWidth(60);
@@ -166,6 +169,7 @@ void MainWindow::setupUi()
     m_fftDiagLabel->setSegmentStyle(QLCDNumber::Flat);
     m_fftDiagLabel->setMinimumWidth(60);
 
+    m_sdlµsLabel = new QLabel(i18n("SDL buffer µs:"), this);
     m_sdlLabel = new QLabel(i18n("Hz:"), this);
     m_decodeLabel = new QLabel(i18n("Decode:"), this);
     m_fftLabel = new QLabel(i18n("FFT:"), this);
@@ -174,6 +178,8 @@ void MainWindow::setupUi()
     auto *diagLayout = new QHBoxLayout(diagContainer);
     diagLayout->setContentsMargins(4, 0, 4, 0);
     diagLayout->setSpacing(8);
+    diagLayout->addWidget(m_sdlµsLabel);
+    diagLayout->addWidget(m_sdlµsDiagLabel);
     diagLayout->addWidget(m_sdlLabel);
     diagLayout->addWidget(m_sdlDiagLabel);
     diagLayout->addWidget(m_decodeLabel);
@@ -185,6 +191,9 @@ void MainWindow::setupUi()
     auto *diagnostics = new DragonDiagnostics(m_player);
     auto *diagTimer = new QTimer(this);
     connect(diagTimer, &QTimer::timeout, this, [this, diagnostics]() {
+        const int µs = diagnostics->sdlAudioBufferUs();
+        m_sdlµsDiagLabel->display(µs);
+
         const float callbackHz = diagnostics->audioCallbackHz();
         m_sdlDiagLabel->display(static_cast<int>(callbackHz));
 
