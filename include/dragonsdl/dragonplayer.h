@@ -16,7 +16,7 @@
 
 #include <memory>
 
-struct DragonPlayerPrivate;
+class DragonPlayerPrivate;
 
 class DRAGONSDL_EXPORT DragonPlayer : public QObject
 {
@@ -133,7 +133,7 @@ public Q_SLOTS:
     void restoreUndoPosition();
 
     friend class DragonDiagnostics;
-    friend struct DragonPlayerPrivate;
+    friend class DragonPlayerPrivate;
 
 private:
     std::unique_ptr<DragonPlayerPrivate> d;

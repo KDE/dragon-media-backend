@@ -86,7 +86,7 @@ void DragonRadioStream::stop()
     }
 
     {
-        std::lock_guard lock(m_bufferMutex);
+        std::scoped_lock lock(m_bufferMutex);
         m_networkBuffer.clear();
         m_bufferOffset = 0;
     }
@@ -220,7 +220,7 @@ void DragonRadioStream::onWatchdogTimeout()
 void DragonRadioStream::addToAudioBuffer(const QByteArray &data)
 {
     {
-        std::lock_guard lock(m_bufferMutex);
+        std::scoped_lock lock(m_bufferMutex);
         m_networkBuffer.push_back(data);
     }
     m_bufferCv.notify_all();

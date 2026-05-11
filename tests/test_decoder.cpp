@@ -179,7 +179,7 @@ void TestDecoder::testLocalFileDecoding()
     std::mutex samplesMutex;
     std::atomic<bool> callbackFired{false};
     decoder.setSamplesCallback([&](std::span<const std::float32_t> data, int, int) {
-        std::lock_guard lock(samplesMutex);
+        std::scoped_lock lock(samplesMutex);
         capturedSamples.insert(capturedSamples.end(), data.begin(), data.end());
         callbackFired.store(true);
     });
@@ -201,7 +201,7 @@ void TestDecoder::testLocalFileDecoding()
 
     QVERIFY2(formatSpy.count() > 0, "formatReady signal should have been emitted");
 
-    std::lock_guard lock(samplesMutex);
+    std::scoped_lock lock(samplesMutex);
     QVERIFY2(!capturedSamples.empty(), "Samples callback should have been invoked with data");
 
     QList<QVariant> formatArgs = formatSpy.at(0);
@@ -285,7 +285,7 @@ void TestDecoder::testSamplesCallback()
     std::vector<std::float32_t> capturedSamples;
     std::mutex samplesMutex;
     decoder.setSamplesCallback([&](std::span<const std::float32_t> data, int, int) {
-        std::lock_guard lock(samplesMutex);
+        std::scoped_lock lock(samplesMutex);
         capturedSamples.insert(capturedSamples.end(), data.begin(), data.end());
     });
 
@@ -296,7 +296,7 @@ void TestDecoder::testSamplesCallback()
 
     t.join();
 
-    std::lock_guard lock(samplesMutex);
+    std::scoped_lock lock(samplesMutex);
     QVERIFY2(capturedSamples.size() > 0, "No samples were decoded");
 
     for (const auto &f : capturedSamples) {
@@ -574,7 +574,7 @@ void TestDecoder::testResamplerBehavior()
     std::vector<std::float32_t> allSamples;
     std::mutex samplesMutex;
     decoder.setSamplesCallback([&](std::span<const std::float32_t> data, int, int) {
-        std::lock_guard lock(samplesMutex);
+        std::scoped_lock lock(samplesMutex);
         allSamples.insert(allSamples.end(), data.begin(), data.end());
     });
 
@@ -586,7 +586,7 @@ void TestDecoder::testResamplerBehavior()
 
     QVERIFY(formatSpy.count() > 0);
 
-    std::lock_guard lock(samplesMutex);
+    std::scoped_lock lock(samplesMutex);
     QVERIFY(!allSamples.empty());
 
     for (const auto &s : allSamples) {
@@ -672,7 +672,7 @@ void TestDecoder::testCallbackThreadAffinity()
     std::mutex threadIdMutex;
     std::atomic<bool> callbackFired{false};
     decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
-        std::lock_guard lock(threadIdMutex);
+        std::scoped_lock lock(threadIdMutex);
         callbackThreadId = std::this_thread::get_id();
         callbackFired.store(true);
     });
@@ -687,7 +687,7 @@ void TestDecoder::testCallbackThreadAffinity()
     QTRY_VERIFY_WITH_TIMEOUT(callbackFired.load(), 5000);
     decodeThread.join();
 
-    std::lock_guard lock(threadIdMutex);
+    std::scoped_lock lock(threadIdMutex);
     QVERIFY2(callbackThreadId == decodeThreadId, "Callback must run on the decode thread, not be queued elsewhere");
 }
 
@@ -762,7 +762,7 @@ void TestDecoder::testCallbackSampleRateAndChannels()
     std::mutex paramsMutex;
     std::atomic<bool> callbackFired{false};
     decoder.setSamplesCallback([&](std::span<const std::float32_t>, int sr, int ch) {
-        std::lock_guard lock(paramsMutex);
+        std::scoped_lock lock(paramsMutex);
         callbackSampleRate = sr;
         callbackChannels = ch;
         callbackFired.store(true);
@@ -781,7 +781,7 @@ void TestDecoder::testCallbackSampleRateAndChannels()
     int formatSampleRate = formatArgs.at(0).toInt();
     int formatChannels = formatArgs.at(1).toInt();
 
-    std::lock_guard lock(paramsMutex);
+    std::scoped_lock lock(paramsMutex);
     QVERIFY2(callbackSampleRate == formatSampleRate,
              qPrintable(u"Sample rate mismatch: callback=%1, formatReady=%2"_s.arg(callbackSampleRate).arg(formatSampleRate)));
     QVERIFY2(callbackChannels == formatChannels, qPrintable(u"Channel mismatch: callback=%1, formatReady=%2"_s.arg(callbackChannels).arg(formatChannels)));

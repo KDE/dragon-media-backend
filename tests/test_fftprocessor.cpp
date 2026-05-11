@@ -285,7 +285,7 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     std::mutex framesMutex;
 
     processor.setFrameCallback([&](DragonFftFrame frame) {
-        std::lock_guard lock(framesMutex);
+        std::scoped_lock lock(framesMutex);
         frames.push_back(std::move(frame));
     });
 
@@ -299,7 +299,7 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     stopSource.request_stop();
     processorThread.join();
 
-    std::lock_guard lock(framesMutex);
+    std::scoped_lock lock(framesMutex);
     QVERIFY2(frames.size() >= 1, qPrintable(QString("Expected at least 1 frame, got %1"_L1).arg(frames.size())));
 
     for (const auto &frame : frames) {
@@ -380,7 +380,7 @@ void TestFftProcessor::testPeakHoldDecay()
     std::mutex mutex;
 
     processor.setFrameCallback([&](const DragonFftFrame &frame) {
-        std::lock_guard lock(mutex);
+        std::scoped_lock lock(mutex);
         if (!frame.barData.empty()) {
             float maxVal = *std::max_element(frame.barData.begin(), frame.barData.end());
             peakValues.push_back(maxVal);
@@ -397,7 +397,7 @@ void TestFftProcessor::testPeakHoldDecay()
     stopSource.request_stop();
     processorThread.join();
 
-    std::lock_guard lock(mutex);
+    std::scoped_lock lock(mutex);
     if (peakValues.size() >= 2) {
         for (size_t i = 1; i < peakValues.size(); ++i) {
             QVERIFY2(peakValues[i] <= peakValues[i - 1] + 2.0f,

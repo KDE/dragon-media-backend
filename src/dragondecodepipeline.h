@@ -60,12 +60,12 @@ Q_SIGNALS:
     void gaplessTransition(const QUrl &newSource);
 
 private:
-    void startDecodeThread();
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless, uint64_t generation);
 
+    void startDecodeThread();
     bool waitForDecoderAssignment(std::stop_token st);
-    std::pair<bool, bool> executeDecodeSession(DragonDecoder *decoder, std::stop_token st);
-    bool processDecodeCompletion(bool wasStopped, bool hadFatalError, std::stop_token st);
+    std::pair<bool, bool> executeDecodeSession(DragonDecoder *decoder);
+    void processDecodeCompletion();
 
     SamplesCallback m_samplesCallback;
 
@@ -74,7 +74,7 @@ private:
     QUrl m_nextSource;
 
     std::jthread m_decodeThread;
-    std::stop_source m_decodeStopSource;
+    std::stop_source m_sessionStopSource;
     mutable std::mutex m_decoderMutex;
     std::condition_variable m_decoderCv;
     bool m_decodeLoopActive = false;

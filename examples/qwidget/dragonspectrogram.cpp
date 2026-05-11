@@ -72,7 +72,7 @@ QRgb DragonSpectrogram::dbToColor(float db)
 
 void DragonSpectrogram::updateFrequencies(const std::vector<float> &frequenciesDb)
 {
-    std::lock_guard lock(m_dataMutex);
+    std::scoped_lock lock(m_dataMutex);
 
     const int numBins = static_cast<int>(frequenciesDb.size());
     if (numBins == 0) {
@@ -109,7 +109,7 @@ void DragonSpectrogram::paintEvent(QPaintEvent *event)
     int currentWriteIndex = 0;
 
     {
-        std::lock_guard lock(m_dataMutex);
+        std::scoped_lock lock(m_dataMutex);
         if (m_image.isNull()) {
             painter.fillRect(bounds, Qt::black);
             return;

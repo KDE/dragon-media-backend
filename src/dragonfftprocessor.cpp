@@ -83,7 +83,7 @@ void DragonFftProcessor::setFrameCallback(FrameCallback cb)
 
 DragonFftFrame DragonFftProcessor::takeLatestFrame()
 {
-    std::lock_guard lock(m_frameMutex);
+    std::scoped_lock lock(m_frameMutex);
     DragonFftFrame result = std::move(m_latestFrame);
     m_latestFrame = {};
     return result;
@@ -248,7 +248,7 @@ void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std:
 void DragonFftProcessor::emitFrame(const DragonFftFrame &frame, int frameCount, FftMode mode)
 {
     {
-        std::lock_guard lock(m_frameMutex);
+        std::scoped_lock lock(m_frameMutex);
         m_latestFrame = frame;
     }
 
