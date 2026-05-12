@@ -76,8 +76,8 @@ bool DragonDecodePipeline::waitForDecoderAssignment(std::stop_token st)
     std::unique_lock lock(m_decoderMutex);
     qCDebug(dragonsdlDecode) << "decode thread waiting for decoder... activeDecoder=" << (m_activeDecoder != nullptr);
 
-    m_decoderCv.wait(lock, [this, &st]() {
-        return m_activeDecoder != nullptr || st.stop_requested();
+    m_decoderCv.wait(lock, st, [this]() {
+        return m_activeDecoder != nullptr;
     });
 
     qCDebug(dragonsdlDecode) << "decode thread woke up activeDecoder=" << (m_activeDecoder != nullptr) << " outerStopRequested=" << st.stop_requested();
