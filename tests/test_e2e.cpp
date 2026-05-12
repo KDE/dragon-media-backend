@@ -1,4 +1,4 @@
-/*
+/**
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-3.0-or-later
  *
@@ -10,8 +10,8 @@
 #include <stdfloat>
 
 #include "logging_timestamp_init.h"
+#include "test_utils.h"
 
-#include "dragondecoder.h"
 #include <dragonsdl/dragondiagnostics.h>
 #include <dragonsdl/dragonplayer.h>
 
@@ -25,25 +25,78 @@ namespace fs = std::filesystem;
 
 using namespace Qt::StringLiterals;
 
-class TestFixture
+struct DecodeResult {
+    int sampleRate = 0;
+    int channels = 0;
+    int64_t duration = 0;
+    std::vector<std::float32_t> allSamples;
+    bool hadError = false;
+    QString errorMessage;
+};
+
+DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
 {
-public:
-    static QString fixturePath(const QString &filename)
-    {
-        QString fixturesDir = QString::fromLocal8Bit(DRAGON_SDL_TESTS_FIXTURES_DIR);
-        return fixturesDir + "/"_L1 + filename;
+    DecodeResult result;
+
+    if (!QFileInfo::exists(filePath)) {
+        result.hadError = true;
+        result.errorMessage = u"File does not exist: "_s + filePath;
+        return result;
     }
 
-    static QStringList availableFixtures()
-    {
-        return {u"sample-3s.mp3"_s,
-                u"sample-3s.aac"_s,
-                u"gs-16b-2c-44100hz.ogg"_s,
-                u"gs-16b-1c-44100hz.flac"_s,
-                u"gs-16b-2c-44100hz.m4a"_s,
-                u"gs-16b-1c-44100hz.wma"_s};
+    DragonDecoder decoder(nullptr, filePath);
+
+    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    QSignalSpy durationSpy(&decoder, &DragonDecoder::durationChanged);
+    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+
+    decoder.setSamplesCallback([&result](std::span<const std::float32_t> data, int sampleRate, int channels) {
+        result.sampleRate = sampleRate;
+        result.channels = channels;
+        result.allSamples.insert(result.allSamples.end(), data.begin(), data.end());
+    });
+
+    std::stop_source stopSource;
+    std::jthread decodeThread([&](std::stop_token) {
+        decoder.decodeLoop(stopSource.get_token());
+    });
+
+    bool completed = QTest::qWaitFor(
+        [&]() {
+            return formatSpy.count() > 0 || errorSpy.count() > 0;
+        },
+        timeoutMs);
+
+    if (!completed) {
+        result.hadError = true;
+        result.errorMessage = u"Decode timeout"_s;
+        stopSource.request_stop();
+        decodeThread.join();
+        return result;
     }
-};
+
+    if (errorSpy.count() > 0) {
+        result.hadError = true;
+        result.errorMessage = errorSpy.at(0).at(0).toString();
+        stopSource.request_stop();
+        decodeThread.join();
+        return result;
+    }
+
+    decodeThread.join();
+
+    if (formatSpy.count() > 0) {
+        auto args = formatSpy.at(0);
+        result.sampleRate = args.at(0).toInt();
+        result.channels = args.at(1).toInt();
+    }
+
+    if (durationSpy.count() > 0) {
+        result.duration = durationSpy.at(0).at(0).toLongLong();
+    }
+
+    return result;
+}
 
 class TestE2E : public QObject
 {
@@ -89,92 +142,14 @@ private Q_SLOTS:
     void testSameFormatSeamlessTransition();
 
     void testDiagnosticsBasicFunctionality();
-
-private:
-    struct DecodeResult {
-        int sampleRate = 0;
-        int channels = 0;
-        int64_t duration = 0;
-        std::vector<std::float32_t> allSamples;
-        bool hadError = false;
-        QString errorMessage;
-    };
-
-    DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000);
 };
-
-TestE2E::DecodeResult TestE2E::decodeFileSync(const QString &filePath, int timeoutMs)
-{
-    DecodeResult result;
-
-    if (!QFileInfo::exists(filePath)) {
-        result.hadError = true;
-        result.errorMessage = "File does not exist: "_L1 + filePath;
-        return result;
-    }
-
-    DragonDecoder decoder(nullptr, filePath);
-
-    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy durationSpy(&decoder, &DragonDecoder::durationChanged);
-    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
-
-    decoder.setSamplesCallback([&result](std::span<const std::float32_t> data, int sampleRate, int channels) {
-        result.sampleRate = sampleRate;
-        result.channels = channels;
-        result.allSamples.insert(result.allSamples.end(), data.begin(), data.end());
-    });
-
-    std::stop_source stopSource;
-    std::jthread decodeThread([&](std::stop_token) {
-        decoder.decodeLoop(stopSource.get_token());
-    });
-
-    bool completed = QTest::qWaitFor(
-        [&]() {
-            return formatSpy.count() > 0 || errorSpy.count() > 0;
-        },
-        timeoutMs);
-
-    if (!completed) {
-        result.hadError = true;
-        result.errorMessage = "Decode timeout"_L1;
-        stopSource.request_stop();
-        decodeThread.join();
-        return result;
-    }
-
-    if (errorSpy.count() > 0) {
-        result.hadError = true;
-        result.errorMessage = errorSpy.at(0).at(0).toString();
-        stopSource.request_stop();
-        decodeThread.join();
-        return result;
-    }
-
-    decodeThread.join();
-
-    if (formatSpy.count() > 0) {
-        auto args = formatSpy.at(0);
-        result.sampleRate = args.at(0).toInt();
-        result.channels = args.at(1).toInt();
-    }
-
-    if (durationSpy.count() > 0) {
-        result.duration = durationSpy.at(0).at(0).toLongLong();
-    }
-
-    return result;
-}
 
 void TestE2E::testDecoderMp3File()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
+    auto result = decodeFileSync(TestFixture::fixturePath(u"sample-3s.mp3"_s));
 
-    auto result = decodeFileSync(filePath);
-
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
+    VERIFY_DECODE_SUCCESS(result, u"sample-3s.mp3"_s);
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
@@ -186,12 +161,10 @@ void TestE2E::testDecoderMp3File()
 
 void TestE2E::testDecoderAacFile()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.aac"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("AAC file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.aac"_s);
+    auto result = decodeFileSync(TestFixture::fixturePath(u"sample-3s.aac"_s));
 
-    auto result = decodeFileSync(filePath);
-
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
+    VERIFY_DECODE_SUCCESS(result, u"sample-3s.aac"_s);
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
@@ -201,12 +174,10 @@ void TestE2E::testDecoderAacFile()
 
 void TestE2E::testDecoderOggFile()
 {
-    QString filePath = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("OGG file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    auto result = decodeFileSync(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s));
 
-    auto result = decodeFileSync(filePath);
-
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
+    VERIFY_DECODE_SUCCESS(result, u"gs-16b-2c-44100hz.ogg"_s);
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
@@ -219,12 +190,10 @@ void TestE2E::testDecoderOggFile()
 
 void TestE2E::testDecoderFlacFile()
 {
-    QString filePath = TestFixture::fixturePath("gs-16b-1c-44100hz.flac"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("FLAC file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-1c-44100hz.flac"_s);
+    auto result = decodeFileSync(TestFixture::fixturePath(u"gs-16b-1c-44100hz.flac"_s));
 
-    auto result = decodeFileSync(filePath);
-
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
+    VERIFY_DECODE_SUCCESS(result, u"gs-16b-1c-44100hz.flac"_s);
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
@@ -237,12 +206,10 @@ void TestE2E::testDecoderFlacFile()
 
 void TestE2E::testDecoderM4aFile()
 {
-    QString filePath = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("M4A file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.m4a"_s);
+    auto result = decodeFileSync(TestFixture::fixturePath(u"gs-16b-2c-44100hz.m4a"_s));
 
-    auto result = decodeFileSync(filePath);
-
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
+    VERIFY_DECODE_SUCCESS(result, u"gs-16b-2c-44100hz.m4a"_s);
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
@@ -252,12 +219,10 @@ void TestE2E::testDecoderM4aFile()
 
 void TestE2E::testDecoderWmaFile()
 {
-    QString filePath = TestFixture::fixturePath("gs-16b-1c-44100hz.wma"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("WMA file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-1c-44100hz.wma"_s);
+    auto result = decodeFileSync(TestFixture::fixturePath(u"gs-16b-1c-44100hz.wma"_s));
 
-    auto result = decodeFileSync(filePath);
-
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
+    VERIFY_DECODE_SUCCESS(result, u"gs-16b-1c-44100hz.wma"_s);
     QVERIFY(result.sampleRate > 0);
     QVERIFY(result.channels > 0);
     QVERIFY(result.allSamples.size() > 0);
@@ -274,12 +239,10 @@ void TestE2E::testDecoderAllFormats_data()
     QTest::addColumn<int>("expectedSampleRate");
     QTest::addColumn<int>("expectedChannels");
 
-    QTest::newRow("mp3_44k_stereo") << u"sample-3s.mp3"_s << 44100 << -1;
-    QTest::newRow("aac_44k_unknown") << u"sample-3s.aac"_s << 44100 << -1;
-    QTest::newRow("ogg_44k_stereo") << u"gs-16b-2c-44100hz.ogg"_s << 44100 << 2;
-    QTest::newRow("flac_44k_mono") << u"gs-16b-1c-44100hz.flac"_s << 44100 << 1;
-    QTest::newRow("m4a_44k_stereo") << u"gs-16b-2c-44100hz.m4a"_s << 44100 << 2;
-    QTest::newRow("wma_44k_mono") << u"gs-16b-1c-44100hz.wma"_s << 44100 << 1;
+    for (const auto &[filename, sampleRate, channels] : TestFixture::formattedFixtures()) {
+        QString rowName = filename.section(u"."_s, 0, 0) + u"_"_s + QString::number(sampleRate);
+        QTest::newRow(qPrintable(rowName)) << filename << sampleRate << channels;
+    }
 }
 
 void TestE2E::testDecoderAllFormats()
@@ -289,16 +252,13 @@ void TestE2E::testDecoderAllFormats()
     QFETCH(int, expectedChannels);
 
     QString filePath = TestFixture::fixturePath(filename);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(filename);
 
     auto result = decodeFileSync(filePath);
 
-    QVERIFY2(!result.hadError, qPrintable(u"Decode failed for %1: %2"_s.arg(filename).arg(result.errorMessage)));
-
+    VERIFY_DECODE_SUCCESS(result, filename);
     QVERIFY2(result.sampleRate > 0, qPrintable(u"Invalid sample rate for %1"_s.arg(filename)));
-
     QVERIFY2(result.channels > 0, qPrintable(u"Invalid channel count for %1"_s.arg(filename)));
-
     QVERIFY2(result.allSamples.size() > 0, qPrintable(u"No samples decoded for %1"_s.arg(filename)));
 
     if (expectedSampleRate > 0) {
@@ -317,35 +277,20 @@ void TestE2E::testDecoderAllFormats()
 
 void TestE2E::testPlayerWithMp3File()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    PlayerHelper helper(&player);
 
-    QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
-    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
-    QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
     QSignalSpy durationSpy(&player, &DragonPlayer::durationChanged);
 
-    QUrl url = QUrl::fromLocalFile(filePath);
-    player.setSource(url);
+    QString path = TestFixture::fixturePath(u"sample-3s.mp3"_s);
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(player.source() == QUrl::fromLocalFile(path));
 
-    QTRY_VERIFY_WITH_TIMEOUT(sourceSpy.count() > 0, 5000);
-
-    QVERIFY(player.source() == url);
-
-    QTRY_VERIFY_WITH_TIMEOUT(statusSpy.count() > 0 || errorSpy.count() > 0, 10000);
-
-    if (errorSpy.count() == 0) {
-        QVERIFY(statusSpy.count() > 0);
-
-        auto latestStatus = statusSpy.last().at(0).value<DragonPlayer::MediaStatus>();
-        qDebug() << "Final status:" << static_cast<int>(latestStatus);
-
-        if (latestStatus == DragonPlayer::MediaStatus::LoadedMedia || latestStatus == DragonPlayer::MediaStatus::BufferedMedia) {
-            QTRY_VERIFY_WITH_TIMEOUT(durationSpy.count() > 0, 3000);
-            QVERIFY(player.duration() > 0);
-        }
+    auto status = player.status();
+    if (status == DragonPlayer::MediaStatus::LoadedMedia || status == DragonPlayer::MediaStatus::BufferedMedia) {
+        QVERIFY(durationSpy.count() > 0 || player.duration() > 0);
     }
 
     qDebug() << "Player test completed. Status:" << static_cast<int>(player.status()) << "Error:" << static_cast<int>(player.error());
@@ -353,19 +298,11 @@ void TestE2E::testPlayerWithMp3File()
 
 void TestE2E::testPlayerWithOggFile()
 {
-    QString filePath = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("OGG file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
 
     DragonPlayer player;
-
-    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
-    QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
-    QSignalSpy seekableSpy(&player, &DragonPlayer::seekableChanged);
-
-    player.setSource(QUrl::fromLocalFile(filePath));
-
-    QTRY_VERIFY_WITH_TIMEOUT(statusSpy.count() > 0 || errorSpy.count() > 0 || seekableSpy.count() > 0, 5000);
-
+    PlayerHelper helper(&player);
+    QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
     QVERIFY(player.seekable());
 
     qDebug() << "OGG Player test completed. Status:" << static_cast<int>(player.status());
@@ -373,68 +310,55 @@ void TestE2E::testPlayerWithOggFile()
 
 void TestE2E::testPlayerStopActuallyStopsAudio()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
     DragonDiagnostics diagnostics(&player);
+    PlayerHelper helper(&player);
 
-    player.setSource(QUrl::fromLocalFile(filePath));
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-
-    player.play();
-
-    QVERIFY2(player.isAudioActive(), "Audio should be active after starting playback");
-    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
-
-    QTest::qWait(100);
-
-    QVERIFY2(player.isAudioActive(), "isAudioActive should be true during playback");
-    QVERIFY2(diagnostics.sdlAudioBufferFrames() > 0, "SDL hardware buffer should report >0 frames during playback");
-    QVERIFY2(diagnostics.sdlAudioBufferUs() > 0, "SDL hardware buffer should report >0 µs during playback");
-    QVERIFY2(diagnostics.hasActiveDecoder(), "Should have active decoder during playback");
-    QVERIFY2(diagnostics.decodeLoopActive() || diagnostics.decodeQueueSize() > 0, "Decode loop should be active or decode queue should have data");
+    VERIFY_AUDIO_ACTIVE(player);
+    QVERIFY(diagnostics.sdlAudioBufferFrames() > 0);
+    QVERIFY(diagnostics.sdlAudioBufferUs() > 0);
+    QVERIFY(diagnostics.hasActiveDecoder());
+    QVERIFY(diagnostics.decodeLoopActive() || diagnostics.decodeQueueSize() > 0);
 
     player.stop();
-
-    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
-
-    QVERIFY2(!player.isAudioActive(), "Audio should be inactive after calling stop() SDL device must be closed");
+    VERIFY_STOPPED_STATE(player);
+    VERIFY_AUDIO_INACTIVE(player);
 
     QTRY_VERIFY_WITH_TIMEOUT(diagnostics.sdlAudioBufferUs() == -1, 1000);
-    QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 (no device) after stop");
+    QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 after stop");
     QVERIFY2(!diagnostics.hasActiveDecoder(), "Should not have active decoder after stop");
     QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active after stop");
 }
 
 void TestE2E::testPlayerPauseResumeSequence()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    PlayerHelper helper(&player);
 
-    player.setSource(QUrl::fromLocalFile(filePath));
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    VERIFY_AUDIO_ACTIVE(player);
+    VERIFY_PLAYING_STATE(player);
 
-    player.play();
+    QVERIFY(helper.pauseAndWait());
+    VERIFY_PAUSED_STATE(player);
+    VERIFY_AUDIO_ACTIVE(player);
 
-    QVERIFY2(player.isAudioActive(), "Audio should be active after starting playback");
-    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
-
-    player.pause();
-    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
-    QVERIFY2(player.isAudioActive(), "Audio device should still be open after pause");
-
-    player.play();
-    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
-    QVERIFY2(player.isAudioActive(), "Audio should be active after resuming from pause");
+    QVERIFY(helper.playAndWait());
+    VERIFY_PLAYING_STATE(player);
+    VERIFY_AUDIO_ACTIVE(player);
 
     player.stop();
-    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
-    QVERIFY2(!player.isAudioActive(), "Audio should be inactive after calling stop()");
+    VERIFY_STOPPED_STATE(player);
+    VERIFY_AUDIO_INACTIVE(player);
 }
 
 void TestE2E::testDecodeAndVerifySamples_data()
@@ -454,13 +378,10 @@ void TestE2E::testDecodeAndVerifySamples()
     QFETCH(bool, checkSampleRange);
     QFETCH(bool, checkNoNaNInf);
 
-    QString filePath = TestFixture::fixturePath(filename);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(filename);
+    auto result = decodeFileSync(TestFixture::fixturePath(filename));
 
-    auto result = decodeFileSync(filePath);
-
-    QVERIFY2(!result.hadError, qPrintable("Decode failed: "_L1 + result.errorMessage));
-
+    VERIFY_DECODE_SUCCESS(result, filename);
     QVERIFY2(result.allSamples.size() > 1000, qPrintable(u"Expected many samples for %1, got %2"_s.arg(filename).arg(result.allSamples.size())));
 
     if (checkSampleRange) {
@@ -472,7 +393,6 @@ void TestE2E::testDecodeAndVerifySamples()
         }
 
         qDebug() << filename << "sample range:" << minSample << "to" << maxSample;
-
         QVERIFY2(minSample >= -2.0f && maxSample <= 2.0f, qPrintable(u"%1: sample range out of bounds [%2, %3]"_s.arg(filename).arg(minSample).arg(maxSample)));
     }
 
@@ -489,13 +409,12 @@ void TestE2E::testDecodeAndVerifySamples()
 
 void TestE2E::testDecoderNonExistentFile()
 {
-    QString filePath = "/nonexistent/path/to/audio.mp3"_L1;
+    QString filePath = u"/nonexistent/path/to/audio.mp3"_s;
     QVERIFY2(!QFileInfo::exists(filePath), "Test file should not exist");
 
     DragonDecoder decoder(nullptr, filePath);
-
-    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
-    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    auto errorSpy = SignalSpyHelper::decoderErrorSpy(&decoder);
+    auto formatSpy = SignalSpyHelper::formatSpy(&decoder);
 
     std::stop_source stopSource;
     std::jthread t([&](std::stop_token) {
@@ -518,18 +437,15 @@ void TestE2E::testDecoderInvalidFile()
     QTemporaryDir tempDir;
     QVERIFY(tempDir.isValid());
 
-    QString invalidPath = tempDir.filePath("invalid.mp3"_L1);
+    QString invalidPath = tempDir.filePath(u"invalid.mp3"_s);
     QFile file(invalidPath);
     QVERIFY(file.open(QIODevice::WriteOnly));
-
-    QByteArray garbage(1024, 0x42);
-    file.write(garbage);
+    file.write(QByteArray(1024, 0x42));
     file.close();
 
     DragonDecoder decoder(nullptr, invalidPath);
-
-    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
-    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
+    auto errorSpy = SignalSpyHelper::decoderErrorSpy(&decoder);
+    auto formatSpy = SignalSpyHelper::formatSpy(&decoder);
 
     std::stop_source stopSource;
     std::jthread t([&](std::stop_token) {
@@ -549,14 +465,12 @@ void TestE2E::testDecoderInvalidFile()
 
 void TestE2E::testDecoderSignalEmissionOrder()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
-    DragonDecoder decoder(nullptr, filePath);
-
-    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy durationSpy(&decoder, &DragonDecoder::durationChanged);
-    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+    DragonDecoder decoder(nullptr, TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    auto formatSpy = SignalSpyHelper::formatSpy(&decoder);
+    auto durationSpy = SignalSpyHelper::decoderDurationSpy(&decoder);
+    auto errorSpy = SignalSpyHelper::decoderErrorSpy(&decoder);
 
     std::atomic<int> callbackCount{0};
     decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
@@ -580,16 +494,11 @@ void TestE2E::testDecoderSignalEmissionOrder()
 
 void TestE2E::testDecoderMultipleFilesConsecutive()
 {
-    QStringList files = {u"sample-3s.mp3"_s, u"sample-3s.aac"_s, u"gs-16b-2c-44100hz.ogg"_s};
+    for (const QString &filename : TestFixture::allAudioFixtures().mid(0, 3)) {
+        VERIFY_FIXTURE_EXISTS(filename);
+        auto result = decodeFileSync(TestFixture::fixturePath(filename), 8000);
 
-    for (const QString &filename : files) {
-        QString filePath = TestFixture::fixturePath(filename);
-        QVERIFY2(QFileInfo::exists(filePath), qPrintable(u"File not found: %1"_s.arg(filename)));
-
-        auto result = decodeFileSync(filePath, 8000);
-
-        QVERIFY2(!result.hadError, qPrintable(u"Failed to decode %1: %2"_s.arg(filename).arg(result.errorMessage)));
-
+        VERIFY_DECODE_SUCCESS(result, filename);
         QVERIFY2(result.allSamples.size() > 0, qPrintable(u"No samples decoded for %1"_s.arg(filename)));
 
         qDebug() << "Successfully decoded" << filename;
@@ -598,14 +507,12 @@ void TestE2E::testDecoderMultipleFilesConsecutive()
 
 void TestE2E::testDecoderNoMemoryLeaks()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("File not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
     for (int i = 0; i < 5; ++i) {
-        auto result = decodeFileSync(filePath, 8000);
+        auto result = decodeFileSync(TestFixture::fixturePath(u"sample-3s.mp3"_s), 8000);
 
-        QVERIFY2(!result.hadError, qPrintable(u"Iteration %1: decode failed: %2"_s.arg(i).arg(result.errorMessage)));
-
+        VERIFY_DECODE_SUCCESS(result, QStringLiteral("Iteration %1").arg(i));
         QVERIFY2(result.allSamples.size() > 0, qPrintable(u"Iteration %1: no samples"_s.arg(i)));
 
         qDebug() << "Iteration" << i << "completed, samples:" << result.allSamples.size();
@@ -614,149 +521,95 @@ void TestE2E::testDecoderNoMemoryLeaks()
 
 void TestE2E::testSeamlessPlaybackTransition()
 {
-    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
-    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
-
-    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
-    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: "_L1 + track2));
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.m4a"_s);
 
     DragonPlayer player;
+    PlayerHelper helper(&player);
 
-    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
-    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
-    QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
-    QSignalSpy nextSourceSpy(&player, &DragonPlayer::nextSourceChanged);
+    auto trackSpy = SignalSpyHelper::trackSpy(&player);
+    auto statusSpy = SignalSpyHelper::statusSpy(&player);
+    auto sourceSpy = SignalSpyHelper::sourceSpy(&player);
 
-    player.setSource(QUrl::fromLocalFile(track1));
-    player.setNextSource(QUrl::fromLocalFile(track2));
+    QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
+    helper.setNextSource(u"gs-16b-2c-44100hz.m4a"_s);
 
-    QVERIFY(player.nextSource() == QUrl::fromLocalFile(track2));
-    QVERIFY(nextSourceSpy.count() >= 1);
+    QVERIFY(player.nextSource() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.m4a"_s)));
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QVERIFY(helper.playAndWait());
+    VERIFY_AUDIO_ACTIVE(player);
 
-    player.play();
+    auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    QVERIFY(helper.waitForTrackChange());
 
-    QVERIFY2(player.isAudioActive(), "Audio device should be open during first track playback");
-    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during seamless transition");
+    QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "EndOfMedia should not be emitted during seamless transition");
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
-
-    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
-
-    for (const auto &args : stateSpy) {
-        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
-        QVERIFY2(state != DragonPlayer::PlaybackState::StoppedState, "Playback state should never stop during seamless transition");
-    }
-
-    for (const auto &args : statusSpy) {
-        auto status = args.at(0).value<DragonPlayer::MediaStatus>();
-        QVERIFY2(status != DragonPlayer::MediaStatus::EndOfMedia, "EndOfMedia should not be emitted during seamless transition");
-    }
-
-    QVERIFY2(player.isAudioActive(), "Audio device should remain open after seamless transition");
-
-    QVERIFY(player.source() == QUrl::fromLocalFile(track2));
-
+    VERIFY_AUDIO_ACTIVE(player);
+    QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.m4a"_s)));
     QVERIFY(!player.nextSource().isValid());
-
     QVERIFY2(sourceSpy.count() >= 2, qPrintable(u"Expected at least 2 source changes, got %1"_s.arg(sourceSpy.count())));
 
     qDebug() << "Seamless playback test passed:"
-             << "trackChanged=" << trackChangedSpy.count() << "stateChanges=" << stateSpy.count() << "sourceChanges=" << sourceSpy.count();
+             << "trackChanged=" << trackSpy.count() << "stateChanges=" << stateSpy.count() << "sourceChanges=" << sourceSpy.count();
 
     player.stop();
 }
 
 void TestE2E::testSeamlessPlaybackWithFormatChange()
 {
-    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
-    QString track2 = TestFixture::fixturePath("gs-16b-1c-44100hz.flac"_L1);
-
-    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
-    QVERIFY2(QFileInfo::exists(track2), qPrintable("FLAC fixture not found: "_L1 + track2));
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-1c-44100hz.flac"_s);
 
     DragonPlayer player;
+    PlayerHelper helper(&player);
 
-    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
-    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
-    QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
-    QSignalSpy nextSourceSpy(&player, &DragonPlayer::nextSourceChanged);
+    auto trackSpy = SignalSpyHelper::trackSpy(&player);
+    auto statusSpy = SignalSpyHelper::statusSpy(&player);
+    auto sourceSpy = SignalSpyHelper::sourceSpy(&player);
 
-    player.setSource(QUrl::fromLocalFile(track1));
-    player.setNextSource(QUrl::fromLocalFile(track2));
+    QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
+    helper.setNextSource(u"gs-16b-1c-44100hz.flac"_s);
 
-    QVERIFY(player.nextSource() == QUrl::fromLocalFile(track2));
-    QVERIFY(nextSourceSpy.count() >= 1);
+    QVERIFY(player.nextSource().isValid());
+    QVERIFY(helper.playAndWait());
+    VERIFY_AUDIO_ACTIVE(player);
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    QVERIFY(helper.waitForTrackChange());
 
-    player.play();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
-    QVERIFY(player.isAudioActive());
+    QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during seamless transition");
+    QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "EndOfMedia should not be emitted during seamless transition");
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
-
-    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
-
-    for (const auto &args : stateSpy) {
-        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
-        QVERIFY2(state != DragonPlayer::PlaybackState::StoppedState, "Playback state should never stop during seamless transition");
-    }
-
-    for (const auto &args : statusSpy) {
-        auto status = args.at(0).value<DragonPlayer::MediaStatus>();
-        QVERIFY2(status != DragonPlayer::MediaStatus::EndOfMedia, "EndOfMedia should not be emitted during seamless transition");
-    }
-
-    QVERIFY(player.source() == QUrl::fromLocalFile(track2));
-
+    QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-1c-44100hz.flac"_s)));
     QVERIFY(!player.nextSource().isValid());
-
-    QVERIFY2(player.isAudioActive(), "Audio device should remain active after format-change gapless transition");
+    VERIFY_AUDIO_ACTIVE(player);
 
     player.stop();
 }
 
 void TestE2E::testFftFramesDuringGaplessTransition()
 {
-    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
-    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
-
-    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
-    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: "_L1 + track2));
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.m4a"_s);
 
     DragonPlayer player;
+    PlayerHelper helper(&player);
+    FftFrameCounter counter(&player);
 
     player.setFftMode(DragonPlayer::FftMode::BarsOnly);
 
-    int frameCount = 0;
-    QObject::connect(
-        &player,
-        &DragonPlayer::fftFrameReady,
-        &player,
-        [&frameCount]() {
-            ++frameCount;
-        },
-        Qt::QueuedConnection);
-
-    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
-
-    player.setSource(QUrl::fromLocalFile(track1));
-    player.setNextSource(QUrl::fromLocalFile(track2));
-
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-
-    player.play();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
+    helper.setNextSource(u"gs-16b-2c-44100hz.m4a"_s);
+    QVERIFY(helper.playAndWait());
 
     QTest::qWait(500);
-    int framesBeforeTransition = frameCount;
+    int framesBeforeTransition = counter.count();
 
-    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
+    QVERIFY(helper.waitForTrackChange());
 
     QTest::qWait(500);
-    int framesAfterTransition = frameCount;
+    int framesAfterTransition = counter.count();
 
     QVERIFY2(framesBeforeTransition > 0, "FFT frames should arrive during first track playback");
     QVERIFY2(framesAfterTransition > framesBeforeTransition, "FFT frames should continue arriving after gapless transition");
@@ -766,64 +619,53 @@ void TestE2E::testFftFramesDuringGaplessTransition()
 
 void TestE2E::testSeamlessPlaybackWhilePaused()
 {
-    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
-    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
-
-    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
-    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: "_L1 + track2));
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.m4a"_s);
 
     DragonPlayer player;
+    PlayerHelper helper(&player);
 
-    QSignalSpy sourceChangedSpy(&player, &DragonPlayer::sourceChanged);
+    auto sourceSpy = SignalSpyHelper::sourceSpy(&player);
 
-    player.setSource(QUrl::fromLocalFile(track1));
+    QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
+    QVERIFY(helper.playAndWait());
+    VERIFY_AUDIO_ACTIVE(player);
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QVERIFY(helper.pauseAndWait());
+    VERIFY_PAUSED_STATE(player);
+    VERIFY_AUDIO_ACTIVE(player);
 
-    player.play();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
-    QVERIFY(player.isAudioActive());
-
-    player.pause();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
-    QVERIFY(player.isAudioActive());
-
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
-    player.setSource(QUrl::fromLocalFile(track2));
-
-    QTRY_VERIFY(sourceChangedSpy.count() > 0);
+    auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.m4a"_s)));
+    QVERIFY(sourceSpy.count() > 0);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
     QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
 
-    QVERIFY(player.source() == QUrl::fromLocalFile(track2));
+    QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.m4a"_s)));
+    VERIFY_AUDIO_ACTIVE(player);
 
-    QVERIFY2(player.isAudioActive(), "Audio device should remain open after track change while paused");
-
-    stateSpy.clear();
-    player.play();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
-    QVERIFY(player.isAudioActive());
-
+    QVERIFY(helper.playAndWait());
+    VERIFY_PLAYING_STATE(player);
     QVERIFY2(stateSpy.count() >= 1, qPrintable(u"Expected state change on resume, got %1"_s.arg(stateSpy.count())));
 
     qDebug() << "Track change while paused test passed:"
-             << "sourceChanged=" << sourceChangedSpy.count() << "stateChanges=" << stateSpy.count();
+             << "sourceChanged=" << sourceSpy.count() << "stateChanges=" << stateSpy.count();
 
     player.stop();
 }
 
 void TestE2E::testGaplessGenerationCheck()
 {
-    QString track1 = TestFixture::fixturePath("sample-3s.mp3"_L1);
-    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
-    QString track3 = TestFixture::fixturePath("gs-16b-1c-44100hz.flac"_L1);
+    QStringList shortTracks = TestFixture::shortFixtures();
+    QVERIFY(!shortTracks.isEmpty());
 
-    QVERIFY2(QFileInfo::exists(track1), qPrintable("MP3 fixture not found: "_L1 + track1));
-    QVERIFY2(QFileInfo::exists(track2), qPrintable("OGG fixture not found: "_L1 + track2));
-    QVERIFY2(QFileInfo::exists(track3), qPrintable("FLAC fixture not found: "_L1 + track3));
+    VERIFY_FIXTURE_EXISTS(shortTracks[0]);
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-1c-44100hz.flac"_s);
 
     DragonPlayer player;
+    PlayerHelper helper(&player);
 
     QList<QUrl> sourceHistory;
     QObject::connect(
@@ -835,30 +677,26 @@ void TestE2E::testGaplessGenerationCheck()
         },
         Qt::DirectConnection);
 
-    player.setSource(QUrl::fromLocalFile(track1));
-    player.setNextSource(QUrl::fromLocalFile(track2));
-
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-
-    player.play();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY(helper.setSourceAndWait(shortTracks[0]));
+    helper.setNextSource(u"gs-16b-2c-44100hz.ogg"_s);
+    QVERIFY(helper.playAndWait());
 
     QTRY_VERIFY_WITH_TIMEOUT(player.position() > 2000, 10000);
-    player.setSource(QUrl::fromLocalFile(track3));
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-1c-44100hz.flac"_s)));
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-
+    QVERIFY(helper.setSourceAndWait(u"gs-16b-1c-44100hz.flac"_s));
     QTest::qWait(1000);
 
-    QVERIFY2(player.source() == QUrl::fromLocalFile(track3), qPrintable(u"Final source should be track3, got %1"_s.arg(player.source().toString())));
+    QVERIFY2(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-1c-44100hz.flac"_s)),
+             qPrintable(u"Final source should be flac, got %1"_s.arg(player.source().toString())));
 
     QVERIFY(player.playbackState() != DragonPlayer::PlaybackState::PlayingState || player.status() == DragonPlayer::MediaStatus::LoadedMedia);
 
-    bool track2WasEverSource = sourceHistory.contains(QUrl::fromLocalFile(track2));
-    if (track2WasEverSource && sourceHistory.last() == QUrl::fromLocalFile(track3)) {
-        qDebug() << "setSource(track3) interrupted an active gapless transition to track2";
+    bool track2WasEverSource = sourceHistory.contains(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    if (track2WasEverSource && sourceHistory.last() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-1c-44100hz.flac"_s))) {
+        qDebug() << "setSource(flac) interrupted an active gapless transition to ogg";
     } else if (!track2WasEverSource) {
-        qDebug() << "Generation-check path: stale gapless callback to track2 was discarded";
+        qDebug() << "Generation-check path: stale gapless callback to ogg was discarded";
     }
 
     player.stop();
@@ -866,58 +704,42 @@ void TestE2E::testGaplessGenerationCheck()
 
 void TestE2E::testNonGaplessEofWithFftOn()
 {
-    QString track1 = TestFixture::fixturePath("sample-3s.mp3"_L1);
-
-    QVERIFY2(QFileInfo::exists(track1), qPrintable("MP3 fixture not found: "_L1 + track1));
+    QStringList shortTracks = TestFixture::shortFixtures();
+    QVERIFY(!shortTracks.isEmpty());
+    VERIFY_FIXTURE_EXISTS(shortTracks[0]);
 
     DragonPlayer player;
+    PlayerHelper helper(&player);
+    FftFrameCounter counter(&player);
 
     player.setFftMode(DragonPlayer::FftMode::BarsOnly);
-
-    int frameCount = 0;
-    QObject::connect(
-        &player,
-        &DragonPlayer::fftFrameReady,
-        &player,
-        [&frameCount]() {
-            ++frameCount;
-        },
-        Qt::QueuedConnection);
-
-    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
-
-    player.setSource(QUrl::fromLocalFile(track1));
-
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-
-    player.play();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY(helper.setSourceAndWait(shortTracks[0]));
+    QVERIFY(helper.playAndWait());
 
     QTest::qWait(500);
-    int framesDuringPlayback = frameCount;
+    int framesDuringPlayback = counter.count();
     QVERIFY2(framesDuringPlayback > 0, "FFT frames should arrive during playback");
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 15000);
+    QVERIFY(helper.waitForEndOfMedia());
     QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
 
     QTest::qWait(1000);
-    int framesAfterDrain = frameCount;
+    int framesAfterDrain = counter.count();
     int inFlightFrames = framesAfterDrain - framesDuringPlayback;
 
     QTest::qWait(500);
-    int framesAfterCheck = frameCount;
+    int framesAfterCheck = counter.count();
     int genuinelyNewFrames = framesAfterCheck - framesAfterDrain;
 
     QVERIFY2(genuinelyNewFrames == 0, qPrintable(u"FFT should stop producing frames after EOF; got %1 genuinely new frames"_s.arg(genuinelyNewFrames)));
     qDebug() << "Non-gapless EOF FFT: in-flight frames after drain=" << inFlightFrames << "genuinely new frames=" << genuinelyNewFrames;
 
     player.play();
-
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
+    QVERIFY(helper.playAndWait());
 
     QTest::qWait(500);
-    int framesAfterRestart = frameCount;
+    int framesAfterRestart = counter.count();
 
     QVERIFY2(framesAfterRestart > framesAfterDrain, "FFT frames should resume after play() at EndOfMedia");
 
@@ -926,48 +748,32 @@ void TestE2E::testNonGaplessEofWithFftOn()
 
 void TestE2E::testSameFormatSeamlessTransition()
 {
-    QString track1 = TestFixture::fixturePath("gs-16b-2c-44100hz.ogg"_L1);
-    QString track2 = TestFixture::fixturePath("gs-16b-2c-44100hz.m4a"_L1);
+    QStringList stereo = TestFixture::stereoFixtures();
+    QVERIFY(stereo.size() >= 2);
 
-    QVERIFY2(QFileInfo::exists(track1), qPrintable("OGG fixture not found: "_L1 + track1));
-    QVERIFY2(QFileInfo::exists(track2), qPrintable("M4A fixture not found: "_L1 + track2));
+    VERIFY_FIXTURE_EXISTS(stereo[0]);
+    VERIFY_FIXTURE_EXISTS(stereo[1]);
 
     DragonPlayer player;
+    PlayerHelper helper(&player);
 
-    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+    auto trackSpy = SignalSpyHelper::trackSpy(&player);
 
-    player.setSource(QUrl::fromLocalFile(track1));
-    player.setNextSource(QUrl::fromLocalFile(track2));
+    QVERIFY(helper.setSourceAndWait(stereo[0]));
+    helper.setNextSource(stereo[1]);
+    QVERIFY(player.nextSource().isValid());
 
-    QVERIFY(player.nextSource() == QUrl::fromLocalFile(track2));
+    QVERIFY(helper.playAndWait());
+    VERIFY_AUDIO_ACTIVE(player);
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    bool audioEverInactive = helper.wasAudioEverInactive(0, 10);
 
-    player.play();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
-    QVERIFY(player.isAudioActive());
+    QVERIFY(helper.waitForTrackChange());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during same-format seamless transition");
 
-    bool audioEverInactive = false;
-    QTimer pollTimer;
-    QObject::connect(&pollTimer, &QTimer::timeout, [&]() {
-        if (!player.isAudioActive()) {
-            audioEverInactive = true;
-        }
-    });
-    pollTimer.start(10);
-
-    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() > 0, 30000);
-
-    pollTimer.stop();
-
-    for (const auto &args : stateSpy) {
-        auto state = args.at(0).value<DragonPlayer::PlaybackState>();
-        QVERIFY2(state != DragonPlayer::PlaybackState::StoppedState, "Playback state should never stop during same-format seamless transition");
-    }
-
-    QVERIFY(player.source() == QUrl::fromLocalFile(track2));
+    QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(stereo[1])));
     QVERIFY(!player.nextSource().isValid());
 
     QVERIFY2(!audioEverInactive, "Audio device should remain active continuously during same-format gapless transition");
@@ -977,13 +783,12 @@ void TestE2E::testSameFormatSeamlessTransition()
 
 void TestE2E::testDiagnosticsBasicFunctionality()
 {
-    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
-    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
     DragonDiagnostics diagnostics(&player);
+    PlayerHelper helper(&player);
 
-    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
     QVERIFY2(diagnostics.sdlAudioBufferUs() == -1, "SDL buffer should return -1 when stopped (no device)");
     QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 when stopped (no device)");
     QVERIFY2(diagnostics.decodeQueueSize() == 0, "Decode queue should be 0 when stopped");
@@ -992,23 +797,18 @@ void TestE2E::testDiagnosticsBasicFunctionality()
     QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active when stopped");
     QVERIFY2(diagnostics.audioCallbackHz() == 0.0f, "Audio callback Hz should be 0 when stopped");
 
-    player.setSource(QUrl::fromLocalFile(filePath));
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadingMedia || player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY2(diagnostics.sdlAudioBufferUs() == -1, "SDL buffer should return -1 before playback starts (no device yet)");
 
-    player.play();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
-
+    QVERIFY(helper.playAndWait());
     QTest::qWait(100);
 
-    QVERIFY2(player.isAudioActive(), "isAudioActive should be true during playback");
+    VERIFY_AUDIO_ACTIVE(player);
     QVERIFY2(diagnostics.sdlAudioBufferFrames() > 0, "SDL hardware buffer should report >0 frames during playback");
     QVERIFY2(diagnostics.sdlAudioBufferUs() > 0, "SDL hardware buffer should report >0 µs during playback");
     QVERIFY2(diagnostics.hasActiveDecoder(), "Should have active decoder during playback");
 
-    player.stop();
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY(helper.stopAndWait());
 
     QTRY_VERIFY_WITH_TIMEOUT(diagnostics.sdlAudioBufferUs() == -1, 1000);
     QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 after stop");
