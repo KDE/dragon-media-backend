@@ -16,11 +16,6 @@
 #include <stop_token>
 #include <thread>
 
-static inline void setCurrentThreadName(const char *name)
-{
-    pthread_setname_np(pthread_self(), name);
-}
-
 DragonFftPipeline::DragonFftPipeline() = default;
 
 DragonFftPipeline::~DragonFftPipeline() = default;
@@ -71,7 +66,7 @@ void DragonFftPipeline::startThread()
     }
 
     m_fftThread = std::jthread([this](std::stop_token st) {
-        setCurrentThreadName("dragon-fft");
+        pthread_setname_np(pthread_self(), "dragon-fft");
         m_fftProcessor->processLoop(std::move(st));
     });
 

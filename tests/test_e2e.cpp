@@ -12,6 +12,7 @@
 #include "logging_timestamp_init.h"
 
 #include "dragondecoder.h"
+#include <dragonsdl/dragondiagnostics.h>
 #include <dragonsdl/dragonplayer.h>
 
 #include <algorithm>
@@ -86,6 +87,8 @@ private Q_SLOTS:
     void testNonGaplessEofWithFftOn();
 
     void testSameFormatSeamlessTransition();
+
+    void testDiagnosticsBasicFunctionality();
 
 private:
     struct DecodeResult {
@@ -374,6 +377,7 @@ void TestE2E::testPlayerStopActuallyStopsAudio()
     QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
 
     DragonPlayer player;
+    DragonDiagnostics diagnostics(&player);
 
     player.setSource(QUrl::fromLocalFile(filePath));
 
@@ -384,11 +388,22 @@ void TestE2E::testPlayerStopActuallyStopsAudio()
     QVERIFY2(player.isAudioActive(), "Audio should be active after starting playback");
     QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
 
+    QTest::qWait(100);
+
+    QVERIFY2(player.isAudioActive(), "isAudioActive should be true during playback");
+    QVERIFY2(diagnostics.hasActiveDecoder(), "Should have active decoder during playback");
+    QVERIFY2(diagnostics.decodeLoopActive() || diagnostics.decodeQueueSize() > 0, "Decode loop should be active or decode queue should have data");
+
     player.stop();
 
     QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
 
     QVERIFY2(!player.isAudioActive(), "Audio should be inactive after calling stop() SDL device must be closed");
+
+    QTRY_VERIFY_WITH_TIMEOUT(diagnostics.sdlAudioBufferUs() == -1, 1000);
+    QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 (no device) after stop");
+    QVERIFY2(!diagnostics.hasActiveDecoder(), "Should not have active decoder after stop");
+    QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active after stop");
 }
 
 void TestE2E::testPlayerPauseResumeSequence()
@@ -956,6 +971,47 @@ void TestE2E::testSameFormatSeamlessTransition()
     QVERIFY2(!audioEverInactive, "Audio device should remain active continuously during same-format gapless transition");
 
     player.stop();
+}
+
+void TestE2E::testDiagnosticsBasicFunctionality()
+{
+    QString filePath = TestFixture::fixturePath("sample-3s.mp3"_L1);
+    QVERIFY2(QFileInfo::exists(filePath), qPrintable("MP3 file not found: "_L1 + filePath));
+
+    DragonPlayer player;
+    DragonDiagnostics diagnostics(&player);
+
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY2(diagnostics.sdlAudioBufferUs() == -1, "SDL buffer should return -1 when stopped (no device)");
+    QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 when stopped (no device)");
+    QVERIFY2(diagnostics.decodeQueueSize() == 0, "Decode queue should be 0 when stopped");
+    QVERIFY2(diagnostics.fftQueueSize() == 0, "FFT queue should be 0 when stopped");
+    QVERIFY2(!diagnostics.hasActiveDecoder(), "Should not have active decoder when stopped");
+    QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active when stopped");
+    QVERIFY2(diagnostics.audioCallbackHz() == 0.0f, "Audio callback Hz should be 0 when stopped");
+
+    player.setSource(QUrl::fromLocalFile(filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadingMedia || player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QVERIFY2(diagnostics.sdlAudioBufferUs() == -1, "SDL buffer should return -1 before playback starts (no device yet)");
+
+    player.play();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+
+    QTest::qWait(100);
+
+    QVERIFY2(player.isAudioActive(), "isAudioActive should be true during playback");
+    QVERIFY2(diagnostics.hasActiveDecoder(), "Should have active decoder during playback");
+
+    player.stop();
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
+
+    QTRY_VERIFY_WITH_TIMEOUT(diagnostics.sdlAudioBufferUs() == -1, 1000);
+    QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 after stop");
+    QVERIFY2(!diagnostics.hasActiveDecoder(), "Should not have active decoder after stop");
+    QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active after stop");
+
+    qDebug() << "Diagnostics basic functionality test passed";
 }
 
 QTEST_MAIN(TestE2E)

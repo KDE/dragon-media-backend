@@ -95,12 +95,17 @@ int DragonDiagnostics::sdlAudioBufferFrames() const
     }
 
     DragonAudioOutput::AudioSession *session = priv->audioOutput->m_session.load(std::memory_order_acquire);
-    if (!session || !session->stream) {
+    if (!session || !session->stream || session->channels <= 0) {
         return -1;
     }
 
-    const int frames = SDL_GetAudioStreamQueued(session->stream);
-    return frames > 0 ? frames : 0;
+    const int bytes = SDL_GetAudioStreamQueued(session->stream);
+    if (bytes <= 0) {
+        return 0;
+    }
+
+    const int samples = bytes / sizeof(float);
+    return samples / session->channels;
 }
 
 std::size_t DragonDiagnostics::decodeQueueSize() const
