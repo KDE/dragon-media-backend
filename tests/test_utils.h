@@ -183,6 +183,24 @@ public:
             timeoutMs);
     }
 
+    bool waitForStatus(DragonPlayer::MediaStatus status, int timeoutMs = 10000)
+    {
+        return QTest::qWaitFor(
+            [&]() {
+                return m_player->status() == status;
+            },
+            timeoutMs);
+    }
+
+    bool waitForState(DragonPlayer::PlaybackState state, int timeoutMs = 5000)
+    {
+        return QTest::qWaitFor(
+            [&]() {
+                return m_player->playbackState() == state;
+            },
+            timeoutMs);
+    }
+
     bool verifyNoStopState(QSignalSpy &stateSpy) const
     {
         for (const auto &args : stateSpy) {
@@ -279,6 +297,24 @@ public:
     {
         return QSignalSpy(decoder, &DragonDecoder::durationChanged);
     }
+
+    template<typename T>
+    static bool contains(const QSignalSpy &spy, T value)
+    {
+        return std::ranges::any_of(spy, [value](const auto &args) {
+            return args.at(0).template value<T>() == value;
+        });
+    }
+
+    static bool containsState(const QSignalSpy &spy, DragonPlayer::PlaybackState state)
+    {
+        return contains(spy, state);
+    }
+
+    static bool containsStatus(const QSignalSpy &spy, DragonPlayer::MediaStatus status)
+    {
+        return contains(spy, status);
+    }
 };
 
 class FftFrameCounter
@@ -305,13 +341,151 @@ public:
     {
         m_count.store(0);
     }
+    bool waitForFrames(int timeoutMs = 3000, int pollIntervalMs = 50)
+    {
+        int maxWaits = timeoutMs / pollIntervalMs;
+        for (int i = 0; i < maxWaits && m_count.load() == 0; ++i) {
+            QTest::qWait(pollIntervalMs);
+        }
+        return m_count.load() > 0;
+    }
 
 private:
     std::atomic<int> m_count{0};
 };
 
-#define VERIFY_FIXTURE_EXISTS(filename) QVERIFY2(QFileInfo::exists(TestFixture::fixturePath(filename)), qPrintable(u"Fixture not found: %1"_s.arg(filename)))
+class SignalOrderTracker
+{
+public:
+    explicit SignalOrderTracker(DragonPlayer *player)
+        : m_player(player)
+    {
+    }
 
+    ~SignalOrderTracker()
+    {
+        cleanup();
+    }
+
+    void trackStateChanges()
+    {
+        auto conn = QObject::connect(
+            m_player,
+            &DragonPlayer::playbackStateChanged,
+            m_player,
+            [this](DragonPlayer::PlaybackState state) {
+                switch (state) {
+                case DragonPlayer::PlaybackState::StoppedState:
+                    m_events.append(u"stateChanged(StoppedState)"_s);
+                    break;
+                case DragonPlayer::PlaybackState::PlayingState:
+                    m_events.append(u"stateChanged(PlayingState)"_s);
+                    break;
+                case DragonPlayer::PlaybackState::PausedState:
+                    m_events.append(u"stateChanged(PausedState)"_s);
+                    break;
+                }
+            },
+            Qt::DirectConnection);
+        m_connections.append(conn);
+    }
+
+    void trackStatusChanges()
+    {
+        auto conn = QObject::connect(
+            m_player,
+            &DragonPlayer::statusChanged,
+            m_player,
+            [this](DragonPlayer::MediaStatus status) {
+                switch (status) {
+                case DragonPlayer::MediaStatus::LoadingMedia:
+                    m_events.append(u"statusChanged(LoadingMedia)"_s);
+                    break;
+                case DragonPlayer::MediaStatus::LoadedMedia:
+                    m_events.append(u"statusChanged(LoadedMedia)"_s);
+                    break;
+                case DragonPlayer::MediaStatus::NoMedia:
+                    m_events.append(u"statusChanged(NoMedia)"_s);
+                    break;
+                case DragonPlayer::MediaStatus::EndOfMedia:
+                    m_events.append(u"statusChanged(EndOfMedia)"_s);
+                    break;
+                case DragonPlayer::MediaStatus::InvalidMedia:
+                    m_events.append(u"statusChanged(InvalidMedia)"_s);
+                    break;
+                default:
+                    break;
+                }
+            },
+            Qt::DirectConnection);
+        m_connections.append(conn);
+    }
+
+    void trackSourceChanges()
+    {
+        auto conn = QObject::connect(
+            m_player,
+            &DragonPlayer::sourceChanged,
+            m_player,
+            [this]() {
+                m_events.append(u"sourceChanged()"_s);
+            },
+            Qt::DirectConnection);
+        m_connections.append(conn);
+    }
+
+    void trackPositionZero()
+    {
+        auto conn = QObject::connect(
+            m_player,
+            &DragonPlayer::positionChanged,
+            m_player,
+            [this](int64_t pos) {
+                if (pos == 0) {
+                    m_events.append(u"positionChanged(0)"_s);
+                }
+            },
+            Qt::DirectConnection);
+        m_connections.append(conn);
+    }
+
+    bool contains(const QString &event) const
+    {
+        return m_events.contains(event);
+    }
+
+    bool verifyOrder(const QString &first, const QString &second) const
+    {
+        int firstIdx = m_events.indexOf(first);
+        int secondIdx = m_events.indexOf(second);
+        return firstIdx >= 0 && secondIdx >= 0 && firstIdx < secondIdx;
+    }
+
+    const QStringList &events() const
+    {
+        return m_events;
+    }
+
+    void clear()
+    {
+        m_events.clear();
+    }
+
+private:
+    DragonPlayer *m_player;
+    QStringList m_events;
+    QList<QMetaObject::Connection> m_connections;
+
+    void cleanup()
+    {
+        for (const auto &conn : m_connections) {
+            QObject::disconnect(conn);
+        }
+        m_connections.clear();
+    }
+};
+
+#define VERIFY_FIXTURE_EXISTS(filename) QVERIFY2(QFileInfo::exists(TestFixture::fixturePath(filename)), qPrintable(u"Fixture not found: %1"_s.arg(filename)))
 #define VERIFY_DECODE_SUCCESS(result, filename) QVERIFY2(!(result).hadError, qPrintable(u"Decode failed for %1: %2"_s.arg(filename).arg((result).errorMessage)))
 
 #define VERIFY_PLAYER_LOADED(player, filename)                                                                                                                 \
@@ -319,12 +493,15 @@ private:
 
 #define VERIFY_PLAYING_STATE(player)                                                                                                                           \
     QVERIFY2((player).playbackState() == DragonPlayer::PlaybackState::PlayingState, u"Expected PlayingState"_s.toUtf8().constData())
+
 #define VERIFY_PAUSED_STATE(player)                                                                                                                            \
     QVERIFY2((player).playbackState() == DragonPlayer::PlaybackState::PausedState, u"Expected PausedState"_s.toUtf8().constData())
-
 #define VERIFY_STOPPED_STATE(player)                                                                                                                           \
     QVERIFY2((player).playbackState() == DragonPlayer::PlaybackState::StoppedState, u"Expected StoppedState"_s.toUtf8().constData())
-
 #define VERIFY_AUDIO_ACTIVE(player) QVERIFY2((player).isAudioActive(), u"Audio should be active"_s.toUtf8().constData())
 
 #define VERIFY_AUDIO_INACTIVE(player) QVERIFY2(!(player).isAudioActive(), u"Audio should be inactive"_s.toUtf8().constData())
+
+#define VERIFY_POSITION_NEAR(actual, expected, tolerance)                                                                                                      \
+    QVERIFY2(std::llabs(static_cast<int64_t>(actual) - static_cast<int64_t>(expected)) < static_cast<int64_t>(tolerance),                                      \
+             qPrintable(u"Position mismatch: expected ~%1ms, got %2ms (tolerance %3ms)"_s.arg(expected).arg(actual).arg(tolerance)))
