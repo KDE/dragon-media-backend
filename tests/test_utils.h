@@ -257,7 +257,6 @@ public:
     {
         return QSignalSpy(player, &DragonPlayer::statusChanged);
     }
-
     static QSignalSpy stateSpy(DragonPlayer *player)
     {
         return QSignalSpy(player, &DragonPlayer::playbackStateChanged);
@@ -341,6 +340,7 @@ public:
     {
         m_count.store(0);
     }
+
     bool waitForFrames(int timeoutMs = 3000, int pollIntervalMs = 50)
     {
         int maxWaits = timeoutMs / pollIntervalMs;
@@ -486,6 +486,7 @@ private:
 };
 
 #define VERIFY_FIXTURE_EXISTS(filename) QVERIFY2(QFileInfo::exists(TestFixture::fixturePath(filename)), qPrintable(u"Fixture not found: %1"_s.arg(filename)))
+
 #define VERIFY_DECODE_SUCCESS(result, filename) QVERIFY2(!(result).hadError, qPrintable(u"Decode failed for %1: %2"_s.arg(filename).arg((result).errorMessage)))
 
 #define VERIFY_PLAYER_LOADED(player, filename)                                                                                                                 \
@@ -496,12 +497,13 @@ private:
 
 #define VERIFY_PAUSED_STATE(player)                                                                                                                            \
     QVERIFY2((player).playbackState() == DragonPlayer::PlaybackState::PausedState, u"Expected PausedState"_s.toUtf8().constData())
+
 #define VERIFY_STOPPED_STATE(player)                                                                                                                           \
     QVERIFY2((player).playbackState() == DragonPlayer::PlaybackState::StoppedState, u"Expected StoppedState"_s.toUtf8().constData())
+
 #define VERIFY_AUDIO_ACTIVE(player) QVERIFY2((player).isAudioActive(), u"Audio should be active"_s.toUtf8().constData())
 
 #define VERIFY_AUDIO_INACTIVE(player) QVERIFY2(!(player).isAudioActive(), u"Audio should be inactive"_s.toUtf8().constData())
-
 #define VERIFY_POSITION_NEAR(actual, expected, tolerance)                                                                                                      \
     QVERIFY2(std::llabs(static_cast<int64_t>(actual) - static_cast<int64_t>(expected)) < static_cast<int64_t>(tolerance),                                      \
              qPrintable(u"Position mismatch: expected ~%1ms, got %2ms (tolerance %3ms)"_s.arg(expected).arg(actual).arg(tolerance)))

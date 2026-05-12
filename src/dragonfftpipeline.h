@@ -33,9 +33,9 @@ public:
     void ensureInfrastructure(DragonPipe<std::float32_t> *pipe, DragonPlayer::FftMode mode);
 
     void teardown();
+
     void setSampleRate(int sampleRate);
     void setChannelCount(int channels);
-
     void setMode(DragonPlayer::FftMode mode);
     [[nodiscard]] DragonPlayer::FftMode mode() const;
 

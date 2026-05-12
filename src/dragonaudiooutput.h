@@ -66,7 +66,6 @@ public:
     [[nodiscard]] bool isPaused() const;
 
     static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
-
     [[nodiscard]] float volume() const;
     void setVolume(float linearGain);
 
@@ -80,7 +79,6 @@ public:
     [[nodiscard]] int64_t totalSamplesWritten() const;
 
     [[nodiscard]] bool hasFormat(int sampleRate, int channels) const;
-
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();

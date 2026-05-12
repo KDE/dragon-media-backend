@@ -87,6 +87,7 @@ private:
     void emitFrame(const DragonFftFrame &frame, int frameCount, FftMode mode);
 
     FrameCallback m_frameCallback;
+
     std::mutex m_frameMutex;
     DragonFftFrame m_latestFrame;
 };

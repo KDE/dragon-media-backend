@@ -28,6 +28,8 @@ include(KDEInstallDirs)
 include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
 include(ECMQtDeclareLoggingCategory)
+include(KDEClangFormat)
+include(KDEGitCommitHooks)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -Werror")
@@ -241,6 +243,37 @@ install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/dragon-sdl-config-version.cmake
     DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dragon-sdl
 )
+
+file(GLOB ALL_ROOT_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
+)
+file(GLOB_RECURSE ALL_SRC_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+)
+file(GLOB_RECURSE ALL_INCLUDE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/*.h"
+)
+file(GLOB_RECURSE ALL_EXAMPLE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/examples/*.h"
+)
+file(GLOB_RECURSE ALL_TEST_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.h"
+)
+set(ALL_CLANG_FORMAT_SOURCE_FILES
+    ${ALL_ROOT_FILES}
+    ${ALL_SRC_FILES}
+    ${ALL_INCLUDE_FILES}
+    ${ALL_EXAMPLE_FILES}
+    ${ALL_TEST_FILES}
+)
+
+kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
+kde_configure_git_pre_commit_hook(CHECKS CLANG_FORMAT)
 
 option(BUILD_EXAMPLES "Build examples" ON)
 if(BUILD_EXAMPLES AND Qt6Widgets_FOUND)
