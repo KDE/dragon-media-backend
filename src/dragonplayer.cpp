@@ -140,6 +140,11 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
 
 void DragonPlayerPrivate::onDecodeFinished(bool hadFatalError)
 {
+    if (decodePipeline.isActive()) {
+        qCDebug(dragonsdlPlayer) << "ignoring stale onDecodeFinished (new decode session already active)";
+        return;
+    }
+
     if (hadFatalError) {
         if (currentError != (currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError)) {
             currentError = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
