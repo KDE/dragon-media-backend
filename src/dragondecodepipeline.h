@@ -76,7 +76,8 @@ private:
     std::jthread m_decodeThread;
     std::stop_source m_sessionStopSource;
     mutable std::mutex m_decoderMutex;
-    std::condition_variable_any m_decoderCv;
+    std::condition_variable_any m_decoderAssignedCv;
+    std::condition_variable_any m_decodeLoopFinishedCv;
     bool m_decodeLoopActive = false;
     std::unique_ptr<DragonDecoder> m_activeDecoder;
     std::unique_ptr<DragonDecoder> m_preWarmedDecoder;

@@ -76,7 +76,7 @@ bool DragonDecodePipeline::waitForDecoderAssignment(std::stop_token st)
     std::unique_lock lock(m_decoderMutex);
     qCDebug(dragonsdlDecode) << "decode thread waiting for decoder... activeDecoder=" << (m_activeDecoder != nullptr);
 
-    m_decoderCv.wait(lock, st, [this]() {
+    m_decoderAssignedCv.wait(lock, st, [this]() {
         return m_activeDecoder != nullptr;
     });
 
@@ -104,7 +104,7 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
 
     if (!decoder) {
         qCDebug(dragonsdlDecode) << "decode thread decoder became null before decodeLoop, treating as stopped";
-        m_decoderCv.notify_all();
+        m_decodeLoopFinishedCv.notify_all();
         return {true, false};
     }
 
@@ -124,7 +124,7 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
 
         m_activeDecoder.reset();
     }
-    m_decoderCv.notify_all();
+    m_decodeLoopFinishedCv.notify_all();
 
     return {wasStopped, hadFatalError};
 }
@@ -162,7 +162,7 @@ void DragonDecodePipeline::stopSession()
     {
         std::unique_lock lock(m_decoderMutex);
         qCDebug(dragonsdlDecode) << "stopSession() waiting for decodeLoopActive=false (current=" << m_decodeLoopActive << ")";
-        m_decoderCv.wait(lock, [this]() {
+        m_decodeLoopFinishedCv.wait(lock, [this]() {
             return !m_decodeLoopActive;
         });
         qCDebug(dragonsdlDecode) << "stopSession() decode loop finished";
@@ -186,7 +186,7 @@ void DragonDecodePipeline::stop()
         m_preWarmThread.request_stop();
     }
 
-    m_decoderCv.notify_all();
+    m_decoderAssignedCv.notify_all();
 
     if (m_decodeThread.joinable()) {
         qCDebug(dragonsdlDecode) << "stop() joining decode thread";
@@ -237,7 +237,7 @@ void DragonDecodePipeline::setSource(const QUrl &source, uint64_t generation)
     {
         std::unique_lock lock(m_decoderMutex);
         qCDebug(dragonsdlDecode) << "setSource waiting for decodeLoopActive=false (current=" << m_decodeLoopActive << ")";
-        m_decoderCv.wait(lock, [this]() {
+        m_decodeLoopFinishedCv.wait(lock, [this]() {
             return !m_decodeLoopActive;
         });
         qCDebug(dragonsdlDecode) << "setSource decode loop inactive, resetting activeDecoder";
@@ -258,7 +258,7 @@ void DragonDecodePipeline::setSource(const QUrl &source, uint64_t generation)
 
     qCDebug(dragonsdlDecode) << "setSource new decoder installed, creating fresh stop source and notifying";
     m_sessionStopSource = std::stop_source{};
-    m_decoderCv.notify_one();
+    m_decoderAssignedCv.notify_one();
     qCDebug(dragonsdlDecode) << "setSource notify_one() called, returning";
 }
 
