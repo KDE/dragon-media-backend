@@ -391,6 +391,8 @@ void TestE2E::testPlayerStopActuallyStopsAudio()
     QTest::qWait(100);
 
     QVERIFY2(player.isAudioActive(), "isAudioActive should be true during playback");
+    QVERIFY2(diagnostics.sdlAudioBufferFrames() > 0, "SDL hardware buffer should report >0 frames during playback");
+    QVERIFY2(diagnostics.sdlAudioBufferUs() > 0, "SDL hardware buffer should report >0 µs during playback");
     QVERIFY2(diagnostics.hasActiveDecoder(), "Should have active decoder during playback");
     QVERIFY2(diagnostics.decodeLoopActive() || diagnostics.decodeQueueSize() > 0, "Decode loop should be active or decode queue should have data");
 
@@ -1001,6 +1003,8 @@ void TestE2E::testDiagnosticsBasicFunctionality()
     QTest::qWait(100);
 
     QVERIFY2(player.isAudioActive(), "isAudioActive should be true during playback");
+    QVERIFY2(diagnostics.sdlAudioBufferFrames() > 0, "SDL hardware buffer should report >0 frames during playback");
+    QVERIFY2(diagnostics.sdlAudioBufferUs() > 0, "SDL hardware buffer should report >0 µs during playback");
     QVERIFY2(diagnostics.hasActiveDecoder(), "Should have active decoder during playback");
 
     player.stop();
