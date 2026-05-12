@@ -1488,8 +1488,11 @@ void TestPlayer::testFftModeToggleCreatesInfrastructure()
     player.play();
     QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
 
-    QTest::qWait(100);
-    int initialCount = frameCount;
+    int initialCount = 0;
+    for (int waits = 0; waits < 60 && frameCount == 0; ++waits) {
+        QTest::qWait(50);
+    }
+    initialCount = frameCount;
 
     QVERIFY2(initialCount > 0, "FFT should be producing frames when mode is BarsOnly");
 
