@@ -650,7 +650,6 @@ void TestFftProcessor::testFftModeSwitch()
     QVERIFY2(framesPhase1 >= 1, qPrintable(QString("Both mode should produce at least 1 frame, got %1"_L1).arg(framesPhase1)));
 
     processor.setFftMode(DragonFftProcessor::FftMode::Off);
-    QTest::qWait(150);
     int framesPhase2Start = frameCount.load();
 
     [[maybe_unused]] const auto written6 = pipe.producer().writeSome(sineWave);

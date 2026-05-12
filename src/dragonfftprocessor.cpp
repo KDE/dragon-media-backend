@@ -141,6 +141,10 @@ bool DragonFftProcessor::tryReadAndDownmix(std::stop_token st)
         return false;
     }
 
+    if (m_fftMode.load(std::memory_order_relaxed) == FftMode::Off) {
+        return false;
+    }
+
     m_consumer.readSomeWith(samplesNeeded, [this](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
         size_t outIdx = 0;
         const int ch = m_channelCount;
