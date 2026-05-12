@@ -64,7 +64,7 @@ private:
 
     void startDecodeThread();
     bool waitForDecoderAssignment(std::stop_token st);
-    std::pair<bool, bool> executeDecodeSession(DragonDecoder *decoder);
+    std::pair<bool, bool> executeDecodeSession();
     void processDecodeCompletion();
 
     SamplesCallback m_samplesCallback;

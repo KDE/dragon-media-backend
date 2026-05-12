@@ -42,8 +42,7 @@ void DragonDecodePipeline::startDecodeThread()
                 break;
             }
 
-            DragonDecoder *decoder = m_activeDecoder.get();
-            auto [wasStopped, hadFatalError] = executeDecodeSession(decoder);
+            auto [wasStopped, hadFatalError] = executeDecodeSession();
             if (wasStopped) {
                 qCDebug(dragonsdlDecode) << "decode thread session was stopped, continue to wait for new decoder";
                 continue;
@@ -91,11 +90,22 @@ bool DragonDecodePipeline::waitForDecoderAssignment(std::stop_token st)
     return true;
 }
 
-std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession(DragonDecoder *decoder)
+std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
 {
+    DragonDecoder *decoder = nullptr;
     {
         std::scoped_lock lock(m_decoderMutex);
         m_decodeLoopActive = true;
+        decoder = m_activeDecoder.get();
+        if (!decoder) {
+            m_decodeLoopActive = false;
+        }
+    }
+
+    if (!decoder) {
+        qCDebug(dragonsdlDecode) << "decode thread decoder became null before decodeLoop, treating as stopped";
+        m_decoderCv.notify_all();
+        return {true, false};
     }
 
     qCDebug(dragonsdlDecode) << "decode thread starting decodeLoop for decoder" << decoder;
