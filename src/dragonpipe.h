@@ -90,7 +90,7 @@ public:
 private:
     std::vector<T> m_buffer;
     LockFreeSpscQueue<T> m_queue;
-    std::condition_variable m_cv;
+    std::condition_variable_any m_cv;
     std::mutex m_cvMutex;
 };
 

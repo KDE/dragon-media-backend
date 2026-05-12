@@ -71,13 +71,10 @@ template<typename T>
 bool DragonPipe<T>::Consumer::waitFor(size_t minItems, std::stop_token st)
 {
     std::unique_lock lock(m_pipe->m_cvMutex);
-    bool ready = m_pipe->m_cv.wait_for(lock, std::chrono::milliseconds(50), [&] {
-        return st.stop_requested() || m_pipe->m_queue.get_num_items_ready() >= minItems;
+    bool ready = m_pipe->m_cv.wait_for(lock, st, std::chrono::milliseconds(50), [&] {
+        return m_pipe->m_queue.get_num_items_ready() >= minItems;
     });
-    if (!ready) {
-        return false;
-    }
-    return !st.stop_requested();
+    return ready && !st.stop_requested();
 }
 
 template<typename T>
