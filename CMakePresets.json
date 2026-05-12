@@ -154,6 +154,25 @@
       "environment": {
         "ASAN_OPTIONS": "halt_on_error=0"
       }
+    },
+    {
+      "name": "asan-repeat-test-parallel",
+      "configurePreset": "asan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false,
+        "jobs": 25,
+        "repeat": {
+          "mode": "until-fail",
+          "count": 20
+        }
+      },
+      "environment": {
+        "ASAN_OPTIONS": "halt_on_error=0"
+      }
     }
   ],
   "workflowPresets": [
@@ -167,7 +186,7 @@
         { "type": "test", "name": "asan" }
       ]
     },
-        {
+    {
       "name": "asan-repeat-test",
       "displayName": "Run ASan-built tests repeatedly, to find race conditions.",
       "description": "Configure, build, and run tests with AddressSanitizer enabled, repeating each test up to 20 times until failure",
@@ -175,6 +194,16 @@
         { "type": "configure", "name": "asan" },
         { "type": "build", "name": "asan" },
         { "type": "test", "name": "asan-repeat-test" }
+      ]
+    },
+    {
+      "name": "asan-repeat-test-parallel",
+      "displayName": "Run ASan-built tests repeatedly in parallel",
+      "description": "Configure, build, and run tests with AddressSanitizer enabled, repeating each test up to 20 times until failure, with 25 parallel jobs",
+      "steps": [
+        { "type": "configure", "name": "asan" },
+        { "type": "build", "name": "asan" },
+        { "type": "test", "name": "asan-repeat-test-parallel" }
       ]
     },
     {

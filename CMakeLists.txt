@@ -153,6 +153,7 @@ set(SOURCES
     src/dragondiagnostics.cpp
     src/dragondecodepipeline.cpp
     src/dragonfftpipeline.cpp
+    src/dragonpipe.cpp
     ${dragonsdl_SOURCES}
 )
 
@@ -329,4 +330,12 @@ if(BUILD_TESTING)
         DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
     )
     add_test(NAME test_network_playback COMMAND test_network_playback)
+
+    add_executable(test_pipe tests/test_pipe.cpp)
+    target_link_libraries(test_pipe PRIVATE
+        dragon-sdl
+        Qt6::Test
+        spsc_queue
+    )
+    add_test(NAME test_pipe COMMAND test_pipe)
 endif()
