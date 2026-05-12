@@ -34,10 +34,8 @@ public:
 
         size_t write(std::span<const T> items, std::stop_token st);
 
-        size_t writeSome(std::span<const T> items);
         template<typename Func>
         size_t writeSomeWith(size_t maxItems, Func &&fn);
-
         void notify();
 
         size_t available() const;

@@ -4,6 +4,7 @@
  */
 
 #include "dragonpipe.h"
+#include "dragonpipe_test_utils.h"
 
 #include <QtTest>
 
@@ -36,7 +37,7 @@ private Q_SLOTS:
         QCOMPARE_EQ(pipe.producer().available(), size_t{256});
     }
 
-    void testWriteSomeReadSome()
+    void testWriteReadSome()
     {
         DragonPipe<std::float32_t> pipe(1024);
 
@@ -45,7 +46,7 @@ private Q_SLOTS:
             return n++;
         });
 
-        size_t n = pipe.producer().writeSome(input);
+        size_t n = writeAll(pipe.producer(), input);
         QCOMPARE_EQ(n, size_t{8});
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{8});
 
@@ -135,7 +136,7 @@ private Q_SLOTS:
         std::jthread producer([&] {
             std::this_thread::sleep_for(5ms);
             std::array<std::float32_t, 4> d{1, 2, 3, 4};
-            pipe.producer().writeSome(d);
+            writeAll(pipe.producer(), d);
         });
 
         bool ok = pipe.consumer().waitFor(4, ss.get_token());
@@ -181,7 +182,7 @@ private Q_SLOTS:
         std::ranges::generate(data, [n = 1.0f]() mutable {
             return n++;
         });
-        pipe.producer().writeSome(data);
+        writeAll(pipe.producer(), data);
 
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{16});
         pipe.consumer().drain();
@@ -217,7 +218,7 @@ private Q_SLOTS:
         QCOMPARE_EQ(pipe.producer().available(), size_t{16});
 
         std::array<std::float32_t, 4> d;
-        pipe.producer().writeSome(d);
+        writeAll(pipe.producer(), d);
         QCOMPARE_LE(pipe.producer().available(), size_t{12});
     }
 

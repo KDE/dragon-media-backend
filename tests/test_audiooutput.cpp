@@ -10,6 +10,7 @@
 #include "logging_timestamp_init.h"
 
 #include "dragonpipe.h"
+#include "dragonpipe_test_utils.h"
 #include <dragonaudiooutput.h>
 
 #include <atomic>
@@ -670,7 +671,7 @@ void TestAudioOutput::fillQueue(DragonPipe<std::float32_t> *pipe, const std::vec
     if (!pipe || data.empty())
         return;
 
-    [[maybe_unused]] const auto written = pipe->producer().writeSome(data);
+    [[maybe_unused]] const auto written = writeAll(pipe->producer(), data);
 }
 
 QTEST_MAIN(TestAudioOutput)

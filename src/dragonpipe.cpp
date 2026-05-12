@@ -43,19 +43,6 @@ size_t DragonPipe<T>::Producer::write(std::span<const T> items, std::stop_token 
 }
 
 template<typename T>
-size_t DragonPipe<T>::Producer::writeSome(std::span<const T> items)
-{
-    size_t n = m_pipe->m_queue.try_write(items.size(), [&](std::span<T> b1, std::span<T> b2) {
-        auto in_iter = std::ranges::copy_n(items.begin(), b1.size(), b1.begin()).in;
-        std::ranges::copy_n(in_iter, b2.size(), b2.begin());
-    });
-    if (n > 0) {
-        m_pipe->m_cv.notify_one();
-    }
-    return n;
-}
-
-template<typename T>
 void DragonPipe<T>::Producer::notify()
 {
     m_pipe->m_cv.notify_one();
