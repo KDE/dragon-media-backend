@@ -8,7 +8,6 @@
 #include <dragonsdl/dragonfftframe.h>
 #include <dragonsdl/dragonplayer.h>
 
-#include <condition_variable>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -17,7 +16,7 @@
 #include <vector>
 
 template<typename T>
-class LockFreeSpscQueue;
+class DragonPipe;
 class DragonFftProcessor;
 
 class DragonFftPipeline
@@ -31,14 +30,11 @@ public:
     DragonFftPipeline(DragonFftPipeline &&) = delete;
     DragonFftPipeline &operator=(DragonFftPipeline &&) = delete;
 
-    void ensureInfrastructure(std::vector<std::float32_t> *buffer, std::condition_variable *waitCv, DragonPlayer::FftMode mode);
+    void ensureInfrastructure(DragonPipe<std::float32_t> *pipe, DragonPlayer::FftMode mode);
 
     void teardown();
-    void setQueue(LockFreeSpscQueue<std::float32_t> *queue);
-
-    void setWaitCv(std::condition_variable *cv);
-
     void setSampleRate(int sampleRate);
+    void setChannelCount(int channels);
 
     void setMode(DragonPlayer::FftMode mode);
     [[nodiscard]] DragonPlayer::FftMode mode() const;
@@ -47,11 +43,10 @@ public:
     void stop();
     [[nodiscard]] bool isRunning() const;
 
-    void restartWithQueue(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv);
+    void restartThread();
 
     using FrameCallback = std::function<void(DragonFftFrame)>;
     void setFrameCallback(FrameCallback cb);
-
     [[nodiscard]] bool hasInfrastructure() const;
 
 private:
@@ -62,15 +57,11 @@ private:
     void startThread();
     void stopThread();
     void setModeInternal(DragonPlayer::FftMode mode);
-    void restartWithQueueInternal(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv);
 
     std::unique_ptr<DragonFftProcessor> m_fftProcessor;
 
     std::jthread m_fftThread;
-
-    LockFreeSpscQueue<std::float32_t> *m_fftQueue = nullptr;
-    std::vector<std::float32_t> *m_fftBuffer = nullptr;
-    std::condition_variable *m_waitCv = nullptr;
+    DragonPipe<std::float32_t> *m_fftPipe = nullptr;
 
     DragonPlayer::FftMode m_currentMode = DragonPlayer::FftMode::Off;
     bool m_infrastructureCreated = false;

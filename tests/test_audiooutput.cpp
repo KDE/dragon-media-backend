@@ -9,7 +9,7 @@
 
 #include "logging_timestamp_init.h"
 
-#include <LockFreeSpscQueue.h>
+#include "dragonpipe.h"
 #include <dragonaudiooutput.h>
 
 #include <atomic>
@@ -65,7 +65,7 @@ private Q_SLOTS:
     void testPositionStabilityDuringPause();
 
 private:
-    void fillQueue(LockFreeSpscQueue<std::float32_t> *queue, const std::vector<std::float32_t> &data);
+    void fillQueue(DragonPipe<std::float32_t> *pipe, const std::vector<std::float32_t> &data);
 };
 
 void TestAudioOutput::testConstruction()
@@ -150,13 +150,12 @@ void TestAudioOutput::testVolumeChangedSignal()
 void TestAudioOutput::testSetQueue()
 {
     DragonAudioOutput output;
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    DragonPipe<std::float32_t> pipe(65536);
 
-    output.setQueue(&queue);
+    output.setAudioPipe(&pipe);
     QVERIFY(true);
 
-    output.setQueue(nullptr);
+    output.setAudioPipe(nullptr);
     QVERIFY(true);
 }
 
@@ -210,9 +209,8 @@ void TestAudioOutput::testStartStopLifecycle()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
 
@@ -230,9 +228,8 @@ void TestAudioOutput::testMultipleStartStopCycles()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     for (int i = 0; i < 3; ++i) {
         output.start(44100, 2);
@@ -248,17 +245,16 @@ void TestAudioOutput::testAudioDataProcessing()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     std::vector<std::float32_t> audioData(4096, 0.5f);
-    fillQueue(&queue, audioData);
+    fillQueue(&pipe, audioData);
 
     output.start(44100, 2);
 
     QTest::qWait(50);
-    fillQueue(&queue, std::vector<std::float32_t>(2048, 0.3f));
+    fillQueue(&pipe, std::vector<std::float32_t>(2048, 0.3f));
 
     QTest::qWait(100);
 
@@ -272,14 +268,13 @@ void TestAudioOutput::testPositionTrackingWithData()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
 
     std::vector<std::float32_t> oneSecond(44100, 0.5f);
-    fillQueue(&queue, oneSecond);
+    fillQueue(&pipe, oneSecond);
 
     QTest::qWait(1500);
 
@@ -296,20 +291,18 @@ void TestAudioOutput::testQueueBehavior()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
+    DragonPipe<std::float32_t> pipe(65536);
 
-    output.setQueue(&queue);
+    output.setAudioPipe(&pipe);
     QVERIFY(true);
 
     DragonAudioOutput output2;
 
-    std::vector<std::float32_t> buffer2(65536);
-    LockFreeSpscQueue<std::float32_t> queue2{std::span{buffer2}};
-    output2.setQueue(&queue2);
+    DragonPipe<std::float32_t> pipe2(65536);
+    output2.setAudioPipe(&pipe2);
     output2.start(44100, 2);
 
-    fillQueue(&queue2, std::vector<std::float32_t>(4096, 0.5f));
+    fillQueue(&pipe2, std::vector<std::float32_t>(4096, 0.5f));
     QTest::qWait(100);
 
     output2.stop();
@@ -319,9 +312,8 @@ void TestAudioOutput::testStartWhileAlreadyStarted()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
@@ -337,18 +329,17 @@ void TestAudioOutput::testStopWithActiveCallbacks()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
 
-    fillQueue(&queue, std::vector<std::float32_t>(8192, 0.5f));
+    fillQueue(&pipe, std::vector<std::float32_t>(8192, 0.5f));
 
     QTest::qWait(20);
 
-    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.3f));
+    fillQueue(&pipe, std::vector<std::float32_t>(4096, 0.3f));
 
     output.stop();
     QVERIFY(!output.isDeviceOpen());
@@ -361,19 +352,18 @@ void TestAudioOutput::testRapidStartStopCycles()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     for (int i = 0; i < 10; ++i) {
         output.start(44100, 2);
         QVERIFY(output.isDeviceOpen());
 
-        fillQueue(&queue, std::vector<std::float32_t>(2048, 0.5f));
+        fillQueue(&pipe, std::vector<std::float32_t>(2048, 0.5f));
 
         QTest::qWait(5);
 
-        fillQueue(&queue, std::vector<std::float32_t>(2048, 0.3f));
+        fillQueue(&pipe, std::vector<std::float32_t>(2048, 0.3f));
 
         output.stop();
         QVERIFY(!output.isDeviceOpen());
@@ -387,9 +377,8 @@ void TestAudioOutput::testStopDuringStarvation()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
@@ -407,9 +396,8 @@ void TestAudioOutput::testSilence()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
@@ -417,7 +405,7 @@ void TestAudioOutput::testSilence()
     output.silence();
     QVERIFY(output.isDeviceOpen());
 
-    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    fillQueue(&pipe, std::vector<std::float32_t>(4096, 0.5f));
     QTest::qWait(100);
 
     QVERIFY(output.isDeviceOpen());
@@ -450,14 +438,13 @@ void TestAudioOutput::testFlushOpensGate()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
 
-    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    fillQueue(&pipe, std::vector<std::float32_t>(4096, 0.5f));
     QTest::qWait(50);
 
     output.setQueueReady(false);
@@ -469,7 +456,7 @@ void TestAudioOutput::testFlushOpensGate()
 
     QVERIFY2(output.isQueueReady(), "SDL callback should have processed flush and opened the gate");
 
-    QCOMPARE(queue.get_num_items_ready(), size_t(0));
+    QCOMPARE(pipe.consumer().ready(), size_t(0));
 
     output.stop();
     QVERIFY(!output.isDeviceOpen());
@@ -479,26 +466,25 @@ void TestAudioOutput::testGaplessTransition()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
 
-    fillQueue(&queue, std::vector<std::float32_t>(65536, 0.5f));
+    fillQueue(&pipe, std::vector<std::float32_t>(65536, 0.5f));
     QTest::qWait(300);
 
     const int64_t samplesBefore = output.totalSamplesWritten();
     QVERIFY2(samplesBefore > 10000, "Counter should have grown large after 300ms of playback");
-    const size_t queueSizeBefore = queue.get_num_items_ready();
+    const size_t queueSizeBefore = pipe.consumer().ready();
     QVERIFY2(queueSizeBefore > 0, "Queue should still have items");
 
     output.setPositionOffset(0, DragonAudioOutput::PositionResetMode::GaplessTransition);
 
     QTest::qWait(100);
 
-    const size_t queueSizeAfter = queue.get_num_items_ready();
+    const size_t queueSizeAfter = pipe.consumer().ready();
     QVERIFY2(queueSizeAfter > 0, "Queue should not be drained during GaplessTransition");
 
     output.stop();
@@ -512,9 +498,8 @@ void TestAudioOutput::testStartPaused()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2, true);
 
@@ -536,14 +521,13 @@ void TestAudioOutput::testPauseResumeCycle()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
 
-    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    fillQueue(&pipe, std::vector<std::float32_t>(4096, 0.5f));
     QTest::qWait(100);
 
     const int64_t posBefore = output.positionMs();
@@ -579,9 +563,8 @@ void TestAudioOutput::testIsPausedBasic()
 
     QVERIFY(!output.isPaused());
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
@@ -600,9 +583,8 @@ void TestAudioOutput::testIsPausedAfterStop()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     output.pause();
@@ -617,22 +599,21 @@ void TestAudioOutput::testSeekWhilePaused()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
     QVERIFY(output.isDeviceOpen());
 
-    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    fillQueue(&pipe, std::vector<std::float32_t>(4096, 0.5f));
     QTest::qWait(100);
 
     output.pause();
     QVERIFY(output.isPaused());
 
-    QVERIFY(queue.get_num_items_ready() == 0);
-    fillQueue(&queue, std::vector<std::float32_t>(8192, 0.5f));
-    const size_t queueSizeBeforeSeek = queue.get_num_items_ready();
+    QVERIFY(pipe.consumer().ready() == 0);
+    fillQueue(&pipe, std::vector<std::float32_t>(8192, 0.5f));
+    const size_t queueSizeBeforeSeek = pipe.consumer().ready();
     QVERIFY2(queueSizeBeforeSeek > 0, "Queue should have stale samples before seek");
 
     output.setQueueReady(false);
@@ -644,7 +625,7 @@ void TestAudioOutput::testSeekWhilePaused()
     const int64_t posAfterSeek = output.positionMs();
     QCOMPARE(posAfterSeek, seekTargetMs);
 
-    QCOMPARE(queue.get_num_items_ready(), size_t(0));
+    QCOMPARE(pipe.consumer().ready(), size_t(0));
 
     QVERIFY(output.isQueueReady());
 
@@ -658,13 +639,12 @@ void TestAudioOutput::testPositionStabilityDuringPause()
 {
     DragonAudioOutput output;
 
-    std::vector<std::float32_t> buffer(65536);
-    LockFreeSpscQueue<std::float32_t> queue{std::span{buffer}};
-    output.setQueue(&queue);
+    DragonPipe<std::float32_t> pipe(65536);
+    output.setAudioPipe(&pipe);
 
     output.start(44100, 2);
 
-    fillQueue(&queue, std::vector<std::float32_t>(4096, 0.5f));
+    fillQueue(&pipe, std::vector<std::float32_t>(4096, 0.5f));
     QTest::qWait(100);
 
     output.pause();
@@ -685,22 +665,12 @@ void TestAudioOutput::testPositionStabilityDuringPause()
     output.stop();
 }
 
-void TestAudioOutput::fillQueue(LockFreeSpscQueue<std::float32_t> *queue, const std::vector<std::float32_t> &data)
+void TestAudioOutput::fillQueue(DragonPipe<std::float32_t> *pipe, const std::vector<std::float32_t> &data)
 {
-    if (!queue || data.empty())
+    if (!pipe || data.empty())
         return;
 
-    [[maybe_unused]] const auto written = queue->try_write(data.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
-        size_t i = 0;
-        for (std::float32_t &v : b1) {
-            if (i < data.size())
-                v = data[i++];
-        }
-        for (std::float32_t &v : b2) {
-            if (i < data.size())
-                v = data[i++];
-        }
-    });
+    [[maybe_unused]] const auto written = pipe->producer().writeSome(data);
 }
 
 QTEST_MAIN(TestAudioOutput)

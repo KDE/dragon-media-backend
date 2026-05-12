@@ -13,15 +13,13 @@
 #include <array>
 #include <atomic>
 #include <complex>
-#include <condition_variable>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <span>
 #include <stop_token>
 
-template<typename T>
-class LockFreeSpscQueue;
+#include "dragonpipe.h"
 
 template<typename T>
 class kissfft;
@@ -45,10 +43,11 @@ public:
     DragonFftProcessor(DragonFftProcessor &&) = delete;
     DragonFftProcessor &operator=(DragonFftProcessor &&) = delete;
 
-    void setQueue(LockFreeSpscQueue<std::float32_t> *queue);
-    void setWaitCv(std::condition_variable *cv);
-    void setSampleRate(int sampleRate);
+    void setConsumer(DragonPipe<std::float32_t>::Consumer consumer);
 
+    void setChannelCount(int channels);
+
+    void setSampleRate(int sampleRate);
     using FftMode = DragonPlayer::FftMode;
 
     void setFftMode(FftMode mode);
@@ -64,21 +63,17 @@ public:
     static void applyHannWindow(std::span<std::float32_t> data);
 
 private:
-    LockFreeSpscQueue<std::float32_t> *m_fftQueue = nullptr;
-    std::condition_variable *m_waitCv = nullptr;
-    std::mutex m_waitMutex;
+    DragonPipe<std::float32_t>::Consumer m_consumer;
+    int m_channelCount = 2;
     std::atomic<int> m_sampleRate{44100};
     std::atomic<FftMode> m_fftMode{FftMode::Off};
 
     std::unique_ptr<kissfft<float>> m_fft;
     std::array<std::float32_t, FFT_SIZE> m_inputWindow;
     std::array<std::float32_t, NUM_BAR_BINS> m_prevBarFrequencies;
-
     void transformReal(std::span<const std::float32_t, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output);
 
-    bool waitForSamples(std::stop_token st);
-
-    bool readSamplesIntoWindow(std::stop_token st);
+    bool tryReadAndDownmix(std::stop_token st);
 
     [[nodiscard]] float getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, int idx) const;
 
@@ -92,7 +87,6 @@ private:
     void emitFrame(const DragonFftFrame &frame, int frameCount, FftMode mode);
 
     FrameCallback m_frameCallback;
-
     std::mutex m_frameMutex;
     DragonFftFrame m_latestFrame;
 };

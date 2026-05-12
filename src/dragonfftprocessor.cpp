@@ -6,17 +6,16 @@
 #include <dragonfftprocessor.h>
 #include <stdfloat>
 
-#include <LockFreeSpscQueue.h>
 #include <kissfft.hh>
 
 #include "dragonsdl_fft_logging.h"
 
+#include "dragonpipe.h"
 #include <algorithm>
 #include <array>
 #include <cassert>
 #include <cmath>
 #include <complex>
-#include <condition_variable>
 #include <numbers>
 #include <ranges>
 #include <thread>
@@ -46,14 +45,14 @@ DragonFftProcessor::DragonFftProcessor()
 
 DragonFftProcessor::~DragonFftProcessor() = default;
 
-void DragonFftProcessor::setQueue(LockFreeSpscQueue<std::float32_t> *queue)
+void DragonFftProcessor::setConsumer(DragonPipe<std::float32_t>::Consumer consumer)
 {
-    m_fftQueue = queue;
+    m_consumer = consumer;
 }
 
-void DragonFftProcessor::setWaitCv(std::condition_variable *cv)
+void DragonFftProcessor::setChannelCount(int channels)
 {
-    m_waitCv = cv;
+    m_channelCount = std::max(1, channels);
 }
 
 void DragonFftProcessor::setSampleRate(int sampleRate)
@@ -108,10 +107,11 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         }
         prevMode = mode;
 
-        if (!waitForSamples(st))
+        if (!tryReadAndDownmix(st)) {
+            if (st.stop_requested())
+                break;
             continue;
-        if (!readSamplesIntoWindow(st))
-            break;
+        }
 
         applyHannWindow(m_inputWindow);
 
@@ -133,31 +133,33 @@ void DragonFftProcessor::processLoop(std::stop_token st)
     }
 }
 
-bool DragonFftProcessor::waitForSamples(std::stop_token st)
+bool DragonFftProcessor::tryReadAndDownmix(std::stop_token st)
 {
-    if (m_waitCv) {
-        std::unique_lock lock(m_waitMutex);
-        m_waitCv->wait_for(lock, std::chrono::milliseconds(50), [&] {
-            return st.stop_requested() || !m_fftQueue || m_fftQueue->get_num_items_ready() >= FFT_SIZE;
-        });
-    }
-    if (st.stop_requested())
-        return false;
-    return m_fftQueue && m_fftQueue->get_num_items_ready() >= FFT_SIZE;
-}
+    const size_t samplesNeeded = FFT_SIZE * static_cast<size_t>(m_channelCount);
 
-bool DragonFftProcessor::readSamplesIntoWindow(std::stop_token st)
-{
-    if (st.stop_requested() || !m_fftQueue) {
+    if (!m_consumer.waitFor(samplesNeeded, st)) {
         return false;
     }
-    auto scope = m_fftQueue->prepare_read(FFT_SIZE);
-    assert(scope.get_items_read() == FFT_SIZE);
 
-    auto [_, out1] = std::ranges::copy(scope.get_block1(), m_inputWindow.begin());
-    std::ranges::copy(scope.get_block2(), out1);
+    m_consumer.readSomeWith(samplesNeeded, [this](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
+        size_t outIdx = 0;
+        const int ch = m_channelCount;
 
-    return !st.stop_requested();
+        auto downmixBlock = [&](std::span<const std::float32_t> block) {
+            for (size_t i = 0; i + static_cast<size_t>(ch) <= block.size() && outIdx < FFT_SIZE; i += static_cast<size_t>(ch), ++outIdx) {
+                std::float32_t sum = 0;
+                for (int c = 0; c < ch; ++c) {
+                    sum += block[i + static_cast<size_t>(c)];
+                }
+                m_inputWindow[outIdx] = sum / static_cast<std::float32_t>(ch);
+            }
+        };
+
+        downmixBlock(b1);
+        downmixBlock(b2);
+    });
+
+    return true;
 }
 
 float DragonFftProcessor::getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, const float binToFreq, const int idx) const

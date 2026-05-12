@@ -9,8 +9,6 @@
 #include <SDL3/SDL_audio.h>
 #include <SDL3/SDL_timer.h>
 
-#include <LockFreeSpscQueue.h>
-
 #include <atomic>
 #include <cstdint>
 
@@ -108,19 +106,19 @@ int DragonDiagnostics::sdlAudioBufferFrames() const
 std::size_t DragonDiagnostics::decodeQueueSize() const
 {
     DragonPlayerPrivate *priv = d->m_player->d.get();
-    if (!priv || !priv->audioQueue) {
+    if (!priv) {
         return 0;
     }
-    return priv->audioQueue->get_num_items_ready();
+    return priv->audioPipe.consumer().ready();
 }
 
 std::size_t DragonDiagnostics::fftQueueSize() const
 {
     DragonPlayerPrivate *priv = d->m_player->d.get();
-    if (!priv || !priv->fftQueue) {
+    if (!priv) {
         return 0;
     }
-    return priv->fftQueue->get_num_items_ready();
+    return priv->fftPipe.consumer().ready();
 }
 
 bool DragonDiagnostics::decodeLoopActive() const

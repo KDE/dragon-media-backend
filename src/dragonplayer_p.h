@@ -10,7 +10,7 @@
 #include "dragonfftpipeline.h"
 #include <dragonsdl/dragonplayer.h>
 
-#include <LockFreeSpscQueue.h>
+#include "dragonpipe.h"
 
 #include <QObject>
 #include <QTimer>
@@ -32,8 +32,6 @@ public:
     explicit DragonPlayerPrivate(DragonPlayer *player);
 
 private:
-    static constexpr size_t kBufferCapacity = 65536;
-
     friend class DragonDiagnostics;
     friend class DragonPlayer;
 
@@ -66,10 +64,8 @@ private:
     DragonDecodePipeline decodePipeline;
     DragonFftPipeline fftPipeline;
 
-    std::vector<std::float32_t> fftBuffer;
-    std::vector<std::float32_t> audioBuffer;
-    std::unique_ptr<LockFreeSpscQueue<std::float32_t>> fftQueue;
-    std::unique_ptr<LockFreeSpscQueue<std::float32_t>> audioQueue;
+    DragonPipe<std::float32_t> audioPipe;
+    DragonPipe<std::float32_t> fftPipe;
 
     std::unique_ptr<DragonAudioOutput> audioOutput;
 

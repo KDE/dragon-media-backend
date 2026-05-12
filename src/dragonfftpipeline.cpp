@@ -6,8 +6,6 @@
 #include "dragonfftpipeline.h"
 #include "dragonfftprocessor.h"
 
-#include <LockFreeSpscQueue.h>
-
 #include "dragonsdl_fft_logging.h"
 #include "dragonsdl_logging.h"
 
@@ -33,13 +31,12 @@ void DragonFftPipeline::ensureInfrastructureInternal()
         return;
     }
 
-    if (m_fftBuffer && m_fftBuffer->empty()) {
-        m_fftBuffer->resize(kBufferCapacity);
-    }
-
     m_fftProcessor = std::make_unique<DragonFftProcessor>();
-    m_fftProcessor->setWaitCv(m_waitCv);
     m_fftProcessor->setFftMode(m_currentMode);
+
+    if (m_fftPipe) {
+        m_fftProcessor->setConsumer(m_fftPipe->consumer());
+    }
 
     if (m_frameCallback) {
         m_fftProcessor->setFrameCallback([this](DragonFftFrame frame) {
@@ -56,13 +53,8 @@ void DragonFftPipeline::teardownInternal()
 {
     stopThread();
     m_fftProcessor.reset();
-    if (m_fftBuffer) {
-        m_fftBuffer->clear();
-        m_fftBuffer->shrink_to_fit();
-    }
     m_infrastructureCreated = false;
-    m_fftQueue = nullptr;
-    m_waitCv = nullptr;
+    m_fftPipe = nullptr;
 
     qCDebug(dragonsdlFft) << "FFT infrastructure torn down";
 }
@@ -90,8 +82,8 @@ void DragonFftPipeline::stopThread()
 {
     if (m_fftThread.joinable()) {
         m_fftThread.request_stop();
-        if (m_waitCv) {
-            m_waitCv->notify_all();
+        if (m_fftPipe) {
+            m_fftPipe->producer().notify();
         }
         m_fftThread.join();
         qCDebug(dragonsdlFft) << "FFT thread stopped";
@@ -127,28 +119,19 @@ void DragonFftPipeline::setModeInternal(DragonPlayer::FftMode mode)
     }
 }
 
-void DragonFftPipeline::restartWithQueueInternal(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv)
+void DragonFftPipeline::restartThread()
 {
-    m_fftQueue = queue;
-    m_waitCv = cv;
-
     stopThread();
-
     if (m_fftProcessor) {
-        m_fftProcessor->setQueue(queue);
-        m_fftProcessor->setWaitCv(cv);
         m_fftProcessor->reset();
+        m_fftProcessor->setFftMode(m_currentMode);
     }
-
     startThread();
-
-    qCDebug(dragonsdlFft) << "FFT restarted with queue";
 }
 
-void DragonFftPipeline::ensureInfrastructure(std::vector<std::float32_t> *buffer, std::condition_variable *waitCv, DragonPlayer::FftMode mode)
+void DragonFftPipeline::ensureInfrastructure(DragonPipe<std::float32_t> *pipe, DragonPlayer::FftMode mode)
 {
-    m_fftBuffer = buffer;
-    m_waitCv = waitCv;
+    m_fftPipe = pipe;
     m_currentMode = mode;
 
     if (!m_infrastructureCreated) {
@@ -163,26 +146,17 @@ void DragonFftPipeline::teardown()
     teardownInternal();
 }
 
-void DragonFftPipeline::setQueue(LockFreeSpscQueue<std::float32_t> *queue)
-{
-    m_fftQueue = queue;
-    if (m_fftProcessor) {
-        m_fftProcessor->setQueue(queue);
-    }
-}
-
-void DragonFftPipeline::setWaitCv(std::condition_variable *cv)
-{
-    m_waitCv = cv;
-    if (m_fftProcessor) {
-        m_fftProcessor->setWaitCv(cv);
-    }
-}
-
 void DragonFftPipeline::setSampleRate(int sampleRate)
 {
     if (m_fftProcessor) {
         m_fftProcessor->setSampleRate(sampleRate);
+    }
+}
+
+void DragonFftPipeline::setChannelCount(int channels)
+{
+    if (m_fftProcessor) {
+        m_fftProcessor->setChannelCount(channels);
     }
 }
 
@@ -209,11 +183,6 @@ void DragonFftPipeline::stop()
 bool DragonFftPipeline::isRunning() const
 {
     return m_fftThread.joinable();
-}
-
-void DragonFftPipeline::restartWithQueue(LockFreeSpscQueue<std::float32_t> *queue, std::condition_variable *cv)
-{
-    restartWithQueueInternal(queue, cv);
 }
 
 void DragonFftPipeline::setFrameCallback(FrameCallback cb)

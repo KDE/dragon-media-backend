@@ -17,7 +17,7 @@
 #include <mutex>
 
 template<typename T>
-class LockFreeSpscQueue;
+class DragonPipe;
 
 class DRAGONSDL_EXPORT DragonAudioOutput : public QObject
 {
@@ -32,12 +32,9 @@ public:
     DragonAudioOutput(DragonAudioOutput &&) = delete;
     DragonAudioOutput &operator=(DragonAudioOutput &&) = delete;
 
-    void setQueue(LockFreeSpscQueue<std::float32_t> *queue);
-    void setFftQueue(LockFreeSpscQueue<std::float32_t> *queue);
-    std::condition_variable *fftCv()
-    {
-        return &m_fftWaitCv;
-    }
+    void setAudioPipe(DragonPipe<std::float32_t> *pipe);
+
+    void setFftPipe(DragonPipe<std::float32_t> *pipe);
 
     void start(int sampleRate, int channels, bool startPaused = false);
 
@@ -102,9 +99,8 @@ private:
 
     std::atomic<AudioSession *> m_session{nullptr};
 
-    std::atomic<LockFreeSpscQueue<std::float32_t> *> m_audioQueue{nullptr};
-    std::atomic<LockFreeSpscQueue<std::float32_t> *> m_fftQueue{nullptr};
-    std::condition_variable m_fftWaitCv;
+    std::atomic<DragonPipe<std::float32_t> *> m_audioPipe{nullptr};
+    std::atomic<DragonPipe<std::float32_t> *> m_fftPipe{nullptr};
 
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};

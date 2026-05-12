@@ -30,10 +30,11 @@ public:
     class Producer
     {
     public:
+        Producer() = default;
+
         size_t write(std::span<const T> items, std::stop_token st);
 
         size_t writeSome(std::span<const T> items);
-
         template<typename Func>
         size_t writeSomeWith(size_t maxItems, Func &&fn);
 
@@ -53,6 +54,8 @@ public:
     class Consumer
     {
     public:
+        Consumer() = default;
+
         bool waitFor(size_t minItems, std::stop_token st);
 
         template<typename Func>

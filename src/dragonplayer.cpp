@@ -27,26 +27,6 @@ static inline void setCurrentThreadName(const char *name)
     pthread_setname_np(pthread_self(), name);
 }
 
-namespace
-{
-size_t writeToQueueWithBackpressure(LockFreeSpscQueue<std::float32_t> &queue, std::span<const std::float32_t> pcm, const std::stop_token &st)
-{
-    size_t written = 0;
-    while (written < pcm.size() && !st.stop_requested()) {
-        auto remaining = pcm.subspan(written);
-        size_t n = queue.try_write(remaining.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
-            auto in_iter = std::ranges::copy_n(remaining.begin(), b1.size(), b1.begin()).in;
-            std::ranges::copy_n(in_iter, b2.size(), b2.begin());
-        });
-        written += n;
-        if (written < pcm.size() && !st.stop_requested()) {
-            std::this_thread::sleep_for(std::chrono::microseconds(500));
-        }
-    }
-    return written;
-}
-}
-
 DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player)
     : QObject(player)
     , q(player)
@@ -89,6 +69,7 @@ void DragonPlayerPrivate::onFormatReady(int sampleRate, int channels, bool isGap
     currentChannels = channels;
 
     fftPipeline.setSampleRate(sampleRate);
+    fftPipeline.setChannelCount(channels);
 
     if (currentStatus != DragonPlayer::MediaStatus::LoadedMedia) {
         currentStatus = DragonPlayer::MediaStatus::LoadedMedia;
@@ -200,7 +181,7 @@ void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, con
         return;
     }
 
-    writeToQueueWithBackpressure(*audioQueue, pcm, st);
+    audioPipe.producer().write(pcm, st);
 }
 
 void DragonPlayerPrivate::connectPipelineSignals()
@@ -313,12 +294,9 @@ void DragonPlayerPrivate::stopPipeline()
 
 void DragonPlayerPrivate::init()
 {
-    audioBuffer.resize(kBufferCapacity);
-    audioQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(audioBuffer));
-
     audioOutput = std::make_unique<DragonAudioOutput>();
-    audioOutput->setQueue(audioQueue.get());
-    audioOutput->setFftQueue(nullptr);
+    audioOutput->setAudioPipe(&audioPipe);
+    audioOutput->setFftPipe(nullptr);
 
     QObject::connect(audioOutput.get(), &DragonAudioOutput::errorOccurred, this, [this](const QString &) {
         setError(DragonPlayer::Error::ResourceError);
@@ -437,23 +415,15 @@ void DragonPlayer::setSource(const QUrl &source)
     if (d->currentFftMode == DragonPlayer::FftMode::Off) {
         d->fftPipeline.stop();
         d->fftPipeline.teardown();
-        d->fftQueue.reset();
-        d->fftBuffer.clear();
-        d->fftBuffer.shrink_to_fit();
         if (d->audioOutput) {
-            d->audioOutput->setFftQueue(nullptr);
+            d->audioOutput->setFftPipe(nullptr);
         }
     } else {
-        d->fftPipeline.ensureInfrastructure(&d->fftBuffer, d->audioOutput->fftCv(), d->currentFftMode);
-
-        if (!d->fftQueue) {
-            d->fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(d->fftBuffer));
-            if (d->audioOutput) {
-                d->audioOutput->setFftQueue(d->fftQueue.get());
-            }
+        d->fftPipeline.ensureInfrastructure(&d->fftPipe, d->currentFftMode);
+        if (d->audioOutput) {
+            d->audioOutput->setFftPipe(&d->fftPipe);
         }
-
-        d->fftPipeline.restartWithQueue(d->fftQueue.get(), d->audioOutput->fftCv());
+        d->fftPipeline.restartThread();
     }
 
     d->currentSource = source;
@@ -535,26 +505,18 @@ void DragonPlayer::setFftMode(FftMode mode)
     d->currentFftMode = mode;
 
     if (!wasOn && nowOn) {
-        d->fftPipeline.ensureInfrastructure(&d->fftBuffer, d->audioOutput->fftCv(), mode);
-
-        if (!d->fftQueue) {
-            d->fftQueue = std::make_unique<LockFreeSpscQueue<std::float32_t>>(std::span(d->fftBuffer));
-        }
-
+        d->fftPipeline.ensureInfrastructure(&d->fftPipe, mode);
         if (d->audioOutput) {
-            d->audioOutput->setFftQueue(d->fftQueue.get());
+            d->audioOutput->setFftPipe(&d->fftPipe);
         }
-
-        d->fftPipeline.setQueue(d->fftQueue.get());
-
         if (d->fftPipeline.isRunning()) {
-            d->fftPipeline.restartWithQueue(d->fftQueue.get(), d->audioOutput->fftCv());
+            d->fftPipeline.restartThread();
         } else {
             d->fftPipeline.start();
         }
     } else if (wasOn && !nowOn) {
         if (d->audioOutput) {
-            d->audioOutput->setFftQueue(nullptr);
+            d->audioOutput->setFftPipe(nullptr);
         }
         d->fftPipeline.setMode(mode);
     } else if (nowOn && d->fftPipeline.hasInfrastructure()) {

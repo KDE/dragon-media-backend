@@ -10,7 +10,7 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 
-#include <LockFreeSpscQueue.h>
+#include "dragonpipe.h"
 
 #include "dragonsdl_audio_logging.h"
 #include <QGuiApplication>
@@ -46,14 +46,14 @@ DragonAudioOutput::~DragonAudioOutput()
     SDL_Quit();
 }
 
-void DragonAudioOutput::setQueue(LockFreeSpscQueue<std::float32_t> *queue)
+void DragonAudioOutput::setAudioPipe(DragonPipe<std::float32_t> *pipe)
 {
-    m_audioQueue.store(queue, std::memory_order_release);
+    m_audioPipe.store(pipe, std::memory_order_release);
 }
 
-void DragonAudioOutput::setFftQueue(LockFreeSpscQueue<std::float32_t> *queue)
+void DragonAudioOutput::setFftPipe(DragonPipe<std::float32_t> *pipe)
 {
-    m_fftQueue.store(queue, std::memory_order_release);
+    m_fftPipe.store(pipe, std::memory_order_release);
 }
 
 void DragonAudioOutput::start(int sampleRate, int channels, bool startPaused)
@@ -207,11 +207,9 @@ void DragonAudioOutput::setPositionOffset(int64_t offsetMs, PositionResetMode mo
 
     if (isPaused()) {
         if (mode == PositionResetMode::Seek || mode == PositionResetMode::NormalTrackChange) {
-            if (auto *queue = m_audioQueue.load(std::memory_order_acquire)) {
-                const size_t ready = queue->get_num_items_ready();
-                if (ready > 0) {
-                    auto drain = queue->prepare_read(ready);
-                }
+            auto *pipe = m_audioPipe.load(std::memory_order_acquire);
+            if (pipe) {
+                pipe->consumer().drain();
             }
             clearStream();
             m_queueReady.store(true, std::memory_order_release);
@@ -329,9 +327,8 @@ bool DragonAudioOutput::hasFormat(int sampleRate, int channels) const
 void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int)
 {
     auto *self = static_cast<DragonAudioOutput *>(userdata);
-    if (!self) {
+    if (!self)
         return;
-    }
 
     thread_local static bool audioThreadNamed = false;
     if (!audioThreadNamed) {
@@ -353,95 +350,62 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     Q_EMIT self->audioCallbackInvoked();
 
     const auto *session = self->m_session.load(std::memory_order_acquire);
-    if (!session) {
+    if (!session)
         return;
-    }
 
-    auto *queue = self->m_audioQueue.load(std::memory_order_acquire);
-    if (!queue) {
+    auto *audioPipe = self->m_audioPipe.load(std::memory_order_acquire);
+    if (!audioPipe)
         return;
-    }
 
     if (self->m_positionResetPending.exchange(false, std::memory_order_acq_rel)) {
         self->m_totalSamplesWritten.store(0, std::memory_order_relaxed);
     }
 
     if (self->m_flushPending.exchange(false, std::memory_order_acq_rel)) {
-        const size_t ready = queue->get_num_items_ready();
-        if (ready > 0) {
-            auto drain = queue->prepare_read(ready);
-        }
+        audioPipe->consumer().drain();
         self->m_totalSamplesWritten.store(0, std::memory_order_relaxed);
         self->m_queueReady.store(true, std::memory_order_release);
         return;
     }
 
-    if (additional_amount <= 0) {
+    if (additional_amount <= 0)
         return;
-    }
 
-    const size_t queueReady = queue->get_num_items_ready();
-
-    auto channels = session->channels;
+    const int channels = session->channels;
     const size_t floatsNeeded = (static_cast<size_t>(additional_amount) / sizeof(float)) / static_cast<size_t>(channels) * static_cast<size_t>(channels);
-    if (floatsNeeded == 0) {
+    if (floatsNeeded == 0)
         return;
+
+    size_t totalFloatsRead = 0;
+
+    audioPipe->consumer().readSomeWith(floatsNeeded, [&](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
+        totalFloatsRead = b1.size() + b2.size();
+
+        if (!b1.empty()) {
+            SDL_PutAudioStreamData(stream, b1.data(), static_cast<int>(b1.size() * sizeof(float)));
+        }
+        if (!b2.empty()) {
+            SDL_PutAudioStreamData(stream, b2.data(), static_cast<int>(b2.size() * sizeof(float)));
+        }
+
+        auto *fftPipe = self->m_fftPipe.load(std::memory_order_acquire);
+        if (fftPipe && totalFloatsRead > 0) {
+            fftPipe->producer().writeSomeWith(totalFloatsRead, [&](std::span<std::float32_t> fb1, std::span<std::float32_t> fb2) {
+                size_t srcOffset = 0;
+                auto fillDst = [&](std::span<std::float32_t> dst) {
+                    for (size_t i = 0; i < dst.size() && srcOffset < totalFloatsRead; ++i, ++srcOffset) {
+                        dst[i] = (srcOffset < b1.size()) ? b1[srcOffset] : b2[srcOffset - b1.size()];
+                    }
+                };
+                fillDst(fb1);
+                fillDst(fb2);
+            });
+        }
+    });
+
+    if (totalFloatsRead > 0) {
+        self->m_totalSamplesWritten.fetch_add(static_cast<int64_t>(totalFloatsRead), std::memory_order_relaxed);
+    } else {
+        qCDebug(dragonsdlAudio) << "STARVATION additional=" << additional_amount << "floatsNeeded=" << floatsNeeded << "itemsRead=0";
     }
-
-    auto scope = queue->prepare_read(floatsNeeded);
-    const size_t itemsRead = scope.get_items_read();
-
-    if (itemsRead == 0) {
-        qCDebug(dragonsdlAudio) << "STARVATION additional=" << additional_amount << "queueReady=" << queueReady << "floatsNeeded=" << floatsNeeded
-                                << "itemsRead=0";
-        return;
-    }
-
-    auto block1 = scope.get_block1();
-    auto block2 = scope.get_block2();
-    if (!block1.empty()) {
-        SDL_PutAudioStreamData(stream, block1.data(), static_cast<int>(block1.size() * sizeof(float)));
-    }
-    if (!block2.empty()) {
-        SDL_PutAudioStreamData(stream, block2.data(), static_cast<int>(block2.size() * sizeof(float)));
-    }
-
-    if (auto *fftQueue = self->m_fftQueue.load(std::memory_order_acquire)) {
-        const size_t totalSamples = block1.size() + block2.size();
-        const size_t frameCount = totalSamples / channels;
-
-        auto getSrc = [&](size_t idx) -> std::float32_t {
-            return idx < block1.size() ? block1[idx] : block2[idx - block1.size()];
-        };
-
-        [[maybe_unused]] const size_t fftWritten = fftQueue->try_write(frameCount, [&](std::span<std::float32_t> fb1, std::span<std::float32_t> fb2) {
-            const size_t fftWriteCapacity = fb1.size() + fb2.size();
-            const size_t framesToWrite = std::min(frameCount, fftWriteCapacity);
-
-            const auto computeMono = [&](const size_t frame) -> float {
-                const auto base = frame * channels;
-                auto channelSamples = std::views::iota(0, channels) | std::views::transform([&](const int c) {
-                                          return getSrc(base + c);
-                                      });
-                return std::ranges::fold_left(channelSamples, 0.0f, std::plus{}) / static_cast<float>(channels);
-            };
-
-            const size_t fb1Count = std::min(framesToWrite, fb1.size());
-
-            for (size_t i = 0; i < fb1Count; ++i) {
-                fb1[i] = computeMono(i);
-            }
-            for (size_t i = fb1Count; i < framesToWrite; ++i) {
-                fb2[i - fb1Count] = computeMono(i);
-            }
-
-            if (fftWriteCapacity < frameCount) {
-                qCDebug(dragonsdlAudio) << "Not enough capacity for all frames, skipping" << frameCount - fftWriteCapacity << "frames";
-            }
-        });
-    }
-
-    self->m_fftWaitCv.notify_one();
-
-    self->m_totalSamplesWritten.fetch_add(static_cast<int64_t>(itemsRead), std::memory_order_relaxed);
 }
