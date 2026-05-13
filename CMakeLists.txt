@@ -87,17 +87,10 @@ else()
     endif()
 endif()
 
-FetchContent_Declare(
-    spsc_queue_src
-    GIT_REPOSITORY https://github.com/joz-k/LockFreeSpscQueue.git
-    GIT_TAG v1.0.3
-    PATCH_COMMAND git apply --ignore-whitespace ${CMAKE_CURRENT_SOURCE_DIR}/cmake/lockfree_spsc_queue_no_exceptions.patch || true
+add_library(spsc_queue INTERFACE)
+target_include_directories(spsc_queue INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue>
 )
-set(SPSC_QUEUE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(SPSC_QUEUE_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(SPSC_QUEUE_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
-set(SPSC_QUEUE_BUILD_BENCHMARK_COMPARE OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(spsc_queue_src)
 
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOMOC_RELY_ON_EXPORTS ON)
@@ -182,7 +175,7 @@ target_include_directories(dragon-sdl PRIVATE
 )
 
 target_include_directories(dragon-sdl PRIVATE
-    ${spsc_queue_src_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
 )
 
 target_link_libraries(dragon-sdl
