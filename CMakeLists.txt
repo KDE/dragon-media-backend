@@ -68,7 +68,7 @@ if(KISSFFT_PC_FOUND)
     endif()
 else()
     find_package(kissfft CONFIG COMPONENTS float QUIET)
-    if(NOT kissfft_FOUND)
+    if(NOT TARGET kissfft::kissfft)
         message(STATUS "kissfft not found, downloading...")
         FetchContent_Declare(
             kissfft
@@ -183,10 +183,10 @@ target_link_libraries(dragon-sdl
         Qt6::Core
         Qt6::Network
         SDL3::SDL3
-        kissfft::kissfft-float
         PkgConfig::FFmpeg
     PRIVATE
         Qt6::Gui
+        kissfft::kissfft
 )
 
 include(GenerateExportHeader)
