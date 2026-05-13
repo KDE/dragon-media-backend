@@ -12,13 +12,10 @@
 #include <QString>
 
 #include <cstdint>
-#include <expected>
 #include <functional>
 #include <span>
 #include <stop_token>
 #include <vector>
-
-enum class AvioError;
 
 struct AVIOContext;
 
@@ -67,12 +64,9 @@ private:
 
     struct DecodeSession;
 
-    struct AvioContextHandle;
-    struct AvioInitResult;
+    bool initializeAvio(DecodeSession &session);
 
-    std::expected<AvioContextHandle, AvioError> initializeAvio();
-
-    bool openContainer(AvioContextHandle handle, DecodeSession &session);
+    bool openContainer(DecodeSession &session);
     bool findAudioStream(DecodeSession &session);
     bool setupCodec(DecodeSession &session);
     bool setupResampler(DecodeSession &session);

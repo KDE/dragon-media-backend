@@ -668,7 +668,7 @@ void TestE2E::testGaplessGenerationCheck()
     PlayerHelper helper(&player);
 
     QList<QUrl> sourceHistory;
-    QObject::connect(
+    connect(
         &player,
         &DragonPlayer::sourceChanged,
         &player,

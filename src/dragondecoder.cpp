@@ -10,7 +10,6 @@
 #include <QScopeGuard>
 
 #include <cstring>
-#include <expected>
 #include <memory>
 #include <ranges>
 #include <span>
@@ -50,23 +49,22 @@ struct AvFrameDeleter {
     }
 };
 
+struct AvioCtxDeleter {
+    void operator()(AVIOContext *ctx) const noexcept
+    {
+        if (ctx) {
+            uint8_t *buf = ctx->buffer;
+            avio_context_free(&ctx);
+            av_free(buf);
+        }
+    }
+};
+
 struct AvFormatCtxDeleter {
     void operator()(AVFormatContext *ctx) const noexcept
     {
-        if (!ctx) {
-            return;
-        }
-        const bool customIo = ctx->flags & AVFMT_FLAG_CUSTOM_IO;
-        AVIOContext *pb = customIo ? ctx->pb : nullptr;
-        uint8_t *buffer = nullptr;
-        if (customIo && pb) {
-            buffer = pb->buffer;
-            ctx->pb = nullptr;
-        }
-        avformat_close_input(&ctx);
-        if (customIo && pb) {
-            avio_context_free(&pb);
-            av_free(buffer);
+        if (ctx) {
+            avformat_close_input(&ctx);
         }
     }
 };
@@ -92,7 +90,10 @@ struct SwrCtxDeleter {
 };
 
 struct DragonDecoder::DecodeSession {
+    std::unique_ptr<AVIOContext, AvioCtxDeleter> avioCtx;
+
     std::unique_ptr<AVFormatContext, AvFormatCtxDeleter> fmtCtx;
+
     CodecContextPtr codecCtx;
     std::unique_ptr<SwrContext, SwrCtxDeleter> swrCtx;
     const AVCodec *codec = nullptr;
@@ -105,54 +106,6 @@ struct DragonDecoder::DecodeSession {
     bool firstFrame = true;
     int packetCount = 0;
     int frameCount = 0;
-};
-
-struct DragonDecoder::AvioContextHandle {
-    AVIOContext *ctx = nullptr;
-
-    AvioContextHandle() = default;
-    AvioContextHandle(AVIOContext *c)
-        : ctx(c)
-    {
-    }
-    ~AvioContextHandle()
-    {
-        if (ctx) {
-            uint8_t *buf = ctx->buffer;
-            avio_context_free(&ctx);
-            av_free(buf);
-        }
-    }
-    AvioContextHandle(AvioContextHandle &&other) noexcept
-        : ctx(other.ctx)
-    {
-        other.ctx = nullptr;
-    }
-    AvioContextHandle(const AvioContextHandle &) = delete;
-    AvioContextHandle &operator=(const AvioContextHandle &) = delete;
-
-    explicit operator bool() const noexcept
-    {
-        return ctx != nullptr;
-    }
-    AVIOContext *release() noexcept
-    {
-        auto *tmp = ctx;
-        ctx = nullptr;
-        return tmp;
-    }
-};
-
-struct DragonDecoder::AvioInitResult {
-    bool ok = false;
-    AvioContextHandle handle;
-
-    AvioInitResult() = default;
-    AvioInitResult(bool success, AvioContextHandle h)
-        : ok(success)
-        , handle(std::move(h))
-    {
-    }
 };
 
 DragonDecoder::DragonDecoder(ReadCallback readCb, const QString &filePath, QObject *parent)
@@ -170,11 +123,10 @@ void DragonDecoder::decodeLoop(std::stop_token st)
 
     DecodeSession session;
 
-    auto avio = initializeAvio();
-    if (!avio) {
+    if (!initializeAvio(session)) {
         return;
     }
-    if (!openContainer(std::move(*avio), session)) {
+    if (!openContainer(session)) {
         return;
     }
     if (!findAudioStream(session)) {
@@ -200,20 +152,16 @@ void DragonDecoder::decodeLoop(std::stop_token st)
     qCDebug(dragonsdlDecoder) << "decodeLoop finished total packets=" << session.packetCount << "total frames=" << session.frameCount;
 }
 
-enum class AvioError {
-    AllocateFailed,
-    CreateFailed
-};
-std::expected<DragonDecoder::AvioContextHandle, AvioError> DragonDecoder::initializeAvio()
+bool DragonDecoder::initializeAvio(DecodeSession &session)
 {
     if (!m_networkCallback || !m_filePath.isEmpty()) {
-        return AvioContextHandle{};
+        return true;
     }
 
     uint8_t *ioBuffer = static_cast<uint8_t *>(av_malloc(IO_BUFFER_SIZE));
     if (!ioBuffer) {
         Q_EMIT streamError(u"Failed to allocate AVIOContext buffer"_s);
-        return std::unexpected(AvioError::AllocateFailed);
+        return false;
     }
 
     auto readPacket = [](void *opaque, uint8_t *buf, int bufSize) -> int {
@@ -222,18 +170,18 @@ std::expected<DragonDecoder::AvioContextHandle, AvioError> DragonDecoder::initia
         return ret == 0 ? AVERROR_EOF : ret;
     };
 
-    AVIOContext *avioCtx = avio_alloc_context(ioBuffer, IO_BUFFER_SIZE, 0, this, readPacket, nullptr, nullptr);
-    if (!avioCtx) {
+    session.avioCtx.reset(avio_alloc_context(ioBuffer, IO_BUFFER_SIZE, 0, this, readPacket, nullptr, nullptr));
+    if (!session.avioCtx) {
         av_free(ioBuffer);
         m_hadFatalError.store(true, std::memory_order_relaxed);
         Q_EMIT streamError(u"Failed to create AVIOContext"_s);
-        return std::unexpected(AvioError::CreateFailed);
+        return false;
     }
 
-    return AvioContextHandle(avioCtx);
+    return true;
 }
 
-bool DragonDecoder::openContainer(AvioContextHandle handle, DecodeSession &session)
+bool DragonDecoder::openContainer(DecodeSession &session)
 {
     AVFormatContext *rawFmtCtx = nullptr;
 
@@ -242,13 +190,9 @@ bool DragonDecoder::openContainer(AvioContextHandle handle, DecodeSession &sessi
         if (!rawFmtCtx) {
             return false;
         }
-        rawFmtCtx->pb = handle.ctx;
+        rawFmtCtx->pb = session.avioCtx.get();
 
         if (const int err = avformat_open_input(&rawFmtCtx, "", nullptr, nullptr); err < 0) {
-            if (rawFmtCtx) {
-                rawFmtCtx->pb = nullptr;
-                avformat_free_context(rawFmtCtx);
-            }
             m_hadFatalError.store(true, std::memory_order_relaxed);
             Q_EMIT streamError(u"avformat_open_input failed for network stream"_s);
             return false;
@@ -261,7 +205,6 @@ bool DragonDecoder::openContainer(AvioContextHandle handle, DecodeSession &sessi
         }
     }
 
-    handle.release();
     session.fmtCtx.reset(rawFmtCtx);
     return true;
 }
