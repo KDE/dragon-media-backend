@@ -44,6 +44,7 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
         } else {
             audioOutput->resume();
         }
+        audioOutput->setQueueReady(true);
         setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
         break;
 
@@ -54,6 +55,7 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
         } else {
             audioOutput->pause();
         }
+        audioOutput->setQueueReady(true);
         setPlaybackState(DragonPlayer::PlaybackState::PausedState);
         break;
 
@@ -568,6 +570,9 @@ void DragonPlayer::play()
 
     if (d->audioOutput && !d->audioOutput->isDeviceOpen() && d->currentSampleRate > 0) {
         d->audioOutput->start(d->currentSampleRate, d->currentChannels);
+    }
+    if (d->audioOutput) {
+        d->audioOutput->setQueueReady(true);
     }
     d->setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
 }
