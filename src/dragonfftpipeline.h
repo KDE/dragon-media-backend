@@ -52,15 +52,14 @@ public:
 private:
     static constexpr size_t kBufferCapacity = 65536;
 
-    void ensureInfrastructureInternal();
-    void teardownInternal();
+    void ensureInfrastructure();
     void startThread();
     void stopThread();
-    void setModeInternal(DragonPlayer::FftMode mode);
 
     std::unique_ptr<DragonFftProcessor> m_fftProcessor;
 
     std::jthread m_fftThread;
+
     DragonPipe<std::float32_t> *m_fftPipe = nullptr;
 
     DragonPlayer::FftMode m_currentMode = DragonPlayer::FftMode::Off;

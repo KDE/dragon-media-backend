@@ -20,7 +20,7 @@ DragonFftPipeline::DragonFftPipeline() = default;
 
 DragonFftPipeline::~DragonFftPipeline() = default;
 
-void DragonFftPipeline::ensureInfrastructureInternal()
+void DragonFftPipeline::ensureInfrastructure()
 {
     if (m_infrastructureCreated) {
         return;
@@ -44,7 +44,7 @@ void DragonFftPipeline::ensureInfrastructureInternal()
     qCDebug(dragonsdlFft) << "FFT infrastructure ensured";
 }
 
-void DragonFftPipeline::teardownInternal()
+void DragonFftPipeline::teardown()
 {
     stopThread();
     m_fftProcessor.reset();
@@ -85,14 +85,50 @@ void DragonFftPipeline::stopThread()
     }
 }
 
-void DragonFftPipeline::setModeInternal(DragonPlayer::FftMode mode)
+void DragonFftPipeline::restartThread()
+{
+    stopThread();
+    if (m_fftProcessor) {
+        m_fftProcessor->reset();
+        m_fftProcessor->setFftMode(m_currentMode);
+    }
+    startThread();
+}
+
+void DragonFftPipeline::ensureInfrastructure(DragonPipe<std::float32_t> *pipe, DragonPlayer::FftMode mode)
+{
+    m_fftPipe = pipe;
+    m_currentMode = mode;
+
+    if (!m_infrastructureCreated) {
+        ensureInfrastructure();
+    } else if (m_fftProcessor) {
+        m_fftProcessor->setFftMode(mode);
+    }
+}
+
+void DragonFftPipeline::setSampleRate(int sampleRate)
+{
+    if (m_fftProcessor) {
+        m_fftProcessor->setSampleRate(sampleRate);
+    }
+}
+
+void DragonFftPipeline::setChannelCount(int channels)
+{
+    if (m_fftProcessor) {
+        m_fftProcessor->setChannelCount(channels);
+    }
+}
+
+void DragonFftPipeline::setMode(DragonPlayer::FftMode mode)
 {
     const bool wasOn = (m_currentMode != DragonPlayer::FftMode::Off);
     const bool nowOn = (mode != DragonPlayer::FftMode::Off);
     m_currentMode = mode;
 
     if (!wasOn && nowOn) {
-        ensureInfrastructureInternal();
+        ensureInfrastructure();
 
         if (m_fftProcessor) {
             m_fftProcessor->setFftMode(mode);
@@ -112,52 +148,6 @@ void DragonFftPipeline::setModeInternal(DragonPlayer::FftMode mode)
 
         qCDebug(dragonsdlFft) << "FFT mode change: " << static_cast<int>(mode);
     }
-}
-
-void DragonFftPipeline::restartThread()
-{
-    stopThread();
-    if (m_fftProcessor) {
-        m_fftProcessor->reset();
-        m_fftProcessor->setFftMode(m_currentMode);
-    }
-    startThread();
-}
-
-void DragonFftPipeline::ensureInfrastructure(DragonPipe<std::float32_t> *pipe, DragonPlayer::FftMode mode)
-{
-    m_fftPipe = pipe;
-    m_currentMode = mode;
-
-    if (!m_infrastructureCreated) {
-        ensureInfrastructureInternal();
-    } else if (m_fftProcessor) {
-        m_fftProcessor->setFftMode(mode);
-    }
-}
-
-void DragonFftPipeline::teardown()
-{
-    teardownInternal();
-}
-
-void DragonFftPipeline::setSampleRate(int sampleRate)
-{
-    if (m_fftProcessor) {
-        m_fftProcessor->setSampleRate(sampleRate);
-    }
-}
-
-void DragonFftPipeline::setChannelCount(int channels)
-{
-    if (m_fftProcessor) {
-        m_fftProcessor->setChannelCount(channels);
-    }
-}
-
-void DragonFftPipeline::setMode(DragonPlayer::FftMode mode)
-{
-    setModeInternal(mode);
 }
 
 DragonPlayer::FftMode DragonFftPipeline::mode() const
