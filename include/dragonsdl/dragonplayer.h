@@ -108,6 +108,8 @@ Q_SIGNALS:
     void seekableChanged(bool seekable);
     void fftModeChanged(DragonPlayer::FftMode mode);
 
+    void playingChanged(bool playing);
+
     void playing();
     void paused();
     void stopped();

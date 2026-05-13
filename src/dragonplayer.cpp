@@ -221,6 +221,9 @@ void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
         return;
     }
 
+    const bool wasPlaying = (currentPlaybackState == DragonPlayer::PlaybackState::PlayingState);
+    const bool willBePlaying = (state == DragonPlayer::PlaybackState::PlayingState);
+
     if (state == DragonPlayer::PlaybackState::PlayingState) {
         if (positionTimer) {
             positionTimer->start();
@@ -232,6 +235,10 @@ void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
     }
 
     currentPlaybackState = state;
+
+    if (wasPlaying || willBePlaying) {
+        Q_EMIT q->playingChanged(willBePlaying);
+    }
 
     Q_EMIT q->playbackStateChanged(state);
 

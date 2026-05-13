@@ -449,9 +449,85 @@ public:
         m_connections.append(conn);
     }
 
+    void trackPlayingChanges()
+    {
+        auto conn = QObject::connect(
+            m_player,
+            &DragonPlayer::playingChanged,
+            m_player,
+            [this](bool playing) {
+                m_events.append(playing ? u"playingChanged(true)"_s : u"playingChanged(false)"_s);
+            },
+            Qt::DirectConnection);
+        m_connections.append(conn);
+    }
+
+    void trackDurationChanges()
+    {
+        auto conn = QObject::connect(
+            m_player,
+            &DragonPlayer::durationChanged,
+            m_player,
+            [this](int64_t duration) {
+                m_events.append(u"durationChanged("_s + QString::number(duration) + u")"_s);
+            },
+            Qt::DirectConnection);
+        m_connections.append(conn);
+    }
+
+    void trackErrorChanges()
+    {
+        auto conn = QObject::connect(
+            m_player,
+            &DragonPlayer::errorChanged,
+            m_player,
+            [this](DragonPlayer::Error error) {
+                m_events.append(u"errorChanged("_s + QString::number(static_cast<int>(error)) + u")"_s);
+            },
+            Qt::DirectConnection);
+        m_connections.append(conn);
+    }
+
+    void trackPositionChanges()
+    {
+        auto conn = QObject::connect(
+            m_player,
+            &DragonPlayer::positionChanged,
+            m_player,
+            [this](int64_t pos) {
+                m_events.append(u"positionChanged("_s + QString::number(pos) + u")"_s);
+            },
+            Qt::DirectConnection);
+        m_connections.append(conn);
+    }
+
     bool contains(const QString &event) const
     {
         return m_events.contains(event);
+    }
+
+    bool containsPrefix(const QString &prefix) const
+    {
+        return std::ranges::any_of(m_events, [&prefix](const QString &e) {
+            return e.startsWith(prefix);
+        });
+    }
+
+    int indexOfPrefix(const QString &prefix) const
+    {
+        for (int i = 0; i < m_events.size(); ++i) {
+            if (m_events[i].startsWith(prefix)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    bool verifyOrderPrefix(const QString &firstPrefix, const QString &secondPrefix) const
+    {
+        int firstIdx = indexOfPrefix(firstPrefix);
+        int secondIdx = indexOfPrefix(secondPrefix);
+        return firstIdx >= 0 && secondIdx >= 0 && firstIdx < secondIdx;
     }
 
     bool verifyOrder(const QString &first, const QString &second) const
