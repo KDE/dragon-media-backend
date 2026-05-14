@@ -38,6 +38,9 @@ private Q_SLOTS:
     void testMultipleStopIdempotent();
     void testErrorChangedBeforeInvalidMedia();
 
+    void testRapidSetSourceOnlyLastProcessed();
+    void testSetSourceInterruptedByStop();
+
 private:
     void skipIfMissing(const QString &filename)
     {
@@ -366,6 +369,45 @@ void TestPlayerSignals::testErrorChangedBeforeInvalidMedia()
     QVERIFY2(tracker.contains(u"statusChanged(InvalidMedia)"_s), "InvalidMedia must emit statusChanged(InvalidMedia)");
 
     QVERIFY2(tracker.verifyOrderPrefix(u"errorChanged("_s, u"statusChanged(InvalidMedia)"_s), "errorChanged must precede mediaStatusChanged(InvalidMedia)");
+}
+
+void TestPlayerSignals::testRapidSetSourceOnlyLastProcessed()
+{
+    skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s});
+
+    DragonPlayer player;
+
+    QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
+    QSignalSpy durationSpy(&player, &DragonPlayer::durationChanged);
+
+    const QUrl sourceA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    const QUrl sourceB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s));
+
+    player.setSource(sourceA);
+    player.setSource(sourceB);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QCOMPARE(player.source(), sourceB);
+
+    QVERIFY(sourceSpy.count() >= 1);
+
+    QVERIFY(player.duration() > 0);
+}
+
+void TestPlayerSignals::testSetSourceInterruptedByStop()
+{
+    skipIfMissing(u"sample-3s.mp3"_s);
+    DragonPlayer player;
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
+
+    player.stop();
+
+    QTest::qWait(500);
+
+    QVERIFY(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::NoMedia);
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
 QTEST_MAIN(TestPlayerSignals)

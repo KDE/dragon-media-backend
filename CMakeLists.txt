@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
 # SPDX-License-Identifier: LGPL-3.0-or-later
 
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.25)
 
 project(dragon-sdl
     VERSION 0.1.0
@@ -86,6 +86,67 @@ else()
         endif()
     endif()
 endif()
+
+find_package(QCoro6 QUIET COMPONENTS Core)
+if(NOT QCoro6_FOUND)
+    message(STATUS "QCoro6 not found, downloading via FetchContent...")
+    FetchContent_Declare(
+        QCoro
+        GIT_REPOSITORY https://github.com/qcoro/qcoro.git
+        GIT_TAG v0.13.0
+        PATCH_COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patch-qcoro.sh" "<SOURCE_DIR>"
+    )
+    block()
+        set(QCORO_BUILD_EXAMPLES OFF CACHE BOOL "Disable QCoro examples" FORCE)
+        set(QCORO_ENABLE_WARNINGS_AS_ERRORS OFF CACHE BOOL "Disable warnings as errors for QCoro" FORCE)
+        set(QCORO_WITH_QTDBUS OFF CACHE BOOL "Disable QCoro QtDBus support" FORCE)
+        set(QCORO_WITH_QTNETWORK ON CACHE BOOL "Enable QCoro QtNetwork support" FORCE)
+        set(QCORO_WITH_QTSQL OFF CACHE BOOL "Disable QCoro QtSql support" FORCE)
+        set(QCORO_WITH_QTWIDGETS OFF CACHE BOOL "Disable QCoro QtWidgets support" FORCE)
+        set(QCORO_WITH_QTQUICK OFF CACHE BOOL "Disable QCoro QtQuick support" FORCE)
+        set(QCORO_WITH_QTWEBSOCKETS OFF CACHE BOOL "Disable QCoro QtWebSockets support" FORCE)
+        set(QCORO_WITH_QML OFF CACHE BOOL "Disable QCoro QML support" FORCE)
+        set(BUILD_SHARED_LIBS ON CACHE BOOL "Build QCoro as shared" FORCE)
+        set(QCORO_BUILD_TESTING OFF CACHE BOOL "Disable QCoro tests" FORCE)
+        set(BUILD_TESTING OFF)
+        FetchContent_MakeAvailable(QCoro)
+    endblock()
+    
+    foreach(_qcoro_target IN ITEMS QCoro6Core QCoro6Network)
+        if(TARGET ${_qcoro_target})
+            target_compile_options(${_qcoro_target} PRIVATE -fexceptions)
+            target_compile_options(${_qcoro_target} PRIVATE -Wno-error)
+        endif()
+    endforeach()
+endif()
+
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_FLAGS "-std=c++23")
+check_cxx_source_compiles("
+#include <generator>
+#include <variant>
+#include <cstdint>
+
+struct FormatReady { int sampleRate = 0; };
+struct SamplesChunk {};
+struct DecodeError {};
+struct DecodeEof {};
+using DecodeEvent = std::variant<FormatReady, SamplesChunk, DecodeError, DecodeEof>;
+std::generator<DecodeEvent> test_generator() {
+    co_yield FormatReady{44100};
+    co_yield DecodeEof{};
+}
+int main() {
+    for (auto e : test_generator()) { (void)e; }
+    return 0;
+}
+" HAVE_CXX23_GENERATOR)
+
+if(NOT HAVE_CXX23_GENERATOR)
+    message(FATAL_ERROR "C++23 <generator> header is required but not available. "
+                        "Please use GCC >= 16 or Clang with -std=c++23 -stdlib=libc++")
+endif()
+message(STATUS "C++23 <generator> header: supported")
 
 add_library(spsc_queue INTERFACE)
 target_include_directories(spsc_queue INTERFACE
@@ -187,6 +248,7 @@ target_link_libraries(dragon-sdl
     PRIVATE
         Qt6::Gui
         kissfft::kissfft
+        QCoro6::Core
 )
 
 include(GenerateExportHeader)
