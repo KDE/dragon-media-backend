@@ -59,7 +59,7 @@ struct overloaded : Ts... {
 template<class... Ts>
 overloaded(Ts...) -> overloaded<Ts...>;
 
-std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, int64_t durationMs, const std::vector<std::vector<std::float32_t>> &sampleBatches)
+std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, int64_t durationMs, std::vector<std::vector<std::float32_t>> sampleBatches)
 {
     co_yield FormatReady{sampleRate, channels, durationMs};
 
