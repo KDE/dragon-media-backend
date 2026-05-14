@@ -124,8 +124,6 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
     bool initCompleted = false;
     bool hadFatalError = false;
     bool isGapless = false;
-    int sessionSampleRate = 0;
-    int sessionChannels = 0;
 
     for (auto event : decoder->decodeLoop(m_sessionStopSource.get_token())) {
         if (m_sessionStopSource.get_token().stop_requested()) {
@@ -136,9 +134,6 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
         std::visit(overloaded{[&](const FormatReady &fr) {
                                   if (!initCompleted) {
                                       initCompleted = true;
-                                      sessionSampleRate = fr.sampleRate;
-                                      sessionChannels = fr.channels;
-
                                       qCDebug(dragonsdlDecode) << "decode thread FormatReady, completing init sr=" << fr.sampleRate << "ch=" << fr.channels;
 
                                       if (m_pendingInitCompletion) {

@@ -87,7 +87,7 @@ else()
     endif()
 endif()
 
-find_package(QCoro6 QUIET COMPONENTS Core)
+find_package(QCoro6 QUIET COMPONENTS Core Network)
 if(NOT QCoro6_FOUND)
     message(STATUS "QCoro6 not found, downloading via FetchContent...")
     FetchContent_Declare(
