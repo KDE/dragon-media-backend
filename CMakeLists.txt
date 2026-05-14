@@ -473,6 +473,14 @@ if(BUILD_TESTING)
     )
     add_test(NAME test_network_playback COMMAND test_network_playback)
 
+    add_executable(test_completion tests/test_completion.cpp)
+    target_link_libraries(test_completion PRIVATE
+        dragon-sdl
+        Qt6::Test
+        Qt6::Core
+    )
+    add_test(NAME test_completion COMMAND test_completion)
+
     add_executable(test_pipe tests/test_pipe.cpp)
     target_link_libraries(test_pipe PRIVATE
         dragon-sdl

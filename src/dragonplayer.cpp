@@ -9,7 +9,6 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
-#include <QCoroSignal>
 #include <QCoroTask>
 #pragma GCC diagnostic pop
 #include <QMetaObject>
@@ -70,8 +69,8 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, Drag
 
 void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
 {
-    if (decodePipeline.generation() != currentDecoderGeneration) {
-        qCDebug(dragonsdlPlayer) << "ignoring stale gapless transition (generation mismatch)";
+    if (newSource != nextSource) {
+        qCDebug(dragonsdlPlayer) << "ignoring stale gapless transition (URL mismatch)";
         return;
     }
 
@@ -82,6 +81,8 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
     currentSeekable = currentIsLocal;
     currentDuration = 0;
 
+    decodePipeline.setCurrentSource(newSource);
+
     audioOutput->setPositionOffset(0, DragonAudioOutput::PositionResetMode::GaplessTransition);
 
     Q_EMIT q->trackChanged();
@@ -90,43 +91,38 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
     Q_EMIT q->seekableChanged(currentSeekable);
 }
 
-void DragonPlayerPrivate::onSessionInitCompleted(uint64_t generation, const InitResult &result)
+void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalError)
 {
-    pendingInitGeneration = generation;
-    pendingInitResult = result;
-    pendingInitReady = true;
-    Q_EMIT initResultAvailable();
-}
+    if (source != currentSource) {
+        qCDebug(dragonsdlPlayer) << "ignoring stale onDecodeFinished (source mismatch)";
+        return;
+    }
 
-void DragonPlayerPrivate::onDecodeFinished(bool hadFatalError)
-{
-    if (decodePipeline.isActive()) {
-        qCDebug(dragonsdlPlayer) << "ignoring stale onDecodeFinished (new decode session already active)";
+    if (audioOutput) {
+        audioOutput->silence();
+        audioOutput->setQueueReady(false);
+    }
+
+    if (!hadFatalError && !nextSource.isEmpty()) {
+        q->setSource(nextSource);
         return;
     }
 
     if (hadFatalError) {
-        if (currentError != (currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError)) {
-            currentError = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
-            Q_EMIT q->errorChanged(currentError);
-        }
-        if (currentStatus != DragonPlayer::MediaStatus::InvalidMedia) {
-            currentStatus = DragonPlayer::MediaStatus::InvalidMedia;
-            Q_EMIT q->statusChanged(DragonPlayer::MediaStatus::InvalidMedia);
-        }
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+        setStatus(DragonPlayer::MediaStatus::InvalidMedia);
     } else {
-        if (audioOutput && audioOutput->isDeviceOpen()) {
-            audioOutput->pause();
-        }
-
-        fftPipeline.stop();
-
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
-        if (currentStatus != DragonPlayer::MediaStatus::EndOfMedia) {
-            currentStatus = DragonPlayer::MediaStatus::EndOfMedia;
-            Q_EMIT q->statusChanged(DragonPlayer::MediaStatus::EndOfMedia);
-        }
+        setStatus(DragonPlayer::MediaStatus::EndOfMedia);
+    }
+}
+
+void DragonPlayerPrivate::onDecodeError(const QString &)
+{
+    auto err = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
+    if (currentError != err) {
+        currentError = err;
+        Q_EMIT q->errorChanged(currentError);
     }
 }
 
@@ -152,24 +148,9 @@ void DragonPlayerPrivate::connectPipelineSignals()
         writeToQueues(samples, st);
     });
 
-    connect(&decodePipeline, &DragonDecodePipeline::sessionInitCompleted, this, &DragonPlayerPrivate::onSessionInitCompleted, Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::sessionError, this, &DragonPlayerPrivate::onDecodeError, Qt::QueuedConnection);
 
-    connect(
-        &decodePipeline,
-        &DragonDecodePipeline::sessionError,
-        this,
-        [this](uint64_t gen, const QString &) {
-            if (gen != currentDecoderGeneration)
-                return;
-            auto err = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
-            if (currentError != err) {
-                currentError = err;
-                Q_EMIT q->errorChanged(currentError);
-            }
-        },
-        Qt::QueuedConnection);
-
-    connect(&decodePipeline, &DragonDecodePipeline::finished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::sessionFinished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
 
     connect(&decodePipeline, &DragonDecodePipeline::gaplessTransition, this, &DragonPlayerPrivate::onGaplessTransition, Qt::QueuedConnection);
 }
@@ -278,15 +259,15 @@ void DragonPlayerPrivate::init()
     audioOutput->setAudioPipe(&audioPipe);
     audioOutput->setFftPipe(nullptr);
 
-    QObject::connect(audioOutput.get(), &DragonAudioOutput::errorOccurred, this, [this](const QString &) {
+    connect(audioOutput.get(), &DragonAudioOutput::errorOccurred, this, [this](const QString &) {
         setError(DragonPlayer::Error::ResourceError);
     });
 
-    QObject::connect(audioOutput.get(), &DragonAudioOutput::volumeChanged, q, &DragonPlayer::volumeChanged);
+    connect(audioOutput.get(), &DragonAudioOutput::volumeChanged, q, &DragonPlayer::volumeChanged);
 
     positionTimer = new QTimer(this);
     positionTimer->setInterval(100);
-    QObject::connect(positionTimer, &QTimer::timeout, this, [this]() {
+    connect(positionTimer, &QTimer::timeout, this, [this]() {
         Q_EMIT q->positionChanged(audioOutput && audioOutput->isDeviceOpen() ? audioOutput->positionMs() : currentPosition);
     });
 
@@ -354,7 +335,7 @@ bool DragonPlayer::seekable() const
 }
 bool DragonPlayer::isAudioActive() const
 {
-    return d->audioOutput && d->audioOutput->isDeviceOpen() && d->currentPlaybackState != DragonPlayer::PlaybackState::StoppedState;
+    return d->audioOutput && d->audioOutput->isDeviceOpen() && d->currentPlaybackState != PlaybackState::StoppedState;
 }
 DragonPlayer::FftMode DragonPlayer::fftMode() const
 {
@@ -397,7 +378,7 @@ QCoro::Task<void> DragonPlayer::setSource(const QUrl &source)
 
     d->decodePipeline.stopSession();
 
-    if (d->currentFftMode == DragonPlayer::FftMode::Off) {
+    if (d->currentFftMode == FftMode::Off) {
         d->fftPipeline.stop();
         d->fftPipeline.teardown();
         if (d->audioOutput) {
@@ -426,63 +407,51 @@ QCoro::Task<void> DragonPlayer::setSource(const QUrl &source)
             d->audioOutput->stop();
             d->audioOutput->reset();
         }
-        d->setStatus(DragonPlayer::MediaStatus::NoMedia);
-        d->setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+        d->setStatus(MediaStatus::NoMedia);
+        d->setPlaybackState(PlaybackState::StoppedState);
         co_return;
     }
 
-    if (d->currentPlaybackState != DragonPlayer::PlaybackState::StoppedState) {
-        d->setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+    if (d->currentPlaybackState != PlaybackState::StoppedState) {
+        d->setPlaybackState(PlaybackState::StoppedState);
     } else {
-        Q_EMIT playbackStateChanged(DragonPlayer::PlaybackState::StoppedState);
+        Q_EMIT playbackStateChanged(PlaybackState::StoppedState);
         Q_EMIT stopped();
     }
 
-    if (d->currentError != DragonPlayer::Error::NoError) {
-        d->currentError = DragonPlayer::Error::NoError;
-        Q_EMIT errorChanged(DragonPlayer::Error::NoError);
+    if (d->currentError != Error::NoError) {
+        d->currentError = Error::NoError;
+        Q_EMIT errorChanged(Error::NoError);
     }
 
-    d->setStatus(DragonPlayer::MediaStatus::LoadingMedia);
+    d->setStatus(MediaStatus::LoadingMedia);
 
     const bool isLocal = source.isLocalFile();
     d->currentIsLocal = isLocal;
     d->currentSeekable = isLocal;
     Q_EMIT seekableChanged(d->currentSeekable);
 
-    const uint64_t myGeneration = ++d->currentDecoderGeneration;
-    d->decodePipeline.setSource(source, myGeneration);
+    auto result = co_await d->decodePipeline.initializeSession(source);
 
-    InitResult result;
-    while (true) {
-        if (d->currentDecoderGeneration != myGeneration) {
-            qCDebug(dragonsdlPlayer) << "superseded setSource coroutine (gen" << myGeneration << "!= current" << d->currentDecoderGeneration << "), discarding";
-            co_return;
-        }
-
-        if (d->pendingInitReady && d->pendingInitGeneration == myGeneration) {
-            result = d->pendingInitResult;
-            d->pendingInitReady = false;
-            break;
-        }
-
-        co_await qCoro(d.get(), &DragonPlayerPrivate::initResultAvailable);
-
-        if (!aliveGuard || !aliveGuard->alive) {
-            co_return;
-        }
+    if (!aliveGuard || !aliveGuard->alive) {
+        co_return;
     }
 
-    if (d->currentDecoderGeneration != myGeneration) {
-        qCDebug(dragonsdlPlayer) << "superseded setSource coroutine (gen" << myGeneration << "!= current" << d->currentDecoderGeneration << "), discarding";
+    if (d->currentSource != source) {
+        qCDebug(dragonsdlPlayer) << "superseded setSource coroutine (source" << source.toString() << "!= current" << d->currentSource.toString()
+                                 << "), discarding";
         co_return;
     }
 
     if (!result.success) {
-        d->currentError = d->currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
+        if (result.cancelled) {
+            qCDebug(dragonsdlPlayer) << "setSource coroutine cancelled, returning without state change";
+            co_return;
+        }
+        d->currentError = d->currentIsLocal ? Error::FormatError : Error::NetworkError;
         Q_EMIT errorChanged(d->currentError);
-        d->setStatus(DragonPlayer::MediaStatus::InvalidMedia);
-        d->setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+        d->setStatus(MediaStatus::InvalidMedia);
+        d->setPlaybackState(PlaybackState::StoppedState);
         co_return;
     }
 
@@ -496,7 +465,7 @@ QCoro::Task<void> DragonPlayer::setSource(const QUrl &source)
 
     d->fftPipeline.setSampleRate(result.sampleRate);
     d->fftPipeline.setChannelCount(result.channels);
-    d->setStatus(DragonPlayer::MediaStatus::LoadedMedia);
+    d->setStatus(MediaStatus::LoadedMedia);
 
     d->applyRequestedState(result.sampleRate, result.channels, d->requestedPlaybackState);
 
@@ -509,7 +478,7 @@ void DragonPlayer::setNextSource(const QUrl &nextSource)
     d->nextSource = nextSource;
     Q_EMIT nextSourceChanged();
 
-    d->decodePipeline.setNextSource(nextSource, d->currentDecoderGeneration);
+    d->decodePipeline.setNextSource(nextSource);
 }
 
 void DragonPlayer::setPosition(int64_t posMs)
@@ -526,9 +495,9 @@ void DragonPlayer::setPosition(int64_t posMs)
     }
     Q_EMIT positionChanged(posMs);
 
-    if (posMs == 0 && d->currentStatus == DragonPlayer::MediaStatus::EndOfMedia) {
-        d->currentStatus = DragonPlayer::MediaStatus::LoadedMedia;
-        Q_EMIT statusChanged(DragonPlayer::MediaStatus::LoadedMedia);
+    if (posMs == 0 && d->currentStatus == MediaStatus::EndOfMedia) {
+        d->currentStatus = MediaStatus::LoadedMedia;
+        Q_EMIT statusChanged(MediaStatus::LoadedMedia);
     }
 }
 
@@ -572,32 +541,30 @@ void DragonPlayer::play()
         return;
     }
 
-    d->requestedPlaybackState = DragonPlayer::PlaybackState::PlayingState;
+    d->requestedPlaybackState = PlaybackState::PlayingState;
 
-    if (d->currentPlaybackState == DragonPlayer::PlaybackState::PlayingState) {
+    if (d->currentPlaybackState == PlaybackState::PlayingState) {
         return;
     }
 
-    if (d->currentPlaybackState == DragonPlayer::PlaybackState::PausedState) {
+    if (d->currentPlaybackState == PlaybackState::PausedState) {
         if (d->audioOutput) {
             d->audioOutput->resume();
         }
-        d->setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
+        d->setPlaybackState(PlaybackState::PlayingState);
         return;
     }
 
-    if (d->currentStatus == DragonPlayer::MediaStatus::LoadingMedia) {
+    if (d->currentStatus == MediaStatus::LoadingMedia) {
         qCDebug(dragonsdlPlayer) << "play() status is LoadingMedia, intent captured";
         return;
     }
 
-    if (d->currentStatus == DragonPlayer::MediaStatus::EndOfMedia) {
+    if (d->currentStatus == MediaStatus::EndOfMedia) {
         qCDebug(dragonsdlPlayer) << "play() status is EndOfMedia, reloading source";
         setSource(d->currentSource);
         return;
     }
-
-    qCDebug(dragonsdlPlayer) << "play() status is " << static_cast<int>(d->currentStatus) << ", starting audio synchronously";
 
     if (!d->decodePipeline.isActive() && !d->currentSource.isEmpty()) {
         qCDebug(dragonsdlPlayer) << "play() decoder not active, restarting decode pipeline";
@@ -605,30 +572,32 @@ void DragonPlayer::play()
         return;
     }
 
+    qCDebug(dragonsdlPlayer) << "play() status is " << static_cast<int>(d->currentStatus) << ", starting audio synchronously";
+
     if (d->audioOutput && !d->audioOutput->isDeviceOpen() && d->currentSampleRate > 0) {
         d->audioOutput->start(d->currentSampleRate, d->currentChannels);
     }
     if (d->audioOutput) {
         d->audioOutput->setQueueReady(true);
     }
-    d->setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
+    d->setPlaybackState(PlaybackState::PlayingState);
 }
 
 void DragonPlayer::pause()
 {
     qCDebug(dragonsdlPlayer) << "pause()";
 
-    if (d->currentStatus == DragonPlayer::MediaStatus::NoMedia || d->currentStatus == DragonPlayer::MediaStatus::InvalidMedia) {
+    if (d->currentStatus == MediaStatus::NoMedia || d->currentStatus == MediaStatus::InvalidMedia) {
         return;
     }
 
-    d->requestedPlaybackState = DragonPlayer::PlaybackState::PausedState;
+    d->requestedPlaybackState = PlaybackState::PausedState;
 
-    if (d->currentPlaybackState == DragonPlayer::PlaybackState::PausedState) {
+    if (d->currentPlaybackState == PlaybackState::PausedState) {
         return;
     }
 
-    if (d->currentStatus == DragonPlayer::MediaStatus::LoadingMedia) {
+    if (d->currentStatus == MediaStatus::LoadingMedia) {
         qCDebug(dragonsdlPlayer) << "pause() status is LoadingMedia, intent captured";
         return;
     }
@@ -636,37 +605,22 @@ void DragonPlayer::pause()
     if (d->audioOutput) {
         d->audioOutput->pause();
     }
-    d->setPlaybackState(DragonPlayer::PlaybackState::PausedState);
+    d->setPlaybackState(PlaybackState::PausedState);
 }
 
 void DragonPlayer::stop()
 {
     qCDebug(dragonsdlPlayer) << "stop()";
 
-    d->requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
+    d->requestedPlaybackState = PlaybackState::StoppedState;
 
-    if (d->currentStatus == DragonPlayer::MediaStatus::LoadingMedia) {
-        qCDebug(dragonsdlPlayer) << "stop() status is LoadingMedia, intent captured";
-        return;
+    d->decodePipeline.stopSession();
+
+    if (d->audioOutput) {
+        d->audioOutput->stop();
+        d->audioOutput->reset();
     }
-
-    bool skipTeardown = false;
-    if (d->decodePipeline.isActive() && d->audioOutput && !d->audioOutput->isDeviceOpen()) {
-        qCDebug(dragonsdlPlayer) << "stop() decoder exists but audio not open yet, skipping teardown";
-        skipTeardown = true;
-    }
-
-    if (!skipTeardown) {
-        d->decodePipeline.stopSession();
-        ++d->currentDecoderGeneration;
-
-        if (d->audioOutput) {
-            d->audioOutput->stop();
-            d->audioOutput->reset();
-        }
-
-        d->fftPipeline.stop();
-    }
+    d->fftPipeline.stop();
 
     d->setPlaybackState(PlaybackState::StoppedState);
 

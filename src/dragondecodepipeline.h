@@ -5,6 +5,9 @@
 
 #pragma once
 
+#include "dragoncompletion.h"
+
+#include <QCoroTask>
 #include <QObject>
 #include <QUrl>
 #include <condition_variable>
@@ -20,15 +23,6 @@ class DragonPlayer;
 class DragonDecoder;
 class DragonRadioStream;
 
-struct InitResult {
-    bool success = false;
-    int sampleRate = 0;
-    int channels = 0;
-    int64_t durationMs = -1;
-    bool isGapless = false;
-    QString errorMessage;
-};
-
 class DragonDecodePipeline : public QObject
 {
     Q_OBJECT
@@ -41,8 +35,9 @@ public:
     DragonDecodePipeline(DragonDecodePipeline &&) = delete;
     DragonDecodePipeline &operator=(DragonDecodePipeline &&) = delete;
 
-    void setSource(const QUrl &source, uint64_t generation);
-    void setNextSource(const QUrl &next, uint64_t generation);
+    QCoro::Task<DragonSdl::InitResult> initializeSession(const QUrl &source, bool isGapless = false);
+
+    void setNextSource(const QUrl &next);
 
     void stopSession();
 
@@ -50,7 +45,6 @@ public:
 
     bool isActive() const;
     bool hasFatalError() const;
-    uint64_t generation() const;
 
     void requestSeek(int64_t posMs);
 
@@ -61,34 +55,27 @@ public:
     const std::unique_ptr<DragonDecoder> &activeDecoder() const;
     bool decodeLoopActive() const;
 
+    void setCurrentSource(const QUrl &source);
+
 Q_SIGNALS:
+    void sessionError(const QString &message);
 
-    void formatReady(int sampleRate, int channels, bool isGapless);
+    void sessionFinished(const QUrl &source, bool hadFatalError);
 
-    void durationChanged(int64_t durationMs);
-
-    void errorOccurred(const QString &message);
-
-    void finished(bool hadFatalError);
     void gaplessTransition(const QUrl &newSource);
 
-    void sessionInitCompleted(uint64_t generation, const InitResult &result);
-
-    void sessionError(uint64_t generation, const QString &message);
-
-    void sessionFinished(uint64_t generation, bool hadFatalError);
-
 private:
-    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless, uint64_t generation);
+    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless);
+
     void startDecodeThread();
     bool waitForDecoderAssignment(std::stop_token st);
-    std::pair<bool, bool> executeDecodeSession(uint64_t generation);
+    std::pair<bool, bool> executeDecodeSession();
     void processDecodeCompletion();
 
     SamplesCallback m_samplesCallback;
 
     DragonPlayer *m_player = nullptr;
-    uint64_t m_generation = 0;
+    QUrl m_currentSource;
     QUrl m_nextSource;
 
     std::jthread m_decodeThread;
@@ -101,6 +88,8 @@ private:
     std::unique_ptr<DragonDecoder> m_preWarmedDecoder;
 
     std::jthread m_preWarmThread;
+
+    std::shared_ptr<DragonSdl::DragonCompletion> m_pendingInitCompletion;
 
     std::unique_ptr<DragonRadioStream> m_radioStream;
 };
