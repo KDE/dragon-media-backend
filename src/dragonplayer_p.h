@@ -46,6 +46,10 @@ private:
 private Q_SLOTS:
     void onGaplessTransition(const QUrl &newSource);
     void onDecodeFinished(bool hadFatalError);
+    void onSessionInitCompleted(uint64_t generation, const InitResult &result);
+
+Q_SIGNALS:
+    void initResultAvailable();
 
 private:
     void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);
@@ -83,6 +87,10 @@ private:
     int currentSampleRate = 0;
     int currentChannels = 0;
     DragonPlayer::FftMode currentFftMode = DragonPlayer::FftMode::Off;
+
+    uint64_t pendingInitGeneration = 0;
+    InitResult pendingInitResult;
+    bool pendingInitReady = false;
 
     std::shared_ptr<AliveGuard> aliveGuard;
 

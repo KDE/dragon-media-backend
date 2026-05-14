@@ -90,6 +90,14 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
     Q_EMIT q->seekableChanged(currentSeekable);
 }
 
+void DragonPlayerPrivate::onSessionInitCompleted(uint64_t generation, const InitResult &result)
+{
+    pendingInitGeneration = generation;
+    pendingInitResult = result;
+    pendingInitReady = true;
+    Q_EMIT initResultAvailable();
+}
+
 void DragonPlayerPrivate::onDecodeFinished(bool hadFatalError)
 {
     if (decodePipeline.isActive()) {
@@ -143,6 +151,8 @@ void DragonPlayerPrivate::connectPipelineSignals()
     decodePipeline.setSamplesCallback([this](auto samples, const std::stop_token &st) {
         writeToQueues(samples, st);
     });
+
+    connect(&decodePipeline, &DragonDecodePipeline::sessionInitCompleted, this, &DragonPlayerPrivate::onSessionInitCompleted, Qt::QueuedConnection);
 
     connect(
         &decodePipeline,
@@ -443,15 +453,24 @@ QCoro::Task<void> DragonPlayer::setSource(const QUrl &source)
     const uint64_t myGeneration = ++d->currentDecoderGeneration;
     d->decodePipeline.setSource(source, myGeneration);
 
-    const auto [gen, result] = co_await qCoro(&d->decodePipeline, &DragonDecodePipeline::sessionInitCompleted);
+    InitResult result;
+    while (true) {
+        if (d->currentDecoderGeneration != myGeneration) {
+            qCDebug(dragonsdlPlayer) << "superseded setSource coroutine (gen" << myGeneration << "!= current" << d->currentDecoderGeneration << "), discarding";
+            co_return;
+        }
 
-    if (!aliveGuard || !aliveGuard->alive) {
-        co_return;
-    }
+        if (d->pendingInitReady && d->pendingInitGeneration == myGeneration) {
+            result = d->pendingInitResult;
+            d->pendingInitReady = false;
+            break;
+        }
 
-    if (gen != myGeneration) {
-        qCDebug(dragonsdlPlayer) << "stale setSource coroutine (gen" << myGeneration << "!= received" << gen << "), discarding";
-        co_return;
+        co_await qCoro(d.get(), &DragonPlayerPrivate::initResultAvailable);
+
+        if (!aliveGuard || !aliveGuard->alive) {
+            co_return;
+        }
     }
 
     if (d->currentDecoderGeneration != myGeneration) {
@@ -568,7 +587,7 @@ void DragonPlayer::play()
     }
 
     if (d->currentStatus == DragonPlayer::MediaStatus::LoadingMedia) {
-        qCDebug(dragonsdlPlayer) << "play() status is LoadingMedia, deferring to onFormatReady";
+        qCDebug(dragonsdlPlayer) << "play() status is LoadingMedia, intent captured";
         return;
     }
 
@@ -610,7 +629,7 @@ void DragonPlayer::pause()
     }
 
     if (d->currentStatus == DragonPlayer::MediaStatus::LoadingMedia) {
-        qCDebug(dragonsdlPlayer) << "pause() status is LoadingMedia, deferring to onFormatReady";
+        qCDebug(dragonsdlPlayer) << "pause() status is LoadingMedia, intent captured";
         return;
     }
 
