@@ -296,9 +296,6 @@ bool DragonDecoder::setupResampler(DecodeSession &session)
 
 void DragonDecoder::emitFormatAndDuration(const DecodeSession &session)
 {
-    qCDebug(dragonsdlDecoder) << "formatReady sr=" << session.sampleRate << "ch=" << session.nbChannels << "codec=" << session.codec->name;
-    Q_EMIT formatReady(session.sampleRate, session.nbChannels);
-
     if (session.fmtCtx->duration != AV_NOPTS_VALUE) {
         const int64_t durationMs = session.fmtCtx->duration / (AV_TIME_BASE / 1000);
         qCDebug(dragonsdlDecoder) << "duration=" << durationMs << "ms";
@@ -306,6 +303,9 @@ void DragonDecoder::emitFormatAndDuration(const DecodeSession &session)
     } else {
         qCDebug(dragonsdlDecoder) << "duration unknown";
     }
+
+    qCDebug(dragonsdlDecoder) << "formatReady sr=" << session.sampleRate << "ch=" << session.nbChannels << "codec=" << session.codec->name;
+    Q_EMIT formatReady(session.sampleRate, session.nbChannels);
 }
 
 bool DragonDecoder::allocatePacketAndFrame(DecodeSession &session)

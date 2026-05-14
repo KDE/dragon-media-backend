@@ -432,13 +432,9 @@ void TestPlayer::testStateMachineSequence_data()
     QTest::addColumn<QString>("action");
     QTest::addColumn<QString>("expectedState");
 
-    QTest::newRow("stopped_to_playing") << "StoppedState" << "play" << "PlayingState";
-    QTest::newRow("stopped_to_paused") << "StoppedState" << "pause" << "PausedState";
-    QTest::newRow("stopped_to_stopped") << "StoppedState" << "stop" << "StoppedState";
-    QTest::newRow("playing_to_paused") << "PlayingState" << "pause" << "PausedState";
-    QTest::newRow("playing_to_stopped") << "PlayingState" << "stop" << "StoppedState";
-    QTest::newRow("paused_to_playing") << "PausedState" << "play" << "PlayingState";
-    QTest::newRow("paused_to_stopped") << "PausedState" << "stop" << "StoppedState";
+    QTest::newRow("stopped_to_playing_no_source") << "StoppedState" << "play" << "StoppedState";
+    QTest::newRow("stopped_to_paused_no_source") << "StoppedState" << "pause" << "StoppedState";
+    QTest::newRow("stopped_to_stopped_no_source") << "StoppedState" << "stop" << "StoppedState";
 }
 
 void TestPlayer::testStateMachineSequence()
@@ -449,11 +445,6 @@ void TestPlayer::testStateMachineSequence()
 
     DragonPlayer player;
 
-    if (initialState == "PausedState"_L1) {
-        player.pause();
-        QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
-    }
-
     if (action == "play"_L1) {
         player.play();
     } else if (action == "pause"_L1) {
@@ -462,16 +453,11 @@ void TestPlayer::testStateMachineSequence()
         player.stop();
     }
 
-    if (action == "play"_L1 && (initialState == "StoppedState"_L1 || initialState == "PausedState"_L1)) {
-        auto expected = initialState == "StoppedState"_L1 ? DragonPlayer::PlaybackState::StoppedState : DragonPlayer::PlaybackState::PausedState;
-        QCOMPARE(player.playbackState(), expected);
-    } else if (expectedState == "PlayingState"_L1) {
-        QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
-    } else if (expectedState == "PausedState"_L1) {
-        QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
-    } else if (expectedState == "StoppedState"_L1) {
-        QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
-    }
+    QCOMPARE(player.playbackState(),
+             expectedState == "StoppedState"_L1       ? DragonPlayer::PlaybackState::StoppedState
+                 : expectedState == "PausedState"_L1  ? DragonPlayer::PlaybackState::PausedState
+                 : expectedState == "PlayingState"_L1 ? DragonPlayer::PlaybackState::PlayingState
+                                                      : DragonPlayer::PlaybackState::StoppedState);
 }
 
 void TestPlayer::testPlayPauseStopSequence()
@@ -482,19 +468,19 @@ void TestPlayer::testPlayPauseStopSequence()
     QSignalSpy stoppedSpy(&player, &DragonPlayer::stopped);
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 
     player.pause();
-    if (stateSpy.count() == 0) {
-        QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
-    } else {
-        QVERIFY(pausedSpy.count() >= 1);
-    }
+    QCOMPARE(stateSpy.count(), 0);
+    QCOMPARE(pausedSpy.count(), 0);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     stateSpy.clear();
     player.stop();
-    QTRY_VERIFY(stateSpy.count() >= 1);
-    QVERIFY(stoppedSpy.count() >= 1);
+    QCOMPARE(stateSpy.count(), 0);
+    QCOMPARE(stoppedSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 
     stateSpy.clear();
     player.play();
@@ -504,9 +490,9 @@ void TestPlayer::testPlayPauseStopSequence()
 
     stateSpy.clear();
     player.pause();
-    QTRY_VERIFY(stateSpy.count() >= 1);
-    QVERIFY(pausedSpy.count() >= 1);
-    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
+    QCOMPARE(stateSpy.count(), 0);
+    QCOMPARE(pausedSpy.count(), 0);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
 void TestPlayer::testVolumeBoundaryValues()

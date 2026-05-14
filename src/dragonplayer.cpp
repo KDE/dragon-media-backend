@@ -145,11 +145,11 @@ void DragonPlayerPrivate::onDecodeFinished(bool hadFatalError)
 
         fftPipeline.stop();
 
+        setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
         if (currentStatus != DragonPlayer::MediaStatus::EndOfMedia) {
             currentStatus = DragonPlayer::MediaStatus::EndOfMedia;
             Q_EMIT q->statusChanged(DragonPlayer::MediaStatus::EndOfMedia);
         }
-        setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
     }
 }
 
@@ -500,6 +500,11 @@ void DragonPlayer::setPosition(int64_t posMs)
         d->audioOutput->clearStream();
     }
     Q_EMIT positionChanged(posMs);
+
+    if (posMs == 0 && d->currentStatus == DragonPlayer::MediaStatus::EndOfMedia) {
+        d->currentStatus = DragonPlayer::MediaStatus::LoadedMedia;
+        Q_EMIT statusChanged(DragonPlayer::MediaStatus::LoadedMedia);
+    }
 }
 
 void DragonPlayer::setFftMode(FftMode mode)
@@ -587,6 +592,11 @@ void DragonPlayer::play()
 void DragonPlayer::pause()
 {
     qCDebug(dragonsdlPlayer) << "pause()";
+
+    if (d->currentStatus == DragonPlayer::MediaStatus::NoMedia || d->currentStatus == DragonPlayer::MediaStatus::InvalidMedia) {
+        return;
+    }
+
     d->requestedPlaybackState = DragonPlayer::PlaybackState::PausedState;
 
     if (d->currentPlaybackState == DragonPlayer::PlaybackState::PausedState) {
@@ -615,27 +625,32 @@ void DragonPlayer::stop()
         return;
     }
 
+    bool skipTeardown = false;
     if (d->decodePipeline.isActive() && d->audioOutput && !d->audioOutput->isDeviceOpen()) {
-        qCDebug(dragonsdlPlayer) << "stop() decoder exists but audio not open yet, ignoring stale stop";
-        return;
+        qCDebug(dragonsdlPlayer) << "stop() decoder exists but audio not open yet, skipping teardown";
+        skipTeardown = true;
     }
 
-    d->decodePipeline.stopSession();
-    ++d->currentDecoderGeneration;
+    if (!skipTeardown) {
+        d->decodePipeline.stopSession();
+        ++d->currentDecoderGeneration;
 
-    if (d->audioOutput) {
-        d->audioOutput->stop();
-        d->audioOutput->reset();
+        if (d->audioOutput) {
+            d->audioOutput->stop();
+            d->audioOutput->reset();
+        }
+
+        d->fftPipeline.stop();
     }
-
-    d->fftPipeline.stop();
 
     d->setPlaybackState(PlaybackState::StoppedState);
 
-    if (d->currentStatus != MediaStatus::LoadedMedia) {
-        d->currentStatus = MediaStatus::LoadedMedia;
+    if (d->currentStatus != MediaStatus::NoMedia && d->currentStatus != MediaStatus::InvalidMedia) {
+        if (d->currentStatus != MediaStatus::LoadedMedia) {
+            d->currentStatus = MediaStatus::LoadedMedia;
+        }
+        Q_EMIT statusChanged(MediaStatus::LoadedMedia);
     }
-    Q_EMIT statusChanged(MediaStatus::LoadedMedia);
 }
 
 void DragonPlayer::seek(int64_t posMs)
