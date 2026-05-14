@@ -315,8 +315,8 @@ if(BUILD_TESTING)
     )
     add_test(NAME test_radiostream COMMAND test_radiostream)
 
-    add_executable(test_player tests/test_player.cpp)
-    target_link_libraries(test_player PRIVATE
+    add_executable(test_player_basics tests/test_player_basics.cpp)
+    target_link_libraries(test_player_basics PRIVATE
         dragon-sdl
         Qt6::Test
         Qt6::Network
@@ -325,10 +325,55 @@ if(BUILD_TESTING)
         spsc_queue
         kissfft::kissfft
     )
-    target_compile_definitions(test_player PRIVATE
+    target_compile_definitions(test_player_basics PRIVATE
         DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
     )
-    add_test(NAME test_player COMMAND test_player)
+    add_test(NAME test_player_basics COMMAND test_player_basics)
+
+    add_executable(test_player_playback tests/test_player_playback.cpp)
+    target_link_libraries(test_player_playback PRIVATE
+        dragon-sdl
+        Qt6::Test
+        Qt6::Network
+        SDL3::SDL3
+        PkgConfig::FFmpeg
+        spsc_queue
+        kissfft::kissfft
+    )
+    target_compile_definitions(test_player_playback PRIVATE
+        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
+    add_test(NAME test_player_playback COMMAND test_player_playback)
+
+    add_executable(test_player_signals tests/test_player_signals.cpp)
+    target_link_libraries(test_player_signals PRIVATE
+        dragon-sdl
+        Qt6::Test
+        Qt6::Network
+        SDL3::SDL3
+        PkgConfig::FFmpeg
+        spsc_queue
+        kissfft::kissfft
+    )
+    target_compile_definitions(test_player_signals PRIVATE
+        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
+    add_test(NAME test_player_signals COMMAND test_player_signals)
+
+    add_executable(test_player_fft tests/test_player_fft.cpp)
+    target_link_libraries(test_player_fft PRIVATE
+        dragon-sdl
+        Qt6::Test
+        Qt6::Network
+        SDL3::SDL3
+        PkgConfig::FFmpeg
+        spsc_queue
+        kissfft::kissfft
+    )
+    target_compile_definitions(test_player_fft PRIVATE
+        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
+    add_test(NAME test_player_fft COMMAND test_player_fft)
 
     add_executable(test_e2e tests/test_e2e.cpp)
     target_link_libraries(test_e2e PRIVATE
