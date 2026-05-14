@@ -235,7 +235,7 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(const QUrl &sour
 {
     qCDebug(dragonsdlDecode) << "initializeSession(" << source.toString() << ") isGapless=" << isGapless;
 
-    auto completion = std::make_shared<DragonCompletion>();
+    auto completion = std::make_shared<DragonCompletion>(this);
 
     qCDebug(dragonsdlDecode) << "initializeSession thread joinable=" << m_decodeThread.joinable();
     if (!m_decodeThread.joinable()) {
