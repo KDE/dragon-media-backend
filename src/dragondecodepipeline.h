@@ -20,6 +20,15 @@ class DragonPlayer;
 class DragonDecoder;
 class DragonRadioStream;
 
+struct InitResult {
+    bool success = false;
+    int sampleRate = 0;
+    int channels = 0;
+    int64_t durationMs = -1;
+    bool isGapless = false;
+    QString errorMessage;
+};
+
 class DragonDecodePipeline : public QObject
 {
     Q_OBJECT
@@ -53,18 +62,27 @@ public:
     bool decodeLoopActive() const;
 
 Q_SIGNALS:
+
     void formatReady(int sampleRate, int channels, bool isGapless);
+
     void durationChanged(int64_t durationMs);
+
     void errorOccurred(const QString &message);
+
     void finished(bool hadFatalError);
     void gaplessTransition(const QUrl &newSource);
 
+    void sessionInitCompleted(uint64_t generation, const InitResult &result);
+
+    void sessionError(uint64_t generation, const QString &message);
+
+    void sessionFinished(uint64_t generation, bool hadFatalError);
+
 private:
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless, uint64_t generation);
-
     void startDecodeThread();
     bool waitForDecoderAssignment(std::stop_token st);
-    std::pair<bool, bool> executeDecodeSession();
+    std::pair<bool, bool> executeDecodeSession(uint64_t generation);
     void processDecodeCompletion();
 
     SamplesCallback m_samplesCallback;

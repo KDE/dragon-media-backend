@@ -351,6 +351,13 @@ if(BUILD_TESTING)
     )
     add_test(NAME test_fftprocessor COMMAND test_fftprocessor)
 
+    add_executable(test_generator tests/test_generator.cpp)
+    target_link_libraries(test_generator PRIVATE
+        Qt6::Core
+        Qt6::Test
+    )
+    add_test(NAME test_generator COMMAND test_generator)
+
     add_executable(test_decoder tests/test_decoder.cpp)
     target_link_libraries(test_decoder PRIVATE
         dragon-sdl

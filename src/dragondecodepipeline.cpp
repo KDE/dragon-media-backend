@@ -23,6 +23,8 @@
 #include <stop_token>
 #include <thread>
 
+using namespace DragonSdl;
+
 DragonDecodePipeline::DragonDecodePipeline(DragonPlayer *player)
     : QObject(player)
     , m_player(player)
@@ -42,7 +44,13 @@ void DragonDecodePipeline::startDecodeThread()
                 break;
             }
 
-            auto [wasStopped, hadFatalError] = executeDecodeSession();
+            uint64_t sessionGeneration;
+            {
+                std::scoped_lock lock(m_decoderMutex);
+                sessionGeneration = m_generation;
+            }
+
+            auto [wasStopped, hadFatalError] = executeDecodeSession(sessionGeneration);
             if (wasStopped) {
                 qCDebug(dragonsdlDecode) << "decode thread session was stopped, continue to wait for new decoder";
                 continue;
@@ -51,6 +59,7 @@ void DragonDecodePipeline::startDecodeThread()
             if (hadFatalError) {
                 qCDebug(dragonsdlDecode) << "decode thread fatal error, emitting finished signal";
                 Q_EMIT finished(true);
+                Q_EMIT sessionFinished(sessionGeneration, true);
                 continue;
             }
 
@@ -90,7 +99,7 @@ bool DragonDecodePipeline::waitForDecoderAssignment(std::stop_token st)
     return true;
 }
 
-std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
+std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession(uint64_t generation)
 {
     DragonDecoder *decoder = nullptr;
     {
@@ -110,10 +119,89 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
 
     qCDebug(dragonsdlDecode) << "decode thread starting decodeLoop for decoder" << decoder;
 
-    decoder->decodeLoop(m_sessionStopSource.get_token());
+    bool initCompleted = false;
+    bool hadFatalError = false;
+    bool isGapless = false;
+    int sessionSampleRate = 0;
+    int sessionChannels = 0;
+
+    for (auto event : decoder->decodeLoop(m_sessionStopSource.get_token())) {
+        if (m_sessionStopSource.get_token().stop_requested()) {
+            qCDebug(dragonsdlDecode) << "decode thread stop requested during iteration";
+            break;
+        }
+
+        std::visit(overloaded{[&](const FormatReady &fr) {
+                                  if (!initCompleted) {
+                                      initCompleted = true;
+                                      sessionSampleRate = fr.sampleRate;
+                                      sessionChannels = fr.channels;
+
+                                      qCDebug(dragonsdlDecode)
+                                          << "decode thread FormatReady, emitting formatReady sr=" << fr.sampleRate << "ch=" << fr.channels;
+                                      Q_EMIT durationChanged(fr.durationMs);
+                                      Q_EMIT formatReady(fr.sampleRate, fr.channels, isGapless);
+
+                                      InitResult result;
+                                      result.success = true;
+                                      result.sampleRate = fr.sampleRate;
+                                      result.channels = fr.channels;
+                                      result.durationMs = fr.durationMs;
+                                      result.isGapless = isGapless;
+                                      result.errorMessage = QString();
+
+                                      Q_EMIT sessionInitCompleted(generation, result);
+                                  }
+                              },
+
+                              [&](const SamplesChunk &sc) {
+                                  if (m_samplesCallback && !sc.data.empty()) {
+                                      m_samplesCallback(sc.data, m_sessionStopSource.get_token());
+                                  }
+                              },
+
+                              [&](const DecodeError &err) {
+                                  qCDebug(dragonsdlDecode) << "decode thread DecodeError:" << err.message;
+
+                                  if (!initCompleted) {
+                                      initCompleted = true;
+                                      hadFatalError = true;
+
+                                      Q_EMIT errorOccurred(err.message);
+
+                                      InitResult result;
+                                      result.success = false;
+                                      result.errorMessage = err.message;
+
+                                      Q_EMIT sessionInitCompleted(generation, result);
+                                  } else {
+                                      Q_EMIT errorOccurred(err.message);
+                                      Q_EMIT sessionError(generation, err.message);
+                                      hadFatalError = true;
+                                  }
+                              },
+
+                              [&](const DecodeEof &) {
+                                  qCDebug(dragonsdlDecode) << "decode thread DecodeEof received";
+                              }},
+                   event);
+    }
+
+    if (!initCompleted && !hadFatalError) {
+        if (decoder->hasFatalError()) {
+            Q_EMIT errorOccurred(QStringLiteral("Decoder terminated unexpectedly"));
+
+            InitResult result;
+            result.success = false;
+            result.errorMessage = QStringLiteral("Decoder terminated unexpectedly");
+
+            Q_EMIT sessionInitCompleted(generation, result);
+            hadFatalError = true;
+        }
+    }
 
     qCDebug(dragonsdlDecode) << "decode thread decodeLoop finished";
-    const bool hadFatalError = decoder->hasFatalError();
+    const bool decoderHadFatalError = decoder->hasFatalError();
     bool wasStopped;
     {
         std::scoped_lock lock(m_decoderMutex);
@@ -126,11 +214,13 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
     }
     m_decodeLoopFinishedCv.notify_all();
 
-    return {wasStopped, hadFatalError};
+    return {wasStopped, hadFatalError || decoderHadFatalError};
 }
 
 void DragonDecodePipeline::processDecodeCompletion()
 {
+    uint64_t sessionGeneration = m_generation;
+
     std::unique_lock plock(m_decoderMutex);
     if (m_preWarmedDecoder) {
         m_activeDecoder = std::move(m_preWarmedDecoder);
@@ -146,6 +236,7 @@ void DragonDecodePipeline::processDecodeCompletion()
 
         qCDebug(dragonsdlDecode) << "decode thread no pre-warmed decoder, emitting finished signal";
         Q_EMIT finished(false);
+        Q_EMIT sessionFinished(sessionGeneration, false);
     }
 }
 
@@ -314,7 +405,7 @@ void DragonDecodePipeline::requestSeek(int64_t posMs)
     }
 }
 
-std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &source, bool isGapless, uint64_t generation)
+std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &source, bool, uint64_t generation)
 {
     const bool isLocal = source.isLocalFile();
 
@@ -328,6 +419,7 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
 
         connect(m_radioStream.get(), &DragonRadioStream::errorOccurred, this, [this](const QString &) {
             Q_EMIT errorOccurred(QStringLiteral("Network error"));
+            Q_EMIT sessionError(m_generation, QStringLiteral("Network error"));
         });
 
         connect(m_radioStream.get(), &DragonRadioStream::metadataReady, m_player, &DragonPlayer::currentPlayingForRadiosChanged);
@@ -346,37 +438,11 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
 
     auto decoder = std::make_unique<DragonDecoder>(std::move(readCb), isLocal ? source.toLocalFile() : QString{});
 
-    decoder->setSamplesCallback([this](std::span<const std::float32_t> data, int, int) {
-        if (m_samplesCallback) {
-            m_samplesCallback(data, m_sessionStopSource.get_token());
-        }
+    connect(decoder.get(), &DragonDecoder::streamError, this, [this, generation](const QString &msg) {
+        qCDebug(dragonsdlDecode) << "Decoder mid-stream error:" << msg;
+        Q_EMIT errorOccurred(msg);
+        Q_EMIT sessionError(generation, msg);
     });
-
-    connect(
-        decoder.get(),
-        &DragonDecoder::formatReady,
-        this,
-        [this, generation, isGapless](int sampleRate, int channels) {
-            if (m_generation != generation) {
-                qCDebug(dragonsdlPlayer) << "ignoring stale formatReady (gen" << generation << "!= current" << m_generation << ")";
-                return;
-            }
-            qCDebug(dragonsdlPlayer) << "formatReady sr=" << sampleRate << "ch=" << channels;
-            Q_EMIT formatReady(sampleRate, channels, isGapless);
-        },
-        Qt::QueuedConnection);
-
-    connect(decoder.get(), &DragonDecoder::durationChanged, this, &DragonDecodePipeline::durationChanged, Qt::QueuedConnection);
-
-    connect(
-        decoder.get(),
-        &DragonDecoder::streamError,
-        this,
-        [this](const QString &msg) {
-            qCDebug(dragonsdlPlayer) << "Decoder error:" << msg;
-            Q_EMIT errorOccurred(msg);
-        },
-        Qt::QueuedConnection);
 
     return decoder;
 }

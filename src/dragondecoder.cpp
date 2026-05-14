@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#include <dragondecoder.h>
+#include "dragondecoder.h"
 #include <stdfloat>
 
 #include "dragonsdl_decoder_logging.h"
 #include <QScopeGuard>
 
 #include <cstring>
+#include <generator>
 #include <memory>
 #include <ranges>
 #include <span>
@@ -117,37 +118,71 @@ DragonDecoder::DragonDecoder(ReadCallback readCb, const QString &filePath, QObje
 
 DragonDecoder::~DragonDecoder() = default;
 
-void DragonDecoder::decodeLoop(std::stop_token st)
+std::generator<DragonSdl::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token st)
 {
+    using namespace DragonSdl;
+
     av_log_set_level(AV_LOG_ERROR);
 
     DecodeSession session;
 
     if (!initializeAvio(session)) {
-        return;
+        co_yield DecodeError{u"Failed to initialize AVIO"_s};
+        co_return;
     }
     if (!openContainer(session)) {
-        return;
+        co_yield DecodeError{u"avformat_open_input failed"_s};
+        co_return;
     }
     if (!findAudioStream(session)) {
-        return;
+        co_yield DecodeError{u"No supported audio stream found"_s};
+        co_return;
     }
     if (!setupCodec(session)) {
-        return;
+        co_yield DecodeError{u"Codec setup failed"_s};
+        co_return;
     }
     if (!setupResampler(session)) {
-        return;
+        co_yield DecodeError{u"Resampler setup failed"_s};
+        co_return;
     }
 
-    emitFormatAndDuration(session);
+    int64_t durationMs = (session.fmtCtx->duration != AV_NOPTS_VALUE) ? session.fmtCtx->duration / (AV_TIME_BASE / 1000) : -1;
+
+    co_yield FormatReady{.sampleRate = session.sampleRate, .channels = session.nbChannels, .durationMs = durationMs};
+
+    qCDebug(dragonsdlDecoder) << "formatReady sr=" << session.sampleRate << "ch=" << session.nbChannels;
 
     if (!allocatePacketAndFrame(session)) {
-        return;
+        co_yield DecodeError{u"Failed to allocate packet/frame"_s};
+        co_return;
     }
 
-    runMainDecodeLoop(session, st);
+    while (!st.stop_requested()) {
+        if (!readAndProcessPacket(session)) {
+            break;
+        }
+        if (st.stop_requested()) {
+            break;
+        }
+
+        if (auto chunk = drainDecoderFrames(session)) {
+            if (session.firstFrame) {
+                session.firstFrame = false;
+                qCDebug(dragonsdlDecoder) << "first frame" << static_cast<int>(chunk->data.size()) << "samples";
+            }
+            co_yield std::move(*chunk);
+        }
+    }
+
     flushDecoder(session);
+    if (auto chunk = drainDecoderFrames(session)) {
+        co_yield std::move(*chunk);
+    }
+
     flushResampler(session);
+
+    co_yield DecodeEof{};
 
     qCDebug(dragonsdlDecoder) << "decodeLoop finished total packets=" << session.packetCount << "total frames=" << session.frameCount;
 }
@@ -160,7 +195,7 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
 
     uint8_t *ioBuffer = static_cast<uint8_t *>(av_malloc(IO_BUFFER_SIZE));
     if (!ioBuffer) {
-        Q_EMIT streamError(u"Failed to allocate AVIOContext buffer"_s);
+        qCWarning(dragonsdlDecoder) << "Failed to allocate AVIOContext buffer";
         return false;
     }
 
@@ -174,7 +209,6 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
     if (!session.avioCtx) {
         av_free(ioBuffer);
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        Q_EMIT streamError(u"Failed to create AVIOContext"_s);
         return false;
     }
 
@@ -194,13 +228,11 @@ bool DragonDecoder::openContainer(DecodeSession &session)
 
         if (const int err = avformat_open_input(&rawFmtCtx, "", nullptr, nullptr); err < 0) {
             m_hadFatalError.store(true, std::memory_order_relaxed);
-            Q_EMIT streamError(u"avformat_open_input failed for network stream"_s);
             return false;
         }
     } else {
         if (const int err = avformat_open_input(&rawFmtCtx, m_filePath.toUtf8().constData(), nullptr, nullptr); err < 0) {
             m_hadFatalError.store(true, std::memory_order_relaxed);
-            Q_EMIT streamError(u"avformat_open_input failed for %1"_s.arg(m_filePath));
             return false;
         }
     }
@@ -213,7 +245,6 @@ bool DragonDecoder::findAudioStream(DecodeSession &session)
 {
     if (const int err = avformat_find_stream_info(session.fmtCtx.get(), nullptr); err < 0) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        Q_EMIT streamError(u"avformat_find_stream_info failed"_s);
         return false;
     }
 
@@ -230,7 +261,6 @@ bool DragonDecoder::findAudioStream(DecodeSession &session)
 
     if (session.audioStreamIndex < 0 || !session.codec) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        Q_EMIT streamError(u"No supported audio stream found"_s);
         return false;
     }
 
@@ -242,19 +272,16 @@ bool DragonDecoder::setupCodec(DecodeSession &session)
     CodecContextPtr codecCtx{avcodec_alloc_context3(session.codec)};
     if (!codecCtx) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        Q_EMIT streamError(u"Failed to allocate codec context"_s);
         return false;
     }
 
     if (const int err = avcodec_parameters_to_context(codecCtx.get(), session.audioStream->codecpar); err < 0) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        Q_EMIT streamError(u"avcodec_parameters_to_context failed"_s);
         return false;
     }
 
     if (const int err = avcodec_open2(codecCtx.get(), session.codec, nullptr); err < 0) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        Q_EMIT streamError(u"avcodec_open2 failed"_s);
         return false;
     }
 
@@ -279,7 +306,6 @@ bool DragonDecoder::setupResampler(DecodeSession &session)
                                   nullptr);
     if (ret < 0 || !rawSwrCtx) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        Q_EMIT streamError(u"swr_alloc_set_opts2 failed"_s);
         return false;
     }
 
@@ -287,25 +313,10 @@ bool DragonDecoder::setupResampler(DecodeSession &session)
     ret = swr_init(session.swrCtx.get());
     if (ret < 0) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        Q_EMIT streamError(u"swr_init failed"_s);
         return false;
     }
 
     return true;
-}
-
-void DragonDecoder::emitFormatAndDuration(const DecodeSession &session)
-{
-    if (session.fmtCtx->duration != AV_NOPTS_VALUE) {
-        const int64_t durationMs = session.fmtCtx->duration / (AV_TIME_BASE / 1000);
-        qCDebug(dragonsdlDecoder) << "duration=" << durationMs << "ms";
-        Q_EMIT durationChanged(durationMs);
-    } else {
-        qCDebug(dragonsdlDecoder) << "duration unknown";
-    }
-
-    qCDebug(dragonsdlDecoder) << "formatReady sr=" << session.sampleRate << "ch=" << session.nbChannels << "codec=" << session.codec->name;
-    Q_EMIT formatReady(session.sampleRate, session.nbChannels);
 }
 
 bool DragonDecoder::allocatePacketAndFrame(DecodeSession &session)
@@ -314,7 +325,6 @@ bool DragonDecoder::allocatePacketAndFrame(DecodeSession &session)
     session.frame.reset(av_frame_alloc());
     if (!session.pkt || !session.frame) {
         m_hadFatalError.store(true, std::memory_order_relaxed);
-        Q_EMIT streamError(u"Failed to allocate packet/frame"_s);
         return false;
     }
     return true;
@@ -358,12 +368,13 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
         return true;
     }
 
-    drainDecoderFrames(session, true);
     return true;
 }
 
-void DragonDecoder::drainDecoderFrames(DecodeSession &session, bool canEmitFirstFrame)
+std::optional<DragonSdl::SamplesChunk> DragonDecoder::drainDecoderFrames(DecodeSession &session)
 {
+    using namespace DragonSdl;
+
     while (true) {
         int ret = avcodec_receive_frame(session.codecCtx.get(), session.frame.get());
         if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF) {
@@ -403,34 +414,23 @@ void DragonDecoder::drainDecoderFrames(DecodeSession &session, bool canEmitFirst
         int totalSamples = converted * session.nbChannels;
         if (totalSamples > 0) {
             ++session.frameCount;
-            if (canEmitFirstFrame && session.firstFrame) {
-                session.firstFrame = false;
-                qCDebug(dragonsdlDecoder) << "first frame" << totalSamples << "samples";
-            }
-            if (m_samplesCallback) {
-                m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), session.sampleRate, session.nbChannels);
-            }
-        }
-    }
-}
 
-void DragonDecoder::runMainDecodeLoop(DecodeSession &session, std::stop_token st)
-{
-    while (!st.stop_requested()) {
-        if (!readAndProcessPacket(session)) {
-            break;
-        }
-        if (st.stop_requested()) {
-            break;
+
+            m_pendingSamples.assign(m_pcmBuffer.begin(), m_pcmBuffer.begin() + totalSamples);
+
+            return SamplesChunk{.data = std::span<const std::float32_t>(m_pendingSamples.data(), m_pendingSamples.size()),
+                                .sampleRate = session.sampleRate,
+                                .channels = session.nbChannels};
         }
     }
+
+    return std::nullopt;
 }
 
 void DragonDecoder::flushDecoder(DecodeSession &session)
 {
     qCDebug(dragonsdlDecoder) << "flushing decoder...";
     avcodec_send_packet(session.codecCtx.get(), nullptr);
-    drainDecoderFrames(session, false);
 }
 
 void DragonDecoder::flushResampler(DecodeSession &session)
@@ -446,9 +446,8 @@ void DragonDecoder::flushResampler(DecodeSession &session)
         if (converted > 0) {
             int totalSamples = converted * session.nbChannels;
             qCDebug(dragonsdlDecoder) << "swr flush samplesDecoded" << totalSamples << "samples";
-            if (m_samplesCallback) {
-                m_samplesCallback(std::span(m_pcmBuffer.data(), static_cast<size_t>(totalSamples)), session.sampleRate, session.nbChannels);
-            }
+
+            m_pendingSamples.assign(m_pcmBuffer.begin(), m_pcmBuffer.begin() + totalSamples);
         }
     }
 }
@@ -462,9 +461,4 @@ void DragonDecoder::requestSeek(int64_t positionMs)
 {
     m_seekTargetMs.store(std::max(int64_t{0}, positionMs), std::memory_order_relaxed);
     m_seekRequested.store(true, std::memory_order_release);
-}
-
-void DragonDecoder::setSamplesCallback(SamplesCallback cb)
-{
-    m_samplesCallback = std::move(cb);
 }

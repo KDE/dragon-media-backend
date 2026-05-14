@@ -12,6 +12,7 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
+#include "dragonevent.h"
 #include <dragonsdl/dragondiagnostics.h>
 #include <dragonsdl/dragonplayer.h>
 
@@ -45,25 +46,41 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
     }
 
     DragonDecoder decoder(nullptr, filePath);
-
-    QSignalSpy formatSpy(&decoder, &DragonDecoder::formatReady);
-    QSignalSpy durationSpy(&decoder, &DragonDecoder::durationChanged);
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
 
-    decoder.setSamplesCallback([&result](std::span<const std::float32_t> data, int sampleRate, int channels) {
-        result.sampleRate = sampleRate;
-        result.channels = channels;
-        result.allSamples.insert(result.allSamples.end(), data.begin(), data.end());
-    });
-
     std::stop_source stopSource;
-    std::jthread decodeThread([&](std::stop_token) {
-        decoder.decodeLoop(stopSource.get_token());
-    });
+    std::atomic<bool> formatReceived{false};
+    std::atomic<bool> decodeComplete{false};
+
+    std::jthread decodeThread(
+        [&](std::stop_token st) {
+            for (auto event : decoder.decodeLoop(st)) {
+                using namespace DragonSdl;
+                std::visit(DragonSdl::overloaded{[&result, &formatReceived](FormatReady &fr) {
+                                                     result.sampleRate = fr.sampleRate;
+                                                     result.channels = fr.channels;
+                                                     result.duration = fr.durationMs;
+                                                     formatReceived.store(true);
+                                                 },
+                                                 [&result](SamplesChunk &sc) {
+                                                     result.sampleRate = sc.sampleRate;
+                                                     result.channels = sc.channels;
+                                                     result.allSamples.insert(result.allSamples.end(), sc.data.begin(), sc.data.end());
+                                                 },
+                                                 [&result](DecodeError &err) {
+                                                     result.hadError = true;
+                                                     result.errorMessage = err.message;
+                                                 },
+                                                 [](DecodeEof &) { }},
+                           event);
+            }
+            decodeComplete.store(true);
+        },
+        stopSource.get_token());
 
     bool completed = QTest::qWaitFor(
         [&]() {
-            return formatSpy.count() > 0 || errorSpy.count() > 0;
+            return formatReceived.load() || result.hadError || errorSpy.count() > 0;
         },
         timeoutMs);
 
@@ -75,25 +92,8 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
         return result;
     }
 
-    if (errorSpy.count() > 0) {
-        result.hadError = true;
-        result.errorMessage = errorSpy.at(0).at(0).toString();
-        stopSource.request_stop();
-        decodeThread.join();
-        return result;
-    }
-
+    stopSource.request_stop();
     decodeThread.join();
-
-    if (formatSpy.count() > 0) {
-        auto args = formatSpy.at(0);
-        result.sampleRate = args.at(0).toInt();
-        result.channels = args.at(1).toInt();
-    }
-
-    if (durationSpy.count() > 0) {
-        result.duration = durationSpy.at(0).at(0).toLongLong();
-    }
 
     return result;
 }
@@ -414,22 +414,37 @@ void TestE2E::testDecoderNonExistentFile()
 
     DragonDecoder decoder(nullptr, filePath);
     auto errorSpy = SignalSpyHelper::decoderErrorSpy(&decoder);
-    auto formatSpy = SignalSpyHelper::formatSpy(&decoder);
+
+    std::atomic<bool> hadError{false};
+    std::atomic<bool> hadFormat{false};
 
     std::stop_source stopSource;
-    std::jthread t([&](std::stop_token) {
-        decoder.decodeLoop(stopSource.get_token());
-    });
+    std::jthread t(
+        [&](std::stop_token st) {
+            for (auto event : decoder.decodeLoop(st)) {
+                using namespace DragonSdl;
+                std::visit(DragonSdl::overloaded{[&hadFormat](FormatReady &) {
+                                                     hadFormat.store(true);
+                                                 },
+                                                 [&hadError](DecodeError &) {
+                                                     hadError.store(true);
+                                                 },
+                                                 [](auto &&) { }},
+                           event);
+            }
+        },
+        stopSource.get_token());
 
     [[maybe_unused]] bool done = QTest::qWaitFor(
         [&]() {
-            return formatSpy.count() > 0 || errorSpy.count() > 0;
+            return hadFormat.load() || hadError.load() || errorSpy.count() > 0;
         },
         5000);
 
+    stopSource.request_stop();
     t.join();
 
-    QVERIFY2(errorSpy.count() > 0 || formatSpy.count() == 0, "Non-existent file should produce error or no format");
+    QVERIFY2(hadError.load() || errorSpy.count() > 0 || !hadFormat.load(), "Non-existent file should produce error or no format");
 }
 
 void TestE2E::testDecoderInvalidFile()
@@ -445,22 +460,37 @@ void TestE2E::testDecoderInvalidFile()
 
     DragonDecoder decoder(nullptr, invalidPath);
     auto errorSpy = SignalSpyHelper::decoderErrorSpy(&decoder);
-    auto formatSpy = SignalSpyHelper::formatSpy(&decoder);
+
+    std::atomic<bool> hadError{false};
+    std::atomic<bool> hadFormat{false};
 
     std::stop_source stopSource;
-    std::jthread t([&](std::stop_token) {
-        decoder.decodeLoop(stopSource.get_token());
-    });
+    std::jthread t(
+        [&](std::stop_token st) {
+            for (auto event : decoder.decodeLoop(st)) {
+                using namespace DragonSdl;
+                std::visit(DragonSdl::overloaded{[&hadFormat](FormatReady &) {
+                                                     hadFormat.store(true);
+                                                 },
+                                                 [&hadError](DecodeError &) {
+                                                     hadError.store(true);
+                                                 },
+                                                 [](auto &&) { }},
+                           event);
+            }
+        },
+        stopSource.get_token());
 
     [[maybe_unused]] bool done = QTest::qWaitFor(
         [&]() {
-            return formatSpy.count() > 0 || errorSpy.count() > 0;
+            return hadFormat.load() || hadError.load() || errorSpy.count() > 0;
         },
         5000);
 
+    stopSource.request_stop();
     t.join();
 
-    QVERIFY2(errorSpy.count() > 0 || formatSpy.count() == 0, "Invalid file should produce error or no format");
+    QVERIFY2(hadError.load() || errorSpy.count() > 0 || !hadFormat.load(), "Invalid file should produce error or no format");
 }
 
 void TestE2E::testDecoderSignalEmissionOrder()
@@ -468,28 +498,46 @@ void TestE2E::testDecoderSignalEmissionOrder()
     VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
     DragonDecoder decoder(nullptr, TestFixture::fixturePath(u"sample-3s.mp3"_s));
-    auto formatSpy = SignalSpyHelper::formatSpy(&decoder);
-    auto durationSpy = SignalSpyHelper::decoderDurationSpy(&decoder);
     auto errorSpy = SignalSpyHelper::decoderErrorSpy(&decoder);
 
-    std::atomic<int> callbackCount{0};
-    decoder.setSamplesCallback([&](std::span<const std::float32_t>, int, int) {
-        callbackCount.fetch_add(1);
-    });
+    std::atomic<int> formatCount{0};
+    std::atomic<int> samplesChunkCount{0};
+    std::atomic<int> samplesCount{0};
+    std::atomic<int> eofCount{0};
+    std::atomic<bool> gotFormatFirst{false};
 
     std::stop_source stopSource;
-    std::jthread t([&](std::stop_token) {
-        decoder.decodeLoop(stopSource.get_token());
-    });
+    std::jthread t(
+        [&](std::stop_token st) {
+            for (auto event : decoder.decodeLoop(st)) {
+                using namespace DragonSdl;
+                std::visit(DragonSdl::overloaded{[&formatCount, &samplesChunkCount, &gotFormatFirst](FormatReady &) {
+                                                     gotFormatFirst.store(samplesChunkCount.load() == 0);
+                                                     formatCount.fetch_add(1);
+                                                 },
+                                                 [&samplesChunkCount, &samplesCount](SamplesChunk &sc) {
+                                                     samplesChunkCount.fetch_add(1);
+                                                     samplesCount.fetch_add(static_cast<int>(sc.data.size()));
+                                                 },
+                                                 [](DecodeError &) { },
+                                                 [&eofCount](DecodeEof &) {
+                                                     eofCount.fetch_add(1);
+                                                 }},
+                           event);
+            }
+        },
+        stopSource.get_token());
 
     t.join();
 
-    if (formatSpy.count() > 0 && callbackCount.load() > 0) {
-        QVERIFY2(formatSpy.at(0).at(0).toInt() > 0, "Format should specify valid sample rate");
-    }
+    QVERIFY2(formatCount.load() > 0, "Should have received FormatReady event");
+    QVERIFY2(gotFormatFirst.load(), "FormatReady should be first event before any SamplesChunk");
+    QVERIFY2(samplesChunkCount.load() > 0, "Should have received SamplesChunk events");
+    QVERIFY2(samplesCount.load() > 0, "Should have decoded actual samples");
+    QVERIFY2(eofCount.load() == 1, "Should receive exactly one DecodeEof event");
 
-    qDebug() << "Signal counts - format:" << formatSpy.count() << "duration:" << durationSpy.count() << "samples (callback):" << callbackCount.load()
-             << "error:" << errorSpy.count();
+    qDebug() << "Event counts - format:" << formatCount.load() << "samples chunks:" << samplesChunkCount.load() << "total samples:" << samplesCount.load()
+             << "eof:" << eofCount.load() << "error:" << errorSpy.count();
 }
 
 void TestE2E::testDecoderMultipleFilesConsecutive()

@@ -282,19 +282,9 @@ public:
         return QSignalSpy(player, &DragonPlayer::durationChanged);
     }
 
-    static QSignalSpy formatSpy(DragonDecoder *decoder)
-    {
-        return QSignalSpy(decoder, &DragonDecoder::formatReady);
-    }
-
     static QSignalSpy decoderErrorSpy(DragonDecoder *decoder)
     {
         return QSignalSpy(decoder, &DragonDecoder::streamError);
-    }
-
-    static QSignalSpy decoderDurationSpy(DragonDecoder *decoder)
-    {
-        return QSignalSpy(decoder, &DragonDecoder::durationChanged);
     }
 
     template<typename T>
