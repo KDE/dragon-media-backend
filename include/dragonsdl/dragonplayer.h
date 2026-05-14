@@ -10,6 +10,7 @@
 
 #include <dragonsdl/dragonicymetadata.h>
 
+#include <QCoroTask>
 #include <QObject>
 #include <QString>
 #include <QUrl>
@@ -121,7 +122,7 @@ Q_SIGNALS:
 public Q_SLOTS:
     void setMuted(bool muted);
     void setVolume(float linearGain);
-    void setSource(const QUrl &source);
+    QCoro::Task<void> setSource(const QUrl &source);
     void setNextSource(const QUrl &nextSource);
     void setPosition(int64_t positionMs);
     void setFftMode(FftMode mode);

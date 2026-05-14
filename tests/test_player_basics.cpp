@@ -157,7 +157,7 @@ void TestPlayerBasics::testErrorProperty()
     QCOMPARE(player.error(), DragonPlayer::Error::NoError);
 
     player.setSource(QUrl("file:///nonexistent/file.mp3"_L1));
-    QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError || player.status() == DragonPlayer::MediaStatus::NoMedia, 3000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError, 3000);
 }
 
 void TestPlayerBasics::testDurationProperty()

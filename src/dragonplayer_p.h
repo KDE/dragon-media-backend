@@ -16,6 +16,7 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <atomic>
 #include <memory>
 #include <span>
 #include <stdfloat>
@@ -24,10 +25,13 @@
 
 class DragonDiagnostics;
 
+struct AliveGuard {
+    std::atomic<bool> alive{true};
+};
+
 class DragonPlayerPrivate : public QObject
 {
     Q_OBJECT
-
 public:
     explicit DragonPlayerPrivate(DragonPlayer *player);
 
@@ -39,16 +43,12 @@ private:
 
     DragonPlayer *q = nullptr;
 
-    void onFormatReady(int sampleRate, int channels, bool isGapless);
-
 private Q_SLOTS:
-    void onDurationChanged(int64_t dur);
-    void onErrorOccurred(const QString &msg);
     void onGaplessTransition(const QUrl &newSource);
     void onDecodeFinished(bool hadFatalError);
 
 private:
-    void applyRequestedState(int sampleRate, int channels);
+    void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);
 
     void writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st);
 
@@ -83,6 +83,8 @@ private:
     int currentSampleRate = 0;
     int currentChannels = 0;
     DragonPlayer::FftMode currentFftMode = DragonPlayer::FftMode::Off;
+
+    std::shared_ptr<AliveGuard> aliveGuard;
 
     uint64_t currentDecoderGeneration = 0;
 

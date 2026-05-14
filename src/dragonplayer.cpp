@@ -7,6 +7,11 @@
 
 #include <dragonsdl/dragonplayer.h>
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#include <QCoroSignal>
+#include <QCoroTask>
+#pragma GCC diagnostic pop
 #include <QMetaObject>
 #include <QTimer>
 #include <dragonsdl_logging.h>
@@ -31,14 +36,14 @@ DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player)
     : QObject(player)
     , q(player)
     , decodePipeline(player)
+    , aliveGuard(std::make_shared<AliveGuard>())
 {
 }
 
-void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
+void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent)
 {
-    switch (requestedPlaybackState) {
+    switch (intent) {
     case DragonPlayer::PlaybackState::PlayingState:
-        requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
         if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
             audioOutput->start(sampleRate, channels);
         } else {
@@ -49,7 +54,6 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
         break;
 
     case DragonPlayer::PlaybackState::PausedState:
-        requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
         if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
             audioOutput->start(sampleRate, channels, true);
         } else {
@@ -62,41 +66,6 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels)
     case DragonPlayer::PlaybackState::StoppedState:
         break;
     }
-}
-
-void DragonPlayerPrivate::onFormatReady(int sampleRate, int channels, bool isGapless)
-{
-    qCDebug(dragonsdlPlayer) << "formatReady sr=" << sampleRate << "ch=" << channels << " isGapless=" << isGapless;
-    currentSampleRate = sampleRate;
-    currentChannels = channels;
-
-    fftPipeline.setSampleRate(sampleRate);
-    fftPipeline.setChannelCount(channels);
-
-    if (currentStatus != DragonPlayer::MediaStatus::LoadedMedia) {
-        currentStatus = DragonPlayer::MediaStatus::LoadedMedia;
-        Q_EMIT q->statusChanged(DragonPlayer::MediaStatus::LoadedMedia);
-    }
-
-    if (isGapless) {
-        if (currentPlaybackState == DragonPlayer::PlaybackState::PlayingState) {
-            if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
-                audioOutput->start(sampleRate, channels);
-            }
-            return;
-        }
-
-        if (currentPlaybackState == DragonPlayer::PlaybackState::PausedState) {
-            if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
-                audioOutput->start(sampleRate, channels, true);
-            }
-            return;
-        }
-
-        return;
-    }
-
-    applyRequestedState(sampleRate, channels);
 }
 
 void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
@@ -153,23 +122,6 @@ void DragonPlayerPrivate::onDecodeFinished(bool hadFatalError)
     }
 }
 
-void DragonPlayerPrivate::onDurationChanged(int64_t dur)
-{
-    if (currentDuration != dur) {
-        currentDuration = dur;
-        Q_EMIT q->durationChanged(dur);
-    }
-}
-
-void DragonPlayerPrivate::onErrorOccurred(const QString &)
-{
-    auto err = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
-    if (currentError != err) {
-        currentError = err;
-        Q_EMIT q->errorChanged(currentError);
-    }
-}
-
 void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st)
 {
     if (pcm.empty()) {
@@ -192,11 +144,20 @@ void DragonPlayerPrivate::connectPipelineSignals()
         writeToQueues(samples, st);
     });
 
-    connect(&decodePipeline, &DragonDecodePipeline::formatReady, this, &DragonPlayerPrivate::onFormatReady, Qt::QueuedConnection);
-
-    connect(&decodePipeline, &DragonDecodePipeline::durationChanged, this, &DragonPlayerPrivate::onDurationChanged, Qt::QueuedConnection);
-
-    connect(&decodePipeline, &DragonDecodePipeline::errorOccurred, this, &DragonPlayerPrivate::onErrorOccurred, Qt::QueuedConnection);
+    connect(
+        &decodePipeline,
+        &DragonDecodePipeline::sessionError,
+        this,
+        [this](uint64_t gen, const QString &) {
+            if (gen != currentDecoderGeneration)
+                return;
+            auto err = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
+            if (currentError != err) {
+                currentError = err;
+                Q_EMIT q->errorChanged(currentError);
+            }
+        },
+        Qt::QueuedConnection);
 
     connect(&decodePipeline, &DragonDecodePipeline::finished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
 
@@ -332,6 +293,9 @@ DragonPlayer::DragonPlayer(QObject *parent)
 
 DragonPlayer::~DragonPlayer()
 {
+    if (d && d->aliveGuard) {
+        d->aliveGuard->alive = false;
+    }
     d->stopPipeline();
 }
 
@@ -409,9 +373,11 @@ void DragonPlayer::setVolume(float gain)
     }
 }
 
-void DragonPlayer::setSource(const QUrl &source)
+QCoro::Task<void> DragonPlayer::setSource(const QUrl &source)
 {
     qCDebug(dragonsdlPlayer) << "setSource(" << source.toString() << ")";
+
+    auto aliveGuard = d->aliveGuard;
 
     if (d->audioOutput) {
         d->audioOutput->silence();
@@ -452,7 +418,7 @@ void DragonPlayer::setSource(const QUrl &source)
         }
         d->setStatus(DragonPlayer::MediaStatus::NoMedia);
         d->setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
-        return;
+        co_return;
     }
 
     if (d->currentPlaybackState != DragonPlayer::PlaybackState::StoppedState) {
@@ -474,8 +440,48 @@ void DragonPlayer::setSource(const QUrl &source)
     d->currentSeekable = isLocal;
     Q_EMIT seekableChanged(d->currentSeekable);
 
-    ++d->currentDecoderGeneration;
-    d->decodePipeline.setSource(source, d->currentDecoderGeneration);
+    const uint64_t myGeneration = ++d->currentDecoderGeneration;
+    d->decodePipeline.setSource(source, myGeneration);
+
+    const auto [gen, result] = co_await qCoro(&d->decodePipeline, &DragonDecodePipeline::sessionInitCompleted);
+
+    if (!aliveGuard || !aliveGuard->alive) {
+        co_return;
+    }
+
+    if (gen != myGeneration) {
+        qCDebug(dragonsdlPlayer) << "stale setSource coroutine (gen" << myGeneration << "!= received" << gen << "), discarding";
+        co_return;
+    }
+
+    if (d->currentDecoderGeneration != myGeneration) {
+        qCDebug(dragonsdlPlayer) << "superseded setSource coroutine (gen" << myGeneration << "!= current" << d->currentDecoderGeneration << "), discarding";
+        co_return;
+    }
+
+    if (!result.success) {
+        d->currentError = d->currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
+        Q_EMIT errorChanged(d->currentError);
+        d->setStatus(DragonPlayer::MediaStatus::InvalidMedia);
+        d->setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+        co_return;
+    }
+
+    d->currentSampleRate = result.sampleRate;
+    d->currentChannels = result.channels;
+    d->currentDuration = result.durationMs;
+
+    if (d->currentDuration >= 0) {
+        Q_EMIT durationChanged(d->currentDuration);
+    }
+
+    d->fftPipeline.setSampleRate(result.sampleRate);
+    d->fftPipeline.setChannelCount(result.channels);
+    d->setStatus(DragonPlayer::MediaStatus::LoadedMedia);
+
+    d->applyRequestedState(result.sampleRate, result.channels, d->requestedPlaybackState);
+
+    co_return;
 }
 
 void DragonPlayer::setNextSource(const QUrl &nextSource)

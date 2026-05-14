@@ -245,10 +245,12 @@ target_link_libraries(dragon-sdl
         Qt6::Network
         SDL3::SDL3
         PkgConfig::FFmpeg
+    PUBLIC
+        QCoro6::Core
     PRIVATE
         Qt6::Gui
         kissfft::kissfft
-        QCoro6::Core
+        QCoro6::Network
 )
 
 include(GenerateExportHeader)
