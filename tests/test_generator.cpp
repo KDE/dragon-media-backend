@@ -72,9 +72,9 @@ std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, in
     co_yield DecodeEof{};
 }
 
-std::generator<DecodeEvent> createErrorGenerator(const QString &errorMessage)
+std::generator<DecodeEvent> createErrorGenerator(QString errorMessage)
 {
-    co_yield DecodeError{errorMessage};
+    co_yield DecodeError{std::move(errorMessage)};
     co_return;
 }
 
