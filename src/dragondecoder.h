@@ -50,7 +50,7 @@ Q_SIGNALS:
 private:
     ReadCallback m_networkCallback;
     QString m_filePath;
-    mutable std::vector<std::float32_t> m_pcmBuffer;
+    std::vector<std::float32_t> m_pcmBuffer;
     std::vector<std::float32_t> m_pendingSamples;
 
     std::atomic<bool> m_seekRequested{false};
