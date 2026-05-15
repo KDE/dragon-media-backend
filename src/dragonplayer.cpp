@@ -111,7 +111,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
     }
 
     if (audioOutput) {
-        audioOutput->silence();
+        audioOutput->stop();
         audioOutput->setQueueReady(false);
     }
 
