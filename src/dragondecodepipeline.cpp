@@ -197,6 +197,8 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
 
 void DragonDecodePipeline::processDecodeCompletion()
 {
+    qCDebug(dragonsdlDecode) << "processDecodeCompletion() called";
+
     std::unique_lock plock(m_decoderMutex);
     if (m_preWarmedDecoder) {
         m_activeDecoder = std::move(m_preWarmedDecoder);

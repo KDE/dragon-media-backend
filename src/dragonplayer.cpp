@@ -102,6 +102,9 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
 
 void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalError)
 {
+    qCDebug(dragonsdlPlayer) << "onDecodeFinished called source=" << source.toString() << "currentSource=" << currentSource.toString()
+                             << "hadFatalError=" << hadFatalError;
+
     if (source != currentSource) {
         qCDebug(dragonsdlPlayer) << "ignoring stale onDecodeFinished (source mismatch)";
         return;
