@@ -14,7 +14,7 @@ DragonPlaylist::DragonPlaylist(DragonPlayer *player, QObject *parent)
     , m_player(player)
 {
     QObject::connect(player, &DragonPlayer::trackChanged, this, [this]() {
-        if (m_currentIndex >= 0 && m_currentIndex < m_tracks.size() - 1) {
+        if (m_gaplessEnabled && m_currentIndex >= 0 && m_currentIndex < m_tracks.size() - 1) {
             m_currentIndex++;
             qDebug() << "PLAYLIST: seamless advance to index" << m_currentIndex;
             Q_EMIT currentIndexChanged(m_currentIndex);
@@ -153,14 +153,32 @@ void DragonPlaylist::setCurrentIndex(int index)
     updatePlayerQueue();
 }
 
+bool DragonPlaylist::gaplessEnabled() const
+{
+    return m_gaplessEnabled;
+}
+
+void DragonPlaylist::setGaplessEnabled(bool enabled)
+{
+    if (m_gaplessEnabled != enabled) {
+        m_gaplessEnabled = enabled;
+        Q_EMIT gaplessEnabledChanged(enabled);
+        updatePlayerQueue();
+    }
+}
+
 void DragonPlaylist::updatePlayerQueue()
 {
-    if (m_currentIndex >= 0 && m_currentIndex < m_tracks.size() - 1) {
+    if (m_gaplessEnabled && m_currentIndex >= 0 && m_currentIndex < m_tracks.size() - 1) {
         m_player->setNextSource(m_tracks[m_currentIndex + 1]);
         qDebug() << "PLAYLIST: queued next track" << m_tracks[m_currentIndex + 1].toString();
     } else {
         m_player->setNextSource(QUrl{});
-        qDebug() << "PLAYLIST: no next track to queue";
+        if (m_gaplessEnabled) {
+            qDebug() << "PLAYLIST: no next track to queue";
+        } else {
+            qDebug() << "PLAYLIST: gapless disabled, not queuing next track";
+        }
     }
 }
 

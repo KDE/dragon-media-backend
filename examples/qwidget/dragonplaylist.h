@@ -28,6 +28,9 @@ public:
     [[nodiscard]] int count() const;
     [[nodiscard]] QUrl trackAt(int index) const;
 
+    [[nodiscard]] bool gaplessEnabled() const;
+    void setGaplessEnabled(bool enabled);
+
     void playNext();
     void playPrevious();
     void setCurrentIndex(int index);
@@ -35,6 +38,7 @@ public:
 Q_SIGNALS:
     void currentIndexChanged(int index);
     void tracksChanged();
+    void gaplessEnabledChanged(bool enabled);
 
 private:
     void updatePlayerQueue();
@@ -43,4 +47,5 @@ private:
     DragonPlayer *m_player = nullptr;
     QList<QUrl> m_tracks;
     int m_currentIndex = -1;
+    bool m_gaplessEnabled = true;
 };

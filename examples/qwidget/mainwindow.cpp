@@ -65,6 +65,12 @@ void MainWindow::setupUi()
     fileMenu->addSeparator();
     fileMenu->addAction(i18n("&Quit"), QKeySequence::Quit, this, &QWidget::close);
 
+    auto *playbackMenu = menuBar()->addMenu(i18n("&Playback"));
+    m_gaplessAction = playbackMenu->addAction(i18n("&Gapless Playback"));
+    m_gaplessAction->setCheckable(true);
+    m_gaplessAction->setChecked(true);
+    connect(m_gaplessAction, &QAction::toggled, m_playlist, &DragonPlaylist::setGaplessEnabled);
+
     auto *central = new QWidget(this);
     auto *mainLayout = new QHBoxLayout(central);
     mainLayout->setSpacing(12);
@@ -231,6 +237,10 @@ void MainWindow::connectPlayer()
     });
 
     connect(m_playlist, &DragonPlaylist::currentIndexChanged, this, &MainWindow::updatePlaylistCurrentIndex);
+
+    connect(m_playlist, &DragonPlaylist::gaplessEnabledChanged, this, [this](bool enabled) {
+        m_gaplessAction->setChecked(enabled);
+    });
 
     connect(m_seekSlider, &QSlider::sliderPressed, this, [this]() {
         m_seeking = true;

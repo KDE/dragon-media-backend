@@ -13,6 +13,7 @@ class DragonPlayer;
 class DragonPlaylist;
 class DragonVisualizer;
 class DragonSpectrogram;
+class QAction;
 class QCheckBox;
 class QPushButton;
 class QSlider;
@@ -71,6 +72,8 @@ private:
     QSlider *m_volumeSlider = nullptr;
 
     QCheckBox *m_fftCheckBox = nullptr;
+
+    QAction *m_gaplessAction = nullptr;
 
     QListWidget *m_playlistWidget = nullptr;
     QLabel *m_statusLabel = nullptr;
