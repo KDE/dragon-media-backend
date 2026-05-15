@@ -101,13 +101,11 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
 {
     DragonDecoder *decoder = nullptr;
     std::shared_ptr<DragonCompletion> completion;
-    QUrl sessionSource;
     {
         std::scoped_lock lock(m_decoderMutex);
         m_decodeLoopActive = true;
         decoder = m_activeDecoder.get();
         completion = m_pendingInitCompletion;
-        sessionSource = m_currentSource;
         if (!decoder) {
             m_decodeLoopActive = false;
         }
@@ -218,10 +216,21 @@ void DragonDecodePipeline::processDecodeCompletion()
         m_currentSource = newSource;
         m_nextSource.clear();
 
+        int sampleRate = 0;
+        int channels = 0;
+        qint64 durationMs = -1;
+        if (m_pendingGaplessCompletion && m_pendingGaplessCompletion->await_ready()) {
+            const auto result = m_pendingGaplessCompletion->await_resume();
+            sampleRate = result.sampleRate;
+            channels = result.channels;
+            durationMs = result.durationMs;
+        }
+
         plock.unlock();
 
-        qCDebug(dragonsdlDecode) << "decode thread gapless transition, decoder swapped for" << newSource.toString();
-        Q_EMIT gaplessTransition(newSource);
+        qCDebug(dragonsdlDecode) << "decode thread gapless transition, decoder swapped for" << newSource.toString() << "sr=" << sampleRate
+                                 << "ch=" << channels << "duration=" << durationMs;
+        Q_EMIT gaplessTransition(newSource, sampleRate, channels, durationMs);
     } else {
         const QUrl finishedSource = m_currentSource;
         plock.unlock();
@@ -229,38 +238,6 @@ void DragonDecodePipeline::processDecodeCompletion()
         qCDebug(dragonsdlDecode) << "decode thread no pre-warmed decoder, emitting sessionFinished for" << finishedSource.toString();
         Q_EMIT sessionFinished(finishedSource, false);
     }
-}
-
-QCoro::Task<InitResult> DragonDecodePipeline::awaitGaplessTransition()
-{
-    std::shared_ptr<DragonCompletion> completion;
-    {
-        std::scoped_lock lock(m_decoderMutex);
-        completion = m_pendingGaplessCompletion;
-    }
-
-    if (!completion) {
-        qCDebug(dragonsdlDecode) << "awaitGaplessTransition no pending completion, returning empty result";
-        co_return InitResult{};
-    }
-
-    qCDebug(dragonsdlDecode) << "awaitGaplessTransition awaiting gapless completion";
-    auto result = co_await *completion;
-
-    {
-        std::scoped_lock lock(m_decoderMutex);
-        if (m_pendingGaplessCompletion == completion) {
-            m_pendingGaplessCompletion.reset();
-        }
-    }
-
-    qCDebug(dragonsdlDecode) << "awaitGaplessTransition completed, success=" << result.success << "isGapless=" << result.isGapless;
-    co_return result;
-}
-
-void DragonDecodePipeline::continueGaplessSession()
-{
-    qCDebug(dragonsdlDecode) << "continueGaplessSession gapless session continuing, decode thread will take over";
 }
 
 QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, bool isGapless)

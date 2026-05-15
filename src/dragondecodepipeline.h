@@ -60,12 +60,7 @@ Q_SIGNALS:
 
     void sessionFinished(const QUrl &source, bool hadFatalError);
 
-    void gaplessTransition(const QUrl &newSource);
-
-public:
-    QCoro::Task<DragonSdl::InitResult> awaitGaplessTransition();
-
-    void continueGaplessSession();
+    void gaplessTransition(const QUrl &newSource, int sampleRate, int channels, qint64 durationMs);
 
 private:
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless);

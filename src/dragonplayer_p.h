@@ -47,7 +47,7 @@ private Q_SLOTS:
     void onDecodeFinished(const QUrl &source, bool hadFatalError);
     void onDecodeError(const QString &message);
 
-    QCoro::Task<void> handleGaplessTransition();
+    void onGaplessTransition(const QUrl &newSource, int sampleRate, int channels, qint64 durationMs);
 
 private:
     void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);
