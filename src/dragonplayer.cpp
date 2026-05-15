@@ -67,16 +67,6 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, Drag
     }
 }
 
-void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
-{
-    if (newSource != nextSource) {
-        qCDebug(dragonsdlPlayer) << "ignoring stale gapless transition (URL mismatch)";
-        return;
-    }
-
-    qCDebug(dragonsdlPlayer) << "onGaplessTransition (deprecated signal-based) for" << newSource.toString();
-}
-
 QCoro::Task<void> DragonPlayerPrivate::handleGaplessTransition()
 {
     qCDebug(dragonsdlPlayer) << "handleGaplessTransition awaiting gapless init handshake";

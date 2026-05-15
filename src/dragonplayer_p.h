@@ -44,7 +44,6 @@ private:
     DragonPlayer *q = nullptr;
 
 private Q_SLOTS:
-    void onGaplessTransition(const QUrl &newSource);
     void onDecodeFinished(const QUrl &source, bool hadFatalError);
     void onDecodeError(const QString &message);
 

@@ -351,6 +351,17 @@ void DragonDecodePipeline::stopSession()
         }
     }
 
+    {
+        std::shared_ptr<DragonCompletion> pending;
+        {
+            std::scoped_lock lock(m_decoderMutex);
+            pending = m_pendingGaplessCompletion;
+        }
+        if (pending) {
+            pending->cancel(QStringLiteral("Session stopped"));
+        }
+    }
+
     if (m_preWarmThread.joinable()) {
         stoppable = m_preWarmThread.request_stop();
         qCDebug(dragonsdlDecode) << "stopSession() cancelling pre-warm thread" << stoppable;
@@ -384,6 +395,17 @@ void DragonDecodePipeline::stop()
         {
             std::scoped_lock lock(m_decoderMutex);
             pending = m_pendingInitCompletion;
+        }
+        if (pending) {
+            pending->cancel(QStringLiteral("Full stop"));
+        }
+    }
+
+    {
+        std::shared_ptr<DragonCompletion> pending;
+        {
+            std::scoped_lock lock(m_decoderMutex);
+            pending = m_pendingGaplessCompletion;
         }
         if (pending) {
             pending->cancel(QStringLiteral("Full stop"));

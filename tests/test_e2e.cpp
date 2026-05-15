@@ -141,6 +141,10 @@ private Q_SLOTS:
 
     void testSameFormatSeamlessTransition();
 
+    void testGaplessTransitionCoroutine();
+    void testGaplessFormatMismatch();
+    void testGaplessPreWarmError();
+
     void testDiagnosticsBasicFunctionality();
 };
 
@@ -864,6 +868,108 @@ void TestE2E::testDiagnosticsBasicFunctionality()
     QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active after stop");
 
     qDebug() << "Diagnostics basic functionality test passed";
+}
+
+void TestE2E::testGaplessTransitionCoroutine()
+{
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.m4a"_s);
+
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    auto trackSpy = SignalSpyHelper::trackSpy(&player);
+    auto sourceSpy = SignalSpyHelper::sourceSpy(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
+    helper.setNextSource(u"gs-16b-2c-44100hz.m4a"_s);
+
+    QVERIFY(player.nextSource().isValid());
+    QVERIFY(player.nextSource() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.m4a"_s)));
+
+    QVERIFY(helper.playAndWait());
+    VERIFY_AUDIO_ACTIVE(player);
+
+    auto stateSpy = SignalSpyHelper::stateSpy(&player);
+
+    QVERIFY(helper.waitForTrackChange());
+
+    QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during coroutine-based gapless transition");
+
+    QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.m4a"_s)));
+    QVERIFY(!player.nextSource().isValid());
+
+    QVERIFY2(trackSpy.count() >= 1, qPrintable(u"Expected trackChanged signal, got %1"_s.arg(trackSpy.count())));
+
+    VERIFY_AUDIO_ACTIVE(player);
+
+    qDebug() << "Coroutine-based gapless transition test passed:"
+             << "trackChanged=" << trackSpy.count() << "sourceChanged=" << sourceSpy.count();
+
+    player.stop();
+}
+
+void TestE2E::testGaplessFormatMismatch()
+{
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-1c-44100hz.flac"_s);
+
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    auto statusSpy = SignalSpyHelper::statusSpy(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
+    helper.setNextSource(u"gs-16b-1c-44100hz.flac"_s);
+
+    QVERIFY(player.nextSource().isValid());
+    QVERIFY(helper.playAndWait());
+    VERIFY_AUDIO_ACTIVE(player);
+
+    QVERIFY(helper.waitForTrackChange());
+
+    QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-1c-44100hz.flac"_s)));
+    QVERIFY(!player.nextSource().isValid());
+
+    QVERIFY(player.duration() > 0);
+
+    qDebug() << "Gapless format mismatch test passed:"
+             << "stateChanges=" << stateSpy.count() << "statusChanges=" << statusSpy.count();
+
+    player.stop();
+}
+
+void TestE2E::testGaplessPreWarmError()
+{
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    auto errorSpy = SignalSpyHelper::errorSpy(&player);
+    auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    auto sourceSpy = SignalSpyHelper::sourceSpy(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
+    QUrl firstSource = player.source();
+
+    helper.setNextSource(u"/nonexistent/invalid_file.mp3"_s);
+
+    QVERIFY(helper.playAndWait());
+    VERIFY_AUDIO_ACTIVE(player);
+
+    QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() > 0 || player.error() != DragonPlayer::Error::NoError, 15000);
+
+    QVERIFY(sourceSpy.count() >= 2);
+
+    QVERIFY(player.error() != DragonPlayer::Error::NoError);
+
+    qDebug() << "Gapless pre-warm error test passed:"
+             << "errors=" << errorSpy.count() << "finalError=" << static_cast<int>(player.error()) << "finalState=" << static_cast<int>(player.playbackState())
+             << "sourceChanges=" << sourceSpy.count();
+
+    player.stop();
 }
 
 QTEST_MAIN(TestE2E)
