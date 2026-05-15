@@ -88,7 +88,8 @@ public:
 private:
     std::vector<T> m_buffer;
     LockFreeSpscQueue<T> m_queue;
-    std::condition_variable_any m_cv;
+    std::condition_variable_any m_consumer_cv;
+    std::condition_variable_any m_producer_cv;
     std::mutex m_cvMutex;
 };
 
@@ -98,7 +99,7 @@ size_t DragonPipe<T>::Producer::writeSomeWith(size_t maxItems, Func &&fn)
 {
     size_t n = m_pipe->m_queue.try_write(maxItems, std::forward<Func>(fn));
     if (n > 0) {
-        m_pipe->m_cv.notify_one();
+        m_pipe->m_consumer_cv.notify_one();
     }
     return n;
 }
@@ -107,5 +108,9 @@ template<typename T>
 template<typename Func>
 size_t DragonPipe<T>::Consumer::readSomeWith(size_t maxItems, Func &&fn)
 {
-    return m_pipe->m_queue.try_read(maxItems, std::forward<Func>(fn));
+    size_t n = m_pipe->m_queue.try_read(maxItems, std::forward<Func>(fn));
+    if (n > 0) {
+        m_pipe->m_producer_cv.notify_one();
+    }
+    return n;
 }

@@ -32,11 +32,14 @@ size_t DragonPipe<T>::Producer::write(std::span<const T> items, std::stop_token 
             std::ranges::copy_n(in_iter, b2.size(), b2.begin());
         });
         if (n > 0) {
-            m_pipe->m_cv.notify_one();
+            m_pipe->m_consumer_cv.notify_one();
         }
         written += n;
         if (written < items.size() && !st.stop_requested()) {
-            std::this_thread::sleep_for(std::chrono::microseconds(500));
+            std::unique_lock lock(m_pipe->m_cvMutex);
+            m_pipe->m_producer_cv.wait_for(lock, st, std::chrono::milliseconds(1), [&] {
+                return m_pipe->m_queue.get_num_free() > 0;
+            });
         }
     }
     return written;
@@ -45,7 +48,7 @@ size_t DragonPipe<T>::Producer::write(std::span<const T> items, std::stop_token 
 template<typename T>
 void DragonPipe<T>::Producer::notify()
 {
-    m_pipe->m_cv.notify_one();
+    m_pipe->m_consumer_cv.notify_one();
 }
 
 template<typename T>
@@ -58,7 +61,7 @@ template<typename T>
 bool DragonPipe<T>::Consumer::waitFor(size_t minItems, std::stop_token st)
 {
     std::unique_lock lock(m_pipe->m_cvMutex);
-    bool ready = m_pipe->m_cv.wait_for(lock, st, std::chrono::milliseconds(50), [&] {
+    bool ready = m_pipe->m_consumer_cv.wait_for(lock, st, std::chrono::milliseconds(50), [&] {
         return m_pipe->m_queue.get_num_items_ready() >= minItems;
     });
     return ready && !st.stop_requested();
@@ -71,7 +74,10 @@ void DragonPipe<T>::Consumer::drain()
         size_t n = m_pipe->m_queue.get_num_items_ready();
         if (n == 0)
             break;
-        [[maybe_unused]] size_t discarded = m_pipe->m_queue.try_read(n, [](std::span<const T>, std::span<const T>) { });
+        size_t discarded = m_pipe->m_queue.try_read(n, [](std::span<const T>, std::span<const T>) { });
+        if (discarded > 0) {
+            m_pipe->m_producer_cv.notify_one();
+        }
     }
 }
 

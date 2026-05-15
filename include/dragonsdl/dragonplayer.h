@@ -101,13 +101,13 @@ Q_SIGNALS:
     void sourceChanged();
     void nextSourceChanged();
     void trackChanged();
-    void playbackStateChanged(DragonPlayer::PlaybackState state);
-    void statusChanged(DragonPlayer::MediaStatus status);
-    void errorChanged(DragonPlayer::Error error);
+    void playbackStateChanged(PlaybackState state);
+    void statusChanged(MediaStatus status);
+    void errorChanged(Error error);
     void durationChanged(int64_t durationMs);
     void positionChanged(int64_t positionMs);
     void seekableChanged(bool seekable);
-    void fftModeChanged(DragonPlayer::FftMode mode);
+    void fftModeChanged(FftMode mode);
 
     void playingChanged(bool playing);
 

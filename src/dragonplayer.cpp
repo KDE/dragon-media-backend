@@ -19,7 +19,6 @@
 #include <condition_variable>
 #include <memory>
 #include <mutex>
-#include <pthread.h>
 #include <ranges>
 #include <stdfloat>
 #include <stop_token>
@@ -157,31 +156,6 @@ void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, con
     audioPipe.producer().write(pcm, st);
 }
 
-void DragonPlayerPrivate::connectPipelineSignals()
-{
-    decodePipeline.setSamplesCallback([this](auto samples, const std::stop_token &st) {
-        writeToQueues(samples, st);
-    });
-
-    connect(&decodePipeline, &DragonDecodePipeline::sessionError, this, &DragonPlayerPrivate::onDecodeError, Qt::QueuedConnection);
-
-    connect(&decodePipeline, &DragonDecodePipeline::sessionFinished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
-
-    connect(&decodePipeline, &DragonDecodePipeline::gaplessTransition, this, &DragonPlayerPrivate::onGaplessTransition, Qt::QueuedConnection);
-}
-
-void DragonPlayerPrivate::wireFftCallbacks()
-{
-    fftPipeline.setFrameCallback([this](DragonFftFrame frame) {
-        QMetaObject::invokeMethod(
-            q,
-            [this, f = std::move(frame)]() mutable {
-                Q_EMIT q->fftFrameReady(f);
-            },
-            Qt::QueuedConnection);
-    });
-}
-
 void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
 {
     qCDebug(dragonsdlPlayer) << "setPlaybackState(" << state << ") current=" << currentPlaybackState;
@@ -291,8 +265,23 @@ void DragonPlayerPrivate::init()
         Q_EMIT q->positionChanged(audioOutput && audioOutput->isDeviceOpen() ? audioOutput->positionMs() : currentPosition);
     });
 
-    connectPipelineSignals();
-    wireFftCallbacks();
+    decodePipeline.setSamplesCallback([this](auto samples, const std::stop_token &st) {
+        writeToQueues(samples, st);
+    });
+
+    connect(&decodePipeline, &DragonDecodePipeline::sessionError, this, &DragonPlayerPrivate::onDecodeError, Qt::QueuedConnection);
+
+    connect(&decodePipeline, &DragonDecodePipeline::sessionFinished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
+
+    connect(&decodePipeline, &DragonDecodePipeline::gaplessTransition, this, &DragonPlayerPrivate::onGaplessTransition, Qt::QueuedConnection);
+    fftPipeline.setFrameCallback([this](DragonFftFrame frame) {
+        QMetaObject::invokeMethod(
+            q,
+            [this, f = std::move(frame)]() mutable {
+                Q_EMIT q->fftFrameReady(f);
+            },
+            Qt::QueuedConnection);
+    });
 }
 
 DragonPlayer::DragonPlayer(QObject *parent)

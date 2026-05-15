@@ -60,9 +60,6 @@ private:
 
     void stopPipeline();
 
-    void connectPipelineSignals();
-    void wireFftCallbacks();
-
     DragonDecodePipeline decodePipeline;
     DragonFftPipeline fftPipeline;
 
