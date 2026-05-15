@@ -166,7 +166,7 @@ std::generator<DragonSdl::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token
             break;
         }
 
-        if (auto chunk = drainDecoderFrames(session)) {
+        while (auto chunk = drainDecoderFrames(session)) {
             if (session.firstFrame) {
                 session.firstFrame = false;
                 qCDebug(dragonsdlDecoder) << "first frame" << static_cast<int>(chunk->data.size()) << "samples";
@@ -176,7 +176,7 @@ std::generator<DragonSdl::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token
     }
 
     flushDecoder(session);
-    if (auto chunk = drainDecoderFrames(session)) {
+    while (auto chunk = drainDecoderFrames(session)) {
         co_yield std::move(*chunk);
     }
 
