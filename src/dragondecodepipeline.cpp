@@ -252,14 +252,7 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
         startDecodeThread();
     }
 
-    {
-        std::scoped_lock lock(m_decoderMutex);
-        m_preWarmedDecoder.reset();
-    }
-    if (m_preWarmThread.joinable()) {
-        m_preWarmThread.request_stop();
-        m_preWarmThread.join();
-    }
+    cancelPreWarm(QStringLiteral("New session started"));
 
     qCDebug(dragonsdlDecode) << "initializeSession requesting decode session stop";
     m_sessionStopSource.request_stop();
@@ -422,17 +415,7 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
 {
     m_nextSource = next;
 
-    {
-        std::scoped_lock lock(m_decoderMutex);
-        m_preWarmedDecoder.reset();
-        if (m_pendingGaplessCompletion) {
-            m_pendingGaplessCompletion->cancel(QStringLiteral("New pre-warm started"));
-        }
-    }
-    if (m_preWarmThread.joinable()) {
-        m_preWarmThread.request_stop();
-        m_preWarmThread.join();
-    }
+    cancelPreWarm(QStringLiteral("New pre-warm started"));
 
     if (next.isEmpty() || !next.isLocalFile()) {
         return;
@@ -586,6 +569,21 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
     });
 
     return decoder;
+}
+
+void DragonDecodePipeline::cancelPreWarm(const QString &reason)
+{
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        m_preWarmedDecoder.reset();
+        if (m_pendingGaplessCompletion) {
+            m_pendingGaplessCompletion->cancel(reason);
+        }
+    }
+    if (m_preWarmThread.joinable()) {
+        m_preWarmThread.request_stop();
+        m_preWarmThread.join();
+    }
 }
 
 void DragonDecodePipeline::setCurrentSource(const QUrl &source)

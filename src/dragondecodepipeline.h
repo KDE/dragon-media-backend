@@ -64,7 +64,7 @@ Q_SIGNALS:
 
 private:
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless);
-
+    void cancelPreWarm(const QString &reason);
     void startDecodeThread();
     bool waitForDecoderAssignment(std::stop_token st);
     std::pair<bool, bool> executeDecodeSession();
