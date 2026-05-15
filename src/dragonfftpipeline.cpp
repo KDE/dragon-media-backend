@@ -136,7 +136,7 @@ void DragonFftPipeline::setMode(DragonPlayer::FftMode mode)
 
         startThread();
 
-        qCDebug(dragonsdlFft) << "FFT mode: Off -> On (" << static_cast<int>(mode) << ")";
+        qCDebug(dragonsdlFft) << "FFT mode: Off -> On (" << mode << ")";
     } else if (wasOn && !nowOn) {
         if (m_fftProcessor) {
             m_fftProcessor->setFftMode(mode);
@@ -146,7 +146,7 @@ void DragonFftPipeline::setMode(DragonPlayer::FftMode mode)
     } else if (nowOn && m_fftProcessor) {
         m_fftProcessor->setFftMode(mode);
 
-        qCDebug(dragonsdlFft) << "FFT mode change: " << static_cast<int>(mode);
+        qCDebug(dragonsdlFft) << "FFT mode change: " << mode;
     }
 }
 

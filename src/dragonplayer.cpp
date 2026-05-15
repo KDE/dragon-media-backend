@@ -120,6 +120,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
         return;
     }
 
+    qCDebug(dragonsdlPlayer) << "onDecodeFinished emitting state/status changes, hadFatalError=" << hadFatalError;
     if (hadFatalError) {
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
         setStatus(DragonPlayer::MediaStatus::InvalidMedia);
@@ -127,6 +128,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
         setStatus(DragonPlayer::MediaStatus::EndOfMedia);
     }
+    qCDebug(dragonsdlPlayer) << "onDecodeFinished state/status changes complete";
 }
 
 void DragonPlayerPrivate::onDecodeError(const QString &)
@@ -181,7 +183,9 @@ void DragonPlayerPrivate::wireFftCallbacks()
 
 void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
 {
+    qCDebug(dragonsdlPlayer) << "setPlaybackState(" << state << ") current=" << currentPlaybackState;
     if (currentPlaybackState == state) {
+        qCDebug(dragonsdlPlayer) << "setPlaybackState no change, returning";
         return;
     }
 
@@ -223,10 +227,13 @@ void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
 
 void DragonPlayerPrivate::setStatus(DragonPlayer::MediaStatus status)
 {
+    qCDebug(dragonsdlPlayer) << "setStatus(" << status << ") current=" << currentStatus;
     if (currentStatus == status) {
+        qCDebug(dragonsdlPlayer) << "setStatus no change, returning";
         return;
     }
     currentStatus = status;
+    qCDebug(dragonsdlPlayer) << "setStatus emitting statusChanged";
     Q_EMIT q->statusChanged(status);
 
     if (status == DragonPlayer::MediaStatus::InvalidMedia && currentError != DragonPlayer::Error::FormatError) {
@@ -584,7 +591,7 @@ void DragonPlayer::play()
         return;
     }
 
-    qCDebug(dragonsdlPlayer) << "play() status is " << static_cast<int>(d->currentStatus) << ", starting audio synchronously";
+    qCDebug(dragonsdlPlayer) << "play() status is " << d->currentStatus << ", starting audio synchronously";
 
     if (d->audioOutput && !d->audioOutput->isDeviceOpen() && d->currentSampleRate > 0) {
         d->audioOutput->start(d->currentSampleRate, d->currentChannels);
