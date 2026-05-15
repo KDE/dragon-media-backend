@@ -341,7 +341,9 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
         int seekRet = av_seek_frame(session.fmtCtx.get(), session.audioStreamIndex, streamTimestamp, AVSEEK_FLAG_BACKWARD);
         if (seekRet >= 0) {
             avcodec_flush_buffers(session.codecCtx.get());
-            swr_convert(session.swrCtx.get(), nullptr, 0, nullptr, 0);
+            if (swr_init(session.swrCtx.get()) < 0) {
+                qCWarning(dragonsdlDecoder) << "swr_init failed after seek";
+            }
         }
     }
 
