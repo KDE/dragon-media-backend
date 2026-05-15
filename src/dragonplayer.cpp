@@ -26,11 +26,6 @@
 #include <thread>
 #include <utility>
 
-static inline void setCurrentThreadName(const char *name)
-{
-    pthread_setname_np(pthread_self(), name);
-}
-
 DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player)
     : QObject(player)
     , q(player)

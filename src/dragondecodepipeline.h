@@ -6,6 +6,7 @@
 #pragma once
 
 #include "dragoncompletion.h"
+#include "dragonevent.h"
 
 #include <QCoroTask>
 #include <QObject>
@@ -50,12 +51,16 @@ public:
 
     void setSamplesCallback(SamplesCallback callback);
 
+    static DragonSdl::InitResult makeSuccessResult(const DragonSdl::FormatReady &fr, bool isGapless = false);
+    static DragonSdl::InitResult makeErrorResult(const QString &message, bool isGapless = false);
+    static DragonSdl::InitResult makeCancelledResult(const QString &message, bool isGapless = false);
+
     const std::unique_ptr<DragonDecoder> &activeDecoder() const;
     bool decodeLoopActive() const;
 
     void setCurrentSource(const QUrl &source);
-
 Q_SIGNALS:
+
     void sessionError(const QString &message);
 
     void sessionFinished(const QUrl &source, bool hadFatalError);
