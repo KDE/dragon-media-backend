@@ -22,6 +22,15 @@ DragonPlaylist::DragonPlaylist(DragonPlayer *player, QObject *parent)
         }
     });
 
+    QObject::connect(player, &DragonPlayer::stopped, this, [this, player]() {
+        if (player->status() == DragonPlayer::MediaStatus::EndOfMedia && m_currentIndex >= 0 && m_currentIndex < m_tracks.size() - 1) {
+            qDebug() << "PLAYLIST: track ended (non-gapless), advancing to index" << m_currentIndex + 1;
+            playNext();
+        } else if (player->status() == DragonPlayer::MediaStatus::EndOfMedia && m_currentIndex >= 0 && m_currentIndex == m_tracks.size() - 1) {
+            qDebug() << "PLAYLIST: track ended, at end of playlist";
+        }
+    });
+
     QObject::connect(player, &DragonPlayer::sourceChanged, this, [this]() {
         syncIndexFromPlayer();
     });
