@@ -122,7 +122,8 @@ Q_SIGNALS:
 public Q_SLOTS:
     void setMuted(bool muted);
     void setVolume(float linearGain);
-    QCoro::Task<void> setSource(const QUrl &source);
+
+    QCoro::Task<void> setSource(QUrl source);
     void setNextSource(const QUrl &nextSource);
     void setPosition(int64_t positionMs);
     void setFftMode(FftMode mode);

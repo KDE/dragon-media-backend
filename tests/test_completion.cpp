@@ -54,7 +54,7 @@ void TestCompletion::testBasicSetResult()
     CompletionCapture cap;
     auto c = std::make_shared<DragonCompletion>();
 
-    captureAwait(c, &cap);
+    auto task = captureAwait(c, &cap);
 
     InitResult r;
     r.success = true;
@@ -76,7 +76,7 @@ void TestCompletion::testCancel()
     CompletionCapture cap;
     auto c = std::make_shared<DragonCompletion>();
 
-    captureAwait(c, &cap);
+    auto task = captureAwait(c, &cap);
 
     QVERIFY(c->cancel(QStringLiteral("Test cancellation")));
 
@@ -93,7 +93,7 @@ void TestCompletion::testFirstCallWins()
     {
         CompletionCapture cap;
         auto c = std::make_shared<DragonCompletion>();
-        captureAwait(c, &cap);
+        auto task = captureAwait(c, &cap);
 
         InitResult r;
         r.success = true;
@@ -108,7 +108,7 @@ void TestCompletion::testFirstCallWins()
     {
         CompletionCapture cap;
         auto c = std::make_shared<DragonCompletion>();
-        captureAwait(c, &cap);
+        auto task = captureAwait(c, &cap);
 
         QVERIFY(c->cancel(QStringLiteral("first")));
         InitResult r;
@@ -132,9 +132,9 @@ void TestCompletion::testSetResultBeforeAwait()
     r.sampleRate = 48000;
     QVERIFY(c->setResult(r));
 
-    captureAwait(c, &cap);
+    auto task = captureAwait(c, &cap);
 
-    QTest::qWait(50);
+    waitForDone(&cap);
 
     QVERIFY(cap.done);
     QVERIFY(cap.result.success);
@@ -147,7 +147,7 @@ void TestCompletion::testSetResultFromOtherThread()
     auto c = std::make_shared<DragonCompletion>();
     Qt::HANDLE mainThreadId = QThread::currentThreadId();
 
-    captureAwait(c, &cap);
+    auto task = captureAwait(c, &cap);
 
     std::thread worker([c]() {
         InitResult r;
@@ -170,7 +170,7 @@ void TestCompletion::testCancelFromOtherThread()
     auto c = std::make_shared<DragonCompletion>();
     Qt::HANDLE mainThreadId = QThread::currentThreadId();
 
-    captureAwait(c, &cap);
+    auto task = captureAwait(c, &cap);
 
     std::thread worker([c]() {
         c->cancel(QStringLiteral("Cancelled from worker"));

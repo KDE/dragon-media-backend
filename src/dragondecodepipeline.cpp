@@ -231,7 +231,7 @@ void DragonDecodePipeline::processDecodeCompletion()
     }
 }
 
-QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(const QUrl &source, bool isGapless)
+QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, bool isGapless)
 {
     qCDebug(dragonsdlDecode) << "initializeSession(" << source.toString() << ") isGapless=" << isGapless;
 

@@ -35,14 +35,12 @@ public:
     DragonDecodePipeline(DragonDecodePipeline &&) = delete;
     DragonDecodePipeline &operator=(DragonDecodePipeline &&) = delete;
 
-    QCoro::Task<DragonSdl::InitResult> initializeSession(const QUrl &source, bool isGapless = false);
-
+    QCoro::Task<DragonSdl::InitResult> initializeSession(QUrl source, bool isGapless = false);
     void setNextSource(const QUrl &next);
 
     void stopSession();
 
     void stop();
-
     bool isActive() const;
     bool hasFatalError() const;
 

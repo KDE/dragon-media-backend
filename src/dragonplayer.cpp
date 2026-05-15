@@ -364,7 +364,7 @@ void DragonPlayer::setVolume(float gain)
     }
 }
 
-QCoro::Task<void> DragonPlayer::setSource(const QUrl &source)
+QCoro::Task<void> DragonPlayer::setSource(QUrl source)
 {
     qCDebug(dragonsdlPlayer) << "setSource(" << source.toString() << ")";
 
