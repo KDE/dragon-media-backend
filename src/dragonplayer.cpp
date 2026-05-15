@@ -89,6 +89,7 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     decodePipeline.setCurrentSource(currentSource);
 
     audioOutput->setPositionOffset(0, DragonAudioOutput::PositionResetMode::GaplessTransition);
+    Q_EMIT q->positionChanged(0);
 
     Q_EMIT q->trackChanged();
     Q_EMIT q->sourceChanged();
@@ -514,7 +515,7 @@ void DragonPlayer::setPosition(int64_t posMs)
     }
     Q_EMIT positionChanged(posMs);
 
-    if (posMs == 0 && d->currentStatus == MediaStatus::EndOfMedia) {
+    if (d->currentStatus == MediaStatus::EndOfMedia) {
         d->currentStatus = MediaStatus::LoadedMedia;
         Q_EMIT statusChanged(MediaStatus::LoadedMedia);
     }
