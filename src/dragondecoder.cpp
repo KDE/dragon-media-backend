@@ -180,7 +180,9 @@ std::generator<DragonSdl::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token
         co_yield std::move(*chunk);
     }
 
-    flushResampler(session);
+    if (auto chunk = flushResampler(session)) {
+        co_yield std::move(*chunk);
+    }
 
     co_yield DecodeEof{};
 
@@ -433,7 +435,7 @@ void DragonDecoder::flushDecoder(DecodeSession &session)
     avcodec_send_packet(session.codecCtx.get(), nullptr);
 }
 
-void DragonDecoder::flushResampler(DecodeSession &session)
+std::optional<DragonSdl::SamplesChunk> DragonDecoder::flushResampler(DecodeSession &session)
 {
     int delaySamples = swr_get_delay(session.swrCtx.get(), session.sampleRate);
     if (delaySamples > 0) {
@@ -448,8 +450,13 @@ void DragonDecoder::flushResampler(DecodeSession &session)
             qCDebug(dragonsdlDecoder) << "swr flush samplesDecoded" << totalSamples << "samples";
 
             m_pendingSamples.assign(m_pcmBuffer.begin(), m_pcmBuffer.begin() + totalSamples);
+
+            return DragonSdl::SamplesChunk{.data = std::span<const std::float32_t>(m_pendingSamples.data(), m_pendingSamples.size()),
+                                           .sampleRate = session.sampleRate,
+                                           .channels = session.nbChannels};
         }
     }
+    return std::nullopt;
 }
 
 bool DragonDecoder::hasFatalError() const

@@ -68,7 +68,7 @@ private:
 
     std::optional<DragonSdl::SamplesChunk> drainDecoderFrames(DecodeSession &session);
     void flushDecoder(DecodeSession &session);
-    void flushResampler(DecodeSession &session);
+    std::optional<DragonSdl::SamplesChunk> flushResampler(DecodeSession &session);
 
     std::atomic<bool> m_hadFatalError{false};
 };
