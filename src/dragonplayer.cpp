@@ -74,14 +74,51 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
         return;
     }
 
-    currentSource = newSource;
+    qCDebug(dragonsdlPlayer) << "onGaplessTransition (deprecated signal-based) for" << newSource.toString();
+}
+
+QCoro::Task<void> DragonPlayerPrivate::handleGaplessTransition()
+{
+    qCDebug(dragonsdlPlayer) << "handleGaplessTransition awaiting gapless init handshake";
+
+    auto result = co_await decodePipeline.awaitGaplessTransition();
+
+    if (!aliveGuard || !aliveGuard->alive) {
+        co_return;
+    }
+
+    if (!result.success) {
+        qCWarning(dragonsdlPlayer) << "handleGaplessTransition gapless init failed:" << result.errorMessage << "falling back to normal transition";
+        if (!nextSource.isEmpty()) {
+            q->setSource(nextSource);
+        }
+        co_return;
+    }
+
+    if (!result.isGapless) {
+        qCDebug(dragonsdlPlayer) << "handleGaplessTransition no gapless transition pending";
+        co_return;
+    }
+
+    if (nextSource.isEmpty()) {
+        qCDebug(dragonsdlPlayer) << "handleGaplessTransition nextSource was cleared, aborting";
+        co_return;
+    }
+
+    qCDebug(dragonsdlPlayer) << "handleGaplessTransition gapless init successful, applying state";
+
+    currentSource = nextSource;
     nextSource.clear();
     currentPosition = 0;
-    currentIsLocal = newSource.isLocalFile();
+    currentIsLocal = currentSource.isLocalFile();
     currentSeekable = currentIsLocal;
-    currentDuration = 0;
+    currentDuration = result.durationMs;
+    currentSampleRate = result.sampleRate;
+    currentChannels = result.channels;
 
-    decodePipeline.setCurrentSource(newSource);
+    decodePipeline.setCurrentSource(currentSource);
+
+    decodePipeline.continueGaplessSession();
 
     audioOutput->setPositionOffset(0, DragonAudioOutput::PositionResetMode::GaplessTransition);
 
@@ -89,6 +126,12 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource)
     Q_EMIT q->sourceChanged();
     Q_EMIT q->nextSourceChanged();
     Q_EMIT q->seekableChanged(currentSeekable);
+
+    if (currentDuration >= 0) {
+        Q_EMIT q->durationChanged(currentDuration);
+    }
+
+    co_return;
 }
 
 void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalError)
@@ -152,7 +195,14 @@ void DragonPlayerPrivate::connectPipelineSignals()
 
     connect(&decodePipeline, &DragonDecodePipeline::sessionFinished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
 
-    connect(&decodePipeline, &DragonDecodePipeline::gaplessTransition, this, &DragonPlayerPrivate::onGaplessTransition, Qt::QueuedConnection);
+    connect(
+        &decodePipeline,
+        &DragonDecodePipeline::gaplessTransition,
+        this,
+        [this](const QUrl &) {
+            handleGaplessTransition();
+        },
+        Qt::QueuedConnection);
 }
 
 void DragonPlayerPrivate::wireFftCallbacks()

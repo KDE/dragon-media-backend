@@ -3,3 +3,4 @@
 * emulate the gapless playback API (signaling before track change) from Phonon
 * add gapless playback to Elisa
 * add some sort of audio visual to Elisa
+* add KIO suppport. for whatever but also to support audio CD playback.

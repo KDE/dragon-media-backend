@@ -62,6 +62,11 @@ Q_SIGNALS:
 
     void gaplessTransition(const QUrl &newSource);
 
+public:
+    QCoro::Task<DragonSdl::InitResult> awaitGaplessTransition();
+
+    void continueGaplessSession();
+
 private:
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless);
 
@@ -88,6 +93,8 @@ private:
     std::jthread m_preWarmThread;
 
     std::shared_ptr<DragonSdl::DragonCompletion> m_pendingInitCompletion;
+
+    std::shared_ptr<DragonSdl::DragonCompletion> m_pendingGaplessCompletion;
 
     std::unique_ptr<DragonRadioStream> m_radioStream;
 };

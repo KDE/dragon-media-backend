@@ -220,7 +220,7 @@ void DragonDecodePipeline::processDecodeCompletion()
 
         plock.unlock();
 
-        qCDebug(dragonsdlDecode) << "decode thread gapless transition, emitting signal for" << newSource.toString();
+        qCDebug(dragonsdlDecode) << "decode thread gapless transition, decoder swapped for" << newSource.toString();
         Q_EMIT gaplessTransition(newSource);
     } else {
         const QUrl finishedSource = m_currentSource;
@@ -229,6 +229,38 @@ void DragonDecodePipeline::processDecodeCompletion()
         qCDebug(dragonsdlDecode) << "decode thread no pre-warmed decoder, emitting sessionFinished for" << finishedSource.toString();
         Q_EMIT sessionFinished(finishedSource, false);
     }
+}
+
+QCoro::Task<InitResult> DragonDecodePipeline::awaitGaplessTransition()
+{
+    std::shared_ptr<DragonCompletion> completion;
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        completion = m_pendingGaplessCompletion;
+    }
+
+    if (!completion) {
+        qCDebug(dragonsdlDecode) << "awaitGaplessTransition no pending completion, returning empty result";
+        co_return InitResult{};
+    }
+
+    qCDebug(dragonsdlDecode) << "awaitGaplessTransition awaiting gapless completion";
+    auto result = co_await *completion;
+
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        if (m_pendingGaplessCompletion == completion) {
+            m_pendingGaplessCompletion.reset();
+        }
+    }
+
+    qCDebug(dragonsdlDecode) << "awaitGaplessTransition completed, success=" << result.success << "isGapless=" << result.isGapless;
+    co_return result;
+}
+
+void DragonDecodePipeline::continueGaplessSession()
+{
+    qCDebug(dragonsdlDecode) << "continueGaplessSession gapless session continuing, decode thread will take over";
 }
 
 QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, bool isGapless)
@@ -394,6 +426,9 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
     {
         std::scoped_lock lock(m_decoderMutex);
         m_preWarmedDecoder.reset();
+        if (m_pendingGaplessCompletion) {
+            m_pendingGaplessCompletion->cancel(QStringLiteral("New pre-warm started"));
+        }
     }
     if (m_preWarmThread.joinable()) {
         m_preWarmThread.request_stop();
@@ -404,16 +439,91 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
         return;
     }
 
+    m_pendingGaplessCompletion = std::make_shared<DragonCompletion>(this);
+
     m_preWarmThread = std::jthread([this, next](std::stop_token st) {
         pthread_setname_np(pthread_self(), "dragon-prewarm");
         auto decoder = createDecoder(next, true);
         if (st.stop_requested()) {
+            if (m_pendingGaplessCompletion) {
+                m_pendingGaplessCompletion->cancel(QStringLiteral("Pre-warm stopped"));
+            }
             return;
         }
-        if (decoder) {
-            std::scoped_lock lock(m_decoderMutex);
-            if (!st.stop_requested()) {
-                m_preWarmedDecoder = std::move(decoder);
+        if (!decoder) {
+            if (m_pendingGaplessCompletion) {
+                InitResult result;
+                result.success = false;
+                result.errorMessage = QStringLiteral("Failed to create decoder");
+                result.isGapless = true;
+                m_pendingGaplessCompletion->setResult(result);
+            }
+            return;
+        }
+
+        InitResult result;
+        result.isGapless = true;
+        bool formatReadyReceived = false;
+
+        for (auto event : decoder->decodeLoop(st)) {
+            if (st.stop_requested()) {
+                result.cancelled = true;
+                result.success = false;
+                result.errorMessage = QStringLiteral("Pre-warm cancelled");
+                break;
+            }
+
+            bool shouldBreak = false;
+            std::visit(overloaded{[&](const FormatReady &fr) {
+                                      result.success = true;
+                                      result.sampleRate = fr.sampleRate;
+                                      result.channels = fr.channels;
+                                      result.durationMs = fr.durationMs;
+                                      formatReadyReceived = true;
+                                      shouldBreak = true;
+
+                                      std::scoped_lock lock(m_decoderMutex);
+                                      if (!st.stop_requested()) {
+                                          m_preWarmedDecoder = std::move(decoder);
+                                      }
+
+                                      if (m_pendingGaplessCompletion) {
+                                          m_pendingGaplessCompletion->setResult(result);
+                                      }
+                                  },
+                                  [&](const DecodeError &err) {
+                                      result.success = false;
+                                      result.errorMessage = err.message;
+                                      formatReadyReceived = false;
+                                      shouldBreak = true;
+
+                                      if (m_pendingGaplessCompletion) {
+                                          m_pendingGaplessCompletion->setResult(result);
+                                      }
+                                  },
+                                  [&](const SamplesChunk &) { },
+                                  [&](const DecodeEof &) {
+                                      result.success = false;
+                                      result.errorMessage = QStringLiteral("Unexpected EOF during pre-warm");
+                                      formatReadyReceived = false;
+                                      shouldBreak = true;
+
+                                      if (m_pendingGaplessCompletion) {
+                                          m_pendingGaplessCompletion->setResult(result);
+                                      }
+                                  }},
+                       event);
+
+            if (shouldBreak) {
+                break;
+            }
+        }
+
+        if (!formatReadyReceived && result.errorMessage.isEmpty()) {
+            result.success = false;
+            result.errorMessage = QStringLiteral("Pre-warm ended without FormatReady");
+            if (m_pendingGaplessCompletion) {
+                m_pendingGaplessCompletion->setResult(result);
             }
         }
     });
