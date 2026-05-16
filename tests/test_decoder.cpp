@@ -160,7 +160,7 @@ private Q_SLOTS:
     void testConstruction();
     void testLocalFileDecoding();
     void testNetworkStreamDecoding();
-    void testFormatReadyFirstEvent();
+    void testDecoderStatePreservation();
     void testSamplesChunkEvents();
     void testDecodeEofLastEvent();
     void testDurationInFormatReady();
@@ -199,9 +199,24 @@ DecodeResult runDecoderCollecting(DragonDecoder &decoder, std::stop_token st = {
 {
     DecodeResult result;
 
+    InitResult initRes = decoder.initialize();
+    if (initRes.success) {
+        FormatReady fr;
+        fr.sampleRate = initRes.sampleRate;
+        fr.channels = initRes.channels;
+        fr.durationMs = initRes.durationMs;
+        result.format = fr;
+    } else {
+        DecodeError err;
+        err.message = initRes.errorMessage;
+        result.error = err;
+        result.hadFatalError = true;
+        return result;
+    }
+
     for (auto event : decoder.decodeLoop(st)) {
-        std::visit(overloaded{[&](const FormatReady &fr) {
-                                  result.format = fr;
+        std::visit(overloaded{[&](const FormatReady &) {
+                                  QFAIL("FormatReady should not be yielded by decodeLoop");
                               },
                               [&](const SamplesChunk &sc) {
                                   if (!sc.data.empty()) {
@@ -282,7 +297,7 @@ void TestDecoder::testNetworkStreamDecoding()
     }
 }
 
-void TestDecoder::testFormatReadyFirstEvent()
+void TestDecoder::testDecoderStatePreservation()
 {
     QVERIFY(m_tempDir.isValid());
     QString filePath = m_tempDir.filePath("test_format.wav"_L1);
@@ -293,15 +308,16 @@ void TestDecoder::testFormatReadyFirstEvent()
 
     DragonDecoder decoder(nullptr, filePath);
 
+    InitResult res = decoder.initialize();
+    QVERIFY(res.success);
+    QCOMPARE(res.sampleRate, 48000);
+    QCOMPARE(res.channels, 1);
+
     auto gen = decoder.decodeLoop({});
     auto it = gen.begin();
     QVERIFY(it != gen.end());
 
-    QVERIFY(std::holds_alternative<FormatReady>(*it));
-    auto fr = std::get<FormatReady>(*it);
-
-    QCOMPARE(fr.sampleRate, 48000);
-    QCOMPARE(fr.channels, 1);
+    QVERIFY(std::holds_alternative<SamplesChunk>(*it));
 }
 
 void TestDecoder::testSamplesChunkEvents()
@@ -422,16 +438,16 @@ void TestDecoder::testPersistentReadError()
         errorMessage = msg;
     });
 
+    InitResult initRes = decoder.initialize();
+    bool sawFormatReady = initRes.success;
+
     auto gen = decoder.decodeLoop(std::stop_token{});
 
-    bool sawFormatReady = false;
     int samplesChunks = 0;
 
     for (auto it = gen.begin(); it != gen.end(); ++it) {
         auto event = *it;
-        if (std::holds_alternative<FormatReady>(event)) {
-            sawFormatReady = true;
-        } else if (std::holds_alternative<SamplesChunk>(event)) {
+        if (std::holds_alternative<SamplesChunk>(event)) {
             ++samplesChunks;
         } else if (std::holds_alternative<DecodeError>(event)) {
             break;
@@ -598,34 +614,27 @@ void TestDecoder::testGeneratorEventOrdering()
     file.close();
 
     DragonDecoder decoder(nullptr, filePath);
+    QVERIFY(decoder.initialize().success);
 
-    int eventCount = 0;
-    bool sawFormat = false;
     bool sawEof = false;
     int samplesChunks = 0;
 
     for (auto event : decoder.decodeLoop({})) {
         std::visit(overloaded{[&](const FormatReady &) {
-                                  QCOMPARE(eventCount, 0);
-                                  sawFormat = true;
-                                  QVERIFY(!sawEof);
+                                  QFAIL("FormatReady should not be yielded by decodeLoop");
                               },
                               [&](const SamplesChunk &) {
-                                  QVERIFY(sawFormat);
                                   QVERIFY(!sawEof);
                                   ++samplesChunks;
                               },
                               [&](const DecodeEof &) {
-                                  QVERIFY(sawFormat);
                                   QVERIFY(!sawEof);
                                   sawEof = true;
                               },
                               [&](const DecodeError &) { }},
                    event);
-        ++eventCount;
     }
 
-    QVERIFY(sawFormat);
     QVERIFY(sawEof);
     QVERIFY(samplesChunks > 0);
 }
@@ -640,15 +649,12 @@ void TestDecoder::testGeneratorSpanLifetime()
     file.close();
 
     DragonDecoder decoder(nullptr, filePath);
+    QVERIFY(decoder.initialize().success);
 
     auto gen = decoder.decodeLoop({});
     auto it = gen.begin();
     QVERIFY(it != gen.end());
 
-    QVERIFY(std::holds_alternative<FormatReady>(*it));
-    ++it;
-
-    QVERIFY(it != gen.end());
     QVERIFY(std::holds_alternative<SamplesChunk>(*it));
 
     auto sc = std::get<SamplesChunk>(*it);
@@ -672,23 +678,10 @@ void TestDecoder::testGeneratorErrorYielded()
     file.close();
 
     DragonDecoder decoder(nullptr, filePath);
+    InitResult res = decoder.initialize();
 
-    bool sawError = false;
-    bool sawFormat = false;
-
-    for (auto event : decoder.decodeLoop({})) {
-        std::visit(overloaded{[&](const FormatReady &) {
-                                  sawFormat = true;
-                              },
-                              [&](const DecodeError &) {
-                                  sawError = true;
-                                  QVERIFY(!sawFormat);
-                              },
-                              [&](const auto &) { }},
-                   event);
-    }
-
-    QVERIFY(sawError);
+    QVERIFY(!res.success);
+    QVERIFY(!res.errorMessage.isEmpty());
 }
 
 void TestDecoder::testGeneratorMultipleIterations()
@@ -701,15 +694,16 @@ void TestDecoder::testGeneratorMultipleIterations()
     file.close();
 
     DragonDecoder decoder(nullptr, filePath);
+    InitResult res = decoder.initialize();
+    QVERIFY(res.success);
 
     std::vector<std::float32_t> allSamples;
-    int formatSampleRate = 0;
-    int formatChannels = 0;
+    int formatSampleRate = res.sampleRate;
+    int formatChannels = res.channels;
 
     for (auto event : decoder.decodeLoop({})) {
-        std::visit(overloaded{[&](const FormatReady &fr) {
-                                  formatSampleRate = fr.sampleRate;
-                                  formatChannels = fr.channels;
+        std::visit(overloaded{[&](const FormatReady &) {
+                                  QFAIL("FormatReady should not be yielded");
                               },
                               [&](const SamplesChunk &sc) {
                                   if (!sc.data.empty()) {

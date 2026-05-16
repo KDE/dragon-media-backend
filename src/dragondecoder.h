@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "dragoncompletion.h"
 #include "dragonevent.h"
 #include "dragonsdl_export.h"
 #include <stdfloat>
@@ -15,6 +16,7 @@
 #include <cstdint>
 #include <functional>
 #include <generator>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -37,6 +39,8 @@ public:
     DragonDecoder(DragonDecoder &&) = delete;
     DragonDecoder &operator=(DragonDecoder &&) = delete;
 
+    DragonSdl::InitResult initialize();
+
     std::generator<DragonSdl::DecodeEvent> decodeLoop(std::stop_token st);
 
     void requestSeek(int64_t positionMs);
@@ -57,6 +61,7 @@ private:
     std::atomic<int64_t> m_seekTargetMs{0};
 
     struct DecodeSession;
+    std::unique_ptr<DecodeSession> m_session;
 
     bool initializeAvio(DecodeSession &session);
     bool openContainer(DecodeSession &session);

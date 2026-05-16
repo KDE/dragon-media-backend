@@ -126,48 +126,74 @@ DragonDecoder::DragonDecoder(ReadCallback readCb, const QString &filePath, QObje
 
 DragonDecoder::~DragonDecoder() = default;
 
+DragonSdl::InitResult DragonDecoder::initialize()
+{
+    using namespace DragonSdl;
+
+    if (m_session) {
+        InitResult result;
+        result.success = true;
+        result.sampleRate = m_session->sampleRate;
+        result.channels = m_session->nbChannels;
+        result.durationMs = (m_session->fmtCtx->duration != AV_NOPTS_VALUE) ? m_session->fmtCtx->duration / (AV_TIME_BASE / 1000) : -1;
+        return result;
+    }
+
+    av_log_set_level(AV_LOG_ERROR);
+
+    m_session = std::make_unique<DecodeSession>();
+
+    m_session->consecutiveReadErrors = 0;
+    m_session->lastSuccessfulRead = std::chrono::steady_clock::now();
+
+    InitResult result;
+    result.success = false;
+
+    if (!initializeAvio(*m_session)) {
+        result.errorMessage = u"Failed to initialize AVIO"_s;
+        return result;
+    }
+    if (!openContainer(*m_session)) {
+        result.errorMessage = u"avformat_open_input failed"_s;
+        return result;
+    }
+    if (!findAudioStream(*m_session)) {
+        result.errorMessage = u"No supported audio stream found"_s;
+        return result;
+    }
+    if (!setupCodec(*m_session)) {
+        result.errorMessage = u"Codec setup failed"_s;
+        return result;
+    }
+    if (!setupResampler(*m_session)) {
+        result.errorMessage = u"Resampler setup failed"_s;
+        return result;
+    }
+    if (!allocatePacketAndFrame(*m_session)) {
+        result.errorMessage = u"Failed to allocate packet/frame"_s;
+        return result;
+    }
+
+    result.durationMs = (m_session->fmtCtx->duration != AV_NOPTS_VALUE) ? m_session->fmtCtx->duration / (AV_TIME_BASE / 1000) : -1;
+    result.sampleRate = m_session->sampleRate;
+    result.channels = m_session->nbChannels;
+    result.success = true;
+
+    qCDebug(dragonsdlDecoder) << "initialize sr=" << result.sampleRate << "ch=" << result.channels;
+
+    return result;
+}
+
 std::generator<DragonSdl::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token st)
 {
     using namespace DragonSdl;
 
-    av_log_set_level(AV_LOG_ERROR);
-
-    DecodeSession session;
-
-    session.consecutiveReadErrors = 0;
-    session.lastSuccessfulRead = std::chrono::steady_clock::now();
-
-    if (!initializeAvio(session)) {
-        co_yield DecodeError{u"Failed to initialize AVIO"_s};
-        co_return;
-    }
-    if (!openContainer(session)) {
-        co_yield DecodeError{u"avformat_open_input failed"_s};
-        co_return;
-    }
-    if (!findAudioStream(session)) {
-        co_yield DecodeError{u"No supported audio stream found"_s};
-        co_return;
-    }
-    if (!setupCodec(session)) {
-        co_yield DecodeError{u"Codec setup failed"_s};
-        co_return;
-    }
-    if (!setupResampler(session)) {
-        co_yield DecodeError{u"Resampler setup failed"_s};
+    if (!m_session) {
+        co_yield DecodeError{u"Decoder not initialized"_s};
         co_return;
     }
 
-    int64_t durationMs = (session.fmtCtx->duration != AV_NOPTS_VALUE) ? session.fmtCtx->duration / (AV_TIME_BASE / 1000) : -1;
-
-    co_yield FormatReady{.sampleRate = session.sampleRate, .channels = session.nbChannels, .durationMs = durationMs};
-
-    qCDebug(dragonsdlDecoder) << "formatReady sr=" << session.sampleRate << "ch=" << session.nbChannels;
-
-    if (!allocatePacketAndFrame(session)) {
-        co_yield DecodeError{u"Failed to allocate packet/frame"_s};
-        co_return;
-    }
+    DecodeSession &session = *m_session;
 
     while (!st.stop_requested()) {
         if (!readAndProcessPacket(session)) {
@@ -232,12 +258,18 @@ bool DragonDecoder::openContainer(DecodeSession &session)
 {
     AVFormatContext *rawFmtCtx = nullptr;
 
+    if (qEnvironmentVariableIsSet("DRAGON_TEST_SLOW_OPEN")) {
+        qCWarning(dragonsdlDecoder) << "DRAGON_TEST_SLOW_OPEN is set, sleeping 1000ms";
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
+
     if (m_networkCallback) {
         rawFmtCtx = avformat_alloc_context();
         if (!rawFmtCtx) {
             return false;
         }
         rawFmtCtx->pb = session.avioCtx.get();
+        rawFmtCtx->flags |= AVFMT_FLAG_CUSTOM_IO;
 
         if (const int err = avformat_open_input(&rawFmtCtx, "", nullptr, nullptr); err < 0) {
             m_hadFatalError.store(true, std::memory_order_relaxed);
@@ -367,7 +399,7 @@ QString DragonDecoder::avErrorString(int errorCode) const
 {
     std::array<char, AV_ERROR_MAX_STRING_SIZE> errbuf{};
     if (av_strerror(errorCode, errbuf.data(), errbuf.size()) < 0) {
-        return u"Unknown FFmpeg error "_s % errorCode;
+        return u"Unknown FFmpeg error "_s % QString::number(errorCode);
     }
     return QString::fromUtf8(errbuf.data());
 }
@@ -423,7 +455,7 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
         }
 
         if (session.consecutiveReadErrors >= session.MAX_READ_ERRORS || !isRecoverable) {
-            QString errorMsg = u"Read error after "_s % session.consecutiveReadErrors % u" attempts: "_s % avErrorString(readStatus);
+            QString errorMsg = u"Read error after "_s % QString::number(session.consecutiveReadErrors) % u" attempts: "_s % avErrorString(readStatus);
 
             qCWarning(dragonsdlDecoder) << errorMsg;
 

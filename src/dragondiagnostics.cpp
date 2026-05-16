@@ -25,6 +25,8 @@ public:
     std::atomic<std::uint64_t> m_callbackCount{0};
     std::atomic<std::uint64_t> m_callbackTimestampUs{0};
     std::atomic<float> m_callbackHz{0.0f};
+
+    std::atomic<int> m_starvationCount{0};
 };
 
 DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
@@ -38,6 +40,17 @@ DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
             &DragonAudioOutput::audioCallbackInvoked,
             this,
             [this]() {
+                DragonPlayerPrivate *priv = d->m_player->d.get();
+                if (!priv) {
+                    return;
+                }
+
+                if (priv->currentPlaybackState == DragonPlayer::PlaybackState::PlayingState) {
+                    if (priv->audioPipe.consumer().ready() == 0) {
+                        d->m_starvationCount.fetch_add(1, std::memory_order_relaxed);
+                    }
+                }
+
                 const uint64_t count = d->m_callbackCount.fetch_add(1, std::memory_order_relaxed) + 1;
                 if ((count % 50) == 0) {
                     const uint64_t now = SDL_GetTicksNS() / 1000ULL;
@@ -56,6 +69,11 @@ DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
 }
 
 DragonDiagnostics::~DragonDiagnostics() = default;
+
+int DragonDiagnostics::audioStarvationCount() const
+{
+    return d->m_starvationCount.load(std::memory_order_relaxed);
+}
 
 int DragonDiagnostics::sdlAudioBufferUs() const
 {

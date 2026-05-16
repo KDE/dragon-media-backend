@@ -117,63 +117,51 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
         return {true, false};
     }
 
-    qCDebug(dragonsdlDecode) << "decode thread starting decodeLoop for decoder" << decoder;
+    qCDebug(dragonsdlDecode) << "decode thread initializing decoder" << decoder;
 
-    bool initCompleted = false;
-    bool hadFatalError = false;
-    bool isGapless = false;
+    InitResult initResult = decoder->initialize();
+    initResult.isGapless = false;
 
-    for (auto event : decoder->decodeLoop(m_sessionStopSource.get_token())) {
-        if (m_sessionStopSource.get_token().stop_requested()) {
-            qCDebug(dragonsdlDecode) << "decode thread stop requested during iteration";
-            break;
-        }
-
-        std::visit(overloaded{[&](const FormatReady &fr) {
-                                  if (!initCompleted) {
-                                      initCompleted = true;
-                                      qCDebug(dragonsdlDecode) << "decode thread FormatReady, completing init sr=" << fr.sampleRate << "ch=" << fr.channels;
-
-                                      if (m_pendingInitCompletion) {
-                                          m_pendingInitCompletion->setResult(makeSuccessResult(fr, isGapless));
-                                      }
-                                  }
-                              },
-
-                              [&](const SamplesChunk &sc) {
-                                  if (m_samplesCallback && !sc.data.empty()) {
-                                      m_samplesCallback(sc.data, m_sessionStopSource.get_token());
-                                  }
-                              },
-
-                              [&](const DecodeError &err) {
-                                  qCDebug(dragonsdlDecode) << "decode thread DecodeError:" << err.message;
-
-                                  if (!initCompleted) {
-                                      initCompleted = true;
-                                      hadFatalError = true;
-
-                                      if (completion) {
-                                          completion->setResult(makeErrorResult(err.message));
-                                      }
-                                  } else {
-                                      Q_EMIT sessionError(err.message);
-                                      hadFatalError = true;
-                                  }
-                              },
-
-                              [&](const DecodeEof &) {
-                                  qCDebug(dragonsdlDecode) << "decode thread DecodeEof received";
-                              }},
-                   event);
+    if (completion) {
+        completion->setResult(initResult);
     }
 
-    if (!initCompleted && !hadFatalError) {
-        if (decoder->hasFatalError()) {
-            hadFatalError = true;
+    bool hadFatalError = !initResult.success;
 
-            if (completion) {
-                completion->setResult(makeErrorResult(QStringLiteral("Decoder terminated unexpectedly")));
+    if (initResult.success) {
+        qCDebug(dragonsdlDecode) << "decode thread starting decodeLoop for decoder" << decoder;
+
+        for (auto event : decoder->decodeLoop(m_sessionStopSource.get_token())) {
+            if (m_sessionStopSource.get_token().stop_requested()) {
+                qCDebug(dragonsdlDecode) << "decode thread stop requested during iteration";
+                break;
+            }
+
+            std::visit(overloaded{[&](const FormatReady &) {
+                                      qCWarning(dragonsdlDecode) << "decode thread unexpected FormatReady yielded";
+                                  },
+
+                                  [&](const SamplesChunk &sc) {
+                                      if (m_samplesCallback && !sc.data.empty()) {
+                                          m_samplesCallback(sc.data, m_sessionStopSource.get_token());
+                                      }
+                                  },
+
+                                  [&](const DecodeError &err) {
+                                      qCDebug(dragonsdlDecode) << "decode thread DecodeError:" << err.message;
+                                      Q_EMIT sessionError(err.message);
+                                      hadFatalError = true;
+                                  },
+
+                                  [&](const DecodeEof &) {
+                                      qCDebug(dragonsdlDecode) << "decode thread DecodeEof received";
+                                  }},
+                       event);
+        }
+
+        if (!hadFatalError) {
+            if (decoder->hasFatalError()) {
+                hadFatalError = true;
             }
         }
     }
@@ -261,12 +249,6 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
     auto decoder = createDecoder(source, isGapless);
     if (!decoder) {
         qCDebug(dragonsdlDecode) << "initializeSession decoder creation FAILED";
-        {
-            std::scoped_lock lock(m_decoderMutex);
-            if (m_pendingInitCompletion == completion) {
-                m_pendingInitCompletion.reset();
-            }
-        }
         co_return makeErrorResult(QStringLiteral("Failed to create decoder"));
     }
 
@@ -275,10 +257,11 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
         m_pendingInitCompletion = completion;
         m_currentSource = source;
         m_activeDecoder = std::move(decoder);
+        m_sessionStopSource = std::stop_source{};
     }
 
     qCDebug(dragonsdlDecode) << "initializeSession new decoder installed, creating fresh stop source and notifying";
-    m_sessionStopSource = std::stop_source{};
+
     m_decoderAssignedCv.notify_one();
 
     auto result = co_await *completion;
@@ -426,62 +409,22 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
             return;
         }
 
-        InitResult result;
+        InitResult result = decoder->initialize();
         result.isGapless = true;
-        bool formatReadyReceived = false;
 
-        for (auto event : decoder->decodeLoop(st)) {
-            if (st.stop_requested()) {
+        if (st.stop_requested()) {
+            result = makeCancelledResult(QStringLiteral("Pre-warm cancelled"), true);
+        } else if (result.success) {
+            std::scoped_lock lock(m_decoderMutex);
+            if (!st.stop_requested()) {
+                m_preWarmedDecoder = std::move(decoder);
+            } else {
                 result = makeCancelledResult(QStringLiteral("Pre-warm cancelled"), true);
-                break;
-            }
-
-            bool shouldBreak = false;
-            std::visit(overloaded{[&](const FormatReady &fr) {
-                                      result = makeSuccessResult(fr, true);
-                                      formatReadyReceived = true;
-                                      shouldBreak = true;
-
-                                      std::scoped_lock lock(m_decoderMutex);
-                                      if (!st.stop_requested()) {
-                                          m_preWarmedDecoder = std::move(decoder);
-                                      }
-
-                                      if (m_pendingGaplessCompletion) {
-                                          m_pendingGaplessCompletion->setResult(result);
-                                      }
-                                  },
-                                  [&](const DecodeError &err) {
-                                      result = makeErrorResult(err.message, true);
-                                      formatReadyReceived = false;
-                                      shouldBreak = true;
-
-                                      if (m_pendingGaplessCompletion) {
-                                          m_pendingGaplessCompletion->setResult(result);
-                                      }
-                                  },
-                                  [&](const SamplesChunk &) { },
-                                  [&](const DecodeEof &) {
-                                      result = makeErrorResult(QStringLiteral("Unexpected EOF during pre-warm"), true);
-                                      formatReadyReceived = false;
-                                      shouldBreak = true;
-
-                                      if (m_pendingGaplessCompletion) {
-                                          m_pendingGaplessCompletion->setResult(result);
-                                      }
-                                  }},
-                       event);
-
-            if (shouldBreak) {
-                break;
             }
         }
 
-        if (!formatReadyReceived && result.errorMessage.isEmpty()) {
-            result = makeErrorResult(QStringLiteral("Pre-warm ended without FormatReady"), true);
-            if (m_pendingGaplessCompletion) {
-                m_pendingGaplessCompletion->setResult(result);
-            }
+        if (m_pendingGaplessCompletion) {
+            m_pendingGaplessCompletion->setResult(result);
         }
     });
 }
@@ -572,7 +515,7 @@ void DragonDecodePipeline::setSamplesCallback(SamplesCallback callback)
     m_samplesCallback = std::move(callback);
 }
 
-DragonSdl::InitResult DragonDecodePipeline::makeSuccessResult(const FormatReady &fr, bool isGapless)
+InitResult DragonDecodePipeline::makeSuccessResult(const FormatReady &fr, bool isGapless)
 {
     InitResult result;
     result.success = true;
@@ -583,7 +526,7 @@ DragonSdl::InitResult DragonDecodePipeline::makeSuccessResult(const FormatReady 
     return result;
 }
 
-DragonSdl::InitResult DragonDecodePipeline::makeErrorResult(const QString &message, bool isGapless)
+InitResult DragonDecodePipeline::makeErrorResult(const QString &message, bool isGapless)
 {
     InitResult result;
     result.success = false;
@@ -592,7 +535,7 @@ DragonSdl::InitResult DragonDecodePipeline::makeErrorResult(const QString &messa
     return result;
 }
 
-DragonSdl::InitResult DragonDecodePipeline::makeCancelledResult(const QString &message, bool isGapless)
+InitResult DragonDecodePipeline::makeCancelledResult(const QString &message, bool isGapless)
 {
     InitResult result;
     result.success = false;
