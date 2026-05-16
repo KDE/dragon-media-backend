@@ -7,6 +7,7 @@
 
 #include "dragondecoder.h"
 #include "dragonradiostream.h"
+#include <dragonbufferprogress.h>
 #include <dragonsdl/dragonicymetadata.h>
 #include <dragonsdl/dragonplayer.h>
 
@@ -466,8 +467,11 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         });
 
         connect(m_radioStream.get(), &DragonRadioStream::metadataReady, m_player, &DragonPlayer::currentPlayingForRadiosChanged);
+        connect(m_radioStream->bufferProgress(), &DragonBufferProgress::progressChanged, this, &DragonDecodePipeline::bufferProgressChanged);
         m_radioStream->start();
     } else if (m_radioStream) {
+        disconnect(m_radioStream->bufferProgress(), nullptr, this, nullptr);
+        Q_EMIT bufferProgressChanged(1.0);
         m_radioStream->stop();
         m_radioStream.reset();
     }

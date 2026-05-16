@@ -134,6 +134,7 @@ private Q_SLOTS:
     void cleanupTestCase();
 
     void testPlayLocalWmaFileOverHttp();
+    void testRadioToLocalFileTransition();
 
 private:
     TestHttpServer *m_server = nullptr;
@@ -236,6 +237,79 @@ void TestNetworkPlayback::testPlayLocalWmaFileOverHttp()
     QVERIFY2(!player.isAudioActive(), "Audio should be inactive");
 
     qDebug() << "Network playback test completed successfully!";
+}
+
+void TestNetworkPlayback::testRadioToLocalFileTransition()
+{
+    QString wmaPath = fixturePath(u"gs-16b-1c-44100hz.wma"_s);
+    QVERIFY2(QFile::exists(wmaPath), qPrintable(u"WMA fixture not found: %1"_s.arg(wmaPath)));
+
+    m_server->serveFile(wmaPath);
+
+    QUrl networkUrl;
+    networkUrl.setScheme(u"http"_s);
+    networkUrl.setHost(u"localhost"_s);
+    networkUrl.setPort(m_server->port());
+    networkUrl.setPath(u"/gs-16b-1c-44100hz.wma"_s);
+
+    qDebug() << "Testing radio stream from:" << networkUrl.toString();
+
+    DragonPlayer player;
+
+    QSignalSpy bufferProgressSpy(&player, &DragonPlayer::bufferProgressChanged);
+    QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    player.setSource(networkUrl);
+
+    QTRY_VERIFY_WITH_TIMEOUT(sourceSpy.count() > 0, 5000);
+    QVERIFY(player.source() == networkUrl);
+
+    QTRY_VERIFY_WITH_TIMEOUT(
+        [&]() {
+            return player.bufferProgress() > 0.0 || player.status() == DragonPlayer::MediaStatus::LoadedMedia;
+        }(),
+        10000);
+
+    double progressBeforeSwitch = player.bufferProgress();
+    qDebug() << "Buffer progress before switch:" << progressBeforeSwitch;
+    QVERIFY2(progressBeforeSwitch >= 0.0, "Buffer progress should be >= 0.0 for network stream");
+
+    QString localPath = fixturePath(u"sample-3s.mp3"_s);
+    QVERIFY2(QFile::exists(localPath), qPrintable(u"MP3 fixture not found: %1"_s.arg(localPath)));
+
+    QUrl localUrl = QUrl::fromLocalFile(localPath);
+    qDebug() << "Switching to local file:" << localUrl.toString();
+
+    bufferProgressSpy.clear();
+    sourceSpy.clear();
+
+    player.setSource(localUrl);
+
+    QTRY_VERIFY_WITH_TIMEOUT(sourceSpy.count() > 0, 5000);
+    QVERIFY(player.source() == localUrl);
+
+    double progressAfterSwitch = player.bufferProgress();
+    qDebug() << "Buffer progress immediately after switch:" << progressAfterSwitch;
+
+    QTest::qWait(100);
+
+    progressAfterSwitch = player.bufferProgress();
+    qDebug() << "Buffer progress after switch + 100ms:" << progressAfterSwitch;
+
+    QVERIFY2(bufferProgressSpy.count() > 0, "Should have received buffer progress signal after switching to local file");
+
+    QVERIFY2(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::LoadingMedia
+                 || player.status() == DragonPlayer::MediaStatus::BufferedMedia,
+             "Local file should be in loading or loaded state");
+
+    if (player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::BufferedMedia) {
+        QCOMPARE(player.bufferProgress(), 1.0);
+    }
+
+    qDebug() << "Radio to local file transition test completed!";
+    qDebug() << "  Final bufferProgress:" << player.bufferProgress();
+    qDebug() << "  Final status:" << static_cast<int>(player.status());
 }
 
 QTEST_MAIN(TestNetworkPlayback)

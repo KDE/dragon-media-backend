@@ -82,6 +82,7 @@ private:
     int currentSampleRate = 0;
     int currentChannels = 0;
     DragonPlayer::FftMode currentFftMode = DragonPlayer::FftMode::Off;
+    double currentBufferProgress = 1.0;
 
     std::shared_ptr<AliveGuard> aliveGuard;
 

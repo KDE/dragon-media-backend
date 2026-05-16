@@ -79,6 +79,7 @@ public:
     Q_PROPERTY(int64_t position READ position WRITE setPosition NOTIFY positionChanged)
     Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged)
     Q_PROPERTY(FftMode fftMode READ fftMode WRITE setFftMode NOTIFY fftModeChanged)
+    Q_PROPERTY(double bufferProgress READ bufferProgress NOTIFY bufferProgressChanged)
 
     [[nodiscard]] bool muted() const;
     [[nodiscard]] float volume() const;
@@ -94,6 +95,7 @@ public:
     [[nodiscard]] bool isAudioActive() const;
 
     [[nodiscard]] FftMode fftMode() const;
+    [[nodiscard]] double bufferProgress() const;
 
 Q_SIGNALS:
     void mutedChanged(bool muted);
@@ -108,6 +110,7 @@ Q_SIGNALS:
     void positionChanged(int64_t positionMs);
     void seekableChanged(bool seekable);
     void fftModeChanged(FftMode mode);
+    void bufferProgressChanged(double progress);
 
     void playingChanged(bool playing);
 

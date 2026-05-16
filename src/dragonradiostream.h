@@ -7,6 +7,7 @@
 
 #include "dragonsdl_export.h"
 
+#include <dragonbufferprogress.h>
 #include <dragonsdl/dragonicymetadata.h>
 
 #include <QNetworkReply>
@@ -47,6 +48,8 @@ public:
 
     [[nodiscard]] bool isAborted() const;
 
+    [[nodiscard]] DragonBufferProgress *bufferProgress() const;
+
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void metadataReady(const DragonIcyMetadata &metadata);
@@ -77,6 +80,8 @@ private:
     std::atomic<bool> m_abort{false};
     std::atomic<bool> m_error{false};
     std::atomic<bool> m_finished{false};
+
+    DragonBufferProgress *m_bufferProgress;
 
     int m_icyMetaint = 0;
     int m_icyBytesRead = 0;

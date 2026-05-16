@@ -67,9 +67,12 @@ Q_SIGNALS:
 
     void gaplessTransition(const QUrl &newSource, int sampleRate, int channels, qint64 durationMs);
 
+    void bufferProgressChanged(double progress);
+
 private:
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless);
     void cancelPreWarm(const QString &reason);
+
     void startDecodeThread();
     bool waitForDecoderAssignment(std::stop_token st);
     std::pair<bool, bool> executeDecodeSession();

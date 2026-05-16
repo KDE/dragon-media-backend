@@ -274,6 +274,19 @@ void DragonPlayerPrivate::init()
     connect(&decodePipeline, &DragonDecodePipeline::sessionFinished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
 
     connect(&decodePipeline, &DragonDecodePipeline::gaplessTransition, this, &DragonPlayerPrivate::onGaplessTransition, Qt::QueuedConnection);
+
+    connect(
+        &decodePipeline,
+        &DragonDecodePipeline::bufferProgressChanged,
+        this,
+        [this](double progress) {
+            if (!qFuzzyCompare(currentBufferProgress, progress)) {
+                currentBufferProgress = progress;
+                Q_EMIT q->bufferProgressChanged(progress);
+            }
+        },
+        Qt::QueuedConnection);
+
     fftPipeline.setFrameCallback([this](DragonFftFrame frame) {
         QMetaObject::invokeMethod(
             q,
@@ -349,6 +362,10 @@ bool DragonPlayer::isAudioActive() const
 DragonPlayer::FftMode DragonPlayer::fftMode() const
 {
     return d->currentFftMode;
+}
+double DragonPlayer::bufferProgress() const
+{
+    return d->currentBufferProgress;
 }
 
 void DragonPlayer::setMuted(bool muted)
@@ -436,6 +453,7 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->setStatus(MediaStatus::LoadingMedia);
 
     const bool isLocal = source.isLocalFile();
+
     d->currentIsLocal = isLocal;
     d->currentSeekable = isLocal;
     Q_EMIT seekableChanged(d->currentSeekable);

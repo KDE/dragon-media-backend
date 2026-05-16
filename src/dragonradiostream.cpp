@@ -5,6 +5,8 @@
 
 #include <dragonradiostream.h>
 
+#include <dragonbufferprogress.h>
+
 #include "dragonsdl_network_logging.h"
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -21,6 +23,7 @@ DragonRadioStream::DragonRadioStream(QObject *parent)
     : QObject(parent)
     , m_nam(new QNetworkAccessManager(this))
     , m_watchdogTimer(new QTimer(this))
+    , m_bufferProgress(new DragonBufferProgress(this))
 {
     m_watchdogTimer->setInterval(5000);
     m_watchdogTimer->setSingleShot(true);
@@ -49,6 +52,8 @@ void DragonRadioStream::start()
     m_icyPendingData.clear();
     m_lastMetadata.clear();
 
+    m_bufferProgress->reset();
+
     if (m_reply) {
         m_reply->disconnect(this);
         m_reply->abort();
@@ -64,6 +69,9 @@ void DragonRadioStream::start()
     connect(m_reply, &QNetworkReply::readyRead, this, &DragonRadioStream::onReplyReadyRead);
     connect(m_reply, &QNetworkReply::finished, this, &DragonRadioStream::onReplyFinished);
     connect(m_reply, &QNetworkReply::errorOccurred, this, &DragonRadioStream::onReplyError);
+    connect(m_reply, &QNetworkReply::downloadProgress, this, [this](qint64 bytesReceived, qint64) {
+        m_bufferProgress->setBytesReceived(bytesReceived);
+    });
 
     m_watchdogTimer->start();
 }
@@ -134,12 +142,25 @@ bool DragonRadioStream::isAborted() const
     return m_abort;
 }
 
+DragonBufferProgress *DragonRadioStream::bufferProgress() const
+{
+    return m_bufferProgress;
+}
+
 void DragonRadioStream::onReplyEncrypted()
 {
+    m_bufferProgress->setTlsHandshakeComplete(true);
 }
 
 void DragonRadioStream::onReplyMetaDataChanged()
 {
+    if (!m_bufferProgress->headersReceived()) {
+        if (!m_bufferProgress->isTlsHandshakeComplete()) {
+            m_bufferProgress->setTlsHandshakeComplete(true);
+        }
+        m_bufferProgress->setHeadersReceived(true);
+    }
+
     if (m_reply) {
         const QByteArray metaintHeader = m_reply->rawHeader("icy-metaint"_ba);
         if (!metaintHeader.isEmpty()) {
