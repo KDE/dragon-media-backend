@@ -67,18 +67,22 @@ public:
 
     static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
     [[nodiscard]] float volume() const;
-    void setVolume(float linearGain);
+
+    void setVolume(float volume);
 
     [[nodiscard]] bool muted() const;
     void setMuted(bool muted);
 
     void setStreamName(const QString &name);
 
+    void restoreVolume(SDL_AudioStream *stream);
+
     [[nodiscard]] int64_t positionMs() const;
 
     [[nodiscard]] int64_t totalSamplesWritten() const;
 
     [[nodiscard]] bool hasFormat(int sampleRate, int channels) const;
+
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();

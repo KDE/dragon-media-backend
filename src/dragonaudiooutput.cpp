@@ -101,7 +101,7 @@ void DragonAudioOutput::start(int sampleRate, int channels, bool startPaused)
         return;
     }
 
-    SDL_SetAudioStreamGain(stream, m_muted ? 0.0f : m_volume);
+    restoreVolume(stream);
 
     qCDebug(dragonsdlAudio) << "registering get callback on stream";
     if (!SDL_SetAudioStreamGetCallback(stream, &DragonAudioOutput::audioStreamCallback, this)) {
@@ -141,9 +141,7 @@ void DragonAudioOutput::resume()
         if (session->deviceId != 0) {
             SDL_ResumeAudioDevice(session->deviceId);
         }
-        if (session->stream) {
-            SDL_SetAudioStreamGain(session->stream, m_muted ? 0.0f : m_volume);
-        }
+        restoreVolume(session->stream);
     }
 }
 
@@ -253,19 +251,53 @@ bool DragonAudioOutput::isPaused() const
     return SDL_AudioDevicePaused(session->deviceId);
 }
 
+namespace
+{
+
+float sliderToLinearGain(float sliderValue)
+{
+    sliderValue = std::clamp(sliderValue, 0.0f, 1.0f);
+
+    if (sliderValue <= 0.001f) {
+        return 0.0f;
+    }
+
+    constexpr float MIN_DB = -60.0f;
+    constexpr float MAX_DB = 0.0f;
+
+    float currentDB = MIN_DB + (MAX_DB - MIN_DB) * sliderValue;
+    return std::pow(10.0f, currentDB / 20.0f);
+}
+
+float calculateGain(float volume, bool muted)
+{
+    return muted ? 0.0f : sliderToLinearGain(volume);
+}
+
+}
+
 float DragonAudioOutput::volume() const
 {
     return m_volume;
 }
 
-void DragonAudioOutput::setVolume(float linearGain)
+void DragonAudioOutput::restoreVolume(SDL_AudioStream *stream)
 {
-    if (qAbs(m_volume - linearGain) < 0.001f) {
+    if (stream) {
+        SDL_SetAudioStreamGain(stream, calculateGain(m_volume, m_muted));
+    }
+}
+
+void DragonAudioOutput::setVolume(float volume)
+{
+    float clampedVolume = std::clamp(volume, 0.0f, 1.0f);
+    if (qAbs(m_volume - clampedVolume) < 0.001f) {
         return;
     }
-    m_volume = linearGain;
+    m_volume = clampedVolume;
+
     if (auto *session = m_session.load(std::memory_order_acquire); session && session->stream && !m_muted) {
-        SDL_SetAudioStreamGain(session->stream, linearGain);
+        restoreVolume(session->stream);
     }
     Q_EMIT volumeChanged();
 }
@@ -283,7 +315,7 @@ void DragonAudioOutput::setMuted(bool muted)
     m_muted = muted;
     if (auto *session = m_session.load(std::memory_order_acquire); session && session->stream) {
         if (!isPaused()) {
-            SDL_SetAudioStreamGain(session->stream, muted ? 0.0f : m_volume);
+            restoreVolume(session->stream);
         }
     }
     Q_EMIT volumeChanged();
@@ -300,9 +332,7 @@ int64_t DragonAudioOutput::positionMs() const
     if (!session || session->channels <= 0 || session->sampleRate <= 0) {
         return m_positionOffsetMs.load(std::memory_order_relaxed);
     }
-
     int64_t written = m_totalSamplesWritten.load(std::memory_order_relaxed);
-
     const int bytesQueued = SDL_GetAudioStreamQueued(session->stream);
     if (bytesQueued > 0) {
         const int64_t samplesQueued = bytesQueued / static_cast<int>(sizeof(float));
@@ -329,7 +359,6 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     auto *self = static_cast<DragonAudioOutput *>(userdata);
     if (!self)
         return;
-
     thread_local static bool audioThreadNamed = false;
     if (!audioThreadNamed) {
         pthread_setname_np(pthread_self(), "dragon-audio");
@@ -370,7 +399,6 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
 
     if (additional_amount <= 0)
         return;
-
     const int channels = session->channels;
     const size_t floatsNeeded = (static_cast<size_t>(additional_amount) / sizeof(float)) / static_cast<size_t>(channels) * static_cast<size_t>(channels);
     if (floatsNeeded == 0)
@@ -380,7 +408,6 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
 
     audioPipe->consumer().readSomeWith(floatsNeeded, [&](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
         totalFloatsRead = b1.size() + b2.size();
-
         if (!b1.empty()) {
             SDL_PutAudioStreamData(stream, b1.data(), static_cast<int>(b1.size() * sizeof(float)));
         }
