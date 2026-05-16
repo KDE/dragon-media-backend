@@ -19,6 +19,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <functional>
 #include <pthread.h>
 #include <ranges>
@@ -262,11 +263,12 @@ float sliderToLinearGain(float sliderValue)
         return 0.0f;
     }
 
-    constexpr float MIN_DB = -60.0f;
-    constexpr float MAX_DB = 0.0f;
+    if (sliderValue >= 0.99f) {
+        return 1.0f;
+    }
 
-    float currentDB = MIN_DB + (MAX_DB - MIN_DB) * sliderValue;
-    return std::pow(10.0f, currentDB / 20.0f);
+    constexpr float LOG100 = 4.60517018599f;
+    return -std::log(1.0f - sliderValue) / LOG100;
 }
 
 float calculateGain(float volume, bool muted)
@@ -332,7 +334,9 @@ int64_t DragonAudioOutput::positionMs() const
     if (!session || session->channels <= 0 || session->sampleRate <= 0) {
         return m_positionOffsetMs.load(std::memory_order_relaxed);
     }
+
     int64_t written = m_totalSamplesWritten.load(std::memory_order_relaxed);
+
     const int bytesQueued = SDL_GetAudioStreamQueued(session->stream);
     if (bytesQueued > 0) {
         const int64_t samplesQueued = bytesQueued / static_cast<int>(sizeof(float));
@@ -359,12 +363,12 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
     auto *self = static_cast<DragonAudioOutput *>(userdata);
     if (!self)
         return;
+
     thread_local static bool audioThreadNamed = false;
     if (!audioThreadNamed) {
         pthread_setname_np(pthread_self(), "dragon-audio");
         audioThreadNamed = true;
     }
-
     self->m_activeCallbacks.fetch_add(1, std::memory_order_relaxed);
     struct Guard {
         DragonAudioOutput *self;
@@ -399,6 +403,7 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
 
     if (additional_amount <= 0)
         return;
+
     const int channels = session->channels;
     const size_t floatsNeeded = (static_cast<size_t>(additional_amount) / sizeof(float)) / static_cast<size_t>(channels) * static_cast<size_t>(channels);
     if (floatsNeeded == 0)
@@ -408,6 +413,7 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
 
     audioPipe->consumer().readSomeWith(floatsNeeded, [&](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
         totalFloatsRead = b1.size() + b2.size();
+
         if (!b1.empty()) {
             SDL_PutAudioStreamData(stream, b1.data(), static_cast<int>(b1.size() * sizeof(float)));
         }
