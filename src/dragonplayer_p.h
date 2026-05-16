@@ -90,4 +90,7 @@ private:
 
     QTimer *positionTimer = nullptr;
     int64_t currentPosition = 0;
+
+    int32_t prefinishMark = 0;
+    bool aboutToFinishEmitted = false;
 };

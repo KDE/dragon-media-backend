@@ -15,6 +15,7 @@
 #include <QString>
 #include <QUrl>
 
+#include <cstdint>
 #include <memory>
 
 class DragonPlayerPrivate;
@@ -80,6 +81,7 @@ public:
     Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged)
     Q_PROPERTY(FftMode fftMode READ fftMode WRITE setFftMode NOTIFY fftModeChanged)
     Q_PROPERTY(double bufferProgress READ bufferProgress NOTIFY bufferProgressChanged)
+    Q_PROPERTY(int32_t prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
 
     [[nodiscard]] bool muted() const;
     [[nodiscard]] float volume() const;
@@ -96,6 +98,7 @@ public:
 
     [[nodiscard]] FftMode fftMode() const;
     [[nodiscard]] double bufferProgress() const;
+    [[nodiscard]] int32_t prefinishMark() const;
 
 Q_SIGNALS:
     void mutedChanged(bool muted);
@@ -111,6 +114,9 @@ Q_SIGNALS:
     void seekableChanged(bool seekable);
     void fftModeChanged(FftMode mode);
     void bufferProgressChanged(double progress);
+    void prefinishMarkChanged(int32_t msec);
+
+    void aboutToFinish();
 
     void playingChanged(bool playing);
 
@@ -130,7 +136,7 @@ public Q_SLOTS:
     void setNextSource(const QUrl &nextSource);
     void setPosition(int64_t positionMs);
     void setFftMode(FftMode mode);
-
+    void setPrefinishMark(int32_t msec);
     void play();
     void pause();
     void stop();

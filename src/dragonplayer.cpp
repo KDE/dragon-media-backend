@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <condition_variable>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <ranges>
@@ -79,6 +80,8 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     currentSource = nextSource;
     nextSource.clear();
     currentPosition = 0;
+    aboutToFinishEmitted = false;
+    qCDebug(dragonsdlPlayer) << "onGaplessTransition: reset aboutToFinishEmitted for" << currentSource.toString();
     currentIsLocal = currentSource.isLocalFile();
     currentSeekable = currentIsLocal;
     currentDuration = durationMs;
@@ -262,7 +265,22 @@ void DragonPlayerPrivate::init()
     positionTimer = new QTimer(this);
     positionTimer->setInterval(100);
     connect(positionTimer, &QTimer::timeout, this, [this]() {
-        Q_EMIT q->positionChanged(audioOutput && audioOutput->isDeviceOpen() ? audioOutput->positionMs() : currentPosition);
+        const int64_t pos = audioOutput && audioOutput->isDeviceOpen() ? audioOutput->positionMs() : currentPosition;
+        Q_EMIT q->positionChanged(pos);
+
+        if (prefinishMark > 0) {
+            qCDebug(dragonsdlPlayer) << "timer: prefinishMark=" << prefinishMark << "currentDuration=" << currentDuration << "emitted=" << aboutToFinishEmitted
+                                     << "pos=" << pos;
+            if (currentDuration > 0 && !aboutToFinishEmitted) {
+                const int64_t remaining = currentDuration - pos;
+                qCDebug(dragonsdlPlayer) << "timer: remaining=" << remaining;
+                if (remaining <= prefinishMark && remaining > 0) {
+                    aboutToFinishEmitted = true;
+                    qCDebug(dragonsdlPlayer) << "aboutToFinish emitted remaining=" << remaining << "ms, prefinishMark=" << prefinishMark;
+                    Q_EMIT q->aboutToFinish();
+                }
+            }
+        }
     });
 
     decodePipeline.setSamplesCallback([this](auto samples, const std::stop_token &st) {
@@ -421,6 +439,8 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->currentSource = source;
     d->currentPosition = 0;
     d->currentDuration = 0;
+    d->aboutToFinishEmitted = false;
+    qCDebug(dragonsdlPlayer) << "setSource: reset aboutToFinishEmitted for" << source.toString();
     d->nextSource.clear();
     d->currentSampleRate = 0;
     d->currentChannels = 0;
@@ -522,9 +542,38 @@ void DragonPlayer::setPosition(int64_t posMs)
     }
     Q_EMIT positionChanged(posMs);
 
+    if (d->prefinishMark > 0 && d->currentDuration > 0) {
+        const int64_t remaining = d->currentDuration - posMs;
+        if (remaining > d->prefinishMark) {
+            d->aboutToFinishEmitted = false;
+        }
+    }
+
     if (d->currentStatus == MediaStatus::EndOfMedia) {
         d->currentStatus = MediaStatus::LoadedMedia;
         Q_EMIT statusChanged(MediaStatus::LoadedMedia);
+    }
+}
+
+int32_t DragonPlayer::prefinishMark() const
+{
+    return d->prefinishMark;
+}
+
+void DragonPlayer::setPrefinishMark(int32_t msec)
+{
+    qCDebug(dragonsdlPlayer) << "setPrefinishMark(" << msec << ")";
+    if (d->prefinishMark == msec) {
+        return;
+    }
+    d->prefinishMark = msec;
+    Q_EMIT prefinishMarkChanged(msec);
+
+    if (d->prefinishMark > 0 && d->currentDuration > 0) {
+        const int64_t remaining = d->currentDuration - position();
+        if (remaining > d->prefinishMark) {
+            d->aboutToFinishEmitted = false;
+        }
     }
 }
 

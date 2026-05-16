@@ -433,6 +433,21 @@ if(BUILD_TESTING)
     )
     add_test(NAME test_player_signals COMMAND test_player_signals)
 
+    add_executable(test_player_prefinish tests/test_player_prefinish.cpp)
+    target_link_libraries(test_player_prefinish PRIVATE
+        dragon-sdl
+        Qt6::Test
+        Qt6::Network
+        SDL3::SDL3
+        PkgConfig::FFmpeg
+        spsc_queue
+        kissfft::kissfft
+    )
+    target_compile_definitions(test_player_prefinish PRIVATE
+        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
+    add_test(NAME test_player_prefinish COMMAND test_player_prefinish)
+
     add_executable(test_player_fft tests/test_player_fft.cpp)
     target_link_libraries(test_player_fft PRIVATE
         dragon-sdl
