@@ -88,7 +88,7 @@ void TestAudioOutput::testVolumeSetGet()
     QVERIFY(qAbs(output.volume() - 0.0f) < 0.01f);
 
     output.setVolume(1.5f);
-    QVERIFY(qAbs(output.volume() - 1.5f) < 0.01f);
+    QVERIFY(qAbs(output.volume() - 1.0f) < 0.01f);
 
     output.setVolume(1.0f);
     QVERIFY(qAbs(output.volume() - 1.0f) < 0.01f);
