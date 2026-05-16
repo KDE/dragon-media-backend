@@ -19,10 +19,12 @@
 #include "dragondecoder.h"
 #include "dragonevent.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <numbers>
 #include <optional>
 #include <stop_token>
@@ -34,6 +36,7 @@ using namespace DragonSdl;
 
 extern "C" {
 #include <libavcodec/avcodec.h>
+#include <libavutil/error.h>
 }
 
 class MockReadCallback
@@ -122,6 +125,33 @@ QByteArray createTestWavData(int sampleRate = 44100, int channels = 2, int durat
     return wav;
 }
 
+class MockErrorReadCallback
+{
+public:
+    std::vector<uint8_t> data;
+    size_t pos = 0;
+    int callCount = 0;
+    int errorAfterCalls = 3;
+
+    int readCallback(std::span<uint8_t> buf)
+    {
+        callCount++;
+        if (callCount > errorAfterCalls) {
+            return AVERROR(EIO);
+        }
+
+        if (pos >= data.size()) {
+            return 0;
+        }
+
+        size_t remaining = data.size() - pos;
+        size_t toCopy = std::min(buf.size(), remaining);
+        std::copy(data.begin() + static_cast<std::ptrdiff_t>(pos), data.begin() + static_cast<std::ptrdiff_t>(pos + toCopy), buf.begin());
+        pos += toCopy;
+        return static_cast<int>(toCopy);
+    }
+};
+
 class TestDecoder : public QObject
 {
     Q_OBJECT
@@ -145,6 +175,8 @@ private Q_SLOTS:
     void testResamplerBehavior();
     void testChannelConfiguration_data();
     void testChannelConfiguration();
+
+    void testPersistentReadError();
 
     void testGeneratorEventOrdering();
     void testGeneratorSpanLifetime();
@@ -367,6 +399,52 @@ void TestDecoder::testStopTokenCancellation()
     decodeThread.join();
 
     QVERIFY(startedDecoding.load());
+}
+
+void TestDecoder::testPersistentReadError()
+{
+    QByteArray wavBytes = createTestWavData(44100, 2, 5000);
+    MockErrorReadCallback mock;
+    mock.data.resize(static_cast<size_t>(wavBytes.size()));
+    std::memcpy(mock.data.data(), wavBytes.constData(), static_cast<size_t>(wavBytes.size()));
+    mock.errorAfterCalls = 3;
+
+    auto readCb = [&mock](std::span<uint8_t> buf) -> int {
+        return mock.readCallback(buf);
+    };
+
+    DragonDecoder decoder(std::move(readCb), {});
+
+    bool errorEmitted = false;
+    QString errorMessage;
+    QObject::connect(&decoder, &DragonDecoder::streamError, [&](const QString &msg) {
+        errorEmitted = true;
+        errorMessage = msg;
+    });
+
+    auto gen = decoder.decodeLoop(std::stop_token{});
+
+    bool sawFormatReady = false;
+    int samplesChunks = 0;
+
+    for (auto it = gen.begin(); it != gen.end(); ++it) {
+        auto event = *it;
+        if (std::holds_alternative<FormatReady>(event)) {
+            sawFormatReady = true;
+        } else if (std::holds_alternative<SamplesChunk>(event)) {
+            ++samplesChunks;
+        } else if (std::holds_alternative<DecodeError>(event)) {
+            break;
+        }
+    }
+
+    QVERIFY2(errorEmitted || decoder.hasFatalError(), "Decoder should have detected and reported the persistent I/O error");
+    QVERIFY2(decoder.hasFatalError(), "hasFatalError() should be true after persistent read error");
+
+    QVERIFY2(mock.callCount < 100, "Decoder should have terminated early, not spun forever on errors");
+
+    qDebug() << "testPersistentReadError: sawFormatReady=" << sawFormatReady << "samplesChunks=" << samplesChunks << "errorEmitted=" << errorEmitted
+             << "hasFatalError=" << decoder.hasFatalError() << "callCount=" << mock.callCount;
 }
 
 void TestDecoder::testDifferentSampleRates_data()

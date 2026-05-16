@@ -66,7 +66,12 @@ private:
     bool allocatePacketAndFrame(DecodeSession &session);
     bool readAndProcessPacket(DecodeSession &session);
 
+    bool isRecoverableReadError(int errorCode) const;
+
+    QString avErrorString(int errorCode) const;
+
     std::optional<DragonSdl::SamplesChunk> drainDecoderFrames(DecodeSession &session);
+
     void flushDecoder(DecodeSession &session);
     std::optional<DragonSdl::SamplesChunk> flushResampler(DecodeSession &session);
 

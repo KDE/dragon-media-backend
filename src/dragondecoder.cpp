@@ -9,11 +9,14 @@
 #include "dragonsdl_decoder_logging.h"
 #include <QScopeGuard>
 
+#include <array>
+#include <chrono>
 #include <cstring>
 #include <generator>
 #include <memory>
 #include <ranges>
 #include <span>
+#include <thread>
 
 #ifdef __cplusplus
 extern "C" {
@@ -107,6 +110,11 @@ struct DragonDecoder::DecodeSession {
     bool firstFrame = true;
     int packetCount = 0;
     int frameCount = 0;
+
+    int consecutiveReadErrors = 0;
+    static constexpr int MAX_READ_ERRORS = 10;
+    static constexpr auto READ_ERROR_RESET_INTERVAL = std::chrono::milliseconds(5000);
+    std::chrono::steady_clock::time_point lastSuccessfulRead;
 };
 
 DragonDecoder::DragonDecoder(ReadCallback readCb, const QString &filePath, QObject *parent)
@@ -125,6 +133,9 @@ std::generator<DragonSdl::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token
     av_log_set_level(AV_LOG_ERROR);
 
     DecodeSession session;
+
+    session.consecutiveReadErrors = 0;
+    session.lastSuccessfulRead = std::chrono::steady_clock::now();
 
     if (!initializeAvio(session)) {
         co_yield DecodeError{u"Failed to initialize AVIO"_s};
@@ -332,6 +343,35 @@ bool DragonDecoder::allocatePacketAndFrame(DecodeSession &session)
     return true;
 }
 
+bool DragonDecoder::isRecoverableReadError(int errorCode) const
+{
+    switch (errorCode) {
+    case AVERROR(EIO):
+    case AVERROR(ECONNRESET):
+    case AVERROR(EINVAL):
+    case AVERROR_INVALIDDATA:
+    case AVERROR_EXIT:
+        return false;
+
+    case AVERROR(EAGAIN):
+    case AVERROR(ETIMEDOUT):
+    case AVERROR(ECONNREFUSED):
+        return true;
+
+    default:
+        return true;
+    }
+}
+
+QString DragonDecoder::avErrorString(int errorCode) const
+{
+    std::array<char, AV_ERROR_MAX_STRING_SIZE> errbuf{};
+    if (av_strerror(errorCode, errbuf.data(), errbuf.size()) < 0) {
+        return u"Unknown FFmpeg error "_s % errorCode;
+    }
+    return QString::fromUtf8(errbuf.data());
+}
+
 bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
 {
     if (m_seekRequested.exchange(false, std::memory_order_acq_rel)) {
@@ -347,16 +387,62 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
         }
     }
 
-    int ret = av_read_frame(session.fmtCtx.get(), session.pkt.get());
-    if (ret < 0) {
-        if (ret == AVERROR_EOF) {
-            qCDebug(dragonsdlDecoder) << "EOF reached after" << session.packetCount << "packets," << session.frameCount << "frames";
+    int readStatus = av_read_frame(session.fmtCtx.get(), session.pkt.get());
+    if (readStatus < 0) {
+        if (readStatus == AVERROR_EOF) {
+            if (session.fmtCtx->pb && session.fmtCtx->pb->error < 0 && session.fmtCtx->pb->error != AVERROR(EAGAIN)) {
+                readStatus = session.fmtCtx->pb->error;
+            } else {
+                qCDebug(dragonsdlDecoder) << "EOF reached after" << session.packetCount << "packets," << session.frameCount << "frames";
+                return false;
+            }
+        }
+
+        if (readStatus == AVERROR(EAGAIN)) {
+            session.consecutiveReadErrors++;
+            qCDebug(dragonsdlDecoder) << "av_read_frame EAGAIN, attempt " << session.consecutiveReadErrors;
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+            av_packet_unref(session.pkt.get());
+            return true;
+        }
+
+        bool isRecoverable = isRecoverableReadError(readStatus);
+
+        session.consecutiveReadErrors++;
+        auto now = std::chrono::steady_clock::now();
+
+        if (now - session.lastSuccessfulRead < session.READ_ERROR_RESET_INTERVAL) {
+            if (session.consecutiveReadErrors <= 3) {
+                qCDebug(dragonsdlDecoder) << "av_read_frame transient error" << readStatus << "(" << avErrorString(readStatus) << "), attempt "
+                                          << session.consecutiveReadErrors;
+                av_packet_unref(session.pkt.get());
+                return true;
+            }
+        }
+
+        if (session.consecutiveReadErrors >= session.MAX_READ_ERRORS || !isRecoverable) {
+            QString errorMsg = u"Read error after "_s % session.consecutiveReadErrors % u" attempts: "_s % avErrorString(readStatus);
+
+            qCWarning(dragonsdlDecoder) << errorMsg;
+
+            Q_EMIT streamError(errorMsg);
+
+            m_hadFatalError.store(true, std::memory_order_relaxed);
+            av_packet_unref(session.pkt.get());
             return false;
         }
-        qCDebug(dragonsdlDecoder) << "av_read_frame transient error" << ret;
+
+        qCWarning(dragonsdlDecoder) << "av_read_frame error" << readStatus << "(" << avErrorString(readStatus) << "), attempt " << session.consecutiveReadErrors
+                                    << "/" << session.MAX_READ_ERRORS;
         av_packet_unref(session.pkt.get());
         return true;
     }
+
+    session.consecutiveReadErrors = 0;
+    session.lastSuccessfulRead = std::chrono::steady_clock::now();
+
     ++session.packetCount;
 
     if (session.pkt->stream_index != session.audioStreamIndex) {
@@ -364,10 +450,10 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
         return true;
     }
 
-    ret = avcodec_send_packet(session.codecCtx.get(), session.pkt.get());
+    int sendStatus = avcodec_send_packet(session.codecCtx.get(), session.pkt.get());
     av_packet_unref(session.pkt.get());
 
-    if (ret < 0) {
+    if (sendStatus < 0) {
         avcodec_flush_buffers(session.codecCtx.get());
         return true;
     }
