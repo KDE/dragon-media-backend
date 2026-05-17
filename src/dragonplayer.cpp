@@ -473,9 +473,10 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->setStatus(MediaStatus::LoadingMedia);
 
     const bool isLocal = source.isLocalFile();
+    const bool isHttp = source.scheme() == QStringLiteral("http") || source.scheme() == QStringLiteral("https");
 
     d->currentIsLocal = isLocal;
-    d->currentSeekable = isLocal;
+    d->currentSeekable = !isHttp;
     Q_EMIT seekableChanged(d->currentSeekable);
 
     auto result = co_await d->decodePipeline.initializeSession(source);

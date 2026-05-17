@@ -19,6 +19,7 @@
 #include <QObject>
 
 #include <condition_variable>
+#include <future>
 #include <memory>
 #include <mutex>
 #include <pthread.h>
@@ -517,21 +518,28 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
                 return size > 0 ? size : -1;
             }
 
-            if (whence == DragonDecoder::SeekWhence::Set) {
-                return kioStream->seek(offset);
-            }
-            if (whence == DragonDecoder::SeekWhence::Cur) {
-                return kioStream->seek(kioStream->position() + offset);
-            }
-            if (whence == DragonDecoder::SeekWhence::End) {
-                const qint64 size = kioStream->size();
-                if (size > 0) {
-                    return kioStream->seek(size + offset);
-                }
-                return -1;
-            }
+            std::promise<int64_t> promise;
+            std::future<int64_t> future = promise.get_future();
 
-            return -1;
+            QMetaObject::invokeMethod(
+                kioStream,
+                [kioStream, offset, whence, p = &promise]() {
+                    int64_t result = -1;
+                    if (whence == DragonDecoder::SeekWhence::Set) {
+                        result = kioStream->seek(offset);
+                    } else if (whence == DragonDecoder::SeekWhence::Cur) {
+                        result = kioStream->seek(kioStream->position() + offset);
+                    } else if (whence == DragonDecoder::SeekWhence::End) {
+                        const qint64 size = kioStream->size();
+                        if (size > 0) {
+                            result = kioStream->seek(size + offset);
+                        }
+                    }
+                    p->set_value(result);
+                },
+                Qt::QueuedConnection);
+
+            return future.get();
         };
     }
 

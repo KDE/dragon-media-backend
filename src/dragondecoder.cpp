@@ -281,6 +281,10 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
         return false;
     }
 
+    if (m_seekCallback) {
+        session.avioCtx->seekable = AVIO_SEEKABLE_NORMAL;
+    }
+
     return true;
 }
 
