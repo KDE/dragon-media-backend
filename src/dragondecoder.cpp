@@ -250,7 +250,28 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
         if (!self->m_seekCallback) {
             return AVERROR(ENOSYS);
         }
-        return self->m_seekCallback(offset, whence);
+
+        SeekWhence sw;
+        if (whence & AVSEEK_SIZE) {
+            sw = SeekWhence::Size;
+        } else {
+            switch (whence & 0xF) {
+            case 0:
+                sw = SeekWhence::Set;
+                break;
+            case 1:
+                sw = SeekWhence::Cur;
+                break;
+            case 2:
+                sw = SeekWhence::End;
+                break;
+            default:
+                return AVERROR(ENOSYS);
+            }
+        }
+
+        const int64_t ret = self->m_seekCallback(offset, sw);
+        return ret < 0 ? AVERROR(ENOSYS) : ret;
     };
 
     session.avioCtx.reset(avio_alloc_context(ioBuffer, IO_BUFFER_SIZE, 0, this, readPacket, nullptr, m_seekCallback ? seekPacket : nullptr));

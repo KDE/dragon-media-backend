@@ -25,11 +25,6 @@
 #include <stop_token>
 #include <thread>
 
-extern "C" {
-#include <libavformat/avformat.h>
-#include <libavutil/error.h>
-}
-
 using namespace DragonSdl;
 using namespace Qt::StringLiterals;
 
@@ -516,29 +511,27 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
             return m_kioStream ? m_kioStream->read(buf, m_sessionStopSource.get_token()) : -1;
         };
 
-        seekCb = [kioStream = m_kioStream.get()](int64_t offset, int whence) -> int64_t {
-            if (whence == AVSEEK_SIZE) {
-                qint64 size = kioStream->size();
-                return size > 0 ? size : AVERROR(ENOSYS);
+        seekCb = [kioStream = m_kioStream.get()](int64_t offset, DragonDecoder::SeekWhence whence) -> int64_t {
+            if (whence == DragonDecoder::SeekWhence::Size) {
+                const qint64 size = kioStream->size();
+                return size > 0 ? size : -1;
             }
 
-            whence &= ~AVSEEK_FORCE;
-
-            if (whence == SEEK_SET) {
+            if (whence == DragonDecoder::SeekWhence::Set) {
                 return kioStream->seek(offset);
             }
-            if (whence == SEEK_CUR) {
+            if (whence == DragonDecoder::SeekWhence::Cur) {
                 return kioStream->seek(kioStream->position() + offset);
             }
-            if (whence == SEEK_END) {
-                qint64 size = kioStream->size();
+            if (whence == DragonDecoder::SeekWhence::End) {
+                const qint64 size = kioStream->size();
                 if (size > 0) {
                     return kioStream->seek(size + offset);
                 }
-                return AVERROR(ENOSYS);
+                return -1;
             }
 
-            return AVERROR(ENOSYS);
+            return -1;
         };
     }
 

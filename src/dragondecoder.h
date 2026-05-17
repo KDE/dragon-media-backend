@@ -22,8 +22,6 @@
 #include <stop_token>
 #include <vector>
 
-struct AVIOContext;
-
 class DRAGONSDL_EXPORT DragonDecoder : public QObject
 {
     Q_OBJECT
@@ -31,7 +29,14 @@ class DRAGONSDL_EXPORT DragonDecoder : public QObject
 public:
     using ReadCallback = std::move_only_function<int(std::span<uint8_t>)>;
 
-    using SeekCallback = std::function<int64_t(int64_t offset, int whence)>;
+    enum class SeekWhence {
+        Set,
+        Cur,
+        End,
+        Size
+    };
+
+    using SeekCallback = std::function<int64_t(int64_t offset, SeekWhence whence)>;
 
     explicit DragonDecoder(ReadCallback readCb, SeekCallback seekCb = nullptr, const QString &filePath = {}, QObject *parent = nullptr);
     ~DragonDecoder() override;
@@ -77,10 +82,10 @@ private:
     bool isRecoverableReadError(int errorCode) const;
 
     QString avErrorString(int errorCode) const;
+
     std::optional<DragonSdl::SamplesChunk> drainDecoderFrames(DecodeSession &session);
 
     void flushDecoder(DecodeSession &session);
     std::optional<DragonSdl::SamplesChunk> flushResampler(DecodeSession &session);
-
     std::atomic<bool> m_hadFatalError{false};
 };
