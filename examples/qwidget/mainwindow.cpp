@@ -292,15 +292,15 @@ void MainWindow::connectPlayer()
 void MainWindow::openFile()
 {
     QSettings settings;
-    const QString lastDir = settings.value("lastOpenDir"_L1, QDir::homePath()).toString();
+    const QUrl lastDir = settings.value("lastOpenDirUrl"_L1, QUrl::fromLocalFile(QDir::homePath())).toUrl();
 
-    const QString file =
-        QFileDialog::getOpenFileName(this, i18n("Open Audio File"), lastDir, i18n("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
+    const QUrl url =
+        QFileDialog::getOpenFileUrl(this, i18n("Open Audio File"), lastDir, i18n("Audio Files (*.mp3 *.wav *.ogg *.flac *.aac *.m4a);;All Files (*)"));
 
-    if (!file.isEmpty()) {
+    if (url.isValid() && !url.isEmpty()) {
         m_playlist->clear();
-        m_playlist->addTrack(QUrl::fromLocalFile(file));
-        settings.setValue("lastOpenDir"_L1, QFileInfo(file).absolutePath());
+        m_playlist->addTrack(url);
+        settings.setValue("lastOpenDirUrl"_L1, url.adjusted(QUrl::RemoveFilename));
     }
 }
 
