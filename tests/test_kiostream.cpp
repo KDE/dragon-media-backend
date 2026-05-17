@@ -4,9 +4,11 @@
  */
 
 #include <QtCore>
+#include <QtNetwork>
 #include <QtTest>
 
 #include "logging_timestamp_init.h"
+#include "testhttpserver.h"
 
 #include "dragonkiostream.h"
 
@@ -14,6 +16,8 @@
 #include <stop_token>
 #include <thread>
 #include <vector>
+
+using namespace Qt::StringLiterals;
 
 class TestKioStream : public QObject
 {
@@ -33,8 +37,17 @@ private Q_SLOTS:
     void testReadCancellation();
     void testSeeking();
 
+    void testHttpKioRead();
+    void testHttpKioSeekDataCorrect();
+
+    void testHttpKioSeekDoesNotCorruptStream();
+    void testHttpKioRapidSeek();
+    void testHttpKioSeekWhileReading();
+
 private:
     QString m_testFilePath;
+    QString m_bigFilePath;
+    TestHttpServer *m_httpServer = nullptr;
 };
 
 void TestKioStream::initTestCase()
@@ -46,12 +59,31 @@ void TestKioStream::initTestCase()
         m_testFilePath = tempFile.fileName();
         tempFile.close();
     }
+
+    QTemporaryFile bigFile;
+    bigFile.setAutoRemove(false);
+    if (bigFile.open()) {
+        bigFile.write(QByteArray("0123456789").repeated(6400));
+        m_bigFilePath = bigFile.fileName();
+        bigFile.close();
+    }
+
+    m_httpServer = new TestHttpServer(this);
+    QVERIFY2(m_httpServer->start(), "Failed to start HTTP server");
 }
 
 void TestKioStream::cleanupTestCase()
 {
     if (!m_testFilePath.isEmpty()) {
         QFile::remove(m_testFilePath);
+    }
+    if (!m_bigFilePath.isEmpty()) {
+        QFile::remove(m_bigFilePath);
+    }
+    if (m_httpServer) {
+        m_httpServer->stop();
+        delete m_httpServer;
+        m_httpServer = nullptr;
     }
 }
 
@@ -64,8 +96,7 @@ void TestKioStream::testConstruction()
 void TestKioStream::testSetUrl()
 {
     DragonKioStream stream;
-    QUrl testUrl = QUrl::fromLocalFile(m_testFilePath);
-    stream.setUrl(testUrl);
+    stream.setUrl(QUrl::fromLocalFile(m_testFilePath));
     QVERIFY(true);
 }
 
@@ -93,9 +124,7 @@ void TestKioStream::testReadLocalFile()
         std::jthread readThread([&]() {
             bytesRead = stream.read(buffer, st);
         });
-
         QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
-
         QCOMPARE(bytesRead.load(), 16);
         QCOMPARE(QString::fromUtf8(reinterpret_cast<const char *>(buffer.data()), bytesRead.load()), QStringLiteral("Hello KIO world!"));
     }
@@ -131,7 +160,6 @@ void TestKioStream::testReadNonExistentFile()
 void TestKioStream::testReadBlocksUntilData()
 {
     DragonKioStream stream;
-
     std::atomic<bool> readCompleted{false};
     std::vector<uint8_t> buffer(1024);
 
@@ -205,6 +233,195 @@ void TestKioStream::testSeeking()
     QCOMPARE(bytesRead.load(), 10);
     QCOMPARE(stream.position(), 16);
     QCOMPARE(QString::fromUtf8(reinterpret_cast<const char *>(buffer.data()), bytesRead.load()), QStringLiteral("KIO world!"));
+}
+
+static QUrl httpUrl(TestHttpServer *server, const QString &path)
+{
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(server->port());
+    url.setPath(path);
+    return url;
+}
+
+void TestKioStream::testHttpKioRead()
+{
+    m_httpServer->serveFile(m_bigFilePath);
+
+    DragonKioStream stream;
+    stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
+    stream.start();
+
+    std::vector<uint8_t> buffer(1024);
+    std::stop_source stopSource;
+    std::stop_token st = stopSource.get_token();
+
+    std::atomic<int> bytesRead{-2};
+    {
+        std::jthread readThread([&]() {
+            bytesRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
+    }
+
+    QCOMPARE(bytesRead.load(), 1024);
+    QCOMPARE(QByteArray(reinterpret_cast<const char *>(buffer.data()), 10), QByteArray("0123456789"));
+}
+
+void TestKioStream::testHttpKioSeekDataCorrect()
+{
+    m_httpServer->serveFile(m_bigFilePath);
+
+    DragonKioStream stream;
+    stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
+    stream.start();
+
+    std::vector<uint8_t> buffer(1024);
+    std::stop_source stopSource;
+    std::stop_token st = stopSource.get_token();
+
+    std::atomic<int> bytesRead{-2};
+    {
+        std::jthread readThread([&]() {
+            bytesRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
+    }
+    QVERIFY(bytesRead.load() > 0);
+    QCOMPARE(QByteArray(reinterpret_cast<const char *>(buffer.data()), 10), QByteArray("0123456789"));
+
+    stream.seek(2048);
+    QCOMPARE(stream.position(), 2048);
+
+    bytesRead = -2;
+    {
+        std::jthread readThread([&]() {
+            bytesRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
+    }
+
+    QVERIFY2(bytesRead.load() > 0, "Read after seek should return data");
+
+    QByteArray expected = QByteArray("0123456789").repeated(6400).mid(2048, bytesRead.load());
+    QCOMPARE(QByteArray(reinterpret_cast<const char *>(buffer.data()), bytesRead.load()), expected);
+}
+
+void TestKioStream::testHttpKioSeekDoesNotCorruptStream()
+{
+    m_httpServer->serveFile(m_bigFilePath);
+
+    DragonKioStream stream;
+    stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
+    stream.start();
+
+    std::vector<uint8_t> buffer(1024);
+    std::stop_source stopSource;
+    std::stop_token st = stopSource.get_token();
+
+    std::atomic<int> bytesRead{-2};
+    {
+        std::jthread readThread([&]() {
+            bytesRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
+    }
+    QVERIFY(bytesRead.load() > 0);
+
+    stream.seek(32768);
+    QCOMPARE(stream.position(), 32768);
+
+    QCoreApplication::processEvents();
+    QTest::qWait(50);
+    QCoreApplication::processEvents();
+
+    bytesRead = -2;
+    {
+        std::jthread readThread([&]() {
+            bytesRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
+    }
+
+    QVERIFY2(bytesRead.load() > 0, qPrintable(u"Read after seek returned %1 stale signal from killed job corrupted stream state"_s.arg(bytesRead.load())));
+
+    QByteArray expected = QByteArray("0123456789").repeated(6400).mid(32768, bytesRead.load());
+    QCOMPARE(QByteArray(reinterpret_cast<const char *>(buffer.data()), bytesRead.load()), expected);
+}
+
+void TestKioStream::testHttpKioRapidSeek()
+{
+    m_httpServer->serveFile(m_bigFilePath);
+
+    DragonKioStream stream;
+    stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
+    stream.start();
+
+    std::vector<uint8_t> buffer(1024);
+    std::stop_source stopSource;
+    std::stop_token st = stopSource.get_token();
+
+    std::atomic<int> bytesRead{-2};
+    {
+        std::jthread readThread([&]() {
+            bytesRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
+    }
+    QVERIFY(bytesRead.load() > 0);
+
+    for (int i = 0; i < 5; ++i) {
+        stream.seek(i * 1024);
+    }
+
+    QCoreApplication::processEvents();
+    QTest::qWait(100);
+    QCoreApplication::processEvents();
+
+    bytesRead = -2;
+    {
+        std::jthread readThread([&]() {
+            bytesRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
+    }
+
+    QVERIFY2(bytesRead.load() > 0, qPrintable(u"Stream broken after rapid seeks returned %1"_s.arg(bytesRead.load())));
+}
+
+void TestKioStream::testHttpKioSeekWhileReading()
+{
+    m_httpServer->serveFile(m_bigFilePath);
+
+    DragonKioStream stream;
+    stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
+    stream.start();
+
+    std::vector<uint8_t> buffer(1024);
+    std::stop_source stopSource;
+    std::stop_token st = stopSource.get_token();
+
+    std::atomic<int> firstRead{-2};
+    std::jthread readThread([&]() {
+        firstRead = stream.read(buffer, st);
+    });
+
+    QTest::qWait(100);
+
+    stream.seek(1024);
+
+    QTRY_VERIFY_WITH_TIMEOUT(firstRead.load() != -2, 5000);
+
+    std::atomic<int> secondRead{-2};
+    {
+        std::jthread readThread2([&]() {
+            secondRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(secondRead.load() != -2, 5000);
+    }
+
+    QVERIFY2(secondRead.load() > 0, qPrintable(u"Stream unusable after seek-while-reading second read returned %1"_s.arg(secondRead.load())));
 }
 
 QTEST_MAIN(TestKioStream)

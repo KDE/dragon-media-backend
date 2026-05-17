@@ -37,6 +37,7 @@ void DragonKioStream::start()
     m_error = false;
     m_finished = false;
     m_bufferProgress->reset();
+    m_totalSize = -1;
 
     if (m_job) {
         m_job->kill(KJob::Quietly);
@@ -56,6 +57,7 @@ void DragonKioStream::stop()
     m_bufferCv.notify_all();
 
     if (m_job) {
+        disconnect(m_job, nullptr, this, nullptr);
         m_job->kill(KJob::Quietly);
         m_job = nullptr;
     }
@@ -142,9 +144,9 @@ DragonBufferProgress *DragonKioStream::bufferProgress() const
     return m_bufferProgress;
 }
 
-void DragonKioStream::onData(KIO::Job *, const QByteArray &data)
+void DragonKioStream::onData(KIO::Job *job, const QByteArray &data)
 {
-    if (data.isEmpty()) {
+    if (job != m_job || data.isEmpty()) {
         return;
     }
 
@@ -157,6 +159,10 @@ void DragonKioStream::onData(KIO::Job *, const QByteArray &data)
 
 void DragonKioStream::onResult(KJob *job)
 {
+    if (job != m_job) {
+        return;
+    }
+
     if (job->error()) {
         qCWarning(dragonsdlNetwork) << "KIO error:" << job->errorString();
         m_error = true;
@@ -170,7 +176,9 @@ void DragonKioStream::onResult(KJob *job)
 
 void DragonKioStream::onTotalAmountChanged(KJob *job, KJob::Unit unit, qulonglong amount)
 {
-    Q_UNUSED(job);
+    if (job != m_job) {
+        return;
+    }
     if (unit == KJob::Bytes) {
         m_totalSize = static_cast<qint64>(amount);
     }
@@ -178,7 +186,9 @@ void DragonKioStream::onTotalAmountChanged(KJob *job, KJob::Unit unit, qulonglon
 
 void DragonKioStream::onProcessedAmountChanged(KJob *job, KJob::Unit unit, qulonglong amount)
 {
-    Q_UNUSED(job);
+    if (job != m_job) {
+        return;
+    }
     if (unit == KJob::Bytes) {
         m_bufferProgress->setBytesReceived(static_cast<qint64>(amount));
     }

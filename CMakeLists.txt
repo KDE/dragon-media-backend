@@ -396,6 +396,7 @@ if(BUILD_TESTING)
     target_link_libraries(test_kiostream PRIVATE
         dragon-sdl
         Qt6::Test
+        Qt6::Network
         KF6::KIOCore
     )
     add_test(NAME test_kiostream COMMAND test_kiostream)
