@@ -30,4 +30,5 @@ target_link_libraries(dragon-sdl-qwidget-example PRIVATE
     Qt6::Gui
     Qt6::Widgets
     KF6::I18n
+    KF6::KIOCore
 )

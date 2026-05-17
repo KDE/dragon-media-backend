@@ -6,6 +6,7 @@
 #include "dragondecodepipeline.h"
 
 #include "dragondecoder.h"
+#include "dragonkiostream.h"
 #include "dragonradiostream.h"
 #include <dragonbufferprogress.h>
 #include <dragonsdl/dragonicymetadata.h>
@@ -25,6 +26,7 @@
 #include <thread>
 
 using namespace DragonSdl;
+using namespace Qt::StringLiterals;
 
 DragonDecodePipeline::DragonDecodePipeline(DragonPlayer *player)
     : QObject(player)
@@ -379,6 +381,10 @@ void DragonDecodePipeline::stop()
         m_radioStream->stop();
         m_radioStream.reset();
     }
+    if (m_kioStream) {
+        m_kioStream->stop();
+        m_kioStream.reset();
+    }
     qCDebug(dragonsdlDecode) << "stop() full teardown complete";
 }
 
@@ -453,12 +459,22 @@ void DragonDecodePipeline::requestSeek(int64_t posMs)
 std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &source, bool)
 {
     const bool isLocal = source.isLocalFile();
+    const QString scheme = source.scheme();
+    const bool isHttp = scheme == u"http"_s || scheme == u"https"_s;
+    const bool isKio = !isLocal && !isHttp;
 
-    if (!isLocal) {
-        if (m_radioStream) {
-            m_radioStream->stop();
-            m_radioStream.reset();
-        }
+    if (m_radioStream) {
+        disconnect(m_radioStream->bufferProgress(), nullptr, this, nullptr);
+        m_radioStream->stop();
+        m_radioStream.reset();
+    }
+    if (m_kioStream) {
+        disconnect(m_kioStream->bufferProgress(), nullptr, this, nullptr);
+        m_kioStream->stop();
+        m_kioStream.reset();
+    }
+
+    if (isHttp) {
         m_radioStream = std::make_unique<DragonRadioStream>();
         m_radioStream->setUrl(source);
 
@@ -469,17 +485,28 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         connect(m_radioStream.get(), &DragonRadioStream::metadataReady, m_player, &DragonPlayer::currentPlayingForRadiosChanged);
         connect(m_radioStream->bufferProgress(), &DragonBufferProgress::progressChanged, this, &DragonDecodePipeline::bufferProgressChanged);
         m_radioStream->start();
-    } else if (m_radioStream) {
-        disconnect(m_radioStream->bufferProgress(), nullptr, this, nullptr);
+    } else if (isKio) {
+        m_kioStream = std::make_unique<DragonKioStream>();
+        m_kioStream->setUrl(source);
+
+        connect(m_kioStream.get(), &DragonKioStream::errorOccurred, this, [this](const QString &) {
+            Q_EMIT sessionError(QStringLiteral("KIO error"));
+        });
+
+        connect(m_kioStream->bufferProgress(), &DragonBufferProgress::progressChanged, this, &DragonDecodePipeline::bufferProgressChanged);
+        m_kioStream->start();
+    } else {
         Q_EMIT bufferProgressChanged(1.0);
-        m_radioStream->stop();
-        m_radioStream.reset();
     }
 
     DragonDecoder::ReadCallback readCb;
-    if (!isLocal) {
+    if (isHttp) {
         readCb = [this](const std::span<uint8_t> buf) -> int {
             return m_radioStream ? m_radioStream->read(buf, m_sessionStopSource.get_token()) : -1;
+        };
+    } else if (isKio) {
+        readCb = [this](const std::span<uint8_t> buf) -> int {
+            return m_kioStream ? m_kioStream->read(buf, m_sessionStopSource.get_token()) : -1;
         };
     }
 

@@ -41,6 +41,7 @@ include(FetchContent)
 
 find_package(Qt6 REQUIRED COMPONENTS Core Network Gui)
 find_package(Qt6 COMPONENTS Widgets)
+find_package(KF6KIO REQUIRED)
 find_package(SDL3 REQUIRED)
 find_package(PkgConfig REQUIRED)
 
@@ -205,6 +206,7 @@ set(SOURCES
     src/dragonaudiooutput.cpp
     src/dragonfftprocessor.cpp
     src/dragonradiostream.cpp
+    src/dragonkiostream.cpp
     src/dragonbufferprogress.cpp
     src/dragonicymetadata.cpp
     src/dragondiagnostics.cpp
@@ -219,6 +221,7 @@ set(HEADERS
         src/dragondecoder.h
         src/dragonaudiooutput.h
         src/dragonradiostream.h
+        src/dragonkiostream.h
         src/dragonfftprocessor.h
     include/dragonsdl/dragonfftframe.h
         src/dragonbufferprogress.h
@@ -251,6 +254,7 @@ target_link_libraries(dragon-sdl
         QCoro6::Core
     PRIVATE
         Qt6::Gui
+        KF6::KIOCore
         kissfft::kissfft
         QCoro6::Network
 )
@@ -387,6 +391,14 @@ if(BUILD_TESTING)
         Qt6::Network
     )
     add_test(NAME test_radiostream COMMAND test_radiostream)
+
+    add_executable(test_kiostream tests/test_kiostream.cpp)
+    target_link_libraries(test_kiostream PRIVATE
+        dragon-sdl
+        Qt6::Test
+        KF6::KIOCore
+    )
+    add_test(NAME test_kiostream COMMAND test_kiostream)
 
     add_executable(test_player_basics tests/test_player_basics.cpp)
     target_link_libraries(test_player_basics PRIVATE
