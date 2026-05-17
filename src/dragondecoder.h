@@ -31,7 +31,9 @@ class DRAGONSDL_EXPORT DragonDecoder : public QObject
 public:
     using ReadCallback = std::move_only_function<int(std::span<uint8_t>)>;
 
-    explicit DragonDecoder(ReadCallback readCb, const QString &filePath = {}, QObject *parent = nullptr);
+    using SeekCallback = std::function<int64_t(int64_t offset, int whence)>;
+
+    explicit DragonDecoder(ReadCallback readCb, SeekCallback seekCb = nullptr, const QString &filePath = {}, QObject *parent = nullptr);
     ~DragonDecoder() override;
 
     DragonDecoder(const DragonDecoder &) = delete;
@@ -53,6 +55,7 @@ Q_SIGNALS:
 
 private:
     ReadCallback m_networkCallback;
+    SeekCallback m_seekCallback;
     QString m_filePath;
     std::vector<std::float32_t> m_pcmBuffer;
     std::vector<std::float32_t> m_pendingSamples;
@@ -74,7 +77,6 @@ private:
     bool isRecoverableReadError(int errorCode) const;
 
     QString avErrorString(int errorCode) const;
-
     std::optional<DragonSdl::SamplesChunk> drainDecoderFrames(DecodeSession &session);
 
     void flushDecoder(DecodeSession &session);

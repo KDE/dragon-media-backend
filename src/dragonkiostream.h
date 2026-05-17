@@ -37,6 +37,11 @@ public:
 
     int read(std::span<uint8_t> buf, std::stop_token st);
 
+    int64_t seek(int64_t offset);
+
+    [[nodiscard]] qint64 size() const;
+    [[nodiscard]] qint64 position() const;
+
     [[nodiscard]] DragonBufferProgress *bufferProgress() const;
 
 Q_SIGNALS:
@@ -60,6 +65,9 @@ private:
     std::atomic<bool> m_abort{false};
     std::atomic<bool> m_error{false};
     std::atomic<bool> m_finished{false};
+
+    std::atomic<qint64> m_totalSize{-1};
+    std::atomic<qint64> m_streamPosition{0};
 
     DragonBufferProgress *m_bufferProgress;
 };

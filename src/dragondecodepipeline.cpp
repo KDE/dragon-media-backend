@@ -25,6 +25,11 @@
 #include <stop_token>
 #include <thread>
 
+extern "C" {
+#include <libavformat/avformat.h>
+#include <libavutil/error.h>
+}
+
 using namespace DragonSdl;
 using namespace Qt::StringLiterals;
 
@@ -500,6 +505,8 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
     }
 
     DragonDecoder::ReadCallback readCb;
+    DragonDecoder::SeekCallback seekCb;
+
     if (isHttp) {
         readCb = [this](const std::span<uint8_t> buf) -> int {
             return m_radioStream ? m_radioStream->read(buf, m_sessionStopSource.get_token()) : -1;
@@ -508,9 +515,34 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         readCb = [this](const std::span<uint8_t> buf) -> int {
             return m_kioStream ? m_kioStream->read(buf, m_sessionStopSource.get_token()) : -1;
         };
+
+        seekCb = [kioStream = m_kioStream.get()](int64_t offset, int whence) -> int64_t {
+            if (whence == AVSEEK_SIZE) {
+                qint64 size = kioStream->size();
+                return size > 0 ? size : AVERROR(ENOSYS);
+            }
+
+            whence &= ~AVSEEK_FORCE;
+
+            if (whence == SEEK_SET) {
+                return kioStream->seek(offset);
+            }
+            if (whence == SEEK_CUR) {
+                return kioStream->seek(kioStream->position() + offset);
+            }
+            if (whence == SEEK_END) {
+                qint64 size = kioStream->size();
+                if (size > 0) {
+                    return kioStream->seek(size + offset);
+                }
+                return AVERROR(ENOSYS);
+            }
+
+            return AVERROR(ENOSYS);
+        };
     }
 
-    auto decoder = std::make_unique<DragonDecoder>(std::move(readCb), isLocal ? source.toLocalFile() : QString{});
+    auto decoder = std::make_unique<DragonDecoder>(std::move(readCb), std::move(seekCb), isLocal ? source.toLocalFile() : QString{});
 
     connect(decoder.get(), &DragonDecoder::streamError, this, [this](const QString &msg) {
         qCDebug(dragonsdlDecode) << "Decoder mid-stream error:" << msg;

@@ -117,9 +117,10 @@ struct DragonDecoder::DecodeSession {
     std::chrono::steady_clock::time_point lastSuccessfulRead;
 };
 
-DragonDecoder::DragonDecoder(ReadCallback readCb, const QString &filePath, QObject *parent)
+DragonDecoder::DragonDecoder(ReadCallback readCb, SeekCallback seekCb, const QString &filePath, QObject *parent)
     : QObject(parent)
     , m_networkCallback(std::move(readCb))
+    , m_seekCallback(std::move(seekCb))
     , m_filePath(filePath)
 {
 }
@@ -244,7 +245,15 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
         return ret == 0 ? AVERROR_EOF : ret;
     };
 
-    session.avioCtx.reset(avio_alloc_context(ioBuffer, IO_BUFFER_SIZE, 0, this, readPacket, nullptr, nullptr));
+    auto seekPacket = [](void *opaque, int64_t offset, int whence) -> int64_t {
+        auto *self = static_cast<DragonDecoder *>(opaque);
+        if (!self->m_seekCallback) {
+            return AVERROR(ENOSYS);
+        }
+        return self->m_seekCallback(offset, whence);
+    };
+
+    session.avioCtx.reset(avio_alloc_context(ioBuffer, IO_BUFFER_SIZE, 0, this, readPacket, nullptr, m_seekCallback ? seekPacket : nullptr));
     if (!session.avioCtx) {
         av_free(ioBuffer);
         m_hadFatalError.store(true, std::memory_order_relaxed);

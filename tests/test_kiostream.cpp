@@ -31,6 +31,7 @@ private Q_SLOTS:
     void testReadNonExistentFile();
     void testReadBlocksUntilData();
     void testReadCancellation();
+    void testSeeking();
 
 private:
     QString m_testFilePath;
@@ -168,6 +169,42 @@ void TestKioStream::testReadCancellation()
         stopSource.request_stop();
     }
     QVERIFY(readCompleted.load());
+}
+
+void TestKioStream::testSeeking()
+{
+    DragonKioStream stream;
+    stream.setUrl(QUrl::fromLocalFile(m_testFilePath));
+    stream.start();
+
+    std::vector<uint8_t> buffer(1024);
+    std::stop_source stopSource;
+    std::stop_token st = stopSource.get_token();
+
+    std::atomic<int> bytesRead{-2};
+    {
+        std::jthread readThread([&]() {
+            bytesRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
+    }
+
+    QCOMPARE(stream.size(), 16);
+
+    stream.seek(6);
+    QCOMPARE(stream.position(), 6);
+
+    bytesRead = -2;
+    {
+        std::jthread readThread([&]() {
+            bytesRead = stream.read(buffer, st);
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(bytesRead.load() != -2, 5000);
+    }
+
+    QCOMPARE(bytesRead.load(), 10);
+    QCOMPARE(stream.position(), 16);
+    QCOMPARE(QString::fromUtf8(reinterpret_cast<const char *>(buffer.data()), bytesRead.load()), QStringLiteral("KIO world!"));
 }
 
 QTEST_MAIN(TestKioStream)

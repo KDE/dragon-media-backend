@@ -101,7 +101,40 @@ int DragonKioStream::read(std::span<uint8_t> buf, std::stop_token st)
         }
     }
 
+    m_streamPosition += bytesRead;
     return bytesRead;
+}
+
+int64_t DragonKioStream::seek(int64_t offset)
+{
+    stop();
+
+    m_abort = false;
+    m_error = false;
+    m_finished = false;
+    m_bufferOffset = 0;
+    m_streamPosition = offset;
+
+    m_job = KIO::get(m_url, KIO::NoReload, KIO::HideProgressInfo);
+
+    m_job->addMetaData(QStringLiteral("resume"), QString::number(offset));
+
+    connect(m_job, &KIO::TransferJob::data, this, &DragonKioStream::onData);
+    connect(m_job, &KJob::result, this, &DragonKioStream::onResult);
+    connect(m_job, &KJob::totalAmountChanged, this, &DragonKioStream::onTotalAmountChanged);
+    connect(m_job, &KJob::processedAmountChanged, this, &DragonKioStream::onProcessedAmountChanged);
+
+    return offset;
+}
+
+qint64 DragonKioStream::size() const
+{
+    return m_totalSize.load();
+}
+
+qint64 DragonKioStream::position() const
+{
+    return m_streamPosition.load();
 }
 
 DragonBufferProgress *DragonKioStream::bufferProgress() const
@@ -138,8 +171,9 @@ void DragonKioStream::onResult(KJob *job)
 void DragonKioStream::onTotalAmountChanged(KJob *job, KJob::Unit unit, qulonglong amount)
 {
     Q_UNUSED(job);
-    Q_UNUSED(amount);
-    if (unit == KJob::Bytes) { }
+    if (unit == KJob::Bytes) {
+        m_totalSize = static_cast<qint64>(amount);
+    }
 }
 
 void DragonKioStream::onProcessedAmountChanged(KJob *job, KJob::Unit unit, qulonglong amount)
