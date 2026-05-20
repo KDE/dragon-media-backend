@@ -22,12 +22,51 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <pthread.h>
 #include <stop_token>
 #include <thread>
 
 using namespace DragonSdl;
 using namespace Qt::StringLiterals;
+
+namespace
+{
+
+template<typename R, typename F>
+std::optional<R> invokeStoppable(QObject *context, std::stop_token st, F &&func)
+{
+    struct State {
+        std::mutex mutex;
+        std::condition_variable_any cv;
+        std::optional<R> result;
+        bool done = false;
+    };
+    auto state = std::make_shared<State>();
+
+    QMetaObject::invokeMethod(
+        context,
+        [state, func = std::forward<F>(func)]() mutable {
+            auto res = func();
+            {
+                std::scoped_lock lock(state->mutex);
+                state->result = std::move(res);
+                state->done = true;
+            }
+            state->cv.notify_one();
+        },
+        Qt::QueuedConnection);
+
+    std::unique_lock lock(state->mutex);
+    if (!state->cv.wait(lock, st, [state]() {
+            return state->done;
+        })) {
+        return std::nullopt;
+    }
+    return std::move(*state->result);
+}
+
+}
 
 DragonDecodePipeline::DragonDecodePipeline(DragonPlayer *player)
     : QObject(player)
@@ -485,29 +524,22 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         };
 
         auto *stream = m_stream.get();
-        seekCb = [stream](int64_t offset, DragonDecoder::SeekWhence whence) -> int64_t {
-            std::promise<int64_t> promise;
-            std::future<int64_t> future = promise.get_future();
-
-            QMetaObject::invokeMethod(
-                stream,
-                [stream, offset, whence, p = &promise]() {
-                    int64_t result = -1;
-                    if (whence == DragonDecoder::SeekWhence::Set) {
-                        result = stream->seek(offset);
-                    } else if (whence == DragonDecoder::SeekWhence::Cur) {
-                        result = stream->seek(stream->position() + offset);
-                    } else if (whence == DragonDecoder::SeekWhence::End) {
-                        const qint64 sz = stream->size();
-                        if (sz > 0) {
-                            result = stream->seek(sz + offset);
-                        }
+        seekCb = [this, stream](int64_t offset, DragonDecoder::SeekWhence whence) -> int64_t {
+            auto result = invokeStoppable<int64_t>(stream, m_sessionStopSource.get_token(), [stream, offset, whence]() {
+                if (whence == DragonDecoder::SeekWhence::Set) {
+                    return stream->seek(offset);
+                } else if (whence == DragonDecoder::SeekWhence::Cur) {
+                    return stream->seek(stream->position() + offset);
+                } else if (whence == DragonDecoder::SeekWhence::End) {
+                    const qint64 sz = stream->size();
+                    if (sz > 0) {
+                        return stream->seek(sz + offset);
                     }
-                    p->set_value(result);
-                },
-                Qt::QueuedConnection);
+                }
+                return static_cast<int64_t>(-1);
+            });
 
-            return future.get();
+            return result.value_or(-1);
         };
     } else {
         Q_EMIT bufferProgressChanged(1.0);
