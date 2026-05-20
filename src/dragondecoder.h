@@ -32,13 +32,16 @@ public:
     enum class SeekWhence {
         Set,
         Cur,
-        End,
-        Size
+        End
     };
 
     using SeekCallback = std::function<int64_t(int64_t offset, SeekWhence whence)>;
 
-    explicit DragonDecoder(ReadCallback readCb, SeekCallback seekCb = nullptr, const QString &filePath = {}, QObject *parent = nullptr);
+    explicit DragonDecoder(ReadCallback readCb,
+                           SeekCallback seekCb = nullptr,
+                           int64_t streamSize = -1,
+                           const QString &filePath = {},
+                           QObject *parent = nullptr);
     ~DragonDecoder() override;
 
     DragonDecoder(const DragonDecoder &) = delete;
@@ -61,6 +64,7 @@ Q_SIGNALS:
 private:
     ReadCallback m_networkCallback;
     SeekCallback m_seekCallback;
+    int64_t m_streamSize{-1};
     QString m_filePath;
     std::vector<std::float32_t> m_pcmBuffer;
     std::vector<std::float32_t> m_pendingSamples;
@@ -84,8 +88,8 @@ private:
     QString avErrorString(int errorCode) const;
 
     std::optional<DragonSdl::SamplesChunk> drainDecoderFrames(DecodeSession &session);
-
     void flushDecoder(DecodeSession &session);
     std::optional<DragonSdl::SamplesChunk> flushResampler(DecodeSession &session);
+
     std::atomic<bool> m_hadFatalError{false};
 };

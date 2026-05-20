@@ -45,7 +45,7 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
         return result;
     }
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
 
     DragonSdl::InitResult initRes = decoder.initialize();
@@ -424,7 +424,7 @@ void TestE2E::testDecoderNonExistentFile()
     QString filePath = u"/nonexistent/path/to/audio.mp3"_s;
     QVERIFY2(!QFileInfo::exists(filePath), "Test file should not exist");
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     DragonSdl::InitResult res = decoder.initialize();
 
     QVERIFY(!res.success);
@@ -442,7 +442,7 @@ void TestE2E::testDecoderInvalidFile()
     file.write(QByteArray(1024, 0x42));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, invalidPath);
+    DragonDecoder decoder(nullptr, nullptr, -1, invalidPath);
     DragonSdl::InitResult res = decoder.initialize();
 
     QVERIFY(!res.success);
@@ -453,7 +453,7 @@ void TestE2E::testDecoderSignalEmissionOrder()
 {
     VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
-    DragonDecoder decoder(nullptr, nullptr, TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    DragonDecoder decoder(nullptr, nullptr, -1, TestFixture::fixturePath(u"sample-3s.mp3"_s));
     auto errorSpy = SignalSpyHelper::decoderErrorSpy(&decoder);
 
     QVERIFY(decoder.initialize().success);

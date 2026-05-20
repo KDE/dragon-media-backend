@@ -486,11 +486,6 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
 
         auto *stream = m_stream.get();
         seekCb = [stream](int64_t offset, DragonDecoder::SeekWhence whence) -> int64_t {
-            if (whence == DragonDecoder::SeekWhence::Size) {
-                const qint64 sz = stream->size();
-                return sz > 0 ? sz : -1;
-            }
-
             std::promise<int64_t> promise;
             std::future<int64_t> future = promise.get_future();
 
@@ -518,7 +513,8 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         Q_EMIT bufferProgressChanged(1.0);
     }
 
-    auto decoder = std::make_unique<DragonDecoder>(std::move(readCb), std::move(seekCb), isLocal ? source.toLocalFile() : QString{});
+    auto decoder =
+        std::make_unique<DragonDecoder>(std::move(readCb), std::move(seekCb), m_stream ? m_stream->size() : -1, isLocal ? source.toLocalFile() : QString{});
 
     connect(decoder.get(), &DragonDecoder::streamError, this, [this](const QString &msg) {
         qCDebug(dragonsdlDecode) << "Decoder mid-stream error:" << msg;

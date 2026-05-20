@@ -117,10 +117,11 @@ struct DragonDecoder::DecodeSession {
     std::chrono::steady_clock::time_point lastSuccessfulRead;
 };
 
-DragonDecoder::DragonDecoder(ReadCallback readCb, SeekCallback seekCb, const QString &filePath, QObject *parent)
+DragonDecoder::DragonDecoder(ReadCallback readCb, SeekCallback seekCb, int64_t streamSize, const QString &filePath, QObject *parent)
     : QObject(parent)
     , m_networkCallback(std::move(readCb))
     , m_seekCallback(std::move(seekCb))
+    , m_streamSize(streamSize)
     , m_filePath(filePath)
 {
 }
@@ -253,7 +254,7 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
 
         SeekWhence sw;
         if (whence & AVSEEK_SIZE) {
-            sw = SeekWhence::Size;
+            return self->m_streamSize > 0 ? self->m_streamSize : AVERROR(ENOSYS);
         } else {
             switch (whence & 0xF) {
             case 0:
@@ -282,8 +283,7 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
     }
 
     if (m_seekCallback) {
-        const int64_t probeSize = m_seekCallback(0, SeekWhence::Size);
-        if (probeSize > 0) {
+        if (m_streamSize > 0) {
             session.avioCtx->seekable = AVIO_SEEKABLE_NORMAL;
         }
     }

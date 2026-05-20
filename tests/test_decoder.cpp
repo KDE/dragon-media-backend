@@ -244,7 +244,7 @@ void TestDecoder::testConstruction()
     DragonDecoder decoder(std::move(readCb), {});
     QVERIFY(true);
 
-    DragonDecoder decoder2(nullptr, nullptr, "/nonexistent/file.mp3"_L1);
+    DragonDecoder decoder2(nullptr, nullptr, -1, "/nonexistent/file.mp3"_L1);
     QVERIFY(true);
 }
 
@@ -258,7 +258,7 @@ void TestDecoder::testLocalFileDecoding()
     wavFile.write(createTestWavData(44100, 2, 100));
     wavFile.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
 
     auto result = runDecoderCollecting(decoder);
 
@@ -306,7 +306,7 @@ void TestDecoder::testDecoderStatePreservation()
     file.write(createTestWavData(48000, 1, 50));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
 
     InitResult res = decoder.initialize();
     QVERIFY(res.success);
@@ -329,7 +329,7 @@ void TestDecoder::testSamplesChunkEvents()
     file.write(createTestWavData(44100, 2, 200));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
 
     auto result = runDecoderCollecting(decoder);
 
@@ -349,7 +349,7 @@ void TestDecoder::testDecodeEofLastEvent()
     file.write(createTestWavData(44100, 2, 50));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
 
     auto result = runDecoderCollecting(decoder);
 
@@ -366,7 +366,7 @@ void TestDecoder::testDurationInFormatReady()
     file.write(createTestWavData(44100, 2, 1000));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
 
     auto result = runDecoderCollecting(decoder);
 
@@ -397,7 +397,7 @@ void TestDecoder::testStopTokenCancellation()
     file.write(createTestWavData(44100, 2, 5000));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
 
     std::stop_source stopSource;
     std::atomic<bool> startedDecoding{false};
@@ -485,7 +485,7 @@ void TestDecoder::testDifferentSampleRates()
     file.write(createTestWavData(sampleRate, 2, 100));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     auto result = runDecoderCollecting(decoder);
 
     QVERIFY2(result.format.has_value(), "FormatReady should have been yielded");
@@ -501,7 +501,7 @@ void TestDecoder::testMonoToStereoConversion()
     file.write(createTestWavData(44100, 1, 100));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     auto result = runDecoderCollecting(decoder);
 
     QVERIFY2(result.format.has_value(), "FormatReady should have been yielded");
@@ -527,8 +527,8 @@ void TestDecoder::testMultipleDecoderInstances()
     f2.write(createTestWavData(48000, 1, 100));
     f2.close();
 
-    DragonDecoder decoder1(nullptr, nullptr, file1);
-    DragonDecoder decoder2(nullptr, nullptr, file2);
+    DragonDecoder decoder1(nullptr, nullptr, -1, file1);
+    DragonDecoder decoder2(nullptr, nullptr, -1, file2);
 
     auto result1 = runDecoderCollecting(decoder1);
     auto result2 = runDecoderCollecting(decoder2);
@@ -553,7 +553,7 @@ void TestDecoder::testCorruptDataHandling()
     file.write("corrupt data here");
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     auto result = runDecoderCollecting(decoder);
 
     QVERIFY2(result.error.has_value() || !result.format.has_value(), "Corrupt data should fail gracefully");
@@ -568,7 +568,7 @@ void TestDecoder::testResamplerBehavior()
     file.write(createTestWavData(48000, 2, 100));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     auto result = runDecoderCollecting(decoder);
 
     QVERIFY2(result.format.has_value(), "FormatReady should have been yielded");
@@ -597,7 +597,7 @@ void TestDecoder::testChannelConfiguration()
     file.write(createTestWavData(44100, channels, 100));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     auto result = runDecoderCollecting(decoder);
 
     QVERIFY2(result.format.has_value(), "FormatReady should have been yielded");
@@ -613,7 +613,7 @@ void TestDecoder::testGeneratorEventOrdering()
     file.write(createTestWavData(44100, 2, 100));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     QVERIFY(decoder.initialize().success);
 
     bool sawEof = false;
@@ -648,7 +648,7 @@ void TestDecoder::testGeneratorSpanLifetime()
     file.write(createTestWavData(44100, 2, 50));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     QVERIFY(decoder.initialize().success);
 
     auto gen = decoder.decodeLoop({});
@@ -677,7 +677,7 @@ void TestDecoder::testGeneratorErrorYielded()
     file.write(QByteArray(1000, '\xFF'));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     InitResult res = decoder.initialize();
 
     QVERIFY(!res.success);
@@ -693,7 +693,7 @@ void TestDecoder::testGeneratorMultipleIterations()
     file.write(createTestWavData(44100, 2, 200));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, filePath);
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     InitResult res = decoder.initialize();
     QVERIFY(res.success);
 
