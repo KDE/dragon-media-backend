@@ -282,7 +282,10 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
     }
 
     if (m_seekCallback) {
-        session.avioCtx->seekable = AVIO_SEEKABLE_NORMAL;
+        const int64_t probeSize = m_seekCallback(0, SeekWhence::Size);
+        if (probeSize > 0) {
+            session.avioCtx->seekable = AVIO_SEEKABLE_NORMAL;
+        }
     }
 
     return true;

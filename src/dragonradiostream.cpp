@@ -51,6 +51,9 @@ void DragonRadioStream::start()
     m_icyBytesRead = 0;
     m_icyPendingData.clear();
     m_lastMetadata.clear();
+    m_totalSize = -1;
+    m_streamPosition = 0;
+    m_acceptsRanges = false;
 
     m_bufferProgress->reset();
 
@@ -134,7 +137,56 @@ int DragonRadioStream::read(std::span<uint8_t> buf, std::stop_token st)
         }
     }
 
+    m_streamPosition += bytesRead;
     return bytesRead;
+}
+
+int64_t DragonRadioStream::seek(int64_t offset)
+{
+    if (!m_acceptsRanges.load()) {
+        return -1;
+    }
+
+    qCDebug(dragonsdlNetwork) << "seek to byte offset" << offset;
+
+    stop();
+
+    m_abort = false;
+    m_error = false;
+    m_finished = false;
+    m_bufferOffset = 0;
+    m_streamPosition = offset;
+    m_icyBytesRead = 0;
+    m_icyPendingData.clear();
+
+    m_bufferProgress->reset();
+
+    QNetworkRequest request(m_url);
+    request.setRawHeader("Icy-Metadata"_ba, "1"_ba);
+    request.setRawHeader("Range"_ba, "bytes="_ba + QByteArray::number(offset) + "-"_ba);
+    m_reply = m_nam->get(request);
+
+    connect(m_reply, &QNetworkReply::encrypted, this, &DragonRadioStream::onReplyEncrypted);
+    connect(m_reply, &QNetworkReply::metaDataChanged, this, &DragonRadioStream::onReplyMetaDataChanged);
+    connect(m_reply, &QNetworkReply::readyRead, this, &DragonRadioStream::onReplyReadyRead);
+    connect(m_reply, &QNetworkReply::finished, this, &DragonRadioStream::onReplyFinished);
+    connect(m_reply, &QNetworkReply::errorOccurred, this, &DragonRadioStream::onReplyError);
+    connect(m_reply, &QNetworkReply::downloadProgress, this, [this](qint64 bytesReceived, qint64) {
+        m_bufferProgress->setBytesReceived(bytesReceived);
+    });
+
+    m_watchdogTimer->start();
+    return offset;
+}
+
+qint64 DragonRadioStream::size() const
+{
+    return m_totalSize.load();
+}
+
+qint64 DragonRadioStream::position() const
+{
+    return m_streamPosition.load();
 }
 
 bool DragonRadioStream::isAborted() const
@@ -170,6 +222,35 @@ void DragonRadioStream::onReplyMetaDataChanged()
                 m_icyMetaint = metaint;
                 qCDebug(dragonsdlNetwork) << "ICY metadata interval:" << m_icyMetaint;
             }
+        }
+
+        const QByteArray contentLength = m_reply->rawHeader("Content-Length"_ba);
+        if (!contentLength.isEmpty()) {
+            bool ok = false;
+            const qint64 cl = contentLength.toLongLong(&ok);
+            if (ok && cl > 0) {
+                const QByteArray contentRange = m_reply->rawHeader("Content-Range"_ba);
+                if (!contentRange.isEmpty()) {
+                    const int slashIdx = contentRange.lastIndexOf('/');
+                    if (slashIdx >= 0) {
+                        bool okTotal = false;
+                        const qint64 total = contentRange.mid(slashIdx + 1).toLongLong(&okTotal);
+                        if (okTotal && total > 0) {
+                            m_totalSize = total;
+                            qCDebug(dragonsdlNetwork) << "Total size from Content-Range:" << total;
+                        }
+                    }
+                } else {
+                    m_totalSize = cl;
+                    qCDebug(dragonsdlNetwork) << "Total size from Content-Length:" << cl;
+                }
+            }
+        }
+
+        const QByteArray acceptRanges = m_reply->rawHeader("Accept-Ranges"_ba);
+        if (acceptRanges.toLower() == "bytes") {
+            m_acceptsRanges = true;
+            qCDebug(dragonsdlNetwork) << "Server supports Range requests";
         }
     }
 }

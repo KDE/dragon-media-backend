@@ -28,6 +28,7 @@ private Q_SLOTS:
 
     void testPlayLocalWmaFileOverHttp();
     void testRadioToLocalFileTransition();
+    void testSeekHttpFile();
 
 private:
     TestHttpServer *m_server = nullptr;
@@ -203,6 +204,54 @@ void TestNetworkPlayback::testRadioToLocalFileTransition()
     qDebug() << "Radio to local file transition test completed!";
     qDebug() << "  Final bufferProgress:" << player.bufferProgress();
     qDebug() << "  Final status:" << static_cast<int>(player.status());
+}
+
+void TestNetworkPlayback::testSeekHttpFile()
+{
+    QString mp3Path = fixturePath(u"sample-3s.mp3"_s);
+    QVERIFY2(QFile::exists(mp3Path), qPrintable(u"MP3 fixture not found: %1"_s.arg(mp3Path)));
+
+    m_server->serveFile(mp3Path);
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(m_server->port());
+    url.setPath(u"/sample-3s.mp3"_s);
+
+    qDebug() << "Testing seek with HTTP file:" << url.toString();
+
+    DragonPlayer player;
+    QSignalSpy seekableSpy(&player, &DragonPlayer::seekableChanged);
+    QSignalSpy positionSpy(&player, &DragonPlayer::positionChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    player.setSource(url);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::BufferedMedia, 10000);
+
+    QVERIFY2(player.seekable(), "HTTP file should be seekable");
+    QVERIFY2(player.duration() > 0, "Duration should be known");
+
+    player.play();
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 5000);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.position() > 500, 5000);
+
+    positionSpy.clear();
+    qDebug() << "Seeking to 1000ms";
+    player.seek(1000);
+
+    QTRY_VERIFY_WITH_TIMEOUT(positionSpy.count() > 0, 5000);
+
+    qDebug() << "Position after seek:" << player.position();
+    QVERIFY2(player.position() >= 900 && player.position() <= 2000, "Position should be near 1000ms");
+
+    QTest::qWait(500);
+    QVERIFY2(player.position() > 1000, "Playback should have advanced past 1000ms");
+
+    player.stop();
+    qDebug() << "Seek HTTP file test completed successfully!";
 }
 
 QTEST_MAIN(TestNetworkPlayback)

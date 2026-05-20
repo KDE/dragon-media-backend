@@ -59,8 +59,10 @@ public:
     bool decodeLoopActive() const;
 
     void setCurrentSource(const QUrl &source);
-Q_SIGNALS:
 
+    qint64 streamSize() const;
+
+Q_SIGNALS:
     void sessionError(const QString &message);
 
     void sessionFinished(const QUrl &source, bool hadFatalError);

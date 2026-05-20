@@ -549,6 +549,11 @@ void DragonDecodePipeline::setCurrentSource(const QUrl &source)
     m_currentSource = source;
 }
 
+qint64 DragonDecodePipeline::streamSize() const
+{
+    return m_stream ? m_stream->size() : -1;
+}
+
 void DragonDecodePipeline::setSamplesCallback(SamplesCallback callback)
 {
     m_samplesCallback = std::move(callback);

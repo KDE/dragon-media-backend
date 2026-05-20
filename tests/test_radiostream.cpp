@@ -11,6 +11,9 @@
 
 #include "dragonradiostream.h"
 
+#include "test_utils.h"
+#include "testhttpserver.h"
+
 #include <QHash>
 #include <atomic>
 #include <stop_token>
@@ -44,18 +47,29 @@ private Q_SLOTS:
     void testUrlChangeBehavior();
     void testIsAbortedFlag();
     void testMultipleStartStopCycles();
+    void testSeekingCapabilities();
 
 private:
+    TestHttpServer *m_server = nullptr;
+
     QByteArray createHttpResponse(const QByteArray &body, bool includeIcyHeaders = false);
 };
 
 void TestRadioStream::initTestCase()
 {
     QVERIFY(QNetworkAccessManager().supportedSchemes().contains("http"_L1));
+
+    m_server = new TestHttpServer(this);
+    QVERIFY(m_server->start());
 }
 
 void TestRadioStream::cleanupTestCase()
 {
+    if (m_server) {
+        m_server->stop();
+        delete m_server;
+        m_server = nullptr;
+    }
 }
 
 void TestRadioStream::testConstruction()
@@ -316,6 +330,63 @@ void TestRadioStream::testMultipleStartStopCycles()
     }
 
     QVERIFY(true);
+}
+
+void TestRadioStream::testSeekingCapabilities()
+{
+    QString wmaPath = TestFixture::fixturePath(u"gs-16b-1c-44100hz.wma"_s);
+    QVERIFY(QFile::exists(wmaPath));
+
+    m_server->serveFile(wmaPath);
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(m_server->port());
+    url.setPath(u"/gs-16b-1c-44100hz.wma"_s);
+
+    DragonRadioStream stream;
+    stream.setUrl(url);
+    stream.start();
+
+    QTRY_VERIFY_WITH_TIMEOUT(stream.size() > 0, 5000);
+
+    qint64 totalSize = stream.size();
+    QVERIFY(totalSize > 0);
+    QCOMPARE(stream.position(), 0);
+
+    std::vector<uint8_t> buffer(4096);
+    std::atomic<int> readBytes{-1};
+    std::atomic<bool> readDone{false};
+    std::stop_source ss;
+
+    std::thread readThread([&]() {
+        readBytes = stream.read(buffer, ss.get_token());
+        readDone = true;
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(readDone.load(), 5000);
+    readThread.join();
+
+    QVERIFY(readBytes.load() > 0);
+    QCOMPARE(stream.position(), readBytes.load());
+
+    qint64 seekTarget = totalSize / 2;
+    qint64 seekResult = stream.seek(seekTarget);
+    QCOMPARE(seekResult, seekTarget);
+    QCOMPARE(stream.position(), seekTarget);
+
+    readDone = false;
+    readBytes = -1;
+
+    std::thread readThread2([&]() {
+        readBytes = stream.read(buffer, ss.get_token());
+        readDone = true;
+    });
+    QTRY_VERIFY_WITH_TIMEOUT(readDone.load(), 5000);
+    readThread2.join();
+
+    QVERIFY(readBytes.load() > 0);
+    QCOMPARE(stream.position(), seekTarget + readBytes.load());
 }
 
 QByteArray TestRadioStream::createHttpResponse(const QByteArray &body, bool includeIcyHeaders)

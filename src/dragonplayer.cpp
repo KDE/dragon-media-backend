@@ -513,6 +513,12 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
 
     d->fftPipeline.setSampleRate(result.sampleRate);
     d->fftPipeline.setChannelCount(result.channels);
+
+    if (!d->currentIsLocal && d->decodePipeline.streamSize() > 0) {
+        d->currentSeekable = true;
+        Q_EMIT seekableChanged(true);
+    }
+
     d->setStatus(MediaStatus::LoadedMedia);
 
     d->applyRequestedState(result.sampleRate, result.channels, d->requestedPlaybackState);

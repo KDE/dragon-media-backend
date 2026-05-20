@@ -393,6 +393,9 @@ if(BUILD_TESTING)
         Qt6::Test
         Qt6::Network
     )
+    target_compile_definitions(test_radiostream PRIVATE
+        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
+    )
     add_test(NAME test_radiostream COMMAND test_radiostream)
 
     add_executable(test_kiostream tests/test_kiostream.cpp)

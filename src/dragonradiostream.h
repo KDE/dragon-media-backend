@@ -45,6 +45,11 @@ public:
 
     int read(std::span<uint8_t> buf, std::stop_token st) override;
 
+    int64_t seek(int64_t offset) override;
+
+    [[nodiscard]] qint64 size() const override;
+    [[nodiscard]] qint64 position() const override;
+
     [[nodiscard]] bool isAborted() const;
 
     [[nodiscard]] DragonBufferProgress *bufferProgress() const override;
@@ -75,6 +80,10 @@ private:
     std::atomic<bool> m_abort{false};
     std::atomic<bool> m_error{false};
     std::atomic<bool> m_finished{false};
+
+    std::atomic<qint64> m_totalSize{-1};
+    std::atomic<qint64> m_streamPosition{0};
+    std::atomic<bool> m_acceptsRanges{false};
 
     DragonBufferProgress *m_bufferProgress;
 
