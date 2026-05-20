@@ -207,6 +207,8 @@ set(SOURCES
     src/dragonfftprocessor.cpp
     src/dragonradiostream.cpp
     src/dragonkiostream.cpp
+    src/dragonstream.cpp
+    src/dragonstreamfactory.cpp
     src/dragonbufferprogress.cpp
     src/dragonicymetadata.cpp
     src/dragondiagnostics.cpp
@@ -222,6 +224,7 @@ set(HEADERS
         src/dragonaudiooutput.h
         src/dragonradiostream.h
         src/dragonkiostream.h
+        src/dragonstream.h
         src/dragonfftprocessor.h
     include/dragonsdl/dragonfftframe.h
         src/dragonbufferprogress.h

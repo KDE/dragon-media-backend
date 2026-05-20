@@ -5,11 +5,10 @@
 
 #pragma once
 
-#include "dragonsdl_export.h"
+#include "dragonstream.h"
 
 #include <KIO/TransferJob>
 #include <QByteArray>
-#include <QObject>
 #include <QPointer>
 #include <QUrl>
 
@@ -23,7 +22,7 @@
 
 class DragonBufferProgress;
 
-class DRAGONSDL_EXPORT DragonKioStream : public QObject
+class DRAGONSDL_EXPORT DragonKioStream : public DragonStream
 {
     Q_OBJECT
 
@@ -31,21 +30,18 @@ public:
     explicit DragonKioStream(QObject *parent = nullptr);
     ~DragonKioStream() override;
 
-    void setUrl(const QUrl &url);
-    void start();
-    void stop();
+    void setUrl(const QUrl &url) override;
+    void start() override;
+    void stop() override;
 
-    int read(std::span<uint8_t> buf, std::stop_token st);
+    int read(std::span<uint8_t> buf, std::stop_token st) override;
 
-    int64_t seek(int64_t offset);
+    int64_t seek(int64_t offset) override;
 
-    [[nodiscard]] qint64 size() const;
-    [[nodiscard]] qint64 position() const;
+    [[nodiscard]] qint64 size() const override;
+    [[nodiscard]] qint64 position() const override;
 
-    [[nodiscard]] DragonBufferProgress *bufferProgress() const;
-
-Q_SIGNALS:
-    void errorOccurred(const QString &message);
+    [[nodiscard]] DragonBufferProgress *bufferProgress() const override;
 
 private Q_SLOTS:
     void onData(KIO::Job *job, const QByteArray &data);

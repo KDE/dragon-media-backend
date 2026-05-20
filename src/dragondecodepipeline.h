@@ -22,8 +22,7 @@
 
 class DragonPlayer;
 class DragonDecoder;
-class DragonRadioStream;
-class DragonKioStream;
+class DragonStream;
 
 class DragonDecodePipeline : public QObject
 {
@@ -100,7 +99,5 @@ private:
 
     std::shared_ptr<DragonSdl::DragonCompletion> m_pendingGaplessCompletion;
 
-    std::unique_ptr<DragonRadioStream> m_radioStream;
-
-    std::unique_ptr<DragonKioStream> m_kioStream;
+    std::unique_ptr<DragonStream> m_stream;
 };

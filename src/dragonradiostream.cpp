@@ -20,7 +20,7 @@ using namespace Qt::StringLiterals;
 using namespace std::chrono_literals;
 
 DragonRadioStream::DragonRadioStream(QObject *parent)
-    : QObject(parent)
+    : DragonStream(parent)
     , m_nam(new QNetworkAccessManager(this))
     , m_watchdogTimer(new QTimer(this))
     , m_bufferProgress(new DragonBufferProgress(this))

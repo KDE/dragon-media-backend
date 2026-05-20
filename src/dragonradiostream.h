@@ -5,13 +5,12 @@
 
 #pragma once
 
-#include "dragonsdl_export.h"
+#include "dragonstream.h"
 
 #include <dragonbufferprogress.h>
 #include <dragonsdl/dragonicymetadata.h>
 
 #include <QNetworkReply>
-#include <QObject>
 #include <QPointer>
 #include <QString>
 #include <QUrl>
@@ -27,7 +26,7 @@
 class QNetworkAccessManager;
 class QTimer;
 
-class DRAGONSDL_EXPORT DragonRadioStream : public QObject
+class DRAGONSDL_EXPORT DragonRadioStream : public DragonStream
 {
     Q_OBJECT
 
@@ -40,19 +39,15 @@ public:
     DragonRadioStream(DragonRadioStream &&) = delete;
     DragonRadioStream &operator=(DragonRadioStream &&) = delete;
 
-    void setUrl(const QUrl &url);
-    void start();
-    void stop();
+    void setUrl(const QUrl &url) override;
+    void start() override;
+    void stop() override;
 
-    int read(std::span<uint8_t> buf, std::stop_token st);
+    int read(std::span<uint8_t> buf, std::stop_token st) override;
 
     [[nodiscard]] bool isAborted() const;
 
-    [[nodiscard]] DragonBufferProgress *bufferProgress() const;
-
-Q_SIGNALS:
-    void errorOccurred(const QString &message);
-    void metadataReady(const DragonIcyMetadata &metadata);
+    [[nodiscard]] DragonBufferProgress *bufferProgress() const override;
 
 private Q_SLOTS:
     void onReplyEncrypted();

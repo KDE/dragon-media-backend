@@ -14,7 +14,7 @@
 #include <cstring>
 
 DragonKioStream::DragonKioStream(QObject *parent)
-    : QObject(parent)
+    : DragonStream(parent)
     , m_bufferProgress(new DragonBufferProgress(this))
 {
 }
