@@ -110,9 +110,9 @@ void MainWindow::setupUi()
     m_kexpButton->setToolTip(i18n("Play KEXP Radio Stream"));
     hBtnLayout->addWidget(m_kexpButton);
 
-    m_playCdButton = new QPushButton(i18n("Play CD"), this);
-    m_playCdButton->setToolTip(i18n("Play Audio CD"));
-    hBtnLayout->addWidget(m_playCdButton);
+    m_playLandSongButton = new QPushButton(i18n("Play The Land Song"), this);
+    m_playLandSongButton->setToolTip(i18n("Play The Land Song"));
+    hBtnLayout->addWidget(m_playLandSongButton);
 
     vLayout->addLayout(hBtnLayout);
 
@@ -228,7 +228,7 @@ void MainWindow::connectPlayer()
     connect(m_nextButton, &QPushButton::clicked, m_playlist, &DragonPlaylist::playNext);
     connect(m_prevButton, &QPushButton::clicked, m_playlist, &DragonPlaylist::playPrevious);
     connect(m_kexpButton, &QPushButton::clicked, this, &MainWindow::playKexp);
-    connect(m_playCdButton, &QPushButton::clicked, this, &MainWindow::playCd);
+    connect(m_playLandSongButton, &QPushButton::clicked, this, &MainWindow::playLandSong);
 
     connect(m_playlistWidget, &QListWidget::activated, this, [this](const QModelIndex &index) {
         m_playlist->setCurrentIndex(index.row());
@@ -352,38 +352,12 @@ void MainWindow::playKexp()
     m_playlist->addTrack(QUrl("https://kexp.streamguys1.com/kexp160.aac"_L1));
 }
 
-void MainWindow::playCd()
+void MainWindow::playLandSong()
 {
     m_playlist->clear();
-    m_statusLabel->setText(i18n("Listing CD tracks..."));
-
-    auto *job = KIO::listDir(QUrl(u"audiocd:/"_s), KIO::HideProgressInfo);
-    connect(job, &KIO::ListJob::entries, this, [this](KIO::Job *, const KIO::UDSEntryList &entries) {
-        QList<QUrl> urls;
-        for (const auto &entry : entries) {
-            const QString name = entry.stringValue(KIO::UDSEntry::UDS_NAME);
-            if (name.endsWith(u".wav"_s)) {
-                QUrl url(u"audiocd:/"_s);
-                url.setPath(u"/"_s + name);
-                urls.append(url);
-            }
-        }
-        std::sort(urls.begin(), urls.end(), [](const QUrl &a, const QUrl &b) {
-            return a.toString() < b.toString();
-        });
-        m_playlist->addTracks(urls);
-    });
-    connect(job, &KJob::result, this, [this](KJob *job) {
-        if (job->error()) {
-            m_statusLabel->setText(i18n("Error listing CD: %1").arg(job->errorString()));
-        } else {
-            m_statusLabel->setText(i18n("CD tracks loaded"));
-            if (m_playlist->count() > 0) {
-                m_playlist->setCurrentIndex(0);
-                m_player->play();
-            }
-        }
-    });
+    m_playlist->addTrack(QUrl("http://www.historyworkshop.org.uk/wp-content/uploads/2011/05/01-The-Land-Song.mp3"_L1));
+    m_playlist->setCurrentIndex(0);
+    m_player->play();
 }
 
 void MainWindow::playPlaylistItem(int index)

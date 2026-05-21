@@ -35,7 +35,7 @@ private Q_SLOTS:
     void addNetworkUrl();
     void clearPlaylist();
     void playKexp();
-    void playCd();
+    void playLandSong();
     void playPlaylistItem(int index);
     void updatePlaybackState();
     void updatePosition(int64_t positionMs);
@@ -66,7 +66,7 @@ private:
     QPushButton *m_nextButton = nullptr;
     QPushButton *m_prevButton = nullptr;
     QPushButton *m_kexpButton = nullptr;
-    QPushButton *m_playCdButton = nullptr;
+    QPushButton *m_playLandSongButton = nullptr;
 
     QSlider *m_seekSlider = nullptr;
     QLabel *m_timeLabel = nullptr;
