@@ -125,11 +125,11 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
 
     qCDebug(dragonsdlPlayer) << "onDecodeFinished emitting state/status changes, hadFatalError=" << hadFatalError;
     if (hadFatalError) {
-        setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
         setStatus(DragonPlayer::MediaStatus::InvalidMedia);
-    } else {
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+    } else {
         setStatus(DragonPlayer::MediaStatus::EndOfMedia);
+        setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
     }
     qCDebug(dragonsdlPlayer) << "onDecodeFinished state/status changes complete";
 }

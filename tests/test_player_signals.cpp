@@ -185,13 +185,13 @@ void TestPlayerSignals::testSignalOrderOnEndOfMedia()
     QTRY_VERIFY_WITH_TIMEOUT(helper.waitForEndOfMedia(15000), 15000);
 
     QVERIFY2(tracker.containsPrefix(u"positionChanged("_s), "EndOfMedia must emit positionChanged(duration)");
-    QVERIFY2(tracker.contains(u"stateChanged(StoppedState)"_s), "EndOfMedia must emit playbackStateChanged(StoppedState)");
     QVERIFY2(tracker.contains(u"statusChanged(EndOfMedia)"_s), "EndOfMedia must emit mediaStatusChanged(EndOfMedia)");
+    QVERIFY2(tracker.contains(u"stateChanged(StoppedState)"_s), "EndOfMedia must emit playbackStateChanged(StoppedState)");
 
-    QVERIFY2(tracker.verifyOrderPrefix(u"positionChanged("_s, u"stateChanged(StoppedState)"_s),
-             "positionChanged(duration) must precede playbackStateChanged(StoppedState)");
-    QVERIFY2(tracker.verifyOrder(u"stateChanged(StoppedState)"_s, u"statusChanged(EndOfMedia)"_s),
-             "playbackStateChanged(StoppedState) must precede mediaStatusChanged(EndOfMedia)");
+    QVERIFY2(tracker.verifyOrderPrefix(u"positionChanged("_s, u"statusChanged(EndOfMedia)"_s),
+             "positionChanged(duration) must precede mediaStatusChanged(EndOfMedia)");
+    QVERIFY2(tracker.verifyOrder(u"statusChanged(EndOfMedia)"_s, u"stateChanged(StoppedState)"_s),
+             "mediaStatusChanged(EndOfMedia) must precede playbackStateChanged(StoppedState)");
 }
 
 void TestPlayerSignals::testDurationChangedAfterLoadedMedia()
