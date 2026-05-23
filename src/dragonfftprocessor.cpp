@@ -127,7 +127,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         if (!primed) {
             if (historyHasEnoughForWindow()) {
                 primed = true;
-                m_lastFrameAtSample = m_historyTotalSamples >= hopSamples ? m_historyTotalSamples - hopSamples : 0;
+                m_lastFrameAtSample = FFT_SIZE >= hopSamples ? FFT_SIZE - hopSamples : 0;
             } else {
                 if (!gotData && !st.stop_requested())
                     m_consumer.waitFor(1, st);

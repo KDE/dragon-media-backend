@@ -54,6 +54,7 @@ private Q_SLOTS:
     void testFftModeBarsOnly();
     void testFftModeDetailedOnly();
     void testFftModeSwitch();
+    void testFrameCountForThreeSecondsStereo();
 
 private:
     std::vector<std::float32_t> createSineWave(float frequency, int sampleRate, int numSamples);
@@ -674,6 +675,54 @@ void TestFftProcessor::testFftModeSwitch()
     auto frame = processor.takeLatestFrame();
     QVERIFY2(!frame.barData.empty(), "Latest frame should have barData after switching to BarsOnly");
     QVERIFY2(frame.frequenciesDb.empty(), "Latest frame should not have frequenciesDb in BarsOnly mode");
+}
+
+void TestFftProcessor::testFrameCountForThreeSecondsStereo()
+{
+    constexpr int sampleRate = 44100;
+    constexpr int channels = 2;
+    constexpr float durationSeconds = 3.0f;
+    constexpr int totalFloats = static_cast<int>(sampleRate * durationSeconds * channels); // 264600 interleaved stereo floats
+
+    // Silence is fine we are counting emitted frames, not validating content.
+    auto audio = createSilence(totalFloats);
+
+    // Pipe must hold ceil(264600 / 1024) = 259 blocks. 512 gives comfortable headroom.
+    DragonPipe<DragonFftBlock> pipe(512);
+
+    DragonFftProcessor processor;
+    processor.setConsumer(pipe.consumer());
+    processor.setChannelCount(channels);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
+
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    // Dump the entire 3-second burst (matches what the SDL dummy driver does in CI).
+    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), audio);
+
+    // Give the processor thread time to drain the pipe and emit all owed frames.
+    QTest::qWait(500);
+
+    stopSource.request_stop();
+    processorThread.join();
+
+    const int count = frameCount.load(std::memory_order_relaxed);
+
+    // Total mono samples after downmix: 264600 / 2 = 132300.
+    // First frame at FFT_SIZE (4096), then every hop = sampleRate/60 = 735 samples.
+    // Expected = floor((132300 - 4096) / 735) + 1 = 175 frames.
+    // 10 % tolerance covers any edge-case rounding in block boundaries.
+    QVERIFY2(count >= 158, qPrintable(u"Too few frames (%1) for 3-second stereo burst expected ~175"_s.arg(count)));
+    QVERIFY2(count <= 192, qPrintable(u"Too many frames (%1) possible burst-emission bug"_s.arg(count)));
 }
 
 QTEST_MAIN(TestFftProcessor)

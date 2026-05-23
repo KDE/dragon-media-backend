@@ -31,6 +31,7 @@ private Q_SLOTS:
     void testFftInfrastructurePersistsAcrossTrackChanges();
     void testFftOffSkipsInfrastructureOnTrackChange();
     void testFftModeBothEmitsDetailedAndBarFrames();
+    void testFftFrameRateApproaches60Hz();
 
 private:
     void skipIfMissing(const QString &filename)
@@ -167,6 +168,48 @@ void TestPlayerFft::testFftModeBothEmitsDetailedAndBarFrames()
     for (int i = 0; i < fftSpy.size(); ++i) {
         QVERIFY(fftSpy.at(i).at(0).isValid());
     }
+
+    player.stop();
+}
+
+void TestPlayerFft::testFftFrameRateApproaches60Hz()
+{
+    skipIfMissing(u"sample-3s.mp3"_s);
+
+    DragonPlayer player;
+    player.setFftMode(DragonPlayer::FftMode::Both);
+
+    PlayerHelper helper(&player);
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+
+    // Use a direct-connected atomic counter no event-loop backlog, no QSignalSpy overhead.
+    std::atomic<int> frameCount{0};
+    QObject::connect(
+        &player,
+        &DragonPlayer::fftFrameReady,
+        &player,
+        [&frameCount]() {
+            frameCount.fetch_add(1, std::memory_order_relaxed);
+        },
+        Qt::DirectConnection);
+
+    QVERIFY(helper.playAndWait());
+
+    // Wait for playback to finish (~3.2 seconds) plus generous drain for trailing frames
+    QVERIFY(helper.waitForEndOfMedia(15000));
+    QTest::qWait(500);
+    QCoreApplication::processEvents(QEventLoop::AllEvents, 200);
+
+    const int count = frameCount.load(std::memory_order_relaxed);
+
+    // NOTE: In CI the SDL dummy driver decodes faster than real-time, so the
+    // wall-clock duration is shorter than the file length. The authoritative
+    // rate verification is testFrameCountForThreeSecondsStereo in
+    // test_fftprocessor.cpp, which feeds a known sample count directly.
+    // This integration test is a sanity check that the full pipeline emits
+    // "many" frames (catches severe bugs like the old ~11 Hz bug).
+    QVERIFY2(count >= 60, qPrintable(u"Too few FFT frames (%1) full pipeline severely underproducing"_s.arg(count)));
+    QVERIFY2(count <= 220, qPrintable(u"Too many FFT frames (%1) possible burst emission bug"_s.arg(count)));
 
     player.stop();
 }
