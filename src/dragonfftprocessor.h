@@ -74,7 +74,9 @@ private:
     std::array<std::float32_t, NUM_BAR_BINS> m_prevBarFrequencies;
     void transformReal(std::span<const std::float32_t, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output);
 
-    bool tryReadAndDownmix(std::stop_token st, std::chrono::microseconds &outPts);
+    bool drainPipeToHistory(std::stop_token st);
+    void readMostRecent(std::span<std::float32_t, FFT_SIZE> out);
+    bool historyHasEnoughForWindow() const;
 
     [[nodiscard]] float getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, int idx) const;
 
@@ -92,6 +94,12 @@ private:
     std::mutex m_frameMutex;
     DragonFftFrame m_latestFrame;
 
-    DragonFftBlock m_currentBlock;
-    size_t m_currentBlockOffset = 0;
+    static constexpr size_t HISTORY_SIZE = FFT_SIZE * 2;
+
+    std::array<std::float32_t, HISTORY_SIZE> m_sampleHistory{};
+    size_t m_historyWritePos = 0;
+    size_t m_historyTotalSamples = 0;
+    size_t m_lastFrameAtSample = 0;
+
+    std::chrono::microseconds m_newestBlockPts{};
 };

@@ -91,14 +91,17 @@ DragonFftFrame DragonFftProcessor::takeLatestFrame()
 void DragonFftProcessor::processLoop(std::stop_token st)
 {
     int frameCount = 0;
-    auto prevMode = FftMode::Both;
+    auto prevMode = FftMode::Off;
+    bool primed = false;
 
     while (!st.stop_requested()) {
         const FftMode mode = m_fftMode.load(std::memory_order_relaxed);
 
         if (mode == FftMode::Off) {
             prevMode = FftMode::Off;
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            primed = false;
+            drainPipeToHistory(st);
+            m_consumer.waitFor(1, st);
             continue;
         }
 
@@ -107,69 +110,92 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         }
         prevMode = mode;
 
-        std::chrono::microseconds blockPts{};
-        if (!tryReadAndDownmix(st, blockPts)) {
-            if (st.stop_requested())
-                break;
-            continue;
+        const int sr = m_sampleRate.load(std::memory_order_relaxed);
+        const size_t hopSamples = static_cast<size_t>(sr) / 60u;
+
+        bool gotData = drainPipeToHistory(st);
+
+        if (!primed) {
+            if (historyHasEnoughForWindow()) {
+                primed = true;
+                m_lastFrameAtSample = m_historyTotalSamples >= hopSamples ? m_historyTotalSamples - hopSamples : 0;
+            } else {
+                if (!gotData && !st.stop_requested())
+                    m_consumer.waitFor(1, st);
+                continue;
+            }
         }
 
-        applyHannWindow(m_inputWindow);
+        while (m_historyTotalSamples >= m_lastFrameAtSample + hopSamples) {
+            readMostRecent(m_inputWindow);
+            applyHannWindow(std::span<std::float32_t>(m_inputWindow));
 
-        std::array<std::complex<float>, FFT_SIZE / 2> fftOut;
-        transformReal(m_inputWindow, fftOut);
+            std::array<std::complex<float>, FFT_SIZE / 2> fftOut;
+            transformReal(m_inputWindow, fftOut);
 
-        const float binToFreq = static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / static_cast<float>(FFT_SIZE);
-        DragonFftFrame frame;
+            const float binToFreq = static_cast<float>(sr) / static_cast<float>(FFT_SIZE);
+            DragonFftFrame frame;
 
-        if (mode == FftMode::DetailedOnly || mode == FftMode::Both) {
-            fillDetailedBins(frame, fftOut, binToFreq);
+            if (mode == FftMode::DetailedOnly || mode == FftMode::Both)
+                fillDetailedBins(frame, fftOut, binToFreq);
+            if (mode == FftMode::BarsOnly || mode == FftMode::Both)
+                fillBarBins(frame, fftOut, binToFreq);
+
+            frame.timestamp = m_newestBlockPts;
+
+            emitFrame(frame, ++frameCount, mode);
+
+            m_lastFrameAtSample = m_historyTotalSamples;
         }
-        if (mode == FftMode::BarsOnly || mode == FftMode::Both) {
-            fillBarBins(frame, fftOut, binToFreq);
-        }
-        frame.timestamp = blockPts;
 
-        emitFrame(frame, ++frameCount, mode);
+        if (!gotData && !st.stop_requested())
+            m_consumer.waitFor(1, st);
     }
 }
 
-bool DragonFftProcessor::tryReadAndDownmix(std::stop_token st, std::chrono::microseconds &outPts)
+bool DragonFftProcessor::drainPipeToHistory(std::stop_token st)
 {
-    if (m_fftMode.load(std::memory_order_relaxed) == FftMode::Off) {
-        return false;
-    }
-
-    size_t outIdx = 0;
+    (void)st;
+    bool gotAny = false;
     const int ch = m_channelCount;
 
-    while (outIdx < FFT_SIZE && !st.stop_requested()) {
-        if (m_fftMode.load(std::memory_order_relaxed) == FftMode::Off) {
-            return false;
-        }
-        if (m_currentBlockOffset + ch > m_currentBlock.count) {
-            if (!m_consumer.waitFor(1, st)) {
-                return false;
-            }
-            m_consumer.readSomeWith(1, [this](std::span<const DragonFftBlock> b1, std::span<const DragonFftBlock> b2) {
-                m_currentBlock = b1.empty() ? b2[0] : b1[0];
-            });
-            m_currentBlockOffset = 0;
-        }
+    while (auto available = m_consumer.ready()) {
+        m_consumer.readSomeWith(available, [&](std::span<const DragonFftBlock> b1, std::span<const DragonFftBlock> b2) {
+            auto processBlock = [&](const DragonFftBlock &blk) {
+                m_newestBlockPts = blk.pts;
 
-        outPts = m_currentBlock.pts;
+                for (size_t i = 0; i + ch <= blk.count; i += ch) {
+                    std::float32_t sum = 0;
+                    for (int c = 0; c < ch; ++c)
+                        sum += blk.samples[i + c];
+                    sum /= static_cast<std::float32_t>(ch);
 
-        while (m_currentBlockOffset + ch <= m_currentBlock.count && outIdx < FFT_SIZE) {
-            std::float32_t sum = 0;
-            for (int c = 0; c < ch; ++c) {
-                sum += m_currentBlock.samples[m_currentBlockOffset + c];
-            }
-            m_inputWindow[outIdx++] = sum / static_cast<std::float32_t>(ch);
-            m_currentBlockOffset += ch;
-        }
+                    m_sampleHistory[m_historyWritePos] = sum;
+                    m_historyWritePos = (m_historyWritePos + 1) % HISTORY_SIZE;
+                    ++m_historyTotalSamples;
+                }
+            };
+            for (const auto &blk : b1)
+                processBlock(blk);
+            for (const auto &blk : b2)
+                processBlock(blk);
+        });
+        gotAny = true;
     }
+    return gotAny;
+}
 
-    return outIdx == FFT_SIZE;
+void DragonFftProcessor::readMostRecent(std::span<std::float32_t, FFT_SIZE> out)
+{
+    const size_t start = (m_historyWritePos + HISTORY_SIZE - FFT_SIZE) % HISTORY_SIZE;
+
+    for (size_t i = 0; i < FFT_SIZE; ++i)
+        out[i] = m_sampleHistory[(start + i) % HISTORY_SIZE];
+}
+
+bool DragonFftProcessor::historyHasEnoughForWindow() const
+{
+    return m_historyTotalSamples >= FFT_SIZE;
 }
 
 float DragonFftProcessor::getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, const float binToFreq, const int idx) const
