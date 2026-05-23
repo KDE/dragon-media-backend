@@ -136,7 +136,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         }
 
         while (m_historyTotalSamples >= m_lastFrameAtSample + hopSamples) {
-            readMostRecent(m_inputWindow);
+            readWindowEndingAt(m_lastFrameAtSample + hopSamples - 1, m_inputWindow);
             applyHannWindow(std::span<std::float32_t>(m_inputWindow));
 
             std::array<std::complex<float>, FFT_SIZE / 2> fftOut;
@@ -200,6 +200,19 @@ void DragonFftProcessor::readMostRecent(std::span<std::float32_t, FFT_SIZE> out)
 
     for (size_t i = 0; i < FFT_SIZE; ++i)
         out[i] = m_sampleHistory[(start + i) % HISTORY_SIZE];
+}
+
+void DragonFftProcessor::readWindowEndingAt(size_t endPos, std::span<std::float32_t, FFT_SIZE> out)
+{
+    // endPos is the monotonic sample index of the last sample in the window.
+    // The window spans [endPos - FFT_SIZE + 1, endPos].
+    const size_t startPos = endPos + 1 - FFT_SIZE;
+    size_t circularPos = (m_historyWritePos + HISTORY_SIZE + startPos - m_historyTotalSamples) % HISTORY_SIZE;
+
+    for (size_t i = 0; i < FFT_SIZE; ++i) {
+        out[i] = m_sampleHistory[circularPos];
+        circularPos = (circularPos + 1) % HISTORY_SIZE;
+    }
 }
 
 bool DragonFftProcessor::historyHasEnoughForWindow() const

@@ -76,6 +76,7 @@ private:
 
     bool drainPipeToHistory(std::stop_token st);
     void readMostRecent(std::span<std::float32_t, FFT_SIZE> out);
+    void readWindowEndingAt(size_t endPos, std::span<std::float32_t, FFT_SIZE> out);
     bool historyHasEnoughForWindow() const;
 
     [[nodiscard]] float getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, int idx) const;
