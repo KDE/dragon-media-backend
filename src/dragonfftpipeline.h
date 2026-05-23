@@ -17,6 +17,7 @@
 
 template<typename T>
 class DragonPipe;
+struct DragonFftBlock;
 class DragonFftProcessor;
 
 class DragonFftPipeline
@@ -30,7 +31,7 @@ public:
     DragonFftPipeline(DragonFftPipeline &&) = delete;
     DragonFftPipeline &operator=(DragonFftPipeline &&) = delete;
 
-    void ensureInfrastructure(DragonPipe<std::float32_t> *pipe, DragonPlayer::FftMode mode);
+    void ensureInfrastructure(DragonPipe<DragonFftBlock> *pipe, DragonPlayer::FftMode mode);
 
     void teardown();
 
@@ -60,7 +61,7 @@ private:
 
     std::jthread m_fftThread;
 
-    DragonPipe<std::float32_t> *m_fftPipe = nullptr;
+    DragonPipe<DragonFftBlock> *m_fftPipe = nullptr;
 
     DragonPlayer::FftMode m_currentMode = DragonPlayer::FftMode::Off;
     bool m_infrastructureCreated = false;

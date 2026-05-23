@@ -18,6 +18,7 @@
 
 template<typename T>
 class DragonPipe;
+struct DragonFftBlock;
 
 class DRAGONSDL_EXPORT DragonAudioOutput : public QObject
 {
@@ -34,7 +35,7 @@ public:
 
     void setAudioPipe(DragonPipe<std::float32_t> *pipe);
 
-    void setFftPipe(DragonPipe<std::float32_t> *pipe);
+    void setFftPipe(DragonPipe<DragonFftBlock> *pipe);
 
     void start(int sampleRate, int channels, bool startPaused = false);
 
@@ -102,7 +103,7 @@ private:
     std::atomic<AudioSession *> m_session{nullptr};
 
     std::atomic<DragonPipe<std::float32_t> *> m_audioPipe{nullptr};
-    std::atomic<DragonPipe<std::float32_t> *> m_fftPipe{nullptr};
+    std::atomic<DragonPipe<DragonFftBlock> *> m_fftPipe{nullptr};
 
     std::atomic<int64_t> m_totalSamplesWritten{0};
     std::atomic<int64_t> m_positionOffsetMs{0};

@@ -10,6 +10,7 @@
 #include "dragonfftpipeline.h"
 #include <dragonsdl/dragonplayer.h>
 
+#include "dragonfftblock.h"
 #include "dragonpipe.h"
 
 #include <QObject>
@@ -64,7 +65,7 @@ private:
     DragonFftPipeline fftPipeline;
 
     DragonPipe<std::float32_t> audioPipe;
-    DragonPipe<std::float32_t> fftPipe;
+    DragonPipe<DragonFftBlock> fftPipe{256};
 
     std::unique_ptr<DragonAudioOutput> audioOutput;
 

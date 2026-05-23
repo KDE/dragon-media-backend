@@ -19,6 +19,7 @@
 #include <span>
 #include <stop_token>
 
+#include "dragonfftblock.h"
 #include "dragonpipe.h"
 
 template<typename T>
@@ -43,7 +44,7 @@ public:
     DragonFftProcessor(DragonFftProcessor &&) = delete;
     DragonFftProcessor &operator=(DragonFftProcessor &&) = delete;
 
-    void setConsumer(DragonPipe<std::float32_t>::Consumer consumer);
+    void setConsumer(DragonPipe<DragonFftBlock>::Consumer consumer);
 
     void setChannelCount(int channels);
 
@@ -63,7 +64,7 @@ public:
     static void applyHannWindow(std::span<std::float32_t> data);
 
 private:
-    DragonPipe<std::float32_t>::Consumer m_consumer;
+    DragonPipe<DragonFftBlock>::Consumer m_consumer;
     int m_channelCount = 2;
     std::atomic<int> m_sampleRate{44100};
     std::atomic<FftMode> m_fftMode{FftMode::Off};
@@ -73,7 +74,7 @@ private:
     std::array<std::float32_t, NUM_BAR_BINS> m_prevBarFrequencies;
     void transformReal(std::span<const std::float32_t, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output);
 
-    bool tryReadAndDownmix(std::stop_token st);
+    bool tryReadAndDownmix(std::stop_token st, std::chrono::microseconds &outPts);
 
     [[nodiscard]] float getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, int idx) const;
 
@@ -90,4 +91,7 @@ private:
 
     std::mutex m_frameMutex;
     DragonFftFrame m_latestFrame;
+
+    DragonFftBlock m_currentBlock;
+    size_t m_currentBlockOffset = 0;
 };

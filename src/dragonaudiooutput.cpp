@@ -10,8 +10,8 @@
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 
+#include "dragonfftblock.h"
 #include "dragonpipe.h"
-
 #include "dragonsdl_audio_logging.h"
 #include <QGuiApplication>
 #include <QIcon>
@@ -52,7 +52,7 @@ void DragonAudioOutput::setAudioPipe(DragonPipe<std::float32_t> *pipe)
     m_audioPipe.store(pipe, std::memory_order_release);
 }
 
-void DragonAudioOutput::setFftPipe(DragonPipe<std::float32_t> *pipe)
+void DragonAudioOutput::setFftPipe(DragonPipe<DragonFftBlock> *pipe)
 {
     m_fftPipe.store(pipe, std::memory_order_release);
 }
@@ -423,15 +423,36 @@ void SDLCALL DragonAudioOutput::audioStreamCallback(void *userdata, SDL_AudioStr
 
         auto *fftPipe = self->m_fftPipe.load(std::memory_order_acquire);
         if (fftPipe && totalFloatsRead > 0) {
-            fftPipe->producer().writeSomeWith(totalFloatsRead, [&](std::span<std::float32_t> fb1, std::span<std::float32_t> fb2) {
+            int queuedBytes = SDL_GetAudioStreamQueued(stream);
+            int softwareFrames = queuedBytes / (channels * sizeof(float));
+            SDL_AudioSpec spec;
+            int hardwareFrames = 0;
+            SDL_GetAudioDeviceFormat(session->deviceId, &spec, &hardwareFrames);
+            int totalLatencyFrames = softwareFrames + hardwareFrames;
+            float latencySeconds = static_cast<float>(totalLatencyFrames) / static_cast<float>(session->sampleRate);
+
+            auto now = std::chrono::steady_clock::now().time_since_epoch();
+            auto pts =
+                std::chrono::duration_cast<std::chrono::microseconds>(now) + std::chrono::microseconds(static_cast<int64_t>(latencySeconds * 1000000.0f));
+
+            size_t blocksNeeded = (totalFloatsRead + DragonFftBlock::MAX_SAMPLES - 1) / DragonFftBlock::MAX_SAMPLES;
+
+            fftPipe->producer().writeSomeWith(blocksNeeded, [&](std::span<DragonFftBlock> fb1, std::span<DragonFftBlock> fb2) {
                 size_t srcOffset = 0;
-                auto fillDst = [&](std::span<std::float32_t> dst) {
-                    for (size_t i = 0; i < dst.size() && srcOffset < totalFloatsRead; ++i, ++srcOffset) {
-                        dst[i] = (srcOffset < b1.size()) ? b1[srcOffset] : b2[srcOffset - b1.size()];
+                auto fillBlock = [&](std::span<DragonFftBlock> dst) {
+                    for (size_t i = 0; i < dst.size() && srcOffset < totalFloatsRead; ++i) {
+                        size_t remaining = totalFloatsRead - srcOffset;
+                        size_t toCopy = std::min(remaining, DragonFftBlock::MAX_SAMPLES);
+                        dst[i].count = toCopy;
+                        dst[i].pts = pts;
+
+                        for (size_t j = 0; j < toCopy; ++j, ++srcOffset) {
+                            dst[i].samples[j] = (srcOffset < b1.size()) ? b1[srcOffset] : b2[srcOffset - b1.size()];
+                        }
                     }
                 };
-                fillDst(fb1);
-                fillDst(fb2);
+                fillBlock(fb1);
+                fillBlock(fb2);
             });
         }
     });

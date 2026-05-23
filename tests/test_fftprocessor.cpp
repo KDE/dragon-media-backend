@@ -101,7 +101,7 @@ void TestFftProcessor::testConstruction()
 
 void TestFftProcessor::testSetQueue()
 {
-    DragonPipe<std::float32_t> pipe(65536);
+    DragonPipe<DragonFftBlock> pipe(256);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -159,9 +159,9 @@ void TestFftProcessor::testProcessLoopSineWave()
     constexpr float freq = 440.0f;
     auto sineWave = createSineWave(freq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
+    DragonPipe<DragonFftBlock> pipe(256);
 
-    [[maybe_unused]] const auto written1 = writeAll(pipe.producer(), sineWave);
+    [[maybe_unused]] const auto written1 = writeBlocks(pipe.producer(), sineWave);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -204,8 +204,8 @@ void TestFftProcessor::testProcessLoopSilence()
     constexpr int sampleRate = 44100;
     auto silence = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
-    [[maybe_unused]] const auto written = writeAll(pipe.producer(), silence);
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), silence);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -240,10 +240,10 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     constexpr int sampleRate = 44100;
     auto sine1kHz = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
+    DragonPipe<DragonFftBlock> pipe(256);
 
     for (int frame = 0; frame < 3; ++frame) {
-        [[maybe_unused]] const auto written = writeAll(pipe.producer(), sine1kHz);
+        [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), sine1kHz);
     }
 
     DragonFftProcessor processor;
@@ -286,8 +286,8 @@ void TestFftProcessor::testFrameCallbackInvoked()
     constexpr int sampleRate = 44100;
     auto noise = createSineWave(2000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
-    [[maybe_unused]] const auto written = writeAll(pipe.producer(), noise);
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), noise);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -318,8 +318,8 @@ void TestFftProcessor::testPeakHoldDecay()
     constexpr int sampleRate = 44100;
     auto silence = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
-    [[maybe_unused]] const auto written = writeAll(pipe.producer(), silence);
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), silence);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -363,8 +363,8 @@ void TestFftProcessor::testBarDataSizeValidation()
     constexpr float freq = 1000.0f;
     auto sineWave = createSineWave(freq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
-    [[maybe_unused]] const auto written2 = writeAll(pipe.producer(), sineWave);
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written2 = writeBlocks(pipe.producer(), sineWave);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -410,8 +410,8 @@ void TestFftProcessor::testFrequencyDetectionAccuracy()
 
     auto sineWave = createSineWave(frequency, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
-    [[maybe_unused]] const auto written3 = writeAll(pipe.producer(), sineWave);
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written3 = writeBlocks(pipe.producer(), sineWave);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -453,8 +453,8 @@ void TestFftProcessor::testFrameTimestamp()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
-    [[maybe_unused]] const auto written1 = writeAll(pipe.producer(), sineWave);
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written1 = writeBlocks(pipe.producer(), sineWave);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -485,7 +485,7 @@ void TestFftProcessor::testFrameTimestamp()
 
 void TestFftProcessor::testSampleRateChange()
 {
-    DragonPipe<std::float32_t> pipe(65536);
+    DragonPipe<DragonFftBlock> pipe(256);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -495,7 +495,7 @@ void TestFftProcessor::testSampleRateChange()
     processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     auto sine44k = createSineWave(1000.0f, 44100, static_cast<int>(DragonFftProcessor::FFT_SIZE));
-    [[maybe_unused]] const auto written = writeAll(pipe.producer(), sine44k);
+    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), sine44k);
 
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
@@ -519,9 +519,9 @@ void TestFftProcessor::testFftModeOff()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
+    DragonPipe<DragonFftBlock> pipe(256);
 
-    [[maybe_unused]] const auto written2 = writeAll(pipe.producer(), sineWave);
+    [[maybe_unused]] const auto written2 = writeBlocks(pipe.producer(), sineWave);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -552,8 +552,8 @@ void TestFftProcessor::testFftModeBarsOnly()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
-    [[maybe_unused]] const auto written3 = writeAll(pipe.producer(), sineWave);
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written3 = writeBlocks(pipe.producer(), sineWave);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -589,8 +589,8 @@ void TestFftProcessor::testFftModeDetailedOnly()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
-    [[maybe_unused]] const auto written4 = writeAll(pipe.producer(), sineWave);
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written4 = writeBlocks(pipe.producer(), sineWave);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -626,7 +626,7 @@ void TestFftProcessor::testFftModeSwitch()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<std::float32_t> pipe(65536);
+    DragonPipe<DragonFftBlock> pipe(256);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -644,7 +644,7 @@ void TestFftProcessor::testFftModeSwitch()
         processor.processLoop(stopSource.get_token());
     });
 
-    [[maybe_unused]] const auto written5 = writeAll(pipe.producer(), sineWave);
+    [[maybe_unused]] const auto written5 = writeBlocks(pipe.producer(), sineWave);
 
     QTest::qWait(100);
     int framesPhase1 = frameCount.load();
@@ -653,7 +653,7 @@ void TestFftProcessor::testFftModeSwitch()
     processor.setFftMode(DragonFftProcessor::FftMode::Off);
     int framesPhase2Start = frameCount.load();
 
-    [[maybe_unused]] const auto written6 = writeAll(pipe.producer(), sineWave);
+    [[maybe_unused]] const auto written6 = writeBlocks(pipe.producer(), sineWave);
 
     QTest::qWait(300);
     int framesPhase2End = frameCount.load();
@@ -661,7 +661,7 @@ void TestFftProcessor::testFftModeSwitch()
              qPrintable(QString("Off mode should not produce new frames: started at %1, ended at %2"_L1).arg(framesPhase2Start).arg(framesPhase2End)));
 
     processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
-    [[maybe_unused]] const auto written7 = writeAll(pipe.producer(), sineWave);
+    [[maybe_unused]] const auto written7 = writeBlocks(pipe.producer(), sineWave);
 
     QTest::qWait(200);
     int framesPhase3 = frameCount.load();

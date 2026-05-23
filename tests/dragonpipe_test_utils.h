@@ -17,3 +17,24 @@ inline size_t writeAll(DragonPipe<std::float32_t>::Producer producer, std::span<
         std::ranges::copy_n(in_iter, b2.size(), b2.begin());
     });
 }
+
+#include "dragonfftblock.h"
+inline size_t writeBlocks(DragonPipe<DragonFftBlock>::Producer producer, std::span<const std::float32_t> data)
+{
+    size_t blocksNeeded = (data.size() + DragonFftBlock::MAX_SAMPLES - 1) / DragonFftBlock::MAX_SAMPLES;
+    return producer.writeSomeWith(blocksNeeded, [&](std::span<DragonFftBlock> b1, std::span<DragonFftBlock> b2) {
+        size_t srcOffset = 0;
+        auto fillDst = [&](std::span<DragonFftBlock> dst) {
+            for (size_t i = 0; i < dst.size() && srcOffset < data.size(); ++i) {
+                size_t toCopy = std::min(data.size() - srcOffset, DragonFftBlock::MAX_SAMPLES);
+                dst[i].count = toCopy;
+                dst[i].pts = std::chrono::microseconds(1000);
+                for (size_t j = 0; j < toCopy; ++j, ++srcOffset) {
+                    dst[i].samples[j] = data[srcOffset];
+                }
+            }
+        };
+        fillDst(b1);
+        fillDst(b2);
+    });
+}

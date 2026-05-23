@@ -45,9 +45,9 @@ DragonFftProcessor::DragonFftProcessor()
 
 DragonFftProcessor::~DragonFftProcessor() = default;
 
-void DragonFftProcessor::setConsumer(DragonPipe<std::float32_t>::Consumer consumer)
+void DragonFftProcessor::setConsumer(DragonPipe<DragonFftBlock>::Consumer consumer)
 {
-    m_consumer = consumer;
+    m_consumer = std::move(consumer);
 }
 
 void DragonFftProcessor::setChannelCount(int channels)
@@ -107,7 +107,8 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         }
         prevMode = mode;
 
-        if (!tryReadAndDownmix(st)) {
+        std::chrono::microseconds blockPts{};
+        if (!tryReadAndDownmix(st, blockPts)) {
             if (st.stop_requested())
                 break;
             continue;
@@ -127,43 +128,48 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         if (mode == FftMode::BarsOnly || mode == FftMode::Both) {
             fillBarBins(frame, fftOut, binToFreq);
         }
-        frame.timestamp = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch());
+        frame.timestamp = blockPts;
 
         emitFrame(frame, ++frameCount, mode);
     }
 }
 
-bool DragonFftProcessor::tryReadAndDownmix(std::stop_token st)
+bool DragonFftProcessor::tryReadAndDownmix(std::stop_token st, std::chrono::microseconds &outPts)
 {
-    const size_t samplesNeeded = FFT_SIZE * static_cast<size_t>(m_channelCount);
-
-    if (!m_consumer.waitFor(samplesNeeded, st)) {
-        return false;
-    }
-
     if (m_fftMode.load(std::memory_order_relaxed) == FftMode::Off) {
         return false;
     }
 
-    m_consumer.readSomeWith(samplesNeeded, [this](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
-        size_t outIdx = 0;
-        const int ch = m_channelCount;
+    size_t outIdx = 0;
+    const int ch = m_channelCount;
 
-        auto downmixBlock = [&](std::span<const std::float32_t> block) {
-            for (size_t i = 0; i + static_cast<size_t>(ch) <= block.size() && outIdx < FFT_SIZE; i += static_cast<size_t>(ch), ++outIdx) {
-                std::float32_t sum = 0;
-                for (int c = 0; c < ch; ++c) {
-                    sum += block[i + static_cast<size_t>(c)];
-                }
-                m_inputWindow[outIdx] = sum / static_cast<std::float32_t>(ch);
+    while (outIdx < FFT_SIZE && !st.stop_requested()) {
+        if (m_fftMode.load(std::memory_order_relaxed) == FftMode::Off) {
+            return false;
+        }
+        if (m_currentBlockOffset + ch > m_currentBlock.count) {
+            if (!m_consumer.waitFor(1, st)) {
+                return false;
             }
-        };
+            m_consumer.readSomeWith(1, [this](std::span<const DragonFftBlock> b1, std::span<const DragonFftBlock> b2) {
+                m_currentBlock = b1.empty() ? b2[0] : b1[0];
+            });
+            m_currentBlockOffset = 0;
+        }
 
-        downmixBlock(b1);
-        downmixBlock(b2);
-    });
+        outPts = m_currentBlock.pts;
 
-    return true;
+        while (m_currentBlockOffset + ch <= m_currentBlock.count && outIdx < FFT_SIZE) {
+            std::float32_t sum = 0;
+            for (int c = 0; c < ch; ++c) {
+                sum += m_currentBlock.samples[m_currentBlockOffset + c];
+            }
+            m_inputWindow[outIdx++] = sum / static_cast<std::float32_t>(ch);
+            m_currentBlockOffset += ch;
+        }
+    }
+
+    return outIdx == FFT_SIZE;
 }
 
 float DragonFftProcessor::getMagnitude(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, const float binToFreq, const int idx) const

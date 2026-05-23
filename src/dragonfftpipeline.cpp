@@ -95,7 +95,7 @@ void DragonFftPipeline::restartThread()
     startThread();
 }
 
-void DragonFftPipeline::ensureInfrastructure(DragonPipe<std::float32_t> *pipe, DragonPlayer::FftMode mode)
+void DragonFftPipeline::ensureInfrastructure(DragonPipe<DragonFftBlock> *pipe, DragonPlayer::FftMode mode)
 {
     m_fftPipe = pipe;
     m_currentMode = mode;

@@ -88,3 +88,5 @@ size_t DragonPipe<T>::Consumer::ready() const
 }
 
 template class DRAGONSDL_EXPORT DragonPipe<std::float32_t>;
+#include "dragonfftblock.h"
+template class DRAGONSDL_EXPORT DragonPipe<DragonFftBlock>;
