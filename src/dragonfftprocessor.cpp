@@ -68,6 +68,15 @@ void DragonFftProcessor::setFftMode(FftMode mode)
 void DragonFftProcessor::reset()
 {
     m_prevBarFrequencies.fill(-80.0f);
+    m_historyWritePos = 0;
+    m_historyTotalSamples = 0;
+    m_lastFrameAtSample = 0;
+    m_newestBlockPts = {};
+    m_sampleHistory.fill(0.0f);
+    {
+        std::scoped_lock lock(m_frameMutex);
+        m_latestFrame = {};
+    }
 }
 
 void DragonFftProcessor::transformReal(std::span<const std::float32_t, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output)
@@ -145,7 +154,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 
             emitFrame(frame, ++frameCount, mode);
 
-            m_lastFrameAtSample = m_historyTotalSamples;
+            m_lastFrameAtSample += hopSamples;
         }
 
         if (!gotData && !st.stop_requested())
