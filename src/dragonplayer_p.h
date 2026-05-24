@@ -62,10 +62,10 @@ private:
     void stopPipeline();
 
     DragonDecodePipeline decodePipeline;
-    DragonFftPipeline fftPipeline;
 
     DragonPipe<std::float32_t> audioPipe;
     DragonPipe<DragonFftBlock> fftPipe{256};
+    DragonFftPipeline fftPipeline{&fftPipe};
 
     std::unique_ptr<DragonAudioOutput> audioOutput;
 

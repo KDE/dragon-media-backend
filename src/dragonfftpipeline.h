@@ -23,7 +23,7 @@ class DragonFftProcessor;
 class DragonFftPipeline
 {
 public:
-    explicit DragonFftPipeline();
+    explicit DragonFftPipeline(DragonPipe<DragonFftBlock> *pipe);
     ~DragonFftPipeline();
 
     DragonFftPipeline(const DragonFftPipeline &) = delete;
@@ -31,38 +31,33 @@ public:
     DragonFftPipeline(DragonFftPipeline &&) = delete;
     DragonFftPipeline &operator=(DragonFftPipeline &&) = delete;
 
-    void ensureInfrastructure(DragonPipe<DragonFftBlock> *pipe, DragonPlayer::FftMode mode);
-
-    void teardown();
-
     void setSampleRate(int sampleRate);
     void setChannelCount(int channels);
     void setMode(DragonPlayer::FftMode mode);
     void setFftRate(int rate);
     [[nodiscard]] DragonPlayer::FftMode mode() const;
 
-    void start();
     void stop();
-    [[nodiscard]] bool isRunning() const;
 
-    void restartThread();
+    void restart();
 
     using FrameCallback = std::function<void(DragonFftFrame)>;
     void setFrameCallback(FrameCallback cb);
-    [[nodiscard]] bool hasInfrastructure() const;
 
 private:
     static constexpr size_t kBufferCapacity = 65536;
 
     void ensureInfrastructure();
+    void teardown();
     void startThread();
     void stopThread();
+    void restartThread();
 
     std::unique_ptr<DragonFftProcessor> m_fftProcessor;
 
     std::jthread m_fftThread;
 
-    DragonPipe<DragonFftBlock> *m_fftPipe = nullptr;
+    DragonPipe<DragonFftBlock> *const m_fftPipe;
 
     DragonPlayer::FftMode m_currentMode = DragonPlayer::FftMode::Off;
     int m_fftRate = 60;

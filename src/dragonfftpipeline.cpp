@@ -16,7 +16,10 @@
 #include <stop_token>
 #include <thread>
 
-DragonFftPipeline::DragonFftPipeline() = default;
+DragonFftPipeline::DragonFftPipeline(DragonPipe<DragonFftBlock> *pipe)
+    : m_fftPipe(pipe)
+{
+}
 
 DragonFftPipeline::~DragonFftPipeline() = default;
 
@@ -50,7 +53,6 @@ void DragonFftPipeline::teardown()
     stopThread();
     m_fftProcessor.reset();
     m_infrastructureCreated = false;
-    m_fftPipe = nullptr;
 
     qCDebug(dragonsdlFft) << "FFT infrastructure torn down";
 }
@@ -94,18 +96,6 @@ void DragonFftPipeline::restartThread()
         m_fftProcessor->setFftMode(m_currentMode);
     }
     startThread();
-}
-
-void DragonFftPipeline::ensureInfrastructure(DragonPipe<DragonFftBlock> *pipe, DragonPlayer::FftMode mode)
-{
-    m_fftPipe = pipe;
-    m_currentMode = mode;
-
-    if (!m_infrastructureCreated) {
-        ensureInfrastructure();
-    } else if (m_fftProcessor) {
-        m_fftProcessor->setFftMode(mode);
-    }
 }
 
 void DragonFftPipeline::setSampleRate(int sampleRate)
@@ -164,19 +154,19 @@ DragonPlayer::FftMode DragonFftPipeline::mode() const
     return m_currentMode;
 }
 
-void DragonFftPipeline::start()
-{
-    startThread();
-}
-
 void DragonFftPipeline::stop()
 {
     stopThread();
 }
 
-bool DragonFftPipeline::isRunning() const
+void DragonFftPipeline::restart()
 {
-    return m_fftThread.joinable();
+    if (m_currentMode == DragonPlayer::FftMode::Off) {
+        teardown();
+        return;
+    }
+    ensureInfrastructure();
+    restartThread();
 }
 
 void DragonFftPipeline::setFrameCallback(FrameCallback cb)
@@ -190,9 +180,4 @@ void DragonFftPipeline::setFrameCallback(FrameCallback cb)
             }
         });
     }
-}
-
-bool DragonFftPipeline::hasInfrastructure() const
-{
-    return m_infrastructureCreated;
 }

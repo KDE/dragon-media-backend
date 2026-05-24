@@ -426,19 +426,8 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
 
     d->decodePipeline.stopSession();
 
-    if (d->currentFftMode == FftMode::Off) {
-        d->fftPipeline.stop();
-        d->fftPipeline.teardown();
-        if (d->audioOutput) {
-            d->audioOutput->setFftPipe(nullptr);
-        }
-    } else {
-        d->fftPipeline.ensureInfrastructure(&d->fftPipe, d->currentFftMode);
-        if (d->audioOutput) {
-            d->audioOutput->setFftPipe(&d->fftPipe);
-        }
-        d->fftPipeline.restartThread();
-    }
+    d->audioOutput->setFftPipe(d->currentFftMode != FftMode::Off ? &d->fftPipe : nullptr);
+    d->fftPipeline.restart();
 
     d->currentSource = source;
     d->currentPosition = 0;
@@ -595,28 +584,9 @@ void DragonPlayer::setFftMode(FftMode mode)
         return;
     }
 
-    const bool wasOn = (d->currentFftMode != DragonPlayer::FftMode::Off);
-    const bool nowOn = (mode != DragonPlayer::FftMode::Off);
     d->currentFftMode = mode;
-
-    if (!wasOn && nowOn) {
-        d->fftPipeline.ensureInfrastructure(&d->fftPipe, mode);
-        if (d->audioOutput) {
-            d->audioOutput->setFftPipe(&d->fftPipe);
-        }
-        if (d->fftPipeline.isRunning()) {
-            d->fftPipeline.restartThread();
-        } else {
-            d->fftPipeline.start();
-        }
-    } else if (wasOn && !nowOn) {
-        if (d->audioOutput) {
-            d->audioOutput->setFftPipe(nullptr);
-        }
-        d->fftPipeline.setMode(mode);
-    } else if (nowOn && d->fftPipeline.hasInfrastructure()) {
-        d->fftPipeline.setMode(mode);
-    }
+    d->audioOutput->setFftPipe(mode != FftMode::Off ? &d->fftPipe : nullptr);
+    d->fftPipeline.setMode(mode);
 
     Q_EMIT fftModeChanged(mode);
 }
