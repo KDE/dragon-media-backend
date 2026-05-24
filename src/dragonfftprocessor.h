@@ -77,7 +77,6 @@ private:
     void transformReal(std::span<const std::float32_t, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output);
 
     bool drainPipeToHistory(std::stop_token st);
-    void readMostRecent(std::span<std::float32_t, FFT_SIZE> out);
     void readWindowEndingAt(size_t endPos, std::span<std::float32_t, FFT_SIZE> out);
     bool historyHasEnoughForWindow() const;
 

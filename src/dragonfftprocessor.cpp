@@ -146,7 +146,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             }
         }
 
-        while (m_historyTotalSamples >= m_lastFrameAtSample + step) {
+        while (m_historyTotalSamples >= (m_lastFrameAtSample + step)) {
             readWindowEndingAt(m_lastFrameAtSample + step - 1, m_inputWindow);
             applyHannWindow(std::span<std::float32_t>(m_inputWindow));
 
@@ -168,8 +168,9 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             m_lastFrameAtSample += step;
         }
 
-        if (!gotData && !st.stop_requested())
+        if (!gotData && !st.stop_requested()) {
             m_consumer.waitFor(1, st);
+        }
     }
 }
 
@@ -191,7 +192,7 @@ bool DragonFftProcessor::drainPipeToHistory(std::stop_token st)
                     sum /= static_cast<std::float32_t>(ch);
 
                     m_sampleHistory[m_historyWritePos] = sum;
-                    m_historyWritePos = (m_historyWritePos + 1) % HISTORY_SIZE;
+                    m_historyWritePos = (m_historyWritePos + 1) % m_sampleHistory.size();
                     ++m_historyTotalSamples;
                 }
             };
@@ -205,24 +206,16 @@ bool DragonFftProcessor::drainPipeToHistory(std::stop_token st)
     return gotAny;
 }
 
-void DragonFftProcessor::readMostRecent(std::span<std::float32_t, FFT_SIZE> out)
-{
-    const size_t start = (m_historyWritePos + HISTORY_SIZE - FFT_SIZE) % HISTORY_SIZE;
-
-    for (size_t i = 0; i < FFT_SIZE; ++i)
-        out[i] = m_sampleHistory[(start + i) % HISTORY_SIZE];
-}
-
-void DragonFftProcessor::readWindowEndingAt(size_t endPos, std::span<std::float32_t, FFT_SIZE> out)
+void DragonFftProcessor::readWindowEndingAt(const size_t endPos, std::span<std::float32_t, FFT_SIZE> out)
 {
     // endPos is the monotonic sample index of the last sample in the window.
     // The window spans [endPos - FFT_SIZE + 1, endPos].
     const size_t startPos = endPos + 1 - FFT_SIZE;
-    size_t circularPos = (m_historyWritePos + HISTORY_SIZE + startPos - m_historyTotalSamples) % HISTORY_SIZE;
+    size_t circularPos = (m_historyWritePos + m_sampleHistory.size() + startPos - m_historyTotalSamples) % m_sampleHistory.size();
 
-    for (size_t i = 0; i < FFT_SIZE; ++i) {
-        out[i] = m_sampleHistory[circularPos];
-        circularPos = (circularPos + 1) % HISTORY_SIZE;
+    for (auto &element : out) {
+        element = m_sampleHistory[circularPos];
+        circularPos = (circularPos + 1) % m_sampleHistory.size();
     }
 }
 
