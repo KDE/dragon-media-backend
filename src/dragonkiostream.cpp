@@ -11,8 +11,6 @@
 #include <KIO/TransferJob>
 #include <QUrl>
 
-#include <cstring>
-
 DragonKioStream::DragonKioStream(QObject *parent)
     : DragonStream(parent)
     , m_bufferProgress(new DragonBufferProgress(this))
@@ -86,14 +84,14 @@ int DragonKioStream::read(std::span<uint8_t> buf, std::stop_token st)
     }
 
     int bytesRead = 0;
-    int toRead = static_cast<int>(buf.size());
 
-    while (bytesRead < toRead && !m_networkBuffer.empty()) {
+    while (bytesRead < static_cast<int>(buf.size()) && !m_networkBuffer.empty()) {
         const QByteArray &front = m_networkBuffer.front();
-        int available = front.size() - m_bufferOffset;
-        int take = std::min(toRead - bytesRead, available);
+        auto src = std::span(reinterpret_cast<const uint8_t *>(front.constData()), front.size()).subspan(m_bufferOffset);
+        auto dst = buf.subspan(bytesRead);
+        const int take = static_cast<int>(std::min(src.size(), dst.size()));
 
-        std::memcpy(buf.data() + bytesRead, front.constData() + m_bufferOffset, take);
+        std::ranges::copy(src.first(take), dst.begin());
         bytesRead += take;
         m_bufferOffset += take;
 
