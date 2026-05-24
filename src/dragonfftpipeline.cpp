@@ -28,6 +28,7 @@ void DragonFftPipeline::ensureInfrastructure()
 
     m_fftProcessor = std::make_unique<DragonFftProcessor>();
     m_fftProcessor->setFftMode(m_currentMode);
+    m_fftProcessor->setFftRate(m_fftRate);
 
     if (m_fftPipe) {
         m_fftProcessor->setConsumer(m_fftPipe->consumer());
@@ -147,6 +148,14 @@ void DragonFftPipeline::setMode(DragonPlayer::FftMode mode)
         m_fftProcessor->setFftMode(mode);
 
         qCDebug(dragonsdlFft) << "FFT mode change: " << mode;
+    }
+}
+
+void DragonFftPipeline::setFftRate(int rate)
+{
+    m_fftRate = rate;
+    if (m_fftProcessor) {
+        m_fftProcessor->setFftRate(rate);
     }
 }
 

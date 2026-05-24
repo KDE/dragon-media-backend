@@ -80,6 +80,7 @@ public:
     Q_PROPERTY(int64_t position READ position WRITE setPosition NOTIFY positionChanged)
     Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged)
     Q_PROPERTY(FftMode fftMode READ fftMode WRITE setFftMode NOTIFY fftModeChanged)
+    Q_PROPERTY(int fftRate READ fftRate WRITE setFftRate NOTIFY fftRateChanged)
     Q_PROPERTY(double bufferProgress READ bufferProgress NOTIFY bufferProgressChanged)
     Q_PROPERTY(int32_t prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
 
@@ -97,6 +98,7 @@ public:
     [[nodiscard]] bool isAudioActive() const;
 
     [[nodiscard]] FftMode fftMode() const;
+    [[nodiscard]] int fftRate() const;
     [[nodiscard]] double bufferProgress() const;
     [[nodiscard]] int32_t prefinishMark() const;
 
@@ -113,6 +115,7 @@ Q_SIGNALS:
     void positionChanged(int64_t positionMs);
     void seekableChanged(bool seekable);
     void fftModeChanged(FftMode mode);
+    void fftRateChanged(int rate);
     void bufferProgressChanged(double progress);
     void prefinishMarkChanged(int32_t msec);
 
@@ -136,6 +139,7 @@ public Q_SLOTS:
     void setNextSource(const QUrl &nextSource);
     void setPosition(int64_t positionMs);
     void setFftMode(FftMode mode);
+    void setFftRate(int rate);
     void setPrefinishMark(int32_t msec);
     void play();
     void pause();

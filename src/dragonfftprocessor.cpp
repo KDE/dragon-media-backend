@@ -65,6 +65,11 @@ void DragonFftProcessor::setFftMode(FftMode mode)
     m_fftMode.store(mode, std::memory_order_relaxed);
 }
 
+void DragonFftProcessor::setFftRate(int rate)
+{
+    m_fftRate.store(rate, std::memory_order_relaxed);
+}
+
 void DragonFftProcessor::reset()
 {
     m_prevBarFrequencies.fill(-80.0f);
@@ -120,14 +125,20 @@ void DragonFftProcessor::processLoop(std::stop_token st)
         prevMode = mode;
 
         const int sr = m_sampleRate.load(std::memory_order_relaxed);
-        const size_t hopSamples = static_cast<size_t>(sr) / 60u;
+        const int actualRate = std::max(1, m_fftRate.load(std::memory_order_relaxed));
+        const size_t hopSamples = static_cast<size_t>(sr) / static_cast<size_t>(actualRate);
+        const bool blockMode = hopSamples >= FFT_SIZE;
+        const size_t step = blockMode ? FFT_SIZE : hopSamples;
+        const size_t prime = blockMode ? 0 : FFT_SIZE - hopSamples;
+        const float effectiveRate = static_cast<float>(sr) / static_cast<float>(step);
+        const float decayRate = 1.5f * (60.0f / effectiveRate);
 
         bool gotData = drainPipeToHistory(st);
 
         if (!primed) {
             if (historyHasEnoughForWindow()) {
                 primed = true;
-                m_lastFrameAtSample = FFT_SIZE >= hopSamples ? FFT_SIZE - hopSamples : 0;
+                m_lastFrameAtSample = prime;
             } else {
                 if (!gotData && !st.stop_requested())
                     m_consumer.waitFor(1, st);
@@ -135,8 +146,8 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             }
         }
 
-        while (m_historyTotalSamples >= m_lastFrameAtSample + hopSamples) {
-            readWindowEndingAt(m_lastFrameAtSample + hopSamples - 1, m_inputWindow);
+        while (m_historyTotalSamples >= m_lastFrameAtSample + step) {
+            readWindowEndingAt(m_lastFrameAtSample + step - 1, m_inputWindow);
             applyHannWindow(std::span<std::float32_t>(m_inputWindow));
 
             std::array<std::complex<float>, FFT_SIZE / 2> fftOut;
@@ -148,13 +159,13 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             if (mode == FftMode::DetailedOnly || mode == FftMode::Both)
                 fillDetailedBins(frame, fftOut, binToFreq);
             if (mode == FftMode::BarsOnly || mode == FftMode::Both)
-                fillBarBins(frame, fftOut, binToFreq);
+                fillBarBins(frame, fftOut, binToFreq, decayRate);
 
             frame.timestamp = m_newestBlockPts;
 
             emitFrame(frame, ++frameCount, mode);
 
-            m_lastFrameAtSample += hopSamples;
+            m_lastFrameAtSample += step;
         }
 
         if (!gotData && !st.stop_requested())
@@ -284,7 +295,7 @@ void DragonFftProcessor::fillDetailedBins(DragonFftFrame &frame, std::span<const
     frame.frequenciesDb.assign_range(logBins);
 }
 
-void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq)
+void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float decayRate)
 {
     const float melMin = hzToMel(MIN_FREQ);
     const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
@@ -296,7 +307,6 @@ void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std:
         bin = computeMelBin(fftOut, binToFreq, melMin, melMax, t0, t1);
     }
 
-    constexpr float decayRate = 1.5f;
     for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, barBins)) {
         prev = std::max(curr, prev - decayRate);
         curr = prev;

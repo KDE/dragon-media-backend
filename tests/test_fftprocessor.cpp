@@ -55,6 +55,7 @@ private Q_SLOTS:
     void testFftModeDetailedOnly();
     void testFftModeSwitch();
     void testFrameCountForThreeSecondsStereo();
+    void testConfigurableRate();
 
 private:
     std::vector<std::float32_t> createSineWave(float frequency, int sampleRate, int numSamples);
@@ -723,6 +724,47 @@ void TestFftProcessor::testFrameCountForThreeSecondsStereo()
     // 10 % tolerance covers any edge-case rounding in block boundaries.
     QVERIFY2(count >= 158, qPrintable(u"Too few frames (%1) for 3-second stereo burst expected ~175"_s.arg(count)));
     QVERIFY2(count <= 192, qPrintable(u"Too many frames (%1) possible burst-emission bug"_s.arg(count)));
+}
+
+void TestFftProcessor::testConfigurableRate()
+{
+    constexpr int sampleRate = 44100;
+    constexpr int channels = 2;
+    constexpr float durationSeconds = 3.0f;
+    constexpr int totalFloats = static_cast<int>(sampleRate * durationSeconds * channels);
+
+    auto audio = createSineWave(1000.0f, sampleRate, totalFloats);
+
+    DragonPipe<DragonFftBlock> pipe(512);
+
+    DragonFftProcessor processor;
+    processor.setConsumer(pipe.consumer());
+    processor.setChannelCount(channels);
+    processor.setSampleRate(sampleRate);
+    processor.setFftRate(30);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
+
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), audio);
+
+    QTest::qWait(500);
+
+    stopSource.request_stop();
+    processorThread.join();
+
+    const int count = frameCount.load(std::memory_order_relaxed);
+
+    QVERIFY2(count >= 80, qPrintable(u"Too few frames (%1) for 3-second burst at 30 Hz expected ~88"_s.arg(count)));
+    QVERIFY2(count <= 95, qPrintable(u"Too many frames (%1) for 3-second burst at 30 Hz"_s.arg(count)));
 }
 
 QTEST_MAIN(TestFftProcessor)

@@ -381,6 +381,10 @@ DragonPlayer::FftMode DragonPlayer::fftMode() const
 {
     return d->currentFftMode;
 }
+int DragonPlayer::fftRate() const
+{
+    return d->currentFftRate;
+}
 double DragonPlayer::bufferProgress() const
 {
     return d->currentBufferProgress;
@@ -615,6 +619,20 @@ void DragonPlayer::setFftMode(FftMode mode)
     }
 
     Q_EMIT fftModeChanged(mode);
+}
+
+void DragonPlayer::setFftRate(int rate)
+{
+    qCDebug(dragonsdlPlayer) << "setFftRate(" << rate << ")";
+    if (rate <= 0) {
+        rate = 1;
+    }
+    if (d->currentFftRate == rate) {
+        return;
+    }
+    d->currentFftRate = rate;
+    d->fftPipeline.setFftRate(rate);
+    Q_EMIT fftRateChanged(rate);
 }
 
 void DragonPlayer::play()

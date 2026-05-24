@@ -52,6 +52,7 @@ public:
     using FftMode = DragonPlayer::FftMode;
 
     void setFftMode(FftMode mode);
+    void setFftRate(int rate);
 
     void setFrameCallback(FrameCallback cb);
 
@@ -68,6 +69,7 @@ private:
     int m_channelCount = 2;
     std::atomic<int> m_sampleRate{44100};
     std::atomic<FftMode> m_fftMode{FftMode::Off};
+    std::atomic<int> m_fftRate{60};
 
     std::unique_ptr<kissfft<float>> m_fft;
     std::array<std::float32_t, FFT_SIZE> m_inputWindow;
@@ -86,7 +88,7 @@ private:
 
     void fillDetailedBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq) const;
 
-    void fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq);
+    void fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float decayRate);
 
     void emitFrame(const DragonFftFrame &frame, int frameCount, FftMode mode);
 

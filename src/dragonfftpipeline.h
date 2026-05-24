@@ -38,6 +38,7 @@ public:
     void setSampleRate(int sampleRate);
     void setChannelCount(int channels);
     void setMode(DragonPlayer::FftMode mode);
+    void setFftRate(int rate);
     [[nodiscard]] DragonPlayer::FftMode mode() const;
 
     void start();
@@ -64,6 +65,7 @@ private:
     DragonPipe<DragonFftBlock> *m_fftPipe = nullptr;
 
     DragonPlayer::FftMode m_currentMode = DragonPlayer::FftMode::Off;
+    int m_fftRate = 60;
     bool m_infrastructureCreated = false;
 
     FrameCallback m_frameCallback;
