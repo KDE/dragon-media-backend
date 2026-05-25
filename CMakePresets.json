@@ -13,6 +13,21 @@
       }
     },
     {
+      "name": "kde-dev",
+      "displayName": "Build and install to ~/kde",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-kde-dev",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "CMAKE_INSTALL_PREFIX": "$env{HOME}/kde",
+        "BUILD_EXAMPLES": "ON"
+      },
+      "environment": {
+        "CMAKE_PREFIX_PATH": "$env{HOME}/kde/lib64:$env{HOME}/kde/usr"
+      }
+    },
+    {
       "name": "asan",
       "displayName": "Build with Asan support.",
       "generator": "Ninja",
@@ -85,6 +100,10 @@
     {
       "name": "dev",
       "configurePreset": "dev"
+    },
+    {
+      "name": "kde-dev",
+      "configurePreset": "kde-dev"
     },
     {
       "name": "release",
@@ -214,6 +233,15 @@
         { "type": "configure", "name": "dev" },
         { "type": "build", "name": "dev" },
         { "type": "test", "name": "dev" }
+      ]
+    },
+    {
+      "name": "kde-dev",
+      "displayName": "Build to ~/kde",
+      "description": "Configure and build dragon-sdl based on kde at ~/kde",
+      "steps": [
+        { "type": "configure", "name": "kde-dev" },
+        { "type": "build", "name": "kde-dev" }
       ]
     }
   ]
