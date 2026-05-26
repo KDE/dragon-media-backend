@@ -9,6 +9,7 @@
 
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
+#include <SDL3/SDL_log.h>
 
 #include "dragonfftblock.h"
 #include "dragonpipe.h"
@@ -27,9 +28,38 @@
 
 using namespace Qt::StringLiterals;
 
+static void SDLLogOutput(void *userdata, int category, SDL_LogPriority priority, const char *message)
+{
+    Q_UNUSED(userdata);
+    Q_UNUSED(category);
+
+    switch (priority) {
+    case SDL_LOG_PRIORITY_VERBOSE:
+    case SDL_LOG_PRIORITY_DEBUG:
+    case SDL_LOG_PRIORITY_TRACE:
+        qCDebug(dragonsdlAudio) << "SDL:" << message;
+        break;
+    case SDL_LOG_PRIORITY_INFO:
+        qCInfo(dragonsdlAudio) << "SDL:" << message;
+        break;
+    case SDL_LOG_PRIORITY_WARN:
+        qCWarning(dragonsdlAudio) << "SDL:" << message;
+        break;
+    case SDL_LOG_PRIORITY_ERROR:
+    case SDL_LOG_PRIORITY_CRITICAL:
+        qCCritical(dragonsdlAudio) << "SDL:" << message;
+        break;
+    default:
+        qCDebug(dragonsdlAudio) << "SDL:" << message;
+        break;
+    }
+}
+
 DragonAudioOutput::DragonAudioOutput(QObject *parent)
     : QObject(parent)
 {
+    SDL_SetLogOutputFunction(SDLLogOutput, nullptr);
+
     const QString iconName = QGuiApplication::windowIcon().name();
     SDL_SetHint(SDL_HINT_APP_NAME, QGuiApplication::applicationDisplayName().toUtf8().constData());
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_APP_ICON_NAME, iconName.isEmpty() ? "dragon-sdl" : iconName.toUtf8().constData());
