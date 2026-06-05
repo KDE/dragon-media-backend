@@ -4,6 +4,7 @@
  */
 
 #include "dragonplayer_p.h"
+#include "dragonsdlaudiosink.h"
 #include <dragonsdl/dragondiagnostics.h>
 
 #include <SDL3/SDL_audio.h>
@@ -11,6 +12,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <memory>
 
 class DragonDiagnosticsPrivate
 {
@@ -33,46 +35,13 @@ DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
     : QObject(player)
     , d(std::make_unique<DragonDiagnosticsPrivate>(player))
 {
-    DragonPlayerPrivate *priv = d->m_player->d.get();
-    if (priv && priv->audioOutput) {
-        QObject::connect(
-            priv->audioOutput.get(),
-            &DragonAudioOutput::audioCallbackInvoked,
-            this,
-            [this]() {
-                DragonPlayerPrivate *priv = d->m_player->d.get();
-                if (!priv) {
-                    return;
-                }
-
-                if (priv->currentPlaybackState == DragonPlayer::PlaybackState::PlayingState) {
-                    if (priv->audioPipe.consumer().ready() == 0) {
-                        d->m_starvationCount.fetch_add(1, std::memory_order_relaxed);
-                    }
-                }
-
-                const uint64_t count = d->m_callbackCount.fetch_add(1, std::memory_order_relaxed) + 1;
-                if ((count % 50) == 0) {
-                    const uint64_t now = SDL_GetTicksNS() / 1000ULL;
-                    const uint64_t lastTime = d->m_callbackTimestampUs.load(std::memory_order_relaxed);
-                    if (lastTime > 0) {
-                        const uint64_t deltaUs = now - lastTime;
-                        if (deltaUs > 0) {
-                            d->m_callbackHz.store(50000000.0f / static_cast<float>(deltaUs), std::memory_order_relaxed);
-                        }
-                    }
-                    d->m_callbackTimestampUs.store(now, std::memory_order_relaxed);
-                }
-            },
-            Qt::DirectConnection);
-    }
 }
 
 DragonDiagnostics::~DragonDiagnostics() = default;
 
 int DragonDiagnostics::audioStarvationCount() const
 {
-    return d->m_starvationCount.load(std::memory_order_relaxed);
+    return d->m_starvationCount;
 }
 
 int DragonDiagnostics::sdlAudioBufferUs() const
@@ -87,17 +56,12 @@ int DragonDiagnostics::sdlAudioBufferUs() const
         return -1;
     }
 
-    DragonAudioOutput::AudioSession *session = priv->audioOutput->m_session.load(std::memory_order_acquire);
-    if (!session || !session->stream) {
+    auto *sdlSink = dynamic_cast<const DragonSdlAudioSink *>(priv->audioOutput.get());
+    if (!sdlSink) {
         return -1;
     }
 
-    const int sampleRate = session->sampleRate;
-    if (sampleRate <= 0) {
-        return -1;
-    }
-
-    return static_cast<int>((static_cast<int64_t>(frames) * 1000000) / sampleRate);
+    return sdlSink->audioBufferUs();
 }
 
 int DragonDiagnostics::sdlAudioBufferFrames() const
@@ -107,18 +71,12 @@ int DragonDiagnostics::sdlAudioBufferFrames() const
         return -1;
     }
 
-    DragonAudioOutput::AudioSession *session = priv->audioOutput->m_session.load(std::memory_order_acquire);
-    if (!session || !session->stream || !session->deviceId) {
+    auto *sdlSink = dynamic_cast<const DragonSdlAudioSink *>(priv->audioOutput.get());
+    if (!sdlSink) {
         return -1;
     }
 
-    SDL_AudioSpec spec;
-    int sampleFrames = 0;
-    if (!SDL_GetAudioDeviceFormat(session->deviceId, &spec, &sampleFrames)) {
-        return -1;
-    }
-
-    return sampleFrames;
+    return sdlSink->audioBufferFrames();
 }
 
 std::size_t DragonDiagnostics::decodeQueueSize() const

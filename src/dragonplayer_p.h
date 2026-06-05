@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "dragonaudiooutput.h"
+#include "dragonaudiosink.h"
 #include "dragondecodepipeline.h"
 #include "dragonfftpipeline.h"
 #include <dragonsdl/dragonplayer.h>
@@ -67,7 +67,7 @@ private:
     DragonPipe<DragonFftBlock> fftPipe{256};
     DragonFftPipeline fftPipeline{&fftPipe};
 
-    std::unique_ptr<DragonAudioOutput> audioOutput;
+    std::unique_ptr<DragonAudioSink> audioOutput;
 
     QUrl currentSource;
     QUrl nextSource;

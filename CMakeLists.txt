@@ -203,7 +203,9 @@ ecm_qt_declare_logging_category(dragonsdl_SOURCES
 set(SOURCES
     src/dragonplayer.cpp
     src/dragondecoder.cpp
-    src/dragonaudiooutput.cpp
+    src/dragonaudiosink.cpp
+    src/dragonaudiosinkfactory.cpp
+    src/dragonsdlaudiosink.cpp
     src/dragonfftprocessor.cpp
     src/dragonradiostream.cpp
     src/dragonkiostream.cpp
@@ -221,7 +223,9 @@ set(SOURCES
 set(HEADERS
     include/dragonsdl/dragonplayer.h
         src/dragondecoder.h
-        src/dragonaudiooutput.h
+        src/dragonsdlaudiosink.h
+        src/dragonaudiosink.h
+        src/dragonaudiosinkfactory.h
         src/dragonradiostream.h
         src/dragonkiostream.h
         src/dragonstream.h
