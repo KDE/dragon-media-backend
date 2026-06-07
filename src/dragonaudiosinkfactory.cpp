@@ -13,6 +13,8 @@
 
 #include "dragonsdl_factory_logging.h"
 
+using namespace Qt::StringLiterals;
+
 std::unique_ptr<DragonAudioSink> createAudioSink()
 {
     auto plugins = KPluginMetaData::findPlugins(QStringLiteral("dragonsdl/audiosink"));
@@ -25,9 +27,27 @@ std::unique_ptr<DragonAudioSink> createAudioSink()
         qCDebug(dragonsdlFactory) << "Found audio sink plugin:" << md.pluginId() << "with priority:" << md.value(QStringLiteral("Priority"), 0);
     }
 
+    const QString envSink = qEnvironmentVariable("DRAGONSDL_AUDIO_SINK");
+    if (!envSink.isEmpty()) {
+        auto it = std::ranges::find_if(plugins, [&](const KPluginMetaData &md) {
+            qDebug() << "looking at" << md.pluginId() << "with priority" << md.value("Priority"_L1);
+            return md.pluginId() == envSink;
+        });
+        if (it != plugins.end()) {
+            if (const auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(*it)) {
+                qCDebug(dragonsdlFactory) << "Successfully loaded requested audio sink plugin:" << it->pluginId();
+                return std::unique_ptr<DragonAudioSink>(result.plugin);
+            } else {
+                qCWarning(dragonsdlFactory) << "Failed to load requested audio sink plugin:" << it->pluginId() << "-" << result.errorString;
+            }
+        } else {
+            qCWarning(dragonsdlFactory) << "Requested audio sink plugin not found:" << envSink;
+        }
+        return nullptr;
+    }
+
     for (const auto &md : plugins) {
-        auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(md);
-        if (result) {
+        if (const auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(md)) {
             qCDebug(dragonsdlFactory) << "Successfully loaded audio sink plugin:" << md.pluginId();
             return std::unique_ptr<DragonAudioSink>(result.plugin);
         } else {

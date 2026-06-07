@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Name": "PipeWire Audio Sink",
+        "Description": "Direct PipeWire audio output for dragon-sdl",
+        "Icon": "audio-card",
+        "Authors": [{ "Name": "dragon-sdl contributors" }],
+        "Category": "Audio",
+        "Version": "1.0",
+        "EnabledByDefault": true,
+        "ServiceTypes": ["DragonSdl/AudioSink"]
+    },
+    "Priority": 100
+}

@@ -53,6 +53,8 @@ pkg_check_modules(FFmpeg IMPORTED_TARGET REQUIRED
     libavutil
 )
 
+pkg_check_modules(PIPEWIRE IMPORTED_TARGET libpipewire-0.3)
+
 if(NOT TARGET PkgConfig::FFmpeg)
     add_library(PkgConfig::FFmpeg INTERFACE IMPORTED)
     foreach(_lib IN ITEMS avformat avcodec swresample avutil)
@@ -282,6 +284,28 @@ target_include_directories(dragonsdlaudiosink PRIVATE
 )
 target_link_libraries(dragonsdlaudiosink PRIVATE dragon-sdl SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
 
+if(PIPEWIRE_FOUND)
+    ecm_qt_declare_logging_category(dragonpipewireaudiosink_SOURCES
+        HEADER "dragonsdl_audio_logging.h"
+        IDENTIFIER "dragonsdlAudio"
+        CATEGORY_NAME "org.kde.dragonsdl.audio"
+        DEFAULT_SEVERITY Info
+    )
+
+    kcoreaddons_add_plugin(dragonpipewireaudiosink
+        SOURCES src/dragonpipewireaudiosink.cpp ${dragonpipewireaudiosink_SOURCES}
+        INSTALL_NAMESPACE "dragonsdl/audiosink"
+    )
+    target_include_directories(dragonpipewireaudiosink PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
+    )
+    target_link_libraries(dragonpipewireaudiosink PRIVATE dragon-sdl PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui)
+    message(STATUS "PipeWire audio sink plugin: enabled")
+else()
+    message(STATUS "PipeWire audio sink plugin: disabled (libpipewire-0.3 not found)")
+endif()
+
 include(GenerateExportHeader)
 generate_export_header(dragon-sdl
     BASE_NAME dragonsdl
@@ -405,7 +429,11 @@ if(BUILD_TESTING)
         SDL3::SDL3
         spsc_queue
     )
-    add_test(NAME test_audiooutput COMMAND test_audiooutput)
+    add_test(NAME test_audiooutput_pipewire COMMAND test_audiooutput)
+    set_property(TEST test_audiooutput_pipewire APPEND PROPERTY ENVIRONMENT "DRAGONSDL_AUDIO_SINK=dragonpipewireaudiosink")
+    
+    add_test(NAME test_audiooutput_sdl COMMAND test_audiooutput)
+    set_property(TEST test_audiooutput_sdl APPEND PROPERTY ENVIRONMENT "DRAGONSDL_AUDIO_SINK=dragonsdlaudiosink")
 
     add_executable(test_radiostream tests/test_radiostream.cpp)
     target_link_libraries(test_radiostream PRIVATE
@@ -549,7 +577,8 @@ if(BUILD_TESTING)
         test_fftprocessor
         test_generator
         test_decoder
-        test_audiooutput
+        test_audiooutput_pipewire
+        test_audiooutput_sdl
         test_radiostream
         test_kiostream
         test_player_basics
@@ -562,5 +591,5 @@ if(BUILD_TESTING)
         test_completion
         test_pipe
     )
-    set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_PLUGIN_PATH=${CMAKE_BINARY_DIR}/bin")
+    set_property(TEST ${_all_tests} APPEND PROPERTY ENVIRONMENT "QT_PLUGIN_PATH=${CMAKE_BINARY_DIR}/bin")
 endif()
