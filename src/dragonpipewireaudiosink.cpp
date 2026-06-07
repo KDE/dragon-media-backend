@@ -12,17 +12,23 @@
 K_PLUGIN_CLASS_WITH_JSON(DragonPipeWireAudioSink, "pipewire_sink.json")
 
 #include <QGuiApplication>
+#include <QScopeGuard>
 
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
 #include <spa/param/props.h>
 
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 #include <pthread.h>
+#include <span>
 #include <vector>
 
+using namespace Qt::StringLiterals;
+
 static constexpr int PW_POD_BUFFER_LENGTH = 1024;
+static constexpr uint32_t kDefaultQuantumFrames = 1024;
 
 struct DragonPipeWireAudioSink::PwState {
     pw_thread_loop *loop = nullptr;
@@ -48,7 +54,7 @@ DragonPipeWireAudioSink::DragonPipeWireAudioSink(QObject *parent, const QVariant
 
 DragonPipeWireAudioSink::~DragonPipeWireAudioSink()
 {
-    close();
+    DragonPipeWireAudioSink::close();
     pw_deinit();
 }
 
@@ -64,15 +70,34 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     setFormat(sampleRate, channels);
     reset();
 
-    // Create thread loop
+    struct PwOpenGuard {
+        struct PwState &pw;
+        bool dismissed = false;
+
+        ~PwOpenGuard()
+        {
+            if (dismissed)
+                return;
+            if (pw.stream) {
+                pw_stream_destroy(pw.stream);
+                pw.stream = nullptr;
+            }
+            if (pw.loop) {
+                pw_thread_loop_destroy(pw.loop);
+                pw.loop = nullptr;
+            }
+        }
+    };
+
+    PwOpenGuard guard{*m_pw};
+
     m_pw->loop = pw_thread_loop_new("dragon-pw", nullptr);
     if (!m_pw->loop) {
         qCCritical(dragonsdlAudio) << "PipeWire: failed to create thread loop";
-        Q_EMIT errorOccurred(QStringLiteral("PipeWire: failed to create thread loop"));
+        Q_EMIT errorOccurred(u"PipeWire: failed to create thread loop"_s);
         return;
     }
 
-    // Build stream properties
     auto *props = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_MEDIA_ROLE, "Music", nullptr);
 
     const QString appName = QGuiApplication::applicationDisplayName();
@@ -84,33 +109,16 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     pw_properties_set(props, PW_KEY_NODE_DESCRIPTION, nodeName);
     pw_properties_set(props, PW_KEY_MEDIA_NAME, nodeName);
 
-    // Set latency hint: 512 frames at the given sample rate
-    char latencyBuf[64];
-    std::snprintf(latencyBuf, sizeof(latencyBuf), "512/%d", sampleRate);
-    pw_properties_set(props, PW_KEY_NODE_LATENCY, latencyBuf);
-
-    char rateBuf[32];
-    std::snprintf(rateBuf, sizeof(rateBuf), "1/%d", sampleRate);
-    pw_properties_set(props, PW_KEY_NODE_RATE, rateBuf);
-
     pw_properties_set(props, PW_KEY_NODE_ALWAYS_PROCESS, "true");
 
-    // Create the stream
-    m_pw->stream = pw_stream_new_simple(pw_thread_loop_get_loop(m_pw->loop),
-                                        nodeName,
-                                        props, // ownership transferred to pw_stream_new_simple
-                                        &s_streamEvents,
-                                        this);
+    m_pw->stream = pw_stream_new_simple(pw_thread_loop_get_loop(m_pw->loop), nodeName, props, &s_streamEvents, this);
 
     if (!m_pw->stream) {
         qCCritical(dragonsdlAudio) << "PipeWire: failed to create stream";
-        pw_thread_loop_destroy(m_pw->loop);
-        m_pw->loop = nullptr;
-        Q_EMIT errorOccurred(QStringLiteral("PipeWire: failed to create stream"));
+        Q_EMIT errorOccurred(u"PipeWire: failed to create stream"_s);
         return;
     }
 
-    // Build SPA format pod: F32 interleaved
     uint8_t podBuffer[PW_POD_BUFFER_LENGTH];
     struct spa_pod_builder b = SPA_POD_BUILDER_INIT(podBuffer, sizeof(podBuffer));
 
@@ -119,7 +127,8 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     audioInfo.rate = static_cast<uint32_t>(sampleRate);
     audioInfo.channels = static_cast<uint32_t>(channels);
 
-    // Set standard channel positions
+    // Explicit channel positions for mono and stereo.
+    // For >2 channels, PipeWire infers positions from the channel count.
     if (channels == 1) {
         audioInfo.position[0] = SPA_AUDIO_CHANNEL_MONO;
     } else if (channels == 2) {
@@ -130,48 +139,30 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     const struct spa_pod *params = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &audioInfo);
     if (!params) {
         qCCritical(dragonsdlAudio) << "PipeWire: failed to build audio format pod";
-        pw_stream_destroy(m_pw->stream);
-        m_pw->stream = nullptr;
-        pw_thread_loop_destroy(m_pw->loop);
-        m_pw->loop = nullptr;
-        Q_EMIT errorOccurred(QStringLiteral("PipeWire: failed to build audio format"));
+        Q_EMIT errorOccurred(u"PipeWire: failed to build audio format"_s);
         return;
     }
 
-    // Connect the stream
-    constexpr auto streamFlags = static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS);
+    constexpr auto streamFlags = static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
 
     int res = pw_stream_connect(m_pw->stream, PW_DIRECTION_OUTPUT, PW_ID_ANY, streamFlags, &params, 1);
 
     if (res != 0) {
         qCCritical(dragonsdlAudio) << "PipeWire: failed to connect stream:" << res;
-        pw_stream_destroy(m_pw->stream);
-        m_pw->stream = nullptr;
-        pw_thread_loop_destroy(m_pw->loop);
-        m_pw->loop = nullptr;
-        Q_EMIT errorOccurred(QStringLiteral("PipeWire: failed to connect stream"));
+        Q_EMIT errorOccurred(u"PipeWire: failed to connect stream"_s);
         return;
     }
 
-    // Start the thread loop
     res = pw_thread_loop_start(m_pw->loop);
     if (res != 0) {
         qCCritical(dragonsdlAudio) << "PipeWire: failed to start thread loop:" << res;
-        pw_stream_destroy(m_pw->stream);
-        m_pw->stream = nullptr;
-        pw_thread_loop_destroy(m_pw->loop);
-        m_pw->loop = nullptr;
-        Q_EMIT errorOccurred(QStringLiteral("PipeWire: failed to start thread loop"));
+        Q_EMIT errorOccurred(u"PipeWire: failed to start thread loop"_s);
         return;
     }
 
-    // Apply the current gain
-    pw_thread_loop_lock(m_pw->loop);
-    float vol = m_cachedGain;
-    std::vector<float> vols(static_cast<size_t>(channels), vol);
-    pw_stream_set_control(m_pw->stream, SPA_PROP_channelVolumes, static_cast<uint32_t>(channels), vols.data());
-    pw_thread_loop_unlock(m_pw->loop);
+    setChannelVolumes(m_cachedGain);
 
+    guard.dismissed = true;
     m_paused.store(false, std::memory_order_release);
     m_open.store(true, std::memory_order_release);
 
@@ -185,18 +176,23 @@ void DragonPipeWireAudioSink::close()
     m_open.store(false, std::memory_order_release);
     m_paused.store(false, std::memory_order_release);
 
-    if (m_pw->loop) {
-        pw_thread_loop_stop(m_pw->loop);
-    }
-
-    if (m_pw->stream) {
+    if (m_pw->loop && m_pw->stream) {
+        pw_thread_loop_lock(m_pw->loop);
         pw_stream_destroy(m_pw->stream);
         m_pw->stream = nullptr;
+        pw_thread_loop_unlock(m_pw->loop);
     }
 
-    if (m_pw->loop) {
-        pw_thread_loop_destroy(m_pw->loop);
-        m_pw->loop = nullptr;
+    if (auto *loop = std::exchange(m_pw->loop, nullptr)) {
+        pw_thread_loop_stop(loop);
+        pw_thread_loop_destroy(loop);
+    }
+
+    {
+        std::unique_lock lock(m_callbackDoneMutex);
+        m_callbackDoneCv.wait_for(lock, std::chrono::milliseconds(500), [this]() {
+            return m_activeCallbacks.load(std::memory_order_acquire) == 0;
+        });
     }
 
     qCDebug(dragonsdlAudio) << "PipeWire close() complete";
@@ -209,10 +205,7 @@ void DragonPipeWireAudioSink::pause()
     if (m_pw->loop && m_pw->stream) {
         pw_thread_loop_lock(m_pw->loop);
         pw_stream_set_active(m_pw->stream, false);
-        // Also mute gain during pause like SDL backend does
-        float zero = 0.0f;
-        std::vector<float> vols(static_cast<size_t>(currentChannels()), zero);
-        pw_stream_set_control(m_pw->stream, SPA_PROP_channelVolumes, static_cast<uint32_t>(currentChannels()), vols.data());
+        setChannelVolumes(0.0f);
         pw_thread_loop_unlock(m_pw->loop);
     }
 }
@@ -223,10 +216,7 @@ void DragonPipeWireAudioSink::resume()
 
     if (m_pw->loop && m_pw->stream) {
         pw_thread_loop_lock(m_pw->loop);
-        // Restore gain and reactivate
-        float vol = m_cachedGain;
-        std::vector<float> vols(static_cast<size_t>(currentChannels()), vol);
-        pw_stream_set_control(m_pw->stream, SPA_PROP_channelVolumes, static_cast<uint32_t>(currentChannels()), vols.data());
+        setChannelVolumes(m_cachedGain);
         pw_stream_set_active(m_pw->stream, true);
         pw_thread_loop_unlock(m_pw->loop);
     }
@@ -236,21 +226,25 @@ void DragonPipeWireAudioSink::setGain(float linearGain)
 {
     m_cachedGain = linearGain;
 
-    if (m_pw->loop && m_pw->stream && m_open.load(std::memory_order_acquire)) {
+    if (m_pw->stream && m_open.load(std::memory_order_acquire)) {
         pw_thread_loop_lock(m_pw->loop);
-        std::vector<float> vols(static_cast<size_t>(currentChannels()), linearGain);
-        pw_stream_set_control(m_pw->stream, SPA_PROP_channelVolumes, static_cast<uint32_t>(currentChannels()), vols.data());
+        setChannelVolumes(linearGain);
         pw_thread_loop_unlock(m_pw->loop);
     }
 }
 
 void DragonPipeWireAudioSink::clearStream()
 {
-    if (m_pw->loop && m_pw->stream) {
-        pw_thread_loop_lock(m_pw->loop);
+    if (m_pw->stream) {
         pw_stream_flush(m_pw->stream, false);
-        pw_thread_loop_unlock(m_pw->loop);
     }
+}
+
+void DragonPipeWireAudioSink::setChannelVolumes(float linearGain)
+{
+    const uint32_t ch = static_cast<uint32_t>(currentChannels());
+    m_volumesScratch.assign(ch, linearGain);
+    pw_stream_set_control(m_pw->stream, SPA_PROP_channelVolumes, ch, m_volumesScratch.data());
 }
 
 int64_t DragonPipeWireAudioSink::deviceQueuedSamples() const
@@ -264,9 +258,7 @@ int64_t DragonPipeWireAudioSink::deviceQueuedSamples() const
         return 0;
     }
 
-    // time.queued is the sum of pw_buffer::size fields for queued buffers.
-    // In our onProcess, we set pwBuf->size to the number of frames.
-    return static_cast<int64_t>(time.queued) * currentChannels();
+    return static_cast<int64_t>(time.queued) / sizeof(float);
 }
 
 int DragonPipeWireAudioSink::audioBufferFrames() const
@@ -280,7 +272,7 @@ int DragonPipeWireAudioSink::audioBufferFrames() const
         return -1;
     }
 
-    return static_cast<int>(time.queued);
+    return static_cast<int>(time.queued / (currentChannels() * sizeof(float)));
 }
 
 int DragonPipeWireAudioSink::audioBufferUs() const
@@ -309,7 +301,13 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
         return;
     }
 
-    thread_local static bool audioThreadNamed = false;
+    self->m_activeCallbacks.fetch_add(1, std::memory_order_relaxed);
+    auto guard = qScopeGuard([self]() noexcept {
+        self->m_activeCallbacks.fetch_sub(1, std::memory_order_relaxed);
+        self->m_callbackDoneCv.notify_one();
+    });
+
+    thread_local bool audioThreadNamed = false;
     if (!audioThreadNamed) {
         pthread_setname_np(pthread_self(), "dragon-pw-cb");
         audioThreadNamed = true;
@@ -334,13 +332,23 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
     const uint32_t maxBytes = spaBuf->datas[0].maxsize;
     const uint32_t maxFramesFromSize = maxBytes / static_cast<uint32_t>(self->currentChannels() * sizeof(float));
 
-    uint32_t requestedFrames = maxFramesFromSize;
-    if (pwBuf->requested > 0) {
-        requestedFrames = std::min(static_cast<uint32_t>(pwBuf->requested), maxFramesFromSize);
-    } else {
-        // If PipeWire doesn't suggest a size, clamp to a reasonable max (e.g. 1024 frames)
-        // to ensure frequent callbacks and responsive position resets.
-        requestedFrames = std::min(uint32_t{1024}, maxFramesFromSize);
+    uint32_t requestedFrames = pwBuf->requested;
+    if (requestedFrames == 0) {
+        struct pw_time pwt{};
+        if (pw_stream_get_time_n(stream, &pwt, sizeof(pwt)) == 0 && pwt.size > 0) {
+            requestedFrames = pwt.size;
+        } else {
+            requestedFrames = kDefaultQuantumFrames;
+        }
+    }
+    requestedFrames = std::min(requestedFrames, maxFramesFromSize);
+
+    if (requestedFrames == 0) {
+        spaBuf->datas[0].chunk->size = 0;
+        spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
+        pwBuf->size = 0;
+        pw_stream_queue_buffer(stream, pwBuf);
+        return;
     }
 
     const size_t maxSamples = requestedFrames * self->currentChannels();
@@ -350,33 +358,37 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
         return;
     }
 
-    // Compute PTS estimate for FFT sync
     const int channels = self->currentChannels();
 
+    struct pw_time pwt{};
+    int64_t latencyUs = 0;
+    if (pw_stream_get_time_n(stream, &pwt, sizeof(pwt)) == 0 && pwt.rate.denom > 0) {
+        latencyUs = (pwt.delay * 1'000'000LL * pwt.rate.num) / pwt.rate.denom;
+    }
+
     auto now = std::chrono::steady_clock::now().time_since_epoch();
-    auto pts = std::chrono::duration_cast<std::chrono::microseconds>(now);
+    auto pts = std::chrono::duration_cast<std::chrono::microseconds>(now) + std::chrono::microseconds(latencyUs);
 
     auto pcm = self->processAudioCallback(maxSamples, pts);
 
     auto *dst = static_cast<float *>(spaBuf->datas[0].data);
-    if (!pcm.empty()) {
-        std::memcpy(dst, pcm.data(), pcm.size() * sizeof(float));
-        spaBuf->datas[0].chunk->offset = 0;
-        spaBuf->datas[0].chunk->stride = static_cast<int32_t>(channels * sizeof(float));
-        spaBuf->datas[0].chunk->size = static_cast<uint32_t>(pcm.size() * sizeof(float));
 
-        // Set pw_buffer::size to number of frames for position tracking via pw_time::queued
-        const auto frames = pcm.size() / static_cast<size_t>(channels);
-        pwBuf->size = frames;
-    } else {
-        // Starvation write silence
-        std::memset(dst, 0, maxSamples * sizeof(float));
-        spaBuf->datas[0].chunk->offset = 0;
-        spaBuf->datas[0].chunk->stride = static_cast<int32_t>(channels * sizeof(float));
-        spaBuf->datas[0].chunk->size = static_cast<uint32_t>(maxSamples * sizeof(float));
-        spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
-        pwBuf->size = requestedFrames;
+    if (pcm.size() < maxSamples) {
+        std::ranges::fill(std::span{dst + pcm.size(), maxSamples - pcm.size()}, 0.0f);
     }
+
+    if (!pcm.empty()) {
+        std::ranges::copy(pcm, dst);
+        spaBuf->datas[0].chunk->flags = 0;
+    } else {
+        spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
+    }
+
+    spaBuf->datas[0].chunk->offset = 0;
+    spaBuf->datas[0].chunk->stride = static_cast<int32_t>(channels * sizeof(float));
+    spaBuf->datas[0].chunk->size = static_cast<uint32_t>(maxSamples * sizeof(float));
+
+    pwBuf->size = spaBuf->datas[0].chunk->size;
 
     pw_stream_queue_buffer(stream, pwBuf);
 }

@@ -264,7 +264,7 @@ void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioSt
     if (!self)
         return;
 
-    thread_local static bool audioThreadNamed = false;
+    thread_local bool audioThreadNamed = false;
     if (!audioThreadNamed) {
         pthread_setname_np(pthread_self(), "dragon-audio");
         audioThreadNamed = true;

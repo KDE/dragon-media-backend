@@ -631,7 +631,7 @@ void TestDecoder::testGeneratorEventOrdering()
                                   QVERIFY(!sawEof);
                                   sawEof = true;
                               },
-                              [&](const DecodeError &) {}},
+                              [&](const DecodeError &) { }},
                    event);
     }
 
@@ -710,7 +710,7 @@ void TestDecoder::testGeneratorMultipleIterations()
                                       allSamples.insert(allSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
-                              [&](const auto &) {}},
+                              [&](const auto &) { }},
                    event);
     }
 

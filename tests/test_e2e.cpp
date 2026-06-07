@@ -78,7 +78,7 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
                                                      result.hadError = true;
                                                      result.errorMessage = err.message;
                                                  },
-                                                 [](DecodeEof &) {}},
+                                                 [](DecodeEof &) { }},
                            event);
             }
             decodeComplete.store(true);
@@ -474,7 +474,7 @@ void TestE2E::testDecoderSignalEmissionOrder()
                                                      samplesChunkCount.fetch_add(1);
                                                      samplesCount.fetch_add(static_cast<int>(sc.data.size()));
                                                  },
-                                                 [](DecodeError &) {},
+                                                 [](DecodeError &) { },
                                                  [&eofCount](DecodeEof &) {
                                                      eofCount.fetch_add(1);
                                                  }},

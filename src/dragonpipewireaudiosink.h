@@ -10,6 +10,9 @@
 #include <QVariant>
 
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
+#include <vector>
 
 struct pw_thread_loop;
 struct pw_stream;
@@ -41,11 +44,19 @@ public:
     static void onProcess(void *userdata);
 
 private:
+    void setChannelVolumes(float linearGain);
+
     struct PwState;
     std::unique_ptr<PwState> m_pw;
 
     std::atomic<bool> m_paused{false};
     std::atomic<bool> m_open{false};
+
+    std::mutex m_callbackDoneMutex;
+    std::condition_variable m_callbackDoneCv;
+    std::atomic<int> m_activeCallbacks{0};
+
+    std::vector<float> m_volumesScratch;
 
     float m_cachedGain = 1.0f;
 };
