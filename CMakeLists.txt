@@ -42,6 +42,7 @@ include(FetchContent)
 find_package(Qt6 REQUIRED COMPONENTS Core Network Gui)
 find_package(Qt6 COMPONENTS Widgets)
 find_package(KF6KIO REQUIRED)
+find_package(KF6CoreAddons REQUIRED)
 find_package(SDL3 REQUIRED)
 find_package(PkgConfig REQUIRED)
 
@@ -172,7 +173,7 @@ ecm_qt_declare_logging_category(dragonsdl_SOURCES
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(dragonsdl_SOURCES
+ecm_qt_declare_logging_category(dragonsdlaudiosink_SOURCES
     HEADER "dragonsdl_audio_logging.h"
     IDENTIFIER "dragonsdlAudio"
     CATEGORY_NAME "org.kde.dragonsdl.audio"
@@ -200,12 +201,18 @@ ecm_qt_declare_logging_category(dragonsdl_SOURCES
     DEFAULT_SEVERITY Info
 )
 
+ecm_qt_declare_logging_category(dragonsdl_SOURCES
+    HEADER "dragonsdl_factory_logging.h"
+    IDENTIFIER "dragonsdlFactory"
+    CATEGORY_NAME "org.kde.dragonsdl.factory"
+    DEFAULT_SEVERITY Info
+)
+
 set(SOURCES
     src/dragonplayer.cpp
     src/dragondecoder.cpp
     src/dragonaudiosink.cpp
     src/dragonaudiosinkfactory.cpp
-    src/dragonsdlaudiosink.cpp
     src/dragonfftprocessor.cpp
     src/dragonradiostream.cpp
     src/dragonkiostream.cpp
@@ -223,7 +230,6 @@ set(SOURCES
 set(HEADERS
     include/dragonsdl/dragonplayer.h
         src/dragondecoder.h
-        src/dragonsdlaudiosink.h
         src/dragonaudiosink.h
         src/dragonaudiosinkfactory.h
         src/dragonradiostream.h
@@ -255,16 +261,26 @@ target_link_libraries(dragon-sdl
     PUBLIC
         Qt6::Core
         Qt6::Network
-        SDL3::SDL3
         PkgConfig::FFmpeg
     PUBLIC
         QCoro6::Core
     PRIVATE
         Qt6::Gui
         KF6::KIOCore
+        KF6::CoreAddons
         kissfft::kissfft
         QCoro6::Network
 )
+
+kcoreaddons_add_plugin(dragonsdlaudiosink
+    SOURCES src/dragonsdlaudiosink.cpp ${dragonsdlaudiosink_SOURCES}
+    INSTALL_NAMESPACE "dragonsdl/audiosink"
+)
+target_include_directories(dragonsdlaudiosink PRIVATE 
+    ${CMAKE_CURRENT_SOURCE_DIR}/src 
+    ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
+)
+target_link_libraries(dragonsdlaudiosink PRIVATE dragon-sdl SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
 
 include(GenerateExportHeader)
 generate_export_header(dragon-sdl
@@ -528,4 +544,23 @@ if(BUILD_TESTING)
         spsc_queue
     )
     add_test(NAME test_pipe COMMAND test_pipe)
+
+    set(_all_tests
+        test_fftprocessor
+        test_generator
+        test_decoder
+        test_audiooutput
+        test_radiostream
+        test_kiostream
+        test_player_basics
+        test_player_playback
+        test_player_signals
+        test_player_prefinish
+        test_player_fft
+        test_e2e
+        test_network_playback
+        test_completion
+        test_pipe
+    )
+    set_tests_properties(${_all_tests} PROPERTIES ENVIRONMENT "QT_PLUGIN_PATH=${CMAKE_BINARY_DIR}/bin")
 endif()

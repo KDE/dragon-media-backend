@@ -7,6 +7,10 @@
 
 #include "dragonsdl_audio_logging.h"
 
+#include <KPluginFactory>
+
+K_PLUGIN_CLASS_WITH_JSON(DragonSdlAudioSink, "sdl_sink.json")
+
 #include <QGuiApplication>
 #include <QIcon>
 #include <SDL3/SDL_hints.h>
@@ -45,9 +49,10 @@ static void SDLLogOutput(void *userdata, int category, SDL_LogPriority priority,
     }
 }
 
-DragonSdlAudioSink::DragonSdlAudioSink(QObject *parent)
+DragonSdlAudioSink::DragonSdlAudioSink(QObject *parent, const QVariantList &args)
     : DragonAudioSink(parent)
 {
+    Q_UNUSED(args);
     SDL_SetLogOutputFunction(SDLLogOutput, nullptr);
 
     const QString iconName = QGuiApplication::windowIcon().name();
@@ -65,11 +70,6 @@ DragonSdlAudioSink::~DragonSdlAudioSink()
 {
     close();
     SDL_Quit();
-}
-
-bool DragonSdlAudioSink::isAvailable()
-{
-    return true; // Always available when SDL3 is linked
 }
 
 void DragonSdlAudioSink::open(int sampleRate, int channels)
@@ -313,3 +313,5 @@ void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioSt
         qCDebug(dragonsdlAudio) << "STARVATION additional=" << additional_amount << "floatsNeeded=" << floatsNeeded;
     }
 }
+
+#include "dragonsdlaudiosink.moc"

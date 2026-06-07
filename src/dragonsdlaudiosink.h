@@ -9,21 +9,21 @@
 
 #include <SDL3/SDL_audio.h>
 
+#include <QVariant>
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
 
 class DragonDiagnostics;
 
-class DRAGONSDL_EXPORT DragonSdlAudioSink : public DragonAudioSink
+class DragonSdlAudioSink : public DragonAudioSink
 {
     Q_OBJECT
 
 public:
-    explicit DragonSdlAudioSink(QObject *parent = nullptr);
+    explicit DragonSdlAudioSink(QObject *parent, const QVariantList &args);
     ~DragonSdlAudioSink() override;
-
-    static bool isAvailable();
 
     void open(int sampleRate, int channels) override;
     void close() override;
@@ -38,8 +38,8 @@ public:
     void setStreamName(const QString &name) override;
 
     // Diagnostic helpers
-    [[nodiscard]] int audioBufferFrames() const;
-    [[nodiscard]] int audioBufferUs() const;
+    [[nodiscard]] int audioBufferFrames() const override;
+    [[nodiscard]] int audioBufferUs() const override;
 
 private:
     static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);

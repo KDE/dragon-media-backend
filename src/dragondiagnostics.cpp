@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
+#include "dragonaudiosink.h"
 #include "dragonplayer_p.h"
-#include "dragonsdlaudiosink.h"
 #include <dragonsdl/dragondiagnostics.h>
 
 #include <SDL3/SDL_audio.h>
@@ -46,22 +46,11 @@ int DragonDiagnostics::audioStarvationCount() const
 
 int DragonDiagnostics::sdlAudioBufferUs() const
 {
-    const int frames = sdlAudioBufferFrames();
-    if (frames <= 0) {
-        return frames;
-    }
-
     DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->audioOutput) {
         return -1;
     }
-
-    auto *sdlSink = dynamic_cast<const DragonSdlAudioSink *>(priv->audioOutput.get());
-    if (!sdlSink) {
-        return -1;
-    }
-
-    return sdlSink->audioBufferUs();
+    return priv->audioOutput->audioBufferUs();
 }
 
 int DragonDiagnostics::sdlAudioBufferFrames() const
@@ -70,13 +59,7 @@ int DragonDiagnostics::sdlAudioBufferFrames() const
     if (!priv || !priv->audioOutput) {
         return -1;
     }
-
-    auto *sdlSink = dynamic_cast<const DragonSdlAudioSink *>(priv->audioOutput.get());
-    if (!sdlSink) {
-        return -1;
-    }
-
-    return sdlSink->audioBufferFrames();
+    return priv->audioOutput->audioBufferFrames();
 }
 
 std::size_t DragonDiagnostics::decodeQueueSize() const

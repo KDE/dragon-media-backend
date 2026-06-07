@@ -46,6 +46,16 @@ public:
     [[nodiscard]] virtual bool isDeviceOpen() const = 0;
     [[nodiscard]] virtual bool isPaused() const = 0;
 
+    // --- Diagnostics ---
+    [[nodiscard]] virtual int audioBufferUs() const
+    {
+        return -1;
+    }
+    [[nodiscard]] virtual int audioBufferFrames() const
+    {
+        return -1;
+    }
+
     // --- Shared logic (in base class, not virtual) ---
     void setAudioPipe(DragonPipe<std::float32_t> *pipe);
     void setFftPipe(DragonPipe<DragonFftBlock> *pipe);
