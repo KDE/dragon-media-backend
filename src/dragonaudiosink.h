@@ -96,6 +96,9 @@ Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();
 
+protected Q_SLOTS:
+    void onExternalVolumeChanged(float linearGain);
+
 protected:
     std::span<const std::float32_t> processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts);
 

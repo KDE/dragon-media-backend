@@ -17,6 +17,7 @@ K_PLUGIN_CLASS_WITH_JSON(DragonPipeWireAudioSink, "pipewire_sink.json")
 #include <pipewire/pipewire.h>
 #include <spa/param/audio/format-utils.h>
 #include <spa/param/props.h>
+#include <spa/pod/iter.h>
 
 #include <algorithm>
 #include <chrono>
@@ -40,6 +41,8 @@ static const struct pw_stream_events s_streamEvents = [] {
     struct pw_stream_events ev{};
     ev.version = PW_VERSION_STREAM_EVENTS;
     ev.process = DragonPipeWireAudioSink::onProcess;
+    ev.control_info = DragonPipeWireAudioSink::onControlInfo;
+    ev.param_changed = DragonPipeWireAudioSink::onParamChanged;
     return ev;
 }();
 
@@ -391,6 +394,66 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
     pwBuf->size = spaBuf->datas[0].chunk->size;
 
     pw_stream_queue_buffer(stream, pwBuf);
+}
+
+void DragonPipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const struct pw_stream_control *control)
+{
+    auto *self = static_cast<DragonPipeWireAudioSink *>(userdata);
+    if (!self || !control || control->n_values == 0) {
+        return;
+    }
+
+    qCDebug(dragonsdlAudio) << "PipeWire control_info id:" << id;
+
+    if (id == SPA_PROP_channelVolumes) {
+        float sum = 0.0f;
+        for (uint32_t i = 0; i < control->n_values; ++i) {
+            sum += control->values[i];
+        }
+        const float avgGain = sum / static_cast<float>(control->n_values);
+
+        if (qAbs(avgGain - self->m_cachedGain) < 0.001f) {
+            return;
+        }
+        self->m_cachedGain = avgGain;
+
+        qCDebug(dragonsdlAudio) << "PipeWire external volume change via control_info, avgGain:" << avgGain;
+        QMetaObject::invokeMethod(
+            self,
+            [self, avgGain]() {
+                self->onExternalVolumeChanged(avgGain);
+            },
+            Qt::QueuedConnection);
+    }
+}
+
+void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const struct spa_pod *param)
+{
+    auto *self = static_cast<DragonPipeWireAudioSink *>(userdata);
+    if (!self || !param) {
+        return;
+    }
+
+    qCDebug(dragonsdlAudio) << "PipeWire param_changed id:" << id;
+
+    if (id == SPA_PARAM_Props) {
+        const struct spa_pod_prop *prop = nullptr;
+        SPA_POD_OBJECT_FOREACH((const struct spa_pod_object *)param, prop)
+        {
+            if (prop->key == SPA_PROP_volume) {
+                const float *val = reinterpret_cast<const float *>(SPA_POD_BODY(&prop->value));
+                float value = val ? *val : 1.0f;
+                qCDebug(dragonsdlAudio) << "PipeWire param_changed SPA_PROP_volume:" << value;
+                QMetaObject::invokeMethod(
+                    self,
+                    [self, value]() {
+                        self->onExternalVolumeChanged(value);
+                    },
+                    Qt::QueuedConnection);
+                return;
+            }
+        }
+    }
 }
 
 #include "dragonpipewireaudiosink.moc"

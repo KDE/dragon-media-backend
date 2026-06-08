@@ -336,7 +336,7 @@ bool DragonPlayer::muted() const
 }
 float DragonPlayer::volume() const
 {
-    return d->currentVolume;
+    return d->audioOutput ? d->audioOutput->volume() : 1.0f;
 }
 QUrl DragonPlayer::source() const
 {
@@ -406,7 +406,6 @@ void DragonPlayer::setMuted(bool muted)
 void DragonPlayer::setVolume(float gain)
 {
     qCDebug(dragonsdlPlayer) << "setVolume(" << gain << ")";
-    d->currentVolume = gain;
     if (d->audioOutput) {
         d->audioOutput->setVolume(gain);
     }

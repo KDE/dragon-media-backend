@@ -42,6 +42,8 @@ public:
 
     // Called from the pw_thread_loop callback thread public for the static events struct
     static void onProcess(void *userdata);
+    static void onControlInfo(void *userdata, uint32_t id, const struct pw_stream_control *control);
+    static void onParamChanged(void *userdata, uint32_t id, const struct spa_pod *param);
 
 private:
     void setChannelVolumes(float linearGain);

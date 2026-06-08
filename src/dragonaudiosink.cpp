@@ -35,6 +35,17 @@ float calculateGain(float volume, bool muted)
     return muted ? 0.0f : sliderToLinearGain(volume);
 }
 
+float linearGainToSlider(float linearGain)
+{
+    if (linearGain <= 0.0f) {
+        return 0.0f;
+    }
+    if (linearGain >= 1.0f) {
+        return 1.0f;
+    }
+    constexpr float LOG100 = 4.60517018599f;
+    return 1.0f - std::exp(-linearGain * LOG100);
+}
 }
 
 DragonAudioSink::DragonAudioSink(QObject *parent)
@@ -122,6 +133,11 @@ void DragonAudioSink::setMuted(bool muted)
     m_muted = muted;
     setGain(calculateGain(m_volume, m_muted));
     Q_EMIT volumeChanged();
+}
+
+void DragonAudioSink::onExternalVolumeChanged(float linearGain)
+{
+    setVolume(linearGainToSlider(linearGain));
 }
 
 void DragonAudioSink::setStreamName(const QString &name)

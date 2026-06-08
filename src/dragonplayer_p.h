@@ -76,7 +76,6 @@ private:
     DragonPlayer::Error currentError = DragonPlayer::Error::NoError;
     DragonPlayer::PlaybackState requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
     int64_t currentDuration = 0;
-    float currentVolume = 1.0f;
     bool currentMuted = false;
     bool currentSeekable = false;
     bool currentIsLocal = false;
