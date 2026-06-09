@@ -27,18 +27,29 @@ std::unique_ptr<DragonAudioSink> createAudioSink()
         qCDebug(dragonsdlFactory) << "Found audio sink plugin:" << md.pluginId() << "with priority:" << md.value(QStringLiteral("Priority"), 0);
     }
 
+    auto tryLoad = [&](const KPluginMetaData &md) -> std::unique_ptr<DragonAudioSink> {
+        auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(md);
+        if (!result) {
+            qCWarning(dragonsdlFactory) << "Failed to load audio sink plugin:" << md.pluginId() << "-" << result.errorString;
+            return nullptr;
+        }
+        auto sink = std::unique_ptr<DragonAudioSink>(result.plugin);
+        if (!sink->probe()) {
+            qCWarning(dragonsdlFactory) << "Audio sink plugin" << md.pluginId() << "failed runtime probe, falling through";
+            return nullptr;
+        }
+        qCDebug(dragonsdlFactory) << "Audio sink plugin" << md.pluginId() << "passed probe, selected";
+        return sink;
+    };
+
     const QString envSink = qEnvironmentVariable("DRAGONSDL_AUDIO_SINK");
     if (!envSink.isEmpty()) {
         auto it = std::ranges::find_if(plugins, [&](const KPluginMetaData &md) {
-            qDebug() << "looking at" << md.pluginId() << "with priority" << md.value("Priority"_L1);
             return md.pluginId() == envSink;
         });
         if (it != plugins.end()) {
-            if (const auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(*it)) {
-                qCDebug(dragonsdlFactory) << "Successfully loaded requested audio sink plugin:" << it->pluginId();
-                return std::unique_ptr<DragonAudioSink>(result.plugin);
-            } else {
-                qCWarning(dragonsdlFactory) << "Failed to load requested audio sink plugin:" << it->pluginId() << "-" << result.errorString;
+            if (auto sink = tryLoad(*it)) {
+                return sink;
             }
         } else {
             qCWarning(dragonsdlFactory) << "Requested audio sink plugin not found:" << envSink;
@@ -47,11 +58,8 @@ std::unique_ptr<DragonAudioSink> createAudioSink()
     }
 
     for (const auto &md : plugins) {
-        if (const auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(md)) {
-            qCDebug(dragonsdlFactory) << "Successfully loaded audio sink plugin:" << md.pluginId();
-            return std::unique_ptr<DragonAudioSink>(result.plugin);
-        } else {
-            qCWarning(dragonsdlFactory) << "Failed to load audio sink plugin:" << md.pluginId() << "-" << result.errorString;
+        if (auto sink = tryLoad(md)) {
+            return sink;
         }
     }
 

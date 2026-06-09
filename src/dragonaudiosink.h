@@ -35,6 +35,12 @@ public:
     DragonAudioSink(DragonAudioSink &&) = delete;
     DragonAudioSink &operator=(DragonAudioSink &&) = delete;
 
+    // --- Runtime probe: call after construction to verify the backend can reach
+    //     its audio subsystem (e.g. PipeWire socket, SDL audio device).
+    //     Returns false if this sink will never be able to connect.
+    //     The factory discards plugins that fail probe() and tries the next one.
+    [[nodiscard]] virtual bool probe() = 0;
+
     // --- SPI (implemented by each backend) ---
     virtual void open(int sampleRate, int channels) = 0;
     virtual void close() = 0;

@@ -26,6 +26,8 @@ public:
     explicit DragonPipeWireAudioSink(QObject *parent, const QVariantList &args);
     ~DragonPipeWireAudioSink() override;
 
+    [[nodiscard]] bool probe() override;
+
     void open(int sampleRate, int channels) override;
     void close() override;
     void pause() override;

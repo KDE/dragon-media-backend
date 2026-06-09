@@ -72,6 +72,12 @@ DragonSdlAudioSink::~DragonSdlAudioSink()
     SDL_Quit();
 }
 
+bool DragonSdlAudioSink::probe()
+{
+    qCDebug(dragonsdlAudio) << "SDL probe() SDL_Init already called in constructor";
+    return true; // SDL_Init succeeded during construction
+}
+
 void DragonSdlAudioSink::open(int sampleRate, int channels)
 {
     qCDebug(dragonsdlAudio) << "open" << sampleRate << channels;

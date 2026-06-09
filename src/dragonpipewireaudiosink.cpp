@@ -61,6 +61,39 @@ DragonPipeWireAudioSink::~DragonPipeWireAudioSink()
     pw_deinit();
 }
 
+bool DragonPipeWireAudioSink::probe()
+{
+    qCDebug(dragonsdlAudio) << "PipeWire probe() checking daemon connectivity";
+
+    auto *loop = pw_loop_new(nullptr);
+    if (!loop) {
+        qCDebug(dragonsdlAudio) << "PipeWire probe() pw_loop_new failed";
+        return false;
+    }
+
+    struct pw_context *context = pw_context_new(loop, nullptr, 0);
+    if (!context) {
+        qCDebug(dragonsdlAudio) << "PipeWire probe() pw_context_new failed";
+        pw_loop_destroy(loop);
+        return false;
+    }
+
+    struct pw_core *core = pw_context_connect(context, nullptr, 0);
+    const bool alive = (core != nullptr);
+
+    if (alive) {
+        qCDebug(dragonsdlAudio) << "PipeWire probe() daemon reachable, connection confirmed";
+        pw_core_disconnect(core);
+    } else {
+        qCDebug(dragonsdlAudio) << "PipeWire probe() daemon unreachable, errno =" << errno;
+    }
+
+    pw_context_destroy(context);
+    pw_loop_destroy(loop);
+
+    return alive;
+}
+
 void DragonPipeWireAudioSink::open(int sampleRate, int channels)
 {
     qCDebug(dragonsdlAudio) << "PipeWire open" << sampleRate << channels;

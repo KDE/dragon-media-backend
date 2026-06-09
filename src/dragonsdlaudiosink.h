@@ -25,6 +25,8 @@ public:
     explicit DragonSdlAudioSink(QObject *parent, const QVariantList &args);
     ~DragonSdlAudioSink() override;
 
+    [[nodiscard]] bool probe() override;
+
     void open(int sampleRate, int channels) override;
     void close() override;
     void pause() override;
