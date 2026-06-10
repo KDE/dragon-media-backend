@@ -8,7 +8,7 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 find_package(KF6I18n REQUIRED)
 
-add_executable(dragon-sdl-qwidget-example
+add_executable(DragonMultimedia-qwidget-example
     main.cpp
     mainwindow.cpp
     mainwindow.h
@@ -20,12 +20,12 @@ add_executable(dragon-sdl-qwidget-example
     dragonspectrogram.h
 )
 
-target_include_directories(dragon-sdl-qwidget-example PRIVATE
+target_include_directories(DragonMultimedia-qwidget-example PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
-target_link_libraries(dragon-sdl-qwidget-example PRIVATE
-    dragon-sdl
+target_link_libraries(DragonMultimedia-qwidget-example PRIVATE
+    DragonMultimedia
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets

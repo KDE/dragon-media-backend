@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "dragonsdl/dragonfftframe.h"
-#include "dragonsdl/dragonplayer.h"
-#include "dragonsdl_export.h"
+#include "DragonMultimedia/dragonfftframe.h"
+#include "DragonMultimedia/dragonplayer.h"
+#include "dragonmultimedia_export.h"
 #include <stdfloat>
 
 #include <array>
@@ -25,7 +25,7 @@
 template<typename T>
 class kissfft;
 
-class DRAGONSDL_EXPORT DragonFftProcessor
+class DRAGONMULTIMEDIA_EXPORT DragonFftProcessor
 {
 public:
     static constexpr size_t FFT_SIZE = 4096;

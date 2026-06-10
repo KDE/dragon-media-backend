@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include <dragonsdl/dragonfftframe.h>
-#include <dragonsdl/dragonplayer.h>
+#include <DragonMultimedia/dragonfftframe.h>
+#include <DragonMultimedia/dragonplayer.h>
 
 #include <cstddef>
 #include <functional>

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "dragonsdl_export.h"
+#include "dragonmultimedia_export.h"
 
 #include <QObject>
 #include <QUrl>
@@ -17,7 +17,7 @@
 class DragonBufferProgress;
 class DragonIcyMetadata;
 
-class DRAGONSDL_EXPORT DragonStream : public QObject
+class DRAGONMULTIMEDIA_EXPORT DragonStream : public QObject
 {
     Q_OBJECT
 public:

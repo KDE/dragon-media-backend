@@ -22,7 +22,7 @@
 
 class DragonBufferProgress;
 
-class DRAGONSDL_EXPORT DragonKioStream : public DragonStream
+class DRAGONMULTIMEDIA_EXPORT DragonKioStream : public DragonStream
 {
     Q_OBJECT
 

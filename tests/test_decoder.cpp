@@ -32,7 +32,7 @@
 #include <vector>
 
 using namespace Qt::StringLiterals;
-using namespace DragonSdl;
+using namespace DragonMultimedia;
 
 extern "C" {
 #include <libavcodec/avcodec.h>

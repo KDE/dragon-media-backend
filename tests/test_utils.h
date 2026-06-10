@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-3.0-or-later
  *
- * Common test utilities for dragon-sdl test suite.
+ * Common test utilities for Dragon Multimedia test suite.
  * This header provides helper classes and functions to reduce
  * boilerplate in test files while maintaining full test coverage.
  */
@@ -17,7 +17,7 @@
 #include <QtTest>
 
 #include "dragondecoder.h"
-#include <dragonsdl/dragonplayer.h>
+#include <DragonMultimedia/dragonplayer.h>
 
 #include <atomic>
 #include <ranges>

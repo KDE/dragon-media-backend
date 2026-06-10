@@ -36,7 +36,7 @@ public:
     DragonDecodePipeline(DragonDecodePipeline &&) = delete;
     DragonDecodePipeline &operator=(DragonDecodePipeline &&) = delete;
 
-    QCoro::Task<DragonSdl::InitResult> initializeSession(QUrl source, bool isGapless = false);
+    QCoro::Task<DragonMultimedia::InitResult> initializeSession(QUrl source, bool isGapless = false);
     void setNextSource(const QUrl &next);
 
     void stopSession();
@@ -51,9 +51,9 @@ public:
 
     void setSamplesCallback(SamplesCallback callback);
 
-    static DragonSdl::InitResult makeSuccessResult(const DragonSdl::FormatReady &fr, bool isGapless = false);
-    static DragonSdl::InitResult makeErrorResult(const QString &message, bool isGapless = false);
-    static DragonSdl::InitResult makeCancelledResult(const QString &message, bool isGapless = false);
+    static DragonMultimedia::InitResult makeSuccessResult(const DragonMultimedia::FormatReady &fr, bool isGapless = false);
+    static DragonMultimedia::InitResult makeErrorResult(const QString &message, bool isGapless = false);
+    static DragonMultimedia::InitResult makeCancelledResult(const QString &message, bool isGapless = false);
 
     const std::unique_ptr<DragonDecoder> &activeDecoder() const;
     bool decodeLoopActive() const;
@@ -97,9 +97,9 @@ private:
 
     std::jthread m_preWarmThread;
 
-    std::shared_ptr<DragonSdl::DragonCompletion> m_pendingInitCompletion;
+    std::shared_ptr<DragonMultimedia::DragonCompletion> m_pendingInitCompletion;
 
-    std::shared_ptr<DragonSdl::DragonCompletion> m_pendingGaplessCompletion;
+    std::shared_ptr<DragonMultimedia::DragonCompletion> m_pendingGaplessCompletion;
 
     std::unique_ptr<DragonStream> m_stream;
 };

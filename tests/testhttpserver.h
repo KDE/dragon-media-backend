@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-3.0-or-later
  *
- * Shared mock HTTP server for dragon-sdl tests.
+ * Shared mock HTTP server for Dragon Multimedia tests.
  * Supports Range requests so KIO seek via resume metadata works correctly.
  */
 

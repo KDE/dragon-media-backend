@@ -6,7 +6,7 @@
 #include "dragondecoder.h"
 #include <stdfloat>
 
-#include "dragonsdl_decoder_logging.h"
+#include "dragonmultimedia_decoder_logging.h"
 #include <QScopeGuard>
 
 #include <array>
@@ -128,9 +128,9 @@ DragonDecoder::DragonDecoder(ReadCallback readCb, SeekCallback seekCb, int64_t s
 
 DragonDecoder::~DragonDecoder() = default;
 
-DragonSdl::InitResult DragonDecoder::initialize()
+DragonMultimedia::InitResult DragonDecoder::initialize()
 {
-    using namespace DragonSdl;
+    using namespace DragonMultimedia;
 
     if (m_session) {
         InitResult result;
@@ -181,14 +181,14 @@ DragonSdl::InitResult DragonDecoder::initialize()
     result.channels = m_session->nbChannels;
     result.success = true;
 
-    qCDebug(dragonsdlDecoder) << "initialize sr=" << result.sampleRate << "ch=" << result.channels;
+    qCDebug(dragonMultimediaDecoder) << "initialize sr=" << result.sampleRate << "ch=" << result.channels;
 
     return result;
 }
 
-std::generator<DragonSdl::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token st)
+std::generator<DragonMultimedia::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token st)
 {
-    using namespace DragonSdl;
+    using namespace DragonMultimedia;
 
     if (!m_session) {
         co_yield DecodeError{u"Decoder not initialized"_s};
@@ -208,7 +208,7 @@ std::generator<DragonSdl::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token
         while (auto chunk = drainDecoderFrames(session)) {
             if (session.firstFrame) {
                 session.firstFrame = false;
-                qCDebug(dragonsdlDecoder) << "first frame" << static_cast<int>(chunk->data.size()) << "samples";
+                qCDebug(dragonMultimediaDecoder) << "first frame" << static_cast<int>(chunk->data.size()) << "samples";
             }
             co_yield std::move(*chunk);
         }
@@ -225,7 +225,7 @@ std::generator<DragonSdl::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token
 
     co_yield DecodeEof{};
 
-    qCDebug(dragonsdlDecoder) << "decodeLoop finished total packets=" << session.packetCount << "total frames=" << session.frameCount;
+    qCDebug(dragonMultimediaDecoder) << "decodeLoop finished total packets=" << session.packetCount << "total frames=" << session.frameCount;
 }
 
 bool DragonDecoder::initializeAvio(DecodeSession &session)
@@ -236,7 +236,7 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
 
     uint8_t *ioBuffer = static_cast<uint8_t *>(av_malloc(IO_BUFFER_SIZE));
     if (!ioBuffer) {
-        qCWarning(dragonsdlDecoder) << "Failed to allocate AVIOContext buffer";
+        qCWarning(dragonMultimediaDecoder) << "Failed to allocate AVIOContext buffer";
         return false;
     }
 
@@ -296,7 +296,7 @@ bool DragonDecoder::openContainer(DecodeSession &session)
     AVFormatContext *rawFmtCtx = nullptr;
 
     if (qEnvironmentVariableIsSet("DRAGON_TEST_SLOW_OPEN")) {
-        qCWarning(dragonsdlDecoder) << "DRAGON_TEST_SLOW_OPEN is set, sleeping 1000ms";
+        qCWarning(dragonMultimediaDecoder) << "DRAGON_TEST_SLOW_OPEN is set, sleeping 1000ms";
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 
@@ -451,7 +451,7 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
         if (seekRet >= 0) {
             avcodec_flush_buffers(session.codecCtx.get());
             if (swr_init(session.swrCtx.get()) < 0) {
-                qCWarning(dragonsdlDecoder) << "swr_init failed after seek";
+                qCWarning(dragonMultimediaDecoder) << "swr_init failed after seek";
             }
         }
     }
@@ -462,14 +462,14 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
             if (session.fmtCtx->pb && session.fmtCtx->pb->error < 0 && session.fmtCtx->pb->error != AVERROR(EAGAIN)) {
                 readStatus = session.fmtCtx->pb->error;
             } else {
-                qCDebug(dragonsdlDecoder) << "EOF reached after" << session.packetCount << "packets," << session.frameCount << "frames";
+                qCDebug(dragonMultimediaDecoder) << "EOF reached after" << session.packetCount << "packets," << session.frameCount << "frames";
                 return false;
             }
         }
 
         if (readStatus == AVERROR(EAGAIN)) {
             session.consecutiveReadErrors++;
-            qCDebug(dragonsdlDecoder) << "av_read_frame EAGAIN, attempt " << session.consecutiveReadErrors;
+            qCDebug(dragonMultimediaDecoder) << "av_read_frame EAGAIN, attempt " << session.consecutiveReadErrors;
 
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
@@ -484,8 +484,8 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
 
         if (now - session.lastSuccessfulRead < session.READ_ERROR_RESET_INTERVAL) {
             if (session.consecutiveReadErrors <= 3) {
-                qCDebug(dragonsdlDecoder) << "av_read_frame transient error" << readStatus << "(" << avErrorString(readStatus) << "), attempt "
-                                          << session.consecutiveReadErrors;
+                qCDebug(dragonMultimediaDecoder) << "av_read_frame transient error" << readStatus << "(" << avErrorString(readStatus) << "), attempt "
+                                                 << session.consecutiveReadErrors;
                 av_packet_unref(session.pkt.get());
                 return true;
             }
@@ -494,7 +494,7 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
         if (session.consecutiveReadErrors >= session.MAX_READ_ERRORS || !isRecoverable) {
             QString errorMsg = u"Read error after "_s % QString::number(session.consecutiveReadErrors) % u" attempts: "_s % avErrorString(readStatus);
 
-            qCWarning(dragonsdlDecoder) << errorMsg;
+            qCWarning(dragonMultimediaDecoder) << errorMsg;
 
             Q_EMIT streamError(errorMsg);
 
@@ -503,8 +503,8 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
             return false;
         }
 
-        qCWarning(dragonsdlDecoder) << "av_read_frame error" << readStatus << "(" << avErrorString(readStatus) << "), attempt " << session.consecutiveReadErrors
-                                    << "/" << session.MAX_READ_ERRORS;
+        qCWarning(dragonMultimediaDecoder) << "av_read_frame error" << readStatus << "(" << avErrorString(readStatus) << "), attempt "
+                                           << session.consecutiveReadErrors << "/" << session.MAX_READ_ERRORS;
         av_packet_unref(session.pkt.get());
         return true;
     }
@@ -530,9 +530,9 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
     return true;
 }
 
-std::optional<DragonSdl::SamplesChunk> DragonDecoder::drainDecoderFrames(DecodeSession &session)
+std::optional<DragonMultimedia::SamplesChunk> DragonDecoder::drainDecoderFrames(DecodeSession &session)
 {
-    using namespace DragonSdl;
+    using namespace DragonMultimedia;
 
     while (true) {
         int ret = avcodec_receive_frame(session.codecCtx.get(), session.frame.get());
@@ -566,7 +566,7 @@ std::optional<DragonSdl::SamplesChunk> DragonDecoder::drainDecoderFrames(DecodeS
         uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(m_pcmBuffer.data())};
         int converted = swr_convert(session.swrCtx.get(), outData, maxOutSamples, const_cast<const uint8_t **>(session.frame->data), session.frame->nb_samples);
         if (converted < 0) {
-            qCWarning(dragonsdlDecoder) << "swr_convert failed";
+            qCWarning(dragonMultimediaDecoder) << "swr_convert failed";
             continue;
         }
 
@@ -588,11 +588,11 @@ std::optional<DragonSdl::SamplesChunk> DragonDecoder::drainDecoderFrames(DecodeS
 
 void DragonDecoder::flushDecoder(DecodeSession &session)
 {
-    qCDebug(dragonsdlDecoder) << "flushing decoder...";
+    qCDebug(dragonMultimediaDecoder) << "flushing decoder...";
     avcodec_send_packet(session.codecCtx.get(), nullptr);
 }
 
-std::optional<DragonSdl::SamplesChunk> DragonDecoder::flushResampler(DecodeSession &session)
+std::optional<DragonMultimedia::SamplesChunk> DragonDecoder::flushResampler(DecodeSession &session)
 {
     int delaySamples = swr_get_delay(session.swrCtx.get(), session.sampleRate);
     if (delaySamples > 0) {
@@ -604,13 +604,13 @@ std::optional<DragonSdl::SamplesChunk> DragonDecoder::flushResampler(DecodeSessi
         int converted = swr_convert(session.swrCtx.get(), outData, delaySamples, nullptr, 0);
         if (converted > 0) {
             int totalSamples = converted * session.nbChannels;
-            qCDebug(dragonsdlDecoder) << "swr flush samplesDecoded" << totalSamples << "samples";
+            qCDebug(dragonMultimediaDecoder) << "swr flush samplesDecoded" << totalSamples << "samples";
 
             m_pendingSamples.assign(m_pcmBuffer.begin(), m_pcmBuffer.begin() + totalSamples);
 
-            return DragonSdl::SamplesChunk{.data = std::span<const std::float32_t>(m_pendingSamples.data(), m_pendingSamples.size()),
-                                           .sampleRate = session.sampleRate,
-                                           .channels = session.nbChannels};
+            return DragonMultimedia::SamplesChunk{.data = std::span<const std::float32_t>(m_pendingSamples.data(), m_pendingSamples.size()),
+                                                  .sampleRate = session.sampleRate,
+                                                  .channels = session.nbChannels};
         }
     }
     return std::nullopt;

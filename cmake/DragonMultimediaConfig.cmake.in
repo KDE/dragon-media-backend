@@ -30,6 +30,6 @@ if(NOT TARGET PkgConfig::FFmpeg)
 endif()
 
 # Include the targets file
-include("${CMAKE_CURRENT_LIST_DIR}/dragon-sdl-targets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/DragonMultimedia-targets.cmake")
 
-check_required_components(dragon-sdl)
+check_required_components(DragonMultimedia)

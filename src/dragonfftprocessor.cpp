@@ -8,7 +8,7 @@
 
 #include <kissfft.hh>
 
-#include "dragonsdl_fft_logging.h"
+#include "dragonmultimedia_fft_logging.h"
 
 #include "dragonpipe.h"
 #include <algorithm>
@@ -320,13 +320,13 @@ void DragonFftProcessor::emitFrame(const DragonFftFrame &frame, int frameCount, 
 
     if (frameCount <= 3 || frameCount % 60 == 0) {
         if (!frame.barData.empty()) {
-            qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode << "barData[0]=" << frame.barData[0]
-                                  << "barData[11]=" << frame.barData[11] << "barData[23]=" << frame.barData[23];
+            qCDebug(dragonMultimediaFft) << "frame emitted count=" << frameCount << "mode=" << mode << "barData[0]=" << frame.barData[0]
+                                         << "barData[11]=" << frame.barData[11] << "barData[23]=" << frame.barData[23];
         } else if (!frame.frequenciesDb.empty()) {
-            qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode << "freqDb[0]=" << frame.frequenciesDb[0]
-                                  << "freqDb[256]=" << frame.frequenciesDb[256];
+            qCDebug(dragonMultimediaFft) << "frame emitted count=" << frameCount << "mode=" << mode << "freqDb[0]=" << frame.frequenciesDb[0]
+                                         << "freqDb[256]=" << frame.frequenciesDb[256];
         } else {
-            qCDebug(dragonsdlFft) << "frame emitted count=" << frameCount << "mode=" << mode;
+            qCDebug(dragonMultimediaFft) << "frame emitted count=" << frameCount << "mode=" << mode;
         }
     }
 }

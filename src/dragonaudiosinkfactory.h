@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "dragonsdl_export.h"
+#include "dragonmultimedia_export.h"
 #include <memory>
 
 class DragonAudioSink;
 
-DRAGONSDL_EXPORT std::unique_ptr<DragonAudioSink> createAudioSink();
+DRAGONMULTIMEDIA_EXPORT std::unique_ptr<DragonAudioSink> createAudioSink();

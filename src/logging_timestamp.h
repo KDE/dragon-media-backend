@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  *
  * Shared timestamped logging utilities for tests and examples.
- * This does NOT affect logging when dragon-sdl is used as a library.
+ * This does NOT affect logging when DragonMultimedia is used as a library.
  */
 
 #pragma once
@@ -14,7 +14,7 @@
 
 #include <cstdio>
 
-inline void dragonsdl_install_timestamped_handler()
+inline void DragonMultimedia_install_timestamped_handler()
 {
     static bool installed = false;
     if (installed)

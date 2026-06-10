@@ -8,9 +8,9 @@
 #include "dragonspectrogram.h"
 #include "dragonvisualizer.h"
 
-#include <dragonsdl/dragondiagnostics.h>
-#include <dragonsdl/dragonfftframe.h>
-#include <dragonsdl/dragonplayer.h>
+#include <DragonMultimedia/dragondiagnostics.h>
+#include <DragonMultimedia/dragonfftframe.h>
+#include <DragonMultimedia/dragonplayer.h>
 
 #include <QApplication>
 #include <QCheckBox>

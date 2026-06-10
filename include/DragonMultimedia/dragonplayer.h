@@ -6,9 +6,9 @@
 #pragma once
 
 #include "dragonfftframe.h"
-#include "dragonsdl_export.h"
+#include "dragonmultimedia_export.h"
 
-#include <dragonsdl/dragonicymetadata.h>
+#include <DragonMultimedia/dragonicymetadata.h>
 
 #include <QCoroTask>
 #include <QObject>
@@ -20,7 +20,7 @@
 
 class DragonPlayerPrivate;
 
-class DRAGONSDL_EXPORT DragonPlayer : public QObject
+class DRAGONMULTIMEDIA_EXPORT DragonPlayer : public QObject
 {
     Q_OBJECT
 

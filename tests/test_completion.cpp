@@ -14,7 +14,7 @@
 
 #include <thread>
 
-using namespace DragonSdl;
+using namespace DragonMultimedia;
 
 class TestCompletion : public QObject
 {

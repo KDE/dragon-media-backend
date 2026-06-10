@@ -7,7 +7,7 @@
 
 #include "dragoncompletion.h"
 #include "dragonevent.h"
-#include "dragonsdl_export.h"
+#include "dragonmultimedia_export.h"
 #include <stdfloat>
 
 #include <QObject>
@@ -22,7 +22,7 @@
 #include <stop_token>
 #include <vector>
 
-class DRAGONSDL_EXPORT DragonDecoder : public QObject
+class DRAGONMULTIMEDIA_EXPORT DragonDecoder : public QObject
 {
     Q_OBJECT
 
@@ -49,9 +49,9 @@ public:
     DragonDecoder(DragonDecoder &&) = delete;
     DragonDecoder &operator=(DragonDecoder &&) = delete;
 
-    DragonSdl::InitResult initialize();
+    DragonMultimedia::InitResult initialize();
 
-    std::generator<DragonSdl::DecodeEvent> decodeLoop(std::stop_token st);
+    std::generator<DragonMultimedia::DecodeEvent> decodeLoop(std::stop_token st);
 
     void requestSeek(int64_t positionMs);
 
@@ -87,9 +87,9 @@ private:
 
     QString avErrorString(int errorCode) const;
 
-    std::optional<DragonSdl::SamplesChunk> drainDecoderFrames(DecodeSession &session);
+    std::optional<DragonMultimedia::SamplesChunk> drainDecoderFrames(DecodeSession &session);
     void flushDecoder(DecodeSession &session);
-    std::optional<DragonSdl::SamplesChunk> flushResampler(DecodeSession &session);
+    std::optional<DragonMultimedia::SamplesChunk> flushResampler(DecodeSession &session);
 
     std::atomic<bool> m_hadFatalError{false};
 };

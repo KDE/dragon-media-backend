@@ -5,9 +5,9 @@
 
 #pragma once
 
+#include <DragonMultimedia/dragonfftframe.h>
+#include <DragonMultimedia/dragonicymetadata.h>
 #include <QMainWindow>
-#include <dragonsdl/dragonfftframe.h>
-#include <dragonsdl/dragonicymetadata.h>
 
 class DragonPlayer;
 class DragonPlaylist;

@@ -5,11 +5,11 @@
 
 #pragma once
 
-#include "dragonsdl_export.h"
+#include "dragonmultimedia_export.h"
 
 #include <QObject>
 
-class DRAGONSDL_EXPORT DragonBufferProgress : public QObject
+class DRAGONMULTIMEDIA_EXPORT DragonBufferProgress : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(double progress READ progress NOTIFY progressChanged)

@@ -11,7 +11,7 @@
 #include <stdfloat>
 #include <variant>
 
-namespace DragonSdl
+namespace DragonMultimedia
 {
 
 struct FormatReady {

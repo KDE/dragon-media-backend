@@ -6,7 +6,7 @@
 #include "dragonkiostream.h"
 
 #include "dragonbufferprogress.h"
-#include "dragonsdl_network_logging.h"
+#include "dragonmultimedia_network_logging.h"
 
 #include <KIO/TransferJob>
 #include <QUrl>
@@ -29,7 +29,7 @@ void DragonKioStream::setUrl(const QUrl &url)
 
 void DragonKioStream::start()
 {
-    qCDebug(dragonsdlNetwork) << "DragonKioStream start" << m_url.toString();
+    qCDebug(dragonMultimediaNetwork) << "DragonKioStream start" << m_url.toString();
 
     m_abort = false;
     m_error = false;
@@ -162,11 +162,11 @@ void DragonKioStream::onResult(KJob *job)
     }
 
     if (job->error()) {
-        qCWarning(dragonsdlNetwork) << "KIO error:" << job->errorString();
+        qCWarning(dragonMultimediaNetwork) << "KIO error:" << job->errorString();
         m_error = true;
         Q_EMIT errorOccurred(job->errorString());
     } else {
-        qCDebug(dragonsdlNetwork) << "KIO job finished successfully";
+        qCDebug(dragonMultimediaNetwork) << "KIO job finished successfully";
         m_finished = true;
     }
     m_bufferCv.notify_all();

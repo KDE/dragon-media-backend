@@ -8,7 +8,7 @@
 #include "dragonaudiosink.h"
 #include "dragondecodepipeline.h"
 #include "dragonfftpipeline.h"
-#include <dragonsdl/dragonplayer.h>
+#include <DragonMultimedia/dragonplayer.h>
 
 #include "dragonfftblock.h"
 #include "dragonpipe.h"

@@ -13,7 +13,7 @@ using namespace Qt::StringLiterals;
 #include "dragonfftprocessor.h"
 #include "dragonpipe.h"
 #include "dragonpipe_test_utils.h"
-#include <dragonsdl/dragonfftframe.h>
+#include <DragonMultimedia/dragonfftframe.h>
 
 #include <algorithm>
 #include <atomic>

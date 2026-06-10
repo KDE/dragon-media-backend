@@ -6,8 +6,8 @@
 #include "dragonfftpipeline.h"
 #include "dragonfftprocessor.h"
 
-#include "dragonsdl_fft_logging.h"
-#include "dragonsdl_logging.h"
+#include "dragonmultimedia_fft_logging.h"
+#include "dragonmultimedia_logging.h"
 
 #include <QMetaObject>
 
@@ -45,7 +45,7 @@ void DragonFftPipeline::ensureInfrastructure()
 
     m_infrastructureCreated = true;
 
-    qCDebug(dragonsdlFft) << "FFT infrastructure ensured";
+    qCDebug(dragonMultimediaFft) << "FFT infrastructure ensured";
 }
 
 void DragonFftPipeline::teardown()
@@ -54,7 +54,7 @@ void DragonFftPipeline::teardown()
     m_fftProcessor.reset();
     m_infrastructureCreated = false;
 
-    qCDebug(dragonsdlFft) << "FFT infrastructure torn down";
+    qCDebug(dragonMultimediaFft) << "FFT infrastructure torn down";
 }
 
 void DragonFftPipeline::startThread()
@@ -64,7 +64,7 @@ void DragonFftPipeline::startThread()
     }
 
     if (!m_fftProcessor) {
-        qCWarning(dragonsdlFft) << "Cannot start FFT thread: no processor";
+        qCWarning(dragonMultimediaFft) << "Cannot start FFT thread: no processor";
         return;
     }
 
@@ -73,7 +73,7 @@ void DragonFftPipeline::startThread()
         m_fftProcessor->processLoop(std::move(st));
     });
 
-    qCDebug(dragonsdlFft) << "FFT thread started";
+    qCDebug(dragonMultimediaFft) << "FFT thread started";
 }
 
 void DragonFftPipeline::stopThread()
@@ -84,7 +84,7 @@ void DragonFftPipeline::stopThread()
             m_fftPipe->producer().notify();
         }
         m_fftThread.join();
-        qCDebug(dragonsdlFft) << "FFT thread stopped";
+        qCDebug(dragonMultimediaFft) << "FFT thread stopped";
     }
 }
 
@@ -127,17 +127,17 @@ void DragonFftPipeline::setMode(DragonPlayer::FftMode mode)
 
         startThread();
 
-        qCDebug(dragonsdlFft) << "FFT mode: Off -> On (" << mode << ")";
+        qCDebug(dragonMultimediaFft) << "FFT mode: Off -> On (" << mode << ")";
     } else if (wasOn && !nowOn) {
         if (m_fftProcessor) {
             m_fftProcessor->setFftMode(mode);
         }
 
-        qCDebug(dragonsdlFft) << "FFT mode: On -> Off";
+        qCDebug(dragonMultimediaFft) << "FFT mode: On -> Off";
     } else if (nowOn && m_fftProcessor) {
         m_fftProcessor->setFftMode(mode);
 
-        qCDebug(dragonsdlFft) << "FFT mode change: " << mode;
+        qCDebug(dragonMultimediaFft) << "FFT mode change: " << mode;
     }
 }
 

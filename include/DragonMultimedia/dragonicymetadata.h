@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "dragonsdl_export.h"
+#include "dragonmultimedia_export.h"
 
 #include <QHash>
 #include <QSharedDataPointer>
@@ -13,7 +13,7 @@
 
 class DragonIcyMetadataPrivate;
 
-class DRAGONSDL_EXPORT DragonIcyMetadata
+class DRAGONMULTIMEDIA_EXPORT DragonIcyMetadata
 {
 public:
     DragonIcyMetadata();

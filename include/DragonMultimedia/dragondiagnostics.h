@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "dragonsdl_export.h"
+#include "dragonmultimedia_export.h"
 
 #include <QObject>
 
@@ -15,7 +15,7 @@ class DragonPlayer;
 
 class DragonDiagnosticsPrivate;
 
-class DRAGONSDL_EXPORT DragonDiagnostics : public QObject
+class DRAGONMULTIMEDIA_EXPORT DragonDiagnostics : public QObject
 {
 public:
     explicit DragonDiagnostics(DragonPlayer *player);

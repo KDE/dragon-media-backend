@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "dragonsdl_export.h"
+#include "dragonmultimedia_export.h"
 #include <stdfloat>
 
 #include <QObject>
@@ -22,7 +22,7 @@ template<typename T>
 class DragonPipe;
 struct DragonFftBlock;
 
-class DRAGONSDL_EXPORT DragonAudioSink : public QObject
+class DRAGONMULTIMEDIA_EXPORT DragonAudioSink : public QObject
 {
     Q_OBJECT
 

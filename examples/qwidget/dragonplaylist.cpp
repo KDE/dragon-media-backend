@@ -5,7 +5,7 @@
 
 #include "dragonplaylist.h"
 
-#include <dragonsdl/dragonplayer.h>
+#include <DragonMultimedia/dragonplayer.h>
 
 #include <QDebug>
 

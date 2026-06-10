@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.25)
 
-project(dragon-sdl
+project(DragonMultimedia
     VERSION 0.1.0
     DESCRIPTION "KDE audio library using SDL3, ffmpeg, kissfft, and C++23"
     LANGUAGES CXX
@@ -161,52 +161,52 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOMOC_RELY_ON_EXPORTS ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-ecm_qt_declare_logging_category(dragonsdl_SOURCES
-    HEADER "dragonsdl_logging.h"
-    IDENTIFIER "dragonsdlPlayer"
-    CATEGORY_NAME "org.kde.dragonsdl.player"
+ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
+    HEADER "dragonmultimedia_logging.h"
+    IDENTIFIER "dragonMultimediaPlayer"
+    CATEGORY_NAME "org.kde.dragonmultimedia.player"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(dragonsdl_SOURCES
-    HEADER "dragonsdl_decoder_logging.h"
-    IDENTIFIER "dragonsdlDecoder"
-    CATEGORY_NAME "org.kde.dragonsdl.decoder"
+ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
+    HEADER "dragonmultimedia_decoder_logging.h"
+    IDENTIFIER "dragonMultimediaDecoder"
+    CATEGORY_NAME "org.kde.dragonmultimedia.decoder"
     DEFAULT_SEVERITY Info
 )
 
 ecm_qt_declare_logging_category(dragonsdlaudiosink_SOURCES
-    HEADER "dragonsdl_audio_logging.h"
-    IDENTIFIER "dragonsdlAudio"
-    CATEGORY_NAME "org.kde.dragonsdl.audio"
+    HEADER "dragonmultimedia_audio_logging.h"
+    IDENTIFIER "dragonMultimediaAudio"
+    CATEGORY_NAME "org.kde.dragonmultimedia.audio"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(dragonsdl_SOURCES
-    HEADER "dragonsdl_fft_logging.h"
-    IDENTIFIER "dragonsdlFft"
-    CATEGORY_NAME "org.kde.dragonsdl.fft"
+ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
+    HEADER "dragonmultimedia_fft_logging.h"
+    IDENTIFIER "dragonMultimediaFft"
+    CATEGORY_NAME "org.kde.dragonmultimedia.fft"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(dragonsdl_SOURCES
-    HEADER "dragonsdl_network_logging.h"
-    IDENTIFIER "dragonsdlNetwork"
-    CATEGORY_NAME "org.kde.dragonsdl.network"
+ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
+    HEADER "dragonmultimedia_network_logging.h"
+    IDENTIFIER "dragonMultimediaNetwork"
+    CATEGORY_NAME "org.kde.dragonmultimedia.network"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(dragonsdl_SOURCES
-    HEADER "dragonsdl_decode_logging.h"
-    IDENTIFIER "dragonsdlDecode"
-    CATEGORY_NAME "org.kde.dragonsdl.decode"
+ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
+    HEADER "dragonmultimedia_decode_logging.h"
+    IDENTIFIER "dragonMultimediaDecode"
+    CATEGORY_NAME "org.kde.dragonmultimedia.decode"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(dragonsdl_SOURCES
-    HEADER "dragonsdl_factory_logging.h"
-    IDENTIFIER "dragonsdlFactory"
-    CATEGORY_NAME "org.kde.dragonsdl.factory"
+ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
+    HEADER "dragonmultimedia_factory_logging.h"
+    IDENTIFIER "dragonMultimediaFactory"
+    CATEGORY_NAME "org.kde.dragonmultimedia.factory"
     DEFAULT_SEVERITY Info
 )
 
@@ -226,11 +226,11 @@ set(SOURCES
     src/dragondecodepipeline.cpp
     src/dragonfftpipeline.cpp
     src/dragonpipe.cpp
-    ${dragonsdl_SOURCES}
+    ${DragonMultimedia_SOURCES}
 )
 
 set(HEADERS
-    include/dragonsdl/dragonplayer.h
+    include/DragonMultimedia/dragonplayer.h
         src/dragondecoder.h
         src/dragonaudiosink.h
         src/dragonaudiosinkfactory.h
@@ -238,28 +238,28 @@ set(HEADERS
         src/dragonkiostream.h
         src/dragonstream.h
         src/dragonfftprocessor.h
-    include/dragonsdl/dragonfftframe.h
+    include/DragonMultimedia/dragonfftframe.h
         src/dragonbufferprogress.h
-    include/dragonsdl/dragonicymetadata.h
+    include/DragonMultimedia/dragonicymetadata.h
 )
 
-qt_add_library(dragon-sdl SHARED ${SOURCES} ${HEADERS})
+qt_add_library(DragonMultimedia SHARED ${SOURCES} ${HEADERS})
 
-target_include_directories(dragon-sdl PUBLIC
+target_include_directories(DragonMultimedia PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
     $<INSTALL_INTERFACE:include>
 )
 
-target_include_directories(dragon-sdl PRIVATE
+target_include_directories(DragonMultimedia PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_include_directories(dragon-sdl PRIVATE
+target_include_directories(DragonMultimedia PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
 )
 
-target_link_libraries(dragon-sdl
+target_link_libraries(DragonMultimedia
     PUBLIC
         Qt6::Core
         Qt6::Network
@@ -276,82 +276,82 @@ target_link_libraries(dragon-sdl
 
 kcoreaddons_add_plugin(dragonsdlaudiosink
     SOURCES src/dragonsdlaudiosink.cpp ${dragonsdlaudiosink_SOURCES}
-    INSTALL_NAMESPACE "dragonsdl/audiosink"
+    INSTALL_NAMESPACE "DragonMultimedia/audiosink"
 )
 target_include_directories(dragonsdlaudiosink PRIVATE 
     ${CMAKE_CURRENT_SOURCE_DIR}/src 
     ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
 )
-target_link_libraries(dragonsdlaudiosink PRIVATE dragon-sdl SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
+target_link_libraries(dragonsdlaudiosink PRIVATE DragonMultimedia SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
 
 if(PIPEWIRE_FOUND)
     ecm_qt_declare_logging_category(dragonpipewireaudiosink_SOURCES
-        HEADER "dragonsdl_audio_logging.h"
-        IDENTIFIER "dragonsdlAudio"
-        CATEGORY_NAME "org.kde.dragonsdl.audio"
+        HEADER "dragonmultimedia_audio_logging.h"
+        IDENTIFIER "dragonMultimediaAudio"
+        CATEGORY_NAME "org.kde.dragonmultimedia.audio"
         DEFAULT_SEVERITY Info
     )
 
     kcoreaddons_add_plugin(dragonpipewireaudiosink
         SOURCES src/dragonpipewireaudiosink.cpp ${dragonpipewireaudiosink_SOURCES}
-        INSTALL_NAMESPACE "dragonsdl/audiosink"
+        INSTALL_NAMESPACE "DragonMultimedia/audiosink"
     )
     target_include_directories(dragonpipewireaudiosink PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
         ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
     )
-    target_link_libraries(dragonpipewireaudiosink PRIVATE dragon-sdl PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui)
+    target_link_libraries(dragonpipewireaudiosink PRIVATE DragonMultimedia PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui)
     message(STATUS "PipeWire audio sink plugin: enabled")
 else()
     message(STATUS "PipeWire audio sink plugin: disabled (libpipewire-0.3 not found)")
 endif()
 
 include(GenerateExportHeader)
-generate_export_header(dragon-sdl
-    BASE_NAME dragonsdl
-    EXPORT_MACRO_NAME DRAGONSDL_EXPORT
-    EXPORT_FILE_NAME dragonsdl_export.h
+generate_export_header(DragonMultimedia
+    BASE_NAME DragonMultimedia
+    EXPORT_MACRO_NAME DRAGONMULTIMEDIA_EXPORT
+    EXPORT_FILE_NAME dragonmultimedia_export.h
 )
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dragonsdl_export.h
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/dragonsdl
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dragonmultimedia_export.h
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DragonMultimedia
 )
 
-install(TARGETS dragon-sdl
-    EXPORT dragon-sdl-targets
+install(TARGETS DragonMultimedia
+    EXPORT DragonMultimedia-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-install(DIRECTORY include/dragonsdl DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(DIRECTORY include/DragonMultimedia DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 
-install(FILES dragonsdl.categories DESTINATION ${KDE_INSTALL_DATAROOTDIR}/qlogging-categories6)
+install(FILES dragonmultimedia.categories DESTINATION ${KDE_INSTALL_DATAROOTDIR}/qlogging-categories6)
 
 include(CMakePackageConfigHelpers)
 
-install(EXPORT dragon-sdl-targets
-    FILE dragon-sdl-targets.cmake
-    NAMESPACE dragon-sdl::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dragon-sdl
+install(EXPORT DragonMultimedia-targets
+    FILE DragonMultimedia-targets.cmake
+    NAMESPACE DragonMultimedia::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMultimedia
 )
 
 configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/dragon-sdl-config.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/dragon-sdl-config.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dragon-sdl
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/DragonMultimediaConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/DragonMultimediaConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMultimedia
 )
 
 write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/dragon-sdl-config-version.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/DragonMultimediaConfig-version.cmake
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
 
 install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/dragon-sdl-config.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/dragon-sdl-config-version.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/dragon-sdl
+    ${CMAKE_CURRENT_BINARY_DIR}/DragonMultimediaConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/DragonMultimediaConfig-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMultimedia
 )
 
 file(GLOB ALL_ROOT_FILES
@@ -399,7 +399,7 @@ if(BUILD_TESTING)
 
     add_executable(test_fftprocessor tests/test_fftprocessor.cpp)
     target_link_libraries(test_fftprocessor PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         kissfft::kissfft
         spsc_queue
@@ -415,7 +415,7 @@ if(BUILD_TESTING)
 
     add_executable(test_decoder tests/test_decoder.cpp)
     target_link_libraries(test_decoder PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
         PkgConfig::FFmpeg
@@ -424,20 +424,20 @@ if(BUILD_TESTING)
 
     add_executable(test_audiooutput tests/test_audiooutput.cpp)
     target_link_libraries(test_audiooutput PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         SDL3::SDL3
         spsc_queue
     )
     add_test(NAME test_audiooutput_pipewire COMMAND test_audiooutput)
-    set_property(TEST test_audiooutput_pipewire APPEND PROPERTY ENVIRONMENT "DRAGONSDL_AUDIO_SINK=dragonpipewireaudiosink")
+    set_property(TEST test_audiooutput_pipewire APPEND PROPERTY ENVIRONMENT "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpipewireaudiosink")
     
     add_test(NAME test_audiooutput_sdl COMMAND test_audiooutput)
-    set_property(TEST test_audiooutput_sdl APPEND PROPERTY ENVIRONMENT "DRAGONSDL_AUDIO_SINK=dragonsdlaudiosink")
+    set_property(TEST test_audiooutput_sdl APPEND PROPERTY ENVIRONMENT "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink")
 
     add_executable(test_radiostream tests/test_radiostream.cpp)
     target_link_libraries(test_radiostream PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
     )
@@ -448,7 +448,7 @@ if(BUILD_TESTING)
 
     add_executable(test_kiostream tests/test_kiostream.cpp)
     target_link_libraries(test_kiostream PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
         KF6::KIOCore
@@ -457,7 +457,7 @@ if(BUILD_TESTING)
 
     add_executable(test_player_basics tests/test_player_basics.cpp)
     target_link_libraries(test_player_basics PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
         SDL3::SDL3
@@ -472,7 +472,7 @@ if(BUILD_TESTING)
 
     add_executable(test_player_playback tests/test_player_playback.cpp)
     target_link_libraries(test_player_playback PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
         SDL3::SDL3
@@ -487,7 +487,7 @@ if(BUILD_TESTING)
 
     add_executable(test_player_signals tests/test_player_signals.cpp)
     target_link_libraries(test_player_signals PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
         SDL3::SDL3
@@ -502,7 +502,7 @@ if(BUILD_TESTING)
 
     add_executable(test_player_prefinish tests/test_player_prefinish.cpp)
     target_link_libraries(test_player_prefinish PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
         SDL3::SDL3
@@ -517,7 +517,7 @@ if(BUILD_TESTING)
 
     add_executable(test_player_fft tests/test_player_fft.cpp)
     target_link_libraries(test_player_fft PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
         SDL3::SDL3
@@ -532,7 +532,7 @@ if(BUILD_TESTING)
 
     add_executable(test_e2e tests/test_e2e.cpp)
     target_link_libraries(test_e2e PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
         PkgConfig::FFmpeg
@@ -544,7 +544,7 @@ if(BUILD_TESTING)
 
     add_executable(test_network_playback tests/test_network_playback.cpp)
     target_link_libraries(test_network_playback PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Network
         SDL3::SDL3
@@ -559,7 +559,7 @@ if(BUILD_TESTING)
 
     add_executable(test_completion tests/test_completion.cpp)
     target_link_libraries(test_completion PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         Qt6::Core
     )
@@ -567,7 +567,7 @@ if(BUILD_TESTING)
 
     add_executable(test_pipe tests/test_pipe.cpp)
     target_link_libraries(test_pipe PRIVATE
-        dragon-sdl
+        DragonMultimedia
         Qt6::Test
         spsc_queue
     )

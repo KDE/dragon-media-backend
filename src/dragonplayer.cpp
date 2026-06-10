@@ -6,7 +6,7 @@
 #include "dragonplayer_p.h"
 
 #include "dragonaudiosinkfactory.h"
-#include <dragonsdl/dragonplayer.h>
+#include <DragonMultimedia/dragonplayer.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
@@ -14,7 +14,7 @@
 #pragma GCC diagnostic pop
 #include <QMetaObject>
 #include <QTimer>
-#include <dragonsdl_logging.h>
+#include <dragonmultimedia_logging.h>
 
 #include <algorithm>
 #include <condition_variable>
@@ -64,16 +64,16 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, Drag
 
 void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleRate, int channels, qint64 durationMs)
 {
-    qCDebug(dragonsdlPlayer) << "onGaplessTransition newSource=" << newSource.toString() << "sr=" << sampleRate << "ch=" << channels
-                             << "duration=" << durationMs;
+    qCDebug(dragonMultimediaPlayer) << "onGaplessTransition newSource=" << newSource.toString() << "sr=" << sampleRate << "ch=" << channels
+                                    << "duration=" << durationMs;
 
     if (newSource != nextSource) {
-        qCDebug(dragonsdlPlayer) << "ignoring stale onGaplessTransition (source mismatch)";
+        qCDebug(dragonMultimediaPlayer) << "ignoring stale onGaplessTransition (source mismatch)";
         return;
     }
 
     if (nextSource.isEmpty()) {
-        qCDebug(dragonsdlPlayer) << "onGaplessTransition nextSource was cleared, aborting";
+        qCDebug(dragonMultimediaPlayer) << "onGaplessTransition nextSource was cleared, aborting";
         return;
     }
 
@@ -81,7 +81,7 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     nextSource.clear();
     currentPosition = 0;
     aboutToFinishEmitted = false;
-    qCDebug(dragonsdlPlayer) << "onGaplessTransition: reset aboutToFinishEmitted for" << currentSource.toString();
+    qCDebug(dragonMultimediaPlayer) << "onGaplessTransition: reset aboutToFinishEmitted for" << currentSource.toString();
     currentIsLocal = currentSource.isLocalFile();
     currentSeekable = currentIsLocal;
     currentDuration = durationMs;
@@ -105,11 +105,11 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
 
 void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalError)
 {
-    qCDebug(dragonsdlPlayer) << "onDecodeFinished called source=" << source.toString() << "currentSource=" << currentSource.toString()
-                             << "hadFatalError=" << hadFatalError;
+    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished called source=" << source.toString() << "currentSource=" << currentSource.toString()
+                                    << "hadFatalError=" << hadFatalError;
 
     if (source != currentSource) {
-        qCDebug(dragonsdlPlayer) << "ignoring stale onDecodeFinished (source mismatch)";
+        qCDebug(dragonMultimediaPlayer) << "ignoring stale onDecodeFinished (source mismatch)";
         return;
     }
 
@@ -123,7 +123,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
         return;
     }
 
-    qCDebug(dragonsdlPlayer) << "onDecodeFinished emitting state/status changes, hadFatalError=" << hadFatalError;
+    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished emitting state/status changes, hadFatalError=" << hadFatalError;
     if (hadFatalError) {
         setStatus(DragonPlayer::MediaStatus::InvalidMedia);
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
@@ -131,7 +131,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
         setStatus(DragonPlayer::MediaStatus::EndOfMedia);
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
     }
-    qCDebug(dragonsdlPlayer) << "onDecodeFinished state/status changes complete";
+    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished state/status changes complete";
 }
 
 void DragonPlayerPrivate::onDecodeError(const QString &)
@@ -161,9 +161,9 @@ void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, con
 
 void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
 {
-    qCDebug(dragonsdlPlayer) << "setPlaybackState(" << state << ") current=" << currentPlaybackState;
+    qCDebug(dragonMultimediaPlayer) << "setPlaybackState(" << state << ") current=" << currentPlaybackState;
     if (currentPlaybackState == state) {
-        qCDebug(dragonsdlPlayer) << "setPlaybackState no change, returning";
+        qCDebug(dragonMultimediaPlayer) << "setPlaybackState no change, returning";
         return;
     }
 
@@ -205,13 +205,13 @@ void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
 
 void DragonPlayerPrivate::setStatus(DragonPlayer::MediaStatus status)
 {
-    qCDebug(dragonsdlPlayer) << "setStatus(" << status << ") current=" << currentStatus;
+    qCDebug(dragonMultimediaPlayer) << "setStatus(" << status << ") current=" << currentStatus;
     if (currentStatus == status) {
-        qCDebug(dragonsdlPlayer) << "setStatus no change, returning";
+        qCDebug(dragonMultimediaPlayer) << "setStatus no change, returning";
         return;
     }
     currentStatus = status;
-    qCDebug(dragonsdlPlayer) << "setStatus emitting statusChanged";
+    qCDebug(dragonMultimediaPlayer) << "setStatus emitting statusChanged";
     Q_EMIT q->statusChanged(status);
 
     if (status == DragonPlayer::MediaStatus::InvalidMedia && currentError != DragonPlayer::Error::FormatError) {
@@ -236,7 +236,7 @@ void DragonPlayerPrivate::setError(DragonPlayer::Error error)
 
 void DragonPlayerPrivate::stopPipeline()
 {
-    qCDebug(dragonsdlPlayer) << "stopPipeline() full teardown";
+    qCDebug(dragonMultimediaPlayer) << "stopPipeline() full teardown";
 
     decodePipeline.stop();
 
@@ -247,7 +247,7 @@ void DragonPlayerPrivate::stopPipeline()
         audioOutput->reset();
     }
 
-    qCDebug(dragonsdlPlayer) << "stopPipeline() teardown complete";
+    qCDebug(dragonMultimediaPlayer) << "stopPipeline() teardown complete";
 }
 
 void DragonPlayerPrivate::init()
@@ -269,14 +269,14 @@ void DragonPlayerPrivate::init()
         Q_EMIT q->positionChanged(pos);
 
         if (prefinishMark > 0) {
-            qCDebug(dragonsdlPlayer) << "timer: prefinishMark=" << prefinishMark << "currentDuration=" << currentDuration << "emitted=" << aboutToFinishEmitted
-                                     << "pos=" << pos;
+            qCDebug(dragonMultimediaPlayer) << "timer: prefinishMark=" << prefinishMark << "currentDuration=" << currentDuration
+                                            << "emitted=" << aboutToFinishEmitted << "pos=" << pos;
             if (currentDuration > 0 && !aboutToFinishEmitted) {
                 const int64_t remaining = currentDuration - pos;
-                qCDebug(dragonsdlPlayer) << "timer: remaining=" << remaining;
+                qCDebug(dragonMultimediaPlayer) << "timer: remaining=" << remaining;
                 if (remaining <= prefinishMark && remaining > 0) {
                     aboutToFinishEmitted = true;
-                    qCDebug(dragonsdlPlayer) << "aboutToFinish emitted remaining=" << remaining << "ms, prefinishMark=" << prefinishMark;
+                    qCDebug(dragonMultimediaPlayer) << "aboutToFinish emitted remaining=" << remaining << "ms, prefinishMark=" << prefinishMark;
                     Q_EMIT q->aboutToFinish();
                 }
             }
@@ -392,7 +392,7 @@ double DragonPlayer::bufferProgress() const
 
 void DragonPlayer::setMuted(bool muted)
 {
-    qCDebug(dragonsdlPlayer) << "setMuted(" << muted << ")";
+    qCDebug(dragonMultimediaPlayer) << "setMuted(" << muted << ")";
     if (d->currentMuted == muted) {
         return;
     }
@@ -405,7 +405,7 @@ void DragonPlayer::setMuted(bool muted)
 
 void DragonPlayer::setVolume(float gain)
 {
-    qCDebug(dragonsdlPlayer) << "setVolume(" << gain << ")";
+    qCDebug(dragonMultimediaPlayer) << "setVolume(" << gain << ")";
     if (d->audioOutput) {
         d->audioOutput->setVolume(gain);
     }
@@ -413,7 +413,7 @@ void DragonPlayer::setVolume(float gain)
 
 QCoro::Task<void> DragonPlayer::setSource(QUrl source)
 {
-    qCDebug(dragonsdlPlayer) << "setSource(" << source.toString() << ")";
+    qCDebug(dragonMultimediaPlayer) << "setSource(" << source.toString() << ")";
 
     auto aliveGuard = d->aliveGuard;
 
@@ -432,7 +432,7 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->currentPosition = 0;
     d->currentDuration = 0;
     d->aboutToFinishEmitted = false;
-    qCDebug(dragonsdlPlayer) << "setSource: reset aboutToFinishEmitted for" << source.toString();
+    qCDebug(dragonMultimediaPlayer) << "setSource: reset aboutToFinishEmitted for" << source.toString();
     d->nextSource.clear();
     d->currentSampleRate = 0;
     d->currentChannels = 0;
@@ -478,14 +478,14 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     }
 
     if (d->currentSource != source) {
-        qCDebug(dragonsdlPlayer) << "superseded setSource coroutine (source" << source.toString() << "!= current" << d->currentSource.toString()
-                                 << "), discarding";
+        qCDebug(dragonMultimediaPlayer) << "superseded setSource coroutine (source" << source.toString() << "!= current" << d->currentSource.toString()
+                                        << "), discarding";
         co_return;
     }
 
     if (!result.success) {
         if (result.cancelled) {
-            qCDebug(dragonsdlPlayer) << "setSource coroutine cancelled, returning without state change";
+            qCDebug(dragonMultimediaPlayer) << "setSource coroutine cancelled, returning without state change";
             co_return;
         }
         d->currentError = d->currentIsLocal ? Error::FormatError : Error::NetworkError;
@@ -524,7 +524,7 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
 
 void DragonPlayer::setNextSource(const QUrl &nextSource)
 {
-    qCDebug(dragonsdlPlayer) << "setNextSource(" << nextSource.toString() << ")";
+    qCDebug(dragonMultimediaPlayer) << "setNextSource(" << nextSource.toString() << ")";
     d->nextSource = nextSource;
     Q_EMIT nextSourceChanged();
 
@@ -533,7 +533,7 @@ void DragonPlayer::setNextSource(const QUrl &nextSource)
 
 void DragonPlayer::setPosition(int64_t posMs)
 {
-    qCDebug(dragonsdlPlayer) << "setPosition(" << posMs << ")";
+    qCDebug(dragonMultimediaPlayer) << "setPosition(" << posMs << ")";
     posMs = std::clamp(posMs, int64_t{0}, std::max(d->currentDuration, int64_t{0}));
     d->currentPosition = posMs;
 
@@ -565,7 +565,7 @@ int32_t DragonPlayer::prefinishMark() const
 
 void DragonPlayer::setPrefinishMark(int32_t msec)
 {
-    qCDebug(dragonsdlPlayer) << "setPrefinishMark(" << msec << ")";
+    qCDebug(dragonMultimediaPlayer) << "setPrefinishMark(" << msec << ")";
     if (d->prefinishMark == msec) {
         return;
     }
@@ -582,7 +582,7 @@ void DragonPlayer::setPrefinishMark(int32_t msec)
 
 void DragonPlayer::setFftMode(FftMode mode)
 {
-    qCDebug(dragonsdlPlayer) << "setFftMode(" << mode << ")";
+    qCDebug(dragonMultimediaPlayer) << "setFftMode(" << mode << ")";
     if (d->currentFftMode == mode) {
         return;
     }
@@ -596,7 +596,7 @@ void DragonPlayer::setFftMode(FftMode mode)
 
 void DragonPlayer::setFftRate(int rate)
 {
-    qCDebug(dragonsdlPlayer) << "setFftRate(" << rate << ")";
+    qCDebug(dragonMultimediaPlayer) << "setFftRate(" << rate << ")";
     if (rate <= 0) {
         rate = 1;
     }
@@ -610,7 +610,7 @@ void DragonPlayer::setFftRate(int rate)
 
 void DragonPlayer::play()
 {
-    qCDebug(dragonsdlPlayer) << "play()";
+    qCDebug(dragonMultimediaPlayer) << "play()";
     if (d->currentSource.isEmpty()) {
         return;
     }
@@ -630,23 +630,23 @@ void DragonPlayer::play()
     }
 
     if (d->currentStatus == MediaStatus::LoadingMedia) {
-        qCDebug(dragonsdlPlayer) << "play() status is LoadingMedia, intent captured";
+        qCDebug(dragonMultimediaPlayer) << "play() status is LoadingMedia, intent captured";
         return;
     }
 
     if (d->currentStatus == MediaStatus::EndOfMedia) {
-        qCDebug(dragonsdlPlayer) << "play() status is EndOfMedia, reloading source";
+        qCDebug(dragonMultimediaPlayer) << "play() status is EndOfMedia, reloading source";
         setSource(d->currentSource);
         return;
     }
 
     if (!d->decodePipeline.isActive() && !d->currentSource.isEmpty()) {
-        qCDebug(dragonsdlPlayer) << "play() decoder not active, restarting decode pipeline";
+        qCDebug(dragonMultimediaPlayer) << "play() decoder not active, restarting decode pipeline";
         setSource(d->currentSource);
         return;
     }
 
-    qCDebug(dragonsdlPlayer) << "play() status is " << d->currentStatus << ", starting audio synchronously";
+    qCDebug(dragonMultimediaPlayer) << "play() status is " << d->currentStatus << ", starting audio synchronously";
 
     if (d->audioOutput && !d->audioOutput->isDeviceOpen() && d->currentSampleRate > 0) {
         d->audioOutput->open(d->currentSampleRate, d->currentChannels);
@@ -659,7 +659,7 @@ void DragonPlayer::play()
 
 void DragonPlayer::pause()
 {
-    qCDebug(dragonsdlPlayer) << "pause()";
+    qCDebug(dragonMultimediaPlayer) << "pause()";
 
     if (d->currentStatus == MediaStatus::NoMedia || d->currentStatus == MediaStatus::InvalidMedia) {
         return;
@@ -672,7 +672,7 @@ void DragonPlayer::pause()
     }
 
     if (d->currentStatus == MediaStatus::LoadingMedia) {
-        qCDebug(dragonsdlPlayer) << "pause() status is LoadingMedia, intent captured";
+        qCDebug(dragonMultimediaPlayer) << "pause() status is LoadingMedia, intent captured";
         return;
     }
 
@@ -684,7 +684,7 @@ void DragonPlayer::pause()
 
 void DragonPlayer::stop()
 {
-    qCDebug(dragonsdlPlayer) << "stop()";
+    qCDebug(dragonMultimediaPlayer) << "stop()";
 
     d->requestedPlaybackState = PlaybackState::StoppedState;
 
@@ -708,19 +708,19 @@ void DragonPlayer::stop()
 
 void DragonPlayer::seek(int64_t posMs)
 {
-    qCDebug(dragonsdlPlayer) << "seek(" << posMs << ")";
+    qCDebug(dragonMultimediaPlayer) << "seek(" << posMs << ")";
     setPosition(posMs);
 }
 
 void DragonPlayer::saveUndoPosition(int64_t posMs)
 {
-    qCDebug(dragonsdlPlayer) << "saveUndoPosition(" << posMs << ")";
+    qCDebug(dragonMultimediaPlayer) << "saveUndoPosition(" << posMs << ")";
     d->undoPosition = posMs;
 }
 
 void DragonPlayer::restoreUndoPosition()
 {
-    qCDebug(dragonsdlPlayer) << "restoreUndoPosition()";
+    qCDebug(dragonMultimediaPlayer) << "restoreUndoPosition()";
     if (d->undoPosition > 0) {
         setPosition(d->undoPosition);
     }

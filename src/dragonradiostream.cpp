@@ -7,7 +7,7 @@
 
 #include <dragonbufferprogress.h>
 
-#include "dragonsdl_network_logging.h"
+#include "dragonmultimedia_network_logging.h"
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -42,7 +42,7 @@ void DragonRadioStream::setUrl(const QUrl &url)
 
 void DragonRadioStream::start()
 {
-    qCDebug(dragonsdlNetwork) << "start" << m_url.toString();
+    qCDebug(dragonMultimediaNetwork) << "start" << m_url.toString();
 
     m_abort = false;
     m_error = false;
@@ -147,7 +147,7 @@ int64_t DragonRadioStream::seek(int64_t offset)
         return -1;
     }
 
-    qCDebug(dragonsdlNetwork) << "seek to byte offset" << offset;
+    qCDebug(dragonMultimediaNetwork) << "seek to byte offset" << offset;
 
     stop();
 
@@ -220,7 +220,7 @@ void DragonRadioStream::onReplyMetaDataChanged()
             const int metaint = metaintHeader.toInt(&ok);
             if (ok && metaint > 0) {
                 m_icyMetaint = metaint;
-                qCDebug(dragonsdlNetwork) << "ICY metadata interval:" << m_icyMetaint;
+                qCDebug(dragonMultimediaNetwork) << "ICY metadata interval:" << m_icyMetaint;
             }
         }
 
@@ -237,12 +237,12 @@ void DragonRadioStream::onReplyMetaDataChanged()
                         const qint64 total = contentRange.mid(slashIdx + 1).toLongLong(&okTotal);
                         if (okTotal && total > 0) {
                             m_totalSize = total;
-                            qCDebug(dragonsdlNetwork) << "Total size from Content-Range:" << total;
+                            qCDebug(dragonMultimediaNetwork) << "Total size from Content-Range:" << total;
                         }
                     }
                 } else {
                     m_totalSize = cl;
-                    qCDebug(dragonsdlNetwork) << "Total size from Content-Length:" << cl;
+                    qCDebug(dragonMultimediaNetwork) << "Total size from Content-Length:" << cl;
                 }
             }
         }
@@ -250,7 +250,7 @@ void DragonRadioStream::onReplyMetaDataChanged()
         const QByteArray acceptRanges = m_reply->rawHeader("Accept-Ranges"_ba);
         if (acceptRanges.toLower() == "bytes") {
             m_acceptsRanges = true;
-            qCDebug(dragonsdlNetwork) << "Server supports Range requests";
+            qCDebug(dragonMultimediaNetwork) << "Server supports Range requests";
         }
     }
 }
@@ -276,7 +276,7 @@ void DragonRadioStream::onReplyReadyRead()
 
 void DragonRadioStream::onReplyFinished()
 {
-    qCDebug(dragonsdlNetwork) << "reply finished";
+    qCDebug(dragonMultimediaNetwork) << "reply finished";
     m_watchdogTimer->stop();
 
     if (m_abort) {
@@ -284,14 +284,14 @@ void DragonRadioStream::onReplyFinished()
     }
 
     if (m_reply && m_reply->error() != QNetworkReply::NoError) {
-        qCDebug(dragonsdlNetwork) << "reply finished with error, will reconnect";
+        qCDebug(dragonMultimediaNetwork) << "reply finished with error, will reconnect";
         QTimer::singleShot(2000, this, [this]() {
             if (!m_abort) {
                 start();
             }
         });
     } else {
-        qCDebug(dragonsdlNetwork) << "reply finished successfully, no reconnect needed";
+        qCDebug(dragonMultimediaNetwork) << "reply finished successfully, no reconnect needed";
         m_finished = true;
         m_bufferCv.notify_all();
     }
@@ -299,7 +299,7 @@ void DragonRadioStream::onReplyFinished()
 
 void DragonRadioStream::onReplyError(QNetworkReply::NetworkError code)
 {
-    qCWarning(dragonsdlNetwork) << "error:" << code;
+    qCWarning(dragonMultimediaNetwork) << "error:" << code;
     m_watchdogTimer->stop();
     m_error = true;
     m_bufferCv.notify_all();
@@ -315,7 +315,7 @@ void DragonRadioStream::onWatchdogTimeout()
         return;
     }
 
-    qCDebug(dragonsdlNetwork) << "watchdog timeout reconnecting";
+    qCDebug(dragonMultimediaNetwork) << "watchdog timeout reconnecting";
     start();
 }
 

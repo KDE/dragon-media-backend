@@ -16,7 +16,7 @@
 #include <QString>
 #include <QThread>
 
-namespace DragonSdl
+namespace DragonMultimedia
 {
 
 struct InitResult {

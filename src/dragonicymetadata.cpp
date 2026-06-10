@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#include <dragonsdl/dragonicymetadata.h>
+#include <DragonMultimedia/dragonicymetadata.h>
 
 class DragonIcyMetadataPrivate : public QSharedData
 {

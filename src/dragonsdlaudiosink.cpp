@@ -5,7 +5,7 @@
 
 #include "dragonsdlaudiosink.h"
 
-#include "dragonsdl_audio_logging.h"
+#include "dragonmultimedia_audio_logging.h"
 
 #include <KPluginFactory>
 
@@ -31,20 +31,20 @@ static void SDLLogOutput(void *userdata, int category, SDL_LogPriority priority,
     case SDL_LOG_PRIORITY_VERBOSE:
     case SDL_LOG_PRIORITY_DEBUG:
     case SDL_LOG_PRIORITY_TRACE:
-        qCDebug(dragonsdlAudio) << "SDL:" << message;
+        qCDebug(dragonMultimediaAudio) << "SDL:" << message;
         break;
     case SDL_LOG_PRIORITY_INFO:
-        qCInfo(dragonsdlAudio) << "SDL:" << message;
+        qCInfo(dragonMultimediaAudio) << "SDL:" << message;
         break;
     case SDL_LOG_PRIORITY_WARN:
-        qCWarning(dragonsdlAudio) << "SDL:" << message;
+        qCWarning(dragonMultimediaAudio) << "SDL:" << message;
         break;
     case SDL_LOG_PRIORITY_ERROR:
     case SDL_LOG_PRIORITY_CRITICAL:
-        qCCritical(dragonsdlAudio) << "SDL:" << message;
+        qCCritical(dragonMultimediaAudio) << "SDL:" << message;
         break;
     default:
-        qCDebug(dragonsdlAudio) << "SDL:" << message;
+        qCDebug(dragonMultimediaAudio) << "SDL:" << message;
         break;
     }
 }
@@ -57,11 +57,11 @@ DragonSdlAudioSink::DragonSdlAudioSink(QObject *parent, const QVariantList &args
 
     const QString iconName = QGuiApplication::windowIcon().name();
     SDL_SetHint(SDL_HINT_APP_NAME, QGuiApplication::applicationDisplayName().toUtf8().constData());
-    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_APP_ICON_NAME, iconName.isEmpty() ? "dragon-sdl" : iconName.toUtf8().constData());
+    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_APP_ICON_NAME, iconName.isEmpty() ? "DragonMultimedia" : iconName.toUtf8().constData());
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_ROLE, "music");
 
     if (!SDL_Init(SDL_INIT_AUDIO)) {
-        qCCritical(dragonsdlAudio) << "SDL_Init(SDL_INIT_AUDIO) failed:" << SDL_GetError();
+        qCCritical(dragonMultimediaAudio) << "SDL_Init(SDL_INIT_AUDIO) failed:" << SDL_GetError();
         Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
     }
 }
@@ -74,16 +74,16 @@ DragonSdlAudioSink::~DragonSdlAudioSink()
 
 bool DragonSdlAudioSink::probe()
 {
-    qCDebug(dragonsdlAudio) << "SDL probe() SDL_Init already called in constructor";
+    qCDebug(dragonMultimediaAudio) << "SDL probe() SDL_Init already called in constructor";
     return true; // SDL_Init succeeded during construction
 }
 
 void DragonSdlAudioSink::open(int sampleRate, int channels)
 {
-    qCDebug(dragonsdlAudio) << "open" << sampleRate << channels;
+    qCDebug(dragonMultimediaAudio) << "open" << sampleRate << channels;
 
     if (m_session.load(std::memory_order_acquire) != nullptr) {
-        qCDebug(dragonsdlAudio) << "open() called while already open closing old session";
+        qCDebug(dragonMultimediaAudio) << "open() called while already open closing old session";
         close();
     }
 
@@ -96,7 +96,7 @@ void DragonSdlAudioSink::open(int sampleRate, int channels)
 
     SDL_AudioStream *stream = SDL_CreateAudioStream(&spec, nullptr);
     if (!stream) {
-        qCCritical(dragonsdlAudio) << "SDL_CreateAudioStream failed:" << SDL_GetError();
+        qCCritical(dragonMultimediaAudio) << "SDL_CreateAudioStream failed:" << SDL_GetError();
         delete session;
         Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
         return;
@@ -105,7 +105,7 @@ void DragonSdlAudioSink::open(int sampleRate, int channels)
 
     SDL_AudioDeviceID deviceId = SDL_OpenAudioDevice(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, nullptr);
     if (deviceId == 0) {
-        qCCritical(dragonsdlAudio) << "SDL_OpenAudioDevice failed:" << SDL_GetError();
+        qCCritical(dragonMultimediaAudio) << "SDL_OpenAudioDevice failed:" << SDL_GetError();
         SDL_DestroyAudioStream(stream);
         delete session;
         Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));
@@ -114,7 +114,7 @@ void DragonSdlAudioSink::open(int sampleRate, int channels)
     session->deviceId = deviceId;
 
     if (!SDL_BindAudioStreams(deviceId, &stream, 1)) {
-        qCCritical(dragonsdlAudio) << "SDL_BindAudioStreams failed:" << SDL_GetError();
+        qCCritical(dragonMultimediaAudio) << "SDL_BindAudioStreams failed:" << SDL_GetError();
         SDL_CloseAudioDevice(deviceId);
         SDL_DestroyAudioStream(stream);
         delete session;
@@ -125,7 +125,7 @@ void DragonSdlAudioSink::open(int sampleRate, int channels)
     SDL_SetAudioStreamGain(stream, m_cachedGain);
 
     if (!SDL_SetAudioStreamGetCallback(stream, &DragonSdlAudioSink::audioStreamCallback, this)) {
-        qCCritical(dragonsdlAudio) << "SDL_SetAudioStreamGetCallback FAILED:" << SDL_GetError();
+        qCCritical(dragonMultimediaAudio) << "SDL_SetAudioStreamGetCallback FAILED:" << SDL_GetError();
         SDL_CloseAudioDevice(deviceId);
         SDL_DestroyAudioStream(stream);
         delete session;
@@ -136,12 +136,12 @@ void DragonSdlAudioSink::open(int sampleRate, int channels)
     SDL_ResumeAudioDevice(deviceId);
 
     m_session.store(session, std::memory_order_release);
-    qCDebug(dragonsdlAudio) << "SDL audio device opened";
+    qCDebug(dragonMultimediaAudio) << "SDL audio device opened";
 }
 
 void DragonSdlAudioSink::close()
 {
-    qCDebug(dragonsdlAudio) << "close()";
+    qCDebug(dragonMultimediaAudio) << "close()";
 
     auto *oldSession = m_session.exchange(nullptr, std::memory_order_acq_rel);
 
@@ -163,7 +163,7 @@ void DragonSdlAudioSink::close()
     }
 
     delete oldSession;
-    qCDebug(dragonsdlAudio) << "close() complete";
+    qCDebug(dragonMultimediaAudio) << "close() complete";
 }
 
 void DragonSdlAudioSink::pause()
@@ -316,7 +316,7 @@ void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioSt
     if (!pcm.empty()) {
         SDL_PutAudioStreamData(stream, pcm.data(), static_cast<int>(pcm.size() * sizeof(float)));
     } else {
-        qCDebug(dragonsdlAudio) << "STARVATION additional=" << additional_amount << "floatsNeeded=" << floatsNeeded;
+        qCDebug(dragonMultimediaAudio) << "STARVATION additional=" << additional_amount << "floatsNeeded=" << floatsNeeded;
     }
 }
 

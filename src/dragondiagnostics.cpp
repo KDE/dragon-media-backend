@@ -5,7 +5,7 @@
 
 #include "dragonaudiosink.h"
 #include "dragonplayer_p.h"
-#include <dragonsdl/dragondiagnostics.h>
+#include <DragonMultimedia/dragondiagnostics.h>
 
 #include <SDL3/SDL_audio.h>
 #include <SDL3/SDL_timer.h>

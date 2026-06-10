@@ -5,7 +5,7 @@
 
 #include "dragonpipewireaudiosink.h"
 
-#include "dragonsdl_audio_logging.h"
+#include "dragonmultimedia_audio_logging.h"
 
 #include <KPluginFactory>
 
@@ -52,7 +52,7 @@ DragonPipeWireAudioSink::DragonPipeWireAudioSink(QObject *parent, const QVariant
 {
     Q_UNUSED(args);
     pw_init(nullptr, nullptr);
-    qCDebug(dragonsdlAudio) << "PipeWire audio sink created, library version:" << pw_get_library_version();
+    qCDebug(dragonMultimediaAudio) << "PipeWire audio sink created, library version:" << pw_get_library_version();
 }
 
 DragonPipeWireAudioSink::~DragonPipeWireAudioSink()
@@ -63,17 +63,17 @@ DragonPipeWireAudioSink::~DragonPipeWireAudioSink()
 
 bool DragonPipeWireAudioSink::probe()
 {
-    qCDebug(dragonsdlAudio) << "PipeWire probe() checking daemon connectivity";
+    qCDebug(dragonMultimediaAudio) << "PipeWire probe() checking daemon connectivity";
 
     auto *loop = pw_loop_new(nullptr);
     if (!loop) {
-        qCDebug(dragonsdlAudio) << "PipeWire probe() pw_loop_new failed";
+        qCDebug(dragonMultimediaAudio) << "PipeWire probe() pw_loop_new failed";
         return false;
     }
 
     struct pw_context *context = pw_context_new(loop, nullptr, 0);
     if (!context) {
-        qCDebug(dragonsdlAudio) << "PipeWire probe() pw_context_new failed";
+        qCDebug(dragonMultimediaAudio) << "PipeWire probe() pw_context_new failed";
         pw_loop_destroy(loop);
         return false;
     }
@@ -82,10 +82,10 @@ bool DragonPipeWireAudioSink::probe()
     const bool alive = (core != nullptr);
 
     if (alive) {
-        qCDebug(dragonsdlAudio) << "PipeWire probe() daemon reachable, connection confirmed";
+        qCDebug(dragonMultimediaAudio) << "PipeWire probe() daemon reachable, connection confirmed";
         pw_core_disconnect(core);
     } else {
-        qCDebug(dragonsdlAudio) << "PipeWire probe() daemon unreachable, errno =" << errno;
+        qCDebug(dragonMultimediaAudio) << "PipeWire probe() daemon unreachable, errno =" << errno;
     }
 
     pw_context_destroy(context);
@@ -96,10 +96,10 @@ bool DragonPipeWireAudioSink::probe()
 
 void DragonPipeWireAudioSink::open(int sampleRate, int channels)
 {
-    qCDebug(dragonsdlAudio) << "PipeWire open" << sampleRate << channels;
+    qCDebug(dragonMultimediaAudio) << "PipeWire open" << sampleRate << channels;
 
     if (m_open.load(std::memory_order_acquire)) {
-        qCDebug(dragonsdlAudio) << "open() called while already open closing old session";
+        qCDebug(dragonMultimediaAudio) << "open() called while already open closing old session";
         close();
     }
 
@@ -129,7 +129,7 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
 
     m_pw->loop = pw_thread_loop_new("dragon-pw", nullptr);
     if (!m_pw->loop) {
-        qCCritical(dragonsdlAudio) << "PipeWire: failed to create thread loop";
+        qCCritical(dragonMultimediaAudio) << "PipeWire: failed to create thread loop";
         Q_EMIT errorOccurred(u"PipeWire: failed to create thread loop"_s);
         return;
     }
@@ -138,7 +138,7 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
 
     const QString appName = QGuiApplication::applicationDisplayName();
     const QByteArray appNameUtf8 = appName.toUtf8();
-    const char *nodeName = appNameUtf8.isEmpty() ? "dragon-sdl" : appNameUtf8.constData();
+    const char *nodeName = appNameUtf8.isEmpty() ? "DragonMultimedia" : appNameUtf8.constData();
 
     pw_properties_set(props, PW_KEY_APP_NAME, nodeName);
     pw_properties_set(props, PW_KEY_NODE_NAME, nodeName);
@@ -150,7 +150,7 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     m_pw->stream = pw_stream_new_simple(pw_thread_loop_get_loop(m_pw->loop), nodeName, props, &s_streamEvents, this);
 
     if (!m_pw->stream) {
-        qCCritical(dragonsdlAudio) << "PipeWire: failed to create stream";
+        qCCritical(dragonMultimediaAudio) << "PipeWire: failed to create stream";
         Q_EMIT errorOccurred(u"PipeWire: failed to create stream"_s);
         return;
     }
@@ -174,7 +174,7 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
 
     const struct spa_pod *params = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &audioInfo);
     if (!params) {
-        qCCritical(dragonsdlAudio) << "PipeWire: failed to build audio format pod";
+        qCCritical(dragonMultimediaAudio) << "PipeWire: failed to build audio format pod";
         Q_EMIT errorOccurred(u"PipeWire: failed to build audio format"_s);
         return;
     }
@@ -184,14 +184,14 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     int res = pw_stream_connect(m_pw->stream, PW_DIRECTION_OUTPUT, PW_ID_ANY, streamFlags, &params, 1);
 
     if (res != 0) {
-        qCCritical(dragonsdlAudio) << "PipeWire: failed to connect stream:" << res;
+        qCCritical(dragonMultimediaAudio) << "PipeWire: failed to connect stream:" << res;
         Q_EMIT errorOccurred(u"PipeWire: failed to connect stream"_s);
         return;
     }
 
     res = pw_thread_loop_start(m_pw->loop);
     if (res != 0) {
-        qCCritical(dragonsdlAudio) << "PipeWire: failed to start thread loop:" << res;
+        qCCritical(dragonMultimediaAudio) << "PipeWire: failed to start thread loop:" << res;
         Q_EMIT errorOccurred(u"PipeWire: failed to start thread loop"_s);
         return;
     }
@@ -202,12 +202,12 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     m_paused.store(false, std::memory_order_release);
     m_open.store(true, std::memory_order_release);
 
-    qCDebug(dragonsdlAudio) << "PipeWire audio device opened";
+    qCDebug(dragonMultimediaAudio) << "PipeWire audio device opened";
 }
 
 void DragonPipeWireAudioSink::close()
 {
-    qCDebug(dragonsdlAudio) << "PipeWire close()";
+    qCDebug(dragonMultimediaAudio) << "PipeWire close()";
 
     m_open.store(false, std::memory_order_release);
     m_paused.store(false, std::memory_order_release);
@@ -231,7 +231,7 @@ void DragonPipeWireAudioSink::close()
         });
     }
 
-    qCDebug(dragonsdlAudio) << "PipeWire close() complete";
+    qCDebug(dragonMultimediaAudio) << "PipeWire close() complete";
 }
 
 void DragonPipeWireAudioSink::pause()
@@ -436,7 +436,7 @@ void DragonPipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const s
         return;
     }
 
-    qCDebug(dragonsdlAudio) << "PipeWire control_info id:" << id;
+    qCDebug(dragonMultimediaAudio) << "PipeWire control_info id:" << id;
 
     if (id == SPA_PROP_channelVolumes) {
         float sum = 0.0f;
@@ -450,7 +450,7 @@ void DragonPipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const s
         }
         self->m_cachedGain = avgGain;
 
-        qCDebug(dragonsdlAudio) << "PipeWire external volume change via control_info, avgGain:" << avgGain;
+        qCDebug(dragonMultimediaAudio) << "PipeWire external volume change via control_info, avgGain:" << avgGain;
         QMetaObject::invokeMethod(
             self,
             [self, avgGain]() {
@@ -467,7 +467,7 @@ void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const 
         return;
     }
 
-    qCDebug(dragonsdlAudio) << "PipeWire param_changed id:" << id;
+    qCDebug(dragonMultimediaAudio) << "PipeWire param_changed id:" << id;
 
     if (id == SPA_PARAM_Props) {
         const struct spa_pod_prop *prop = nullptr;
@@ -476,7 +476,7 @@ void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const 
             if (prop->key == SPA_PROP_volume) {
                 const float *val = reinterpret_cast<const float *>(SPA_POD_BODY(&prop->value));
                 float value = val ? *val : 1.0f;
-                qCDebug(dragonsdlAudio) << "PipeWire param_changed SPA_PROP_volume:" << value;
+                qCDebug(dragonMultimediaAudio) << "PipeWire param_changed SPA_PROP_volume:" << value;
                 QMetaObject::invokeMethod(
                     self,
                     [self, value]() {
