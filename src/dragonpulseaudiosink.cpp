@@ -428,7 +428,6 @@ void DragonPulseAudioSink::pause()
         if (op) {
             pa_operation_unref(op);
         }
-        applyVolume(0.0f);
         pa_threaded_mainloop_unlock(m_pa->mainloop);
     }
 }
@@ -439,7 +438,6 @@ void DragonPulseAudioSink::resume()
 
     if (m_pa->mainloop && m_pa->stream) {
         pa_threaded_mainloop_lock(m_pa->mainloop);
-        applyVolume(m_cachedGain);
         pa_operation *op = pa_stream_cork(m_pa->stream, 0, nullptr, nullptr);
         if (op) {
             pa_operation_unref(op);

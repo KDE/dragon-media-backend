@@ -241,7 +241,6 @@ void DragonPipeWireAudioSink::pause()
     if (m_pw->loop && m_pw->stream) {
         pw_thread_loop_lock(m_pw->loop);
         pw_stream_set_active(m_pw->stream, false);
-        setChannelVolumes(0.0f);
         pw_thread_loop_unlock(m_pw->loop);
     }
 }
@@ -252,7 +251,6 @@ void DragonPipeWireAudioSink::resume()
 
     if (m_pw->loop && m_pw->stream) {
         pw_thread_loop_lock(m_pw->loop);
-        setChannelVolumes(m_cachedGain);
         pw_stream_set_active(m_pw->stream, true);
         pw_thread_loop_unlock(m_pw->loop);
     }
