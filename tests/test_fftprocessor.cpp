@@ -57,6 +57,9 @@ private Q_SLOTS:
     void testFrameCountForThreeSecondsStereo();
     void testConfigurableRate();
 
+    void testFftHistoryResetOnModeToggle();
+    void testFftStopTokenHonoredInInnerLoop();
+
 private:
     std::vector<std::float32_t> createSineWave(float frequency, int sampleRate, int numSamples);
     std::vector<std::float32_t> createSilence(int numSamples);
@@ -765,6 +768,108 @@ void TestFftProcessor::testConfigurableRate()
 
     QVERIFY2(count >= 80, qPrintable(u"Too few frames (%1) for 3-second burst at 30 Hz expected ~88"_s.arg(count)));
     QVERIFY2(count <= 95, qPrintable(u"Too many frames (%1) for 3-second burst at 30 Hz"_s.arg(count)));
+}
+
+void TestFftProcessor::testFftHistoryResetOnModeToggle()
+{
+    constexpr int sampleRate = 44100;
+    constexpr int channels = 2;
+
+    DragonPipe<DragonFftBlock> pipe(512);
+
+    DragonFftProcessor processor;
+    processor.setConsumer(pipe.consumer());
+    processor.setChannelCount(channels);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
+
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    // Feed a large burst to build up a deep history simulates a long-running session.
+    constexpr int totalFloats = sampleRate * 10 * channels;
+    auto audio = createSilence(totalFloats);
+    [[maybe_unused]] const auto written1 = writeBlocks(pipe.producer(), audio);
+
+    QTest::qWait(300);
+    int framesPhase1 = frameCount.load(std::memory_order_relaxed);
+    QVERIFY2(framesPhase1 > 0, "Should have produced frames during initial playback");
+
+    // Turn Off thread goes to sleep but history stays filled.
+    processor.setFftMode(DragonFftProcessor::FftMode::Off);
+    frameCount.store(0, std::memory_order_relaxed);
+    QTest::qWait(100);
+
+    // Turn back On with a small amount of NEW data.
+    auto newAudio = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE));
+    [[maybe_unused]] const auto written2 = writeBlocks(pipe.producer(), newAudio);
+    processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
+
+    // Give time to drain and emit frames from new data only.
+    QTest::qWait(500);
+    int framesPhase2 = frameCount.load(std::memory_order_relaxed);
+
+    stopSource.request_stop();
+    processorThread.join();
+
+    // The key invariant is that the thread does NOT hang and does emit SOME frames.
+    // The actual reset is done at the DragonFftPipeline level (see test_player_fft.cpp).
+    QVERIFY2(framesPhase2 > 0, "Should resume producing frames after re-enable");
+}
+
+void TestFftProcessor::testFftStopTokenHonoredInInnerLoop()
+{
+    constexpr int sampleRate = 44100;
+    constexpr int channels = 2;
+
+    DragonPipe<DragonFftBlock> pipe(512);
+
+    DragonFftProcessor processor;
+    processor.setConsumer(pipe.consumer());
+    processor.setChannelCount(channels);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
+
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
+    // Pre-fill a massive amount of data so that when the processor starts,
+    // m_historyTotalSamples is huge relative to m_lastFrameAtSample, causing
+    // the inner while-loop to have a lot of work to do.
+    constexpr int totalFloats = sampleRate * 30 * channels;
+    auto audio = createSilence(totalFloats);
+    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), audio);
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    // Wait just long enough for the processor to enter its inner loop.
+    QTest::qWait(50);
+
+    // Now request stop. Without the inner-loop stop-token check, the join()
+    // would block indefinitely while the thread churns through the backlog.
+    stopSource.request_stop();
+
+    // The thread should exit promptly (well under 5 seconds) now that
+    // the inner while-loop also checks st.stop_requested().
+    auto start = std::chrono::steady_clock::now();
+    processorThread.join();
+    auto elapsed = std::chrono::steady_clock::now() - start;
+
+    QVERIFY2(elapsed < std::chrono::seconds(5),
+             qPrintable(u"Thread should stop quickly even with large backlog took %1 ms"_s.arg(
+                 std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count())));
 }
 
 QTEST_MAIN(TestFftProcessor)

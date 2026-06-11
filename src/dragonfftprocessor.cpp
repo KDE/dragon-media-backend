@@ -146,7 +146,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             }
         }
 
-        while (m_historyTotalSamples >= (m_lastFrameAtSample + step)) {
+        while (m_historyTotalSamples >= (m_lastFrameAtSample + step) && !st.stop_requested()) {
             readWindowEndingAt(m_lastFrameAtSample + step - 1, m_inputWindow);
             applyHannWindow(std::span<std::float32_t>(m_inputWindow));
 

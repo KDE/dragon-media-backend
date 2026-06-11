@@ -122,6 +122,7 @@ void DragonFftPipeline::setMode(DragonPlayer::FftMode mode)
         ensureInfrastructure();
 
         if (m_fftProcessor) {
+            m_fftProcessor->reset();
             m_fftProcessor->setFftMode(mode);
         }
 

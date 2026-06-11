@@ -33,6 +33,8 @@ private Q_SLOTS:
     void testFftModeBothEmitsDetailedAndBarFrames();
     void testFftFrameRateApproaches60Hz();
 
+    void testFftHistoryResetWhenReEnabled();
+
 private:
     void skipIfMissing(const QString &filename)
     {
@@ -210,6 +212,61 @@ void TestPlayerFft::testFftFrameRateApproaches60Hz()
     // "many" frames (catches severe bugs like the old ~11 Hz bug).
     QVERIFY2(count >= 60, qPrintable(u"Too few FFT frames (%1) full pipeline severely underproducing"_s.arg(count)));
     QVERIFY2(count <= 220, qPrintable(u"Too many FFT frames (%1) possible burst emission bug"_s.arg(count)));
+
+    player.stop();
+}
+
+void TestPlayerFft::testFftHistoryResetWhenReEnabled()
+{
+    // Regression test: turning FFT Off then On should not reprocess stale
+    // sample history, which would cause a CPU spin and spurious frame burst.
+    // The bug was in DragonFftPipeline::setMode() not calling reset() on
+    // the processor before starting the thread on the Off→On transition.
+
+    skipIfMissing(u"sample-3s.mp3"_s);
+
+    DragonPlayer player;
+    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+
+    // Track FFT frames across the entire test with a single connection.
+    std::atomic<int> totalFrames{0};
+    QObject::connect(
+        &player,
+        &DragonPlayer::fftFrameReady,
+        &player,
+        [&totalFrames]() {
+            totalFrames.fetch_add(1, std::memory_order_relaxed);
+        },
+        Qt::AutoConnection);
+
+    PlayerHelper helper(&player);
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+
+    // Let some frames accumulate to confirm FFT is functioning,
+    // but leave enough file duration for the Off→On phase (~1.7s remaining).
+    QTest::qWait(800);
+    int framesBeforeOff = totalFrames.load(std::memory_order_relaxed);
+    QVERIFY2(framesBeforeOff > 10, qPrintable(QString::fromLatin1("Should have produced FFT frames, got %1").arg(framesBeforeOff)));
+
+    // Turn FFT Off, then immediately back On.
+    // Some queued frames may arrive from before the mode change.
+    player.setFftMode(DragonPlayer::FftMode::Off);
+
+    // Turn FFT back On the file still has ~1.9 seconds remaining.
+    // Count only fresh frames from this point.
+    totalFrames.store(0, std::memory_order_relaxed);
+    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+
+    // Wait for fresh frames.
+    QTest::qWait(800);
+    int framesAfterReEnable = totalFrames.load(std::memory_order_relaxed);
+    QVERIFY2(framesAfterReEnable > 0, qPrintable(QString::fromLatin1("Should produce frames after re-enabling, got 0")));
+
+    // With the fix, history is reset so frames come from fresh data only.
+    // Without the fix, this could be >100 (reprocessing the backlog).
+    QVERIFY2(framesAfterReEnable < 80,
+             qPrintable(QString::fromLatin1("Expected <80 frames after re-enable (fresh data only), got %1").arg(framesAfterReEnable)));
 
     player.stop();
 }
