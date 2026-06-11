@@ -212,80 +212,6 @@ ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
     DEFAULT_SEVERITY Info
 )
 
-set(SOURCES
-    src/dragonplayer.cpp
-    src/dragondecoder.cpp
-    src/dragonaudiosink.cpp
-    src/dragonaudiosinkfactory.cpp
-    src/dragonfftprocessor.cpp
-    src/dragonradiostream.cpp
-    src/dragonkiostream.cpp
-    src/dragonstream.cpp
-    src/dragonstreamfactory.cpp
-    src/dragonbufferprogress.cpp
-    src/dragonicymetadata.cpp
-    src/dragondiagnostics.cpp
-    src/dragondecodepipeline.cpp
-    src/dragonfftpipeline.cpp
-    src/dragonpipe.cpp
-    ${DragonMultimedia_SOURCES}
-)
-
-set(HEADERS
-    include/DragonMultimedia/dragonplayer.h
-        src/dragondecoder.h
-        src/dragonaudiosink.h
-        src/dragonaudiosinkfactory.h
-        src/dragonradiostream.h
-        src/dragonkiostream.h
-        src/dragonstream.h
-        src/dragonfftprocessor.h
-    include/DragonMultimedia/dragonfftframe.h
-        src/dragonbufferprogress.h
-    include/DragonMultimedia/dragonicymetadata.h
-)
-
-qt_add_library(DragonMultimedia SHARED ${SOURCES} ${HEADERS})
-
-target_include_directories(DragonMultimedia PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
-    $<INSTALL_INTERFACE:include>
-)
-
-target_include_directories(DragonMultimedia PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-
-target_include_directories(DragonMultimedia PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
-)
-
-target_link_libraries(DragonMultimedia
-    PUBLIC
-        Qt6::Core
-        Qt6::Network
-        PkgConfig::FFmpeg
-    PUBLIC
-        QCoro6::Core
-    PRIVATE
-        Qt6::Gui
-        KF6::KIOCore
-        KF6::CoreAddons
-        kissfft::kissfft
-        QCoro6::Network
-)
-
-kcoreaddons_add_plugin(dragonsdlaudiosink
-    SOURCES src/dragonsdlaudiosink.cpp ${dragonsdlaudiosink_SOURCES}
-    INSTALL_NAMESPACE "DragonMultimedia/audiosink"
-)
-target_include_directories(dragonsdlaudiosink PRIVATE 
-    ${CMAKE_CURRENT_SOURCE_DIR}/src 
-    ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
-)
-target_link_libraries(dragonsdlaudiosink PRIVATE DragonMultimedia SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
-
 if(PULSEAUDIO_FOUND)
     ecm_qt_declare_logging_category(dragonpulseaudiosink_SOURCES
         HEADER "dragonmultimedia_audio_logging.h"
@@ -293,19 +219,6 @@ if(PULSEAUDIO_FOUND)
         CATEGORY_NAME "org.kde.dragonmultimedia.audio"
         DEFAULT_SEVERITY Info
     )
-
-    kcoreaddons_add_plugin(dragonpulseaudiosink
-        SOURCES src/dragonpulseaudiosink.cpp ${dragonpulseaudiosink_SOURCES}
-        INSTALL_NAMESPACE "DragonMultimedia/audiosink"
-    )
-    target_include_directories(dragonpulseaudiosink PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
-    )
-    target_link_libraries(dragonpulseaudiosink PRIVATE DragonMultimedia PkgConfig::PULSEAUDIO KF6::CoreAddons Qt6::Gui)
-    message(STATUS "PulseAudio audio sink plugin: enabled")
-else()
-    message(STATUS "PulseAudio audio sink plugin: disabled (libpulse not found)")
 endif()
 
 if(PIPEWIRE_FOUND)
@@ -315,28 +228,24 @@ if(PIPEWIRE_FOUND)
         CATEGORY_NAME "org.kde.dragonmultimedia.audio"
         DEFAULT_SEVERITY Info
     )
-
-    kcoreaddons_add_plugin(dragonpipewireaudiosink
-        SOURCES src/dragonpipewireaudiosink.cpp ${dragonpipewireaudiosink_SOURCES}
-        INSTALL_NAMESPACE "DragonMultimedia/audiosink"
-    )
-    target_include_directories(dragonpipewireaudiosink PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
-    )
-    target_link_libraries(dragonpipewireaudiosink PRIVATE DragonMultimedia PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui)
-    message(STATUS "PipeWire audio sink plugin: enabled")
-else()
-    message(STATUS "PipeWire audio sink plugin: disabled (libpipewire-0.3 not found)")
 endif()
 
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTOMOC_RELY_ON_EXPORTS ON)
+set(CMAKE_INCLUDE_CURRENT_DIR ON)
+
+# --- Build ---
+add_subdirectory(src)
+
 include(GenerateExportHeader)
+
 generate_export_header(DragonMultimedia
     BASE_NAME DragonMultimedia
     EXPORT_MACRO_NAME DRAGONMULTIMEDIA_EXPORT
     EXPORT_FILE_NAME dragonmultimedia_export.h
 )
 
+# --- Install & export ---
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dragonmultimedia_export.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DragonMultimedia
 )
@@ -417,207 +326,5 @@ endif()
 option(BUILD_TESTING "Build tests" ON)
 if(BUILD_TESTING)
     enable_testing()
-    include_directories("src")
-    find_package(Qt6 REQUIRED COMPONENTS Core Test)
-
-
-    add_executable(test_fftprocessor tests/test_fftprocessor.cpp)
-    target_link_libraries(test_fftprocessor PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        kissfft::kissfft
-        spsc_queue
-    )
-    add_test(NAME test_fftprocessor COMMAND test_fftprocessor)
-
-    add_executable(test_generator tests/test_generator.cpp)
-    target_link_libraries(test_generator PRIVATE
-        Qt6::Core
-        Qt6::Test
-    )
-    add_test(NAME test_generator COMMAND test_generator)
-
-    add_executable(test_decoder tests/test_decoder.cpp)
-    target_link_libraries(test_decoder PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-        PkgConfig::FFmpeg
-    )
-    add_test(NAME test_decoder COMMAND test_decoder)
-
-    add_executable(test_audiooutput tests/test_audiooutput.cpp)
-    target_link_libraries(test_audiooutput PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        SDL3::SDL3
-        spsc_queue
-    )
-    add_test(NAME test_audiooutput_pipewire COMMAND test_audiooutput)
-    set_property(TEST test_audiooutput_pipewire APPEND PROPERTY ENVIRONMENT "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpipewireaudiosink")
-    
-    add_test(NAME test_audiooutput_sdl COMMAND test_audiooutput)
-    set_property(TEST test_audiooutput_sdl APPEND PROPERTY ENVIRONMENT "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink")
-
-    add_test(NAME test_audiooutput_pulseaudio COMMAND test_audiooutput)
-    set_property(TEST test_audiooutput_pulseaudio APPEND PROPERTY ENVIRONMENT "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpulseaudiosink")
-
-    add_executable(test_radiostream tests/test_radiostream.cpp)
-    target_link_libraries(test_radiostream PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-    )
-    target_compile_definitions(test_radiostream PRIVATE
-        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-    )
-    add_test(NAME test_radiostream COMMAND test_radiostream)
-
-    add_executable(test_kiostream tests/test_kiostream.cpp)
-    target_link_libraries(test_kiostream PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-        KF6::KIOCore
-    )
-    add_test(NAME test_kiostream COMMAND test_kiostream)
-
-    add_executable(test_player_basics tests/test_player_basics.cpp)
-    target_link_libraries(test_player_basics PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-        SDL3::SDL3
-        PkgConfig::FFmpeg
-        spsc_queue
-        kissfft::kissfft
-    )
-    target_compile_definitions(test_player_basics PRIVATE
-        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-    )
-    add_test(NAME test_player_basics COMMAND test_player_basics)
-
-    add_executable(test_player_playback tests/test_player_playback.cpp)
-    target_link_libraries(test_player_playback PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-        SDL3::SDL3
-        PkgConfig::FFmpeg
-        spsc_queue
-        kissfft::kissfft
-    )
-    target_compile_definitions(test_player_playback PRIVATE
-        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-    )
-    add_test(NAME test_player_playback COMMAND test_player_playback)
-
-    add_executable(test_player_signals tests/test_player_signals.cpp)
-    target_link_libraries(test_player_signals PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-        SDL3::SDL3
-        PkgConfig::FFmpeg
-        spsc_queue
-        kissfft::kissfft
-    )
-    target_compile_definitions(test_player_signals PRIVATE
-        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-    )
-    add_test(NAME test_player_signals COMMAND test_player_signals)
-
-    add_executable(test_player_prefinish tests/test_player_prefinish.cpp)
-    target_link_libraries(test_player_prefinish PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-        SDL3::SDL3
-        PkgConfig::FFmpeg
-        spsc_queue
-        kissfft::kissfft
-    )
-    target_compile_definitions(test_player_prefinish PRIVATE
-        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-    )
-    add_test(NAME test_player_prefinish COMMAND test_player_prefinish)
-
-    add_executable(test_player_fft tests/test_player_fft.cpp)
-    target_link_libraries(test_player_fft PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-        SDL3::SDL3
-        PkgConfig::FFmpeg
-        spsc_queue
-        kissfft::kissfft
-    )
-    target_compile_definitions(test_player_fft PRIVATE
-        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-    )
-    add_test(NAME test_player_fft COMMAND test_player_fft)
-
-    add_executable(test_e2e tests/test_e2e.cpp)
-    target_link_libraries(test_e2e PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-        PkgConfig::FFmpeg
-    )
-    target_compile_definitions(test_e2e PRIVATE
-        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-    )
-    add_test(NAME test_e2e COMMAND test_e2e)
-
-    add_executable(test_network_playback tests/test_network_playback.cpp)
-    target_link_libraries(test_network_playback PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Network
-        SDL3::SDL3
-        PkgConfig::FFmpeg
-        spsc_queue
-        kissfft::kissfft
-    )
-    target_compile_definitions(test_network_playback PRIVATE
-        DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures"
-    )
-    add_test(NAME test_network_playback COMMAND test_network_playback)
-
-    add_executable(test_completion tests/test_completion.cpp)
-    target_link_libraries(test_completion PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        Qt6::Core
-    )
-    add_test(NAME test_completion COMMAND test_completion)
-
-    add_executable(test_pipe tests/test_pipe.cpp)
-    target_link_libraries(test_pipe PRIVATE
-        DragonMultimedia
-        Qt6::Test
-        spsc_queue
-    )
-    add_test(NAME test_pipe COMMAND test_pipe)
-
-    set(_all_tests
-        test_fftprocessor
-        test_generator
-        test_decoder
-        test_audiooutput_pipewire
-        test_audiooutput_sdl
-        test_audiooutput_pulseaudio
-        test_radiostream
-        test_kiostream
-        test_player_basics
-        test_player_playback
-        test_player_signals
-        test_player_prefinish
-        test_player_fft
-        test_e2e
-        test_network_playback
-        test_completion
-        test_pipe
-    )
-    set_property(TEST ${_all_tests} APPEND PROPERTY ENVIRONMENT "QT_PLUGIN_PATH=${CMAKE_BINARY_DIR}/bin")
+    add_subdirectory(tests)
 endif()

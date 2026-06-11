@@ -16,7 +16,7 @@
 #include <QtCore>
 #include <QtTest>
 
-#include "dragondecoder.h"
+#include "decoder/dragondecoder.h"
 #include <DragonMultimedia/dragonplayer.h>
 
 #include <atomic>

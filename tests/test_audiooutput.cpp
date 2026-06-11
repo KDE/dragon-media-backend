@@ -9,10 +9,10 @@
 
 #include "logging_timestamp_init.h"
 
-#include "dragonaudiosink.h"
-#include "dragonaudiosinkfactory.h"
-#include "dragonpipe.h"
 #include "dragonpipe_test_utils.h"
+#include "player/dragonpipe.h"
+#include "sink/dragonaudiosink.h"
+#include "sink/dragonaudiosinkfactory.h"
 
 #include <atomic>
 #include <chrono>

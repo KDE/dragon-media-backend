@@ -5,13 +5,13 @@
 
 #pragma once
 
-#include "dragonaudiosink.h"
-#include "dragondecodepipeline.h"
-#include "dragonfftpipeline.h"
+#include "decoder/dragondecodepipeline.h"
+#include "fft/dragonfftpipeline.h"
+#include "sink/dragonaudiosink.h"
 #include <DragonMultimedia/dragonplayer.h>
 
-#include "dragonfftblock.h"
 #include "dragonpipe.h"
+#include "fft/dragonfftblock.h"
 
 #include <QObject>
 #include <QTimer>

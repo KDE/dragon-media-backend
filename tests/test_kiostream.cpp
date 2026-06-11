@@ -10,7 +10,7 @@
 #include "logging_timestamp_init.h"
 #include "testhttpserver.h"
 
-#include "dragonkiostream.h"
+#include "stream/dragonkiostream.h"
 
 #include <atomic>
 #include <stop_token>

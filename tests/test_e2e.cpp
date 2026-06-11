@@ -12,7 +12,7 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include "dragonevent.h"
+#include "player/dragonevent.h"
 #include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
 

@@ -4,8 +4,8 @@
  */
 
 #include "dragonaudiosink.h"
-#include "dragonfftblock.h"
-#include "dragonpipe.h"
+#include "fft/dragonfftblock.h"
+#include "player/dragonpipe.h"
 
 #include <algorithm>
 #include <chrono>

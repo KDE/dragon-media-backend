@@ -10,7 +10,7 @@
 #include <QThread>
 #include <QtTest>
 
-#include "dragoncompletion.h"
+#include "player/dragoncompletion.h"
 
 #include <thread>
 

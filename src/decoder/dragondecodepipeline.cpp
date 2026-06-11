@@ -6,11 +6,11 @@
 #include "dragondecodepipeline.h"
 
 #include "dragondecoder.h"
-#include "dragonstream.h"
-#include "dragonstreamfactory.h"
+#include "stream/dragonbufferprogress.h"
+#include "stream/dragonstream.h"
+#include "stream/dragonstreamfactory.h"
 #include <DragonMultimedia/dragonicymetadata.h>
 #include <DragonMultimedia/dragonplayer.h>
-#include <dragonbufferprogress.h>
 
 #include "dragonmultimedia_decode_logging.h"
 #include "dragonmultimedia_logging.h"

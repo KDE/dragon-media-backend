@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#include "dragonpipe.h"
 #include "dragonpipe_test_utils.h"
+#include "player/dragonpipe.h"
 
 #include <QtTest>
 

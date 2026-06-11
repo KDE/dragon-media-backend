@@ -20,7 +20,7 @@
 #include <stop_token>
 
 #include "dragonfftblock.h"
-#include "dragonpipe.h"
+#include "player/dragonpipe.h"
 
 template<typename T>
 class kissfft;

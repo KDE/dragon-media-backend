@@ -22,6 +22,7 @@ add_executable(DragonMultimedia-qwidget-example
 
 target_include_directories(DragonMultimedia-qwidget-example PRIVATE
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/stream
 )
 
 target_link_libraries(DragonMultimedia-qwidget-example PRIVATE

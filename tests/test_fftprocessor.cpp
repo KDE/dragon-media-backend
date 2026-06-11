@@ -10,9 +10,9 @@
 
 using namespace Qt::StringLiterals;
 
-#include "dragonfftprocessor.h"
-#include "dragonpipe.h"
 #include "dragonpipe_test_utils.h"
+#include "fft/dragonfftprocessor.h"
+#include "player/dragonpipe.h"
 #include <DragonMultimedia/dragonfftframe.h>
 
 #include <algorithm>

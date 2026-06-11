@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: LGPL-3.0-or-later
  */
 
-#include "dragonaudiosink.h"
 #include "dragonplayer_p.h"
+#include "sink/dragonaudiosink.h"
 #include <DragonMultimedia/dragondiagnostics.h>
 
 #include <SDL3/SDL_audio.h>

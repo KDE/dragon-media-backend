@@ -7,8 +7,8 @@
 
 #include "dragonstream.h"
 
+#include "dragonbufferprogress.h"
 #include <DragonMultimedia/dragonicymetadata.h>
-#include <dragonbufferprogress.h>
 
 #include <QNetworkReply>
 #include <QPointer>

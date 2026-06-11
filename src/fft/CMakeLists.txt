@@ -1,0 +1,21 @@
+add_library(dragon_fft_objs OBJECT
+    dragonfftprocessor.cpp
+    dragonfftpipeline.cpp
+)
+
+target_include_directories(dragon_fft_objs PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_BINARY_DIR}
+    ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
+)
+
+target_link_libraries(dragon_fft_objs PRIVATE
+    Qt6::Core
+    kissfft::kissfft
+    QCoro6::Core
+)
+
+set_target_properties(dragon_fft_objs PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+target_compile_definitions(dragon_fft_objs PRIVATE DragonMultimedia_EXPORTS)

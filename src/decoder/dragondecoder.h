@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "dragoncompletion.h"
-#include "dragonevent.h"
 #include "dragonmultimedia_export.h"
+#include "player/dragoncompletion.h"
+#include "player/dragonevent.h"
 #include <stdfloat>
 
 #include <QObject>

@@ -16,8 +16,8 @@
 
 #include "logging_timestamp_init.h"
 
-#include "dragondecoder.h"
-#include "dragonevent.h"
+#include "decoder/dragondecoder.h"
+#include "player/dragonevent.h"
 
 #include <algorithm>
 #include <atomic>

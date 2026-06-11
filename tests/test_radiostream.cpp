@@ -9,7 +9,7 @@
 
 #include "logging_timestamp_init.h"
 
-#include "dragonradiostream.h"
+#include "stream/dragonradiostream.h"
 
 #include "test_utils.h"
 #include "testhttpserver.h"

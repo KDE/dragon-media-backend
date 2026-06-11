@@ -5,7 +5,7 @@
 
 #include "dragonplayer_p.h"
 
-#include "dragonaudiosinkfactory.h"
+#include "sink/dragonaudiosinkfactory.h"
 #include <DragonMultimedia/dragonplayer.h>
 
 #pragma GCC diagnostic push

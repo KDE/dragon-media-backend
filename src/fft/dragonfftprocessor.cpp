@@ -10,7 +10,7 @@
 
 #include "dragonmultimedia_fft_logging.h"
 
-#include "dragonpipe.h"
+#include "player/dragonpipe.h"
 #include <algorithm>
 #include <array>
 #include <cassert>

@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "dragonpipe.h"
+#include "player/dragonpipe.h"
 
 #include <ranges>
 #include <span>
@@ -18,7 +18,7 @@ inline size_t writeAll(DragonPipe<std::float32_t>::Producer producer, std::span<
     });
 }
 
-#include "dragonfftblock.h"
+#include "fft/dragonfftblock.h"
 inline size_t writeBlocks(DragonPipe<DragonFftBlock>::Producer producer, std::span<const std::float32_t> data)
 {
     size_t blocksNeeded = (data.size() + DragonFftBlock::MAX_SAMPLES - 1) / DragonFftBlock::MAX_SAMPLES;
