@@ -55,6 +55,8 @@ pkg_check_modules(FFmpeg IMPORTED_TARGET REQUIRED
 
 pkg_check_modules(PIPEWIRE IMPORTED_TARGET libpipewire-0.3)
 
+pkg_check_modules(PULSEAUDIO IMPORTED_TARGET libpulse)
+
 if(NOT TARGET PkgConfig::FFmpeg)
     add_library(PkgConfig::FFmpeg INTERFACE IMPORTED)
     foreach(_lib IN ITEMS avformat avcodec swresample avutil)
@@ -284,6 +286,28 @@ target_include_directories(dragonsdlaudiosink PRIVATE
 )
 target_link_libraries(dragonsdlaudiosink PRIVATE DragonMultimedia SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
 
+if(PULSEAUDIO_FOUND)
+    ecm_qt_declare_logging_category(dragonpulseaudiosink_SOURCES
+        HEADER "dragonmultimedia_audio_logging.h"
+        IDENTIFIER "dragonMultimediaAudio"
+        CATEGORY_NAME "org.kde.dragonmultimedia.audio"
+        DEFAULT_SEVERITY Info
+    )
+
+    kcoreaddons_add_plugin(dragonpulseaudiosink
+        SOURCES src/dragonpulseaudiosink.cpp ${dragonpulseaudiosink_SOURCES}
+        INSTALL_NAMESPACE "DragonMultimedia/audiosink"
+    )
+    target_include_directories(dragonpulseaudiosink PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue
+    )
+    target_link_libraries(dragonpulseaudiosink PRIVATE DragonMultimedia PkgConfig::PULSEAUDIO KF6::CoreAddons Qt6::Gui)
+    message(STATUS "PulseAudio audio sink plugin: enabled")
+else()
+    message(STATUS "PulseAudio audio sink plugin: disabled (libpulse not found)")
+endif()
+
 if(PIPEWIRE_FOUND)
     ecm_qt_declare_logging_category(dragonpipewireaudiosink_SOURCES
         HEADER "dragonmultimedia_audio_logging.h"
@@ -435,6 +459,9 @@ if(BUILD_TESTING)
     add_test(NAME test_audiooutput_sdl COMMAND test_audiooutput)
     set_property(TEST test_audiooutput_sdl APPEND PROPERTY ENVIRONMENT "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink")
 
+    add_test(NAME test_audiooutput_pulseaudio COMMAND test_audiooutput)
+    set_property(TEST test_audiooutput_pulseaudio APPEND PROPERTY ENVIRONMENT "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpulseaudiosink")
+
     add_executable(test_radiostream tests/test_radiostream.cpp)
     target_link_libraries(test_radiostream PRIVATE
         DragonMultimedia
@@ -579,6 +606,7 @@ if(BUILD_TESTING)
         test_decoder
         test_audiooutput_pipewire
         test_audiooutput_sdl
+        test_audiooutput_pulseaudio
         test_radiostream
         test_kiostream
         test_player_basics

@@ -1,0 +1,13 @@
+{
+    "KPlugin": {
+        "Name": "PulseAudio Audio Sink",
+        "Description": "Direct PulseAudio audio output for DragonMultimedia",
+        "Icon": "audio-card",
+        "Authors": [{ "Name": "DragonMultimedia contributors" }],
+        "Category": "Audio",
+        "Version": "1.0",
+        "EnabledByDefault": true,
+        "ServiceTypes": ["DragonSdl/AudioSink"]
+    },
+    "Priority": 50
+}
