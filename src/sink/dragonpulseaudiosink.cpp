@@ -72,14 +72,15 @@ bool DragonPulseAudioSink::probe()
         pa_threaded_mainloop_signal(ml, 0);
     };
 
+    pa_threaded_mainloop_lock(ml);
+
     pa_context_set_state_callback(ctx, probeContextStateCallback, ml);
 
-    pa_threaded_mainloop_lock(ml);
     int ret = pa_context_connect(ctx, nullptr, PA_CONTEXT_NOAUTOSPAWN, nullptr);
     if (ret < 0) {
+        pa_context_unref(ctx);
         pa_threaded_mainloop_unlock(ml);
         pa_threaded_mainloop_stop(ml);
-        pa_context_unref(ctx);
         pa_threaded_mainloop_free(ml);
         qCDebug(dragonMultimediaAudio) << "PulseAudio probe() pa_context_connect failed";
         return false;
@@ -106,9 +107,9 @@ bool DragonPulseAudioSink::probe()
     }
 
     pa_context_disconnect(ctx);
+    pa_context_unref(ctx);
     pa_threaded_mainloop_unlock(ml);
     pa_threaded_mainloop_stop(ml);
-    pa_context_unref(ctx);
     pa_threaded_mainloop_free(ml);
 
     return alive;
