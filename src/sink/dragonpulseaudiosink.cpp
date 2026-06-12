@@ -280,6 +280,12 @@ void DragonPulseAudioSink::disconnectFromServer()
         return;
     }
 
+    // PA's threaded mainloop API requires the lock to be held when
+    // manipulating context/stream objects.  Failure to do so races with
+    // the mainloop thread and can corrupt internal state, leading to
+    // assertions or use-after-free in pa_mainloop_free().
+    pa_threaded_mainloop_lock(m_pa->mainloop);
+
     if (m_pa->stream) {
         pa_stream_set_state_callback(m_pa->stream, nullptr, nullptr);
         pa_stream_set_write_callback(m_pa->stream, nullptr, nullptr);
@@ -293,6 +299,8 @@ void DragonPulseAudioSink::disconnectFromServer()
         pa_context_unref(m_pa->context);
         m_pa->context = nullptr;
     }
+
+    pa_threaded_mainloop_unlock(m_pa->mainloop);
 
     pa_threaded_mainloop_stop(m_pa->mainloop);
     pa_threaded_mainloop_free(m_pa->mainloop);
@@ -406,14 +414,16 @@ void DragonPulseAudioSink::close()
     m_open.store(false, std::memory_order_release);
     m_paused.store(false, std::memory_order_release);
 
-    disconnectFromServer();
-
+    // Wait for active callbacks to finish BEFORE tearing down PA objects.
+    // Callbacks check m_open and bail quickly when false, so this is bounded.
     {
         std::unique_lock lock(m_callbackDoneMutex);
         m_callbackDoneCv.wait_for(lock, std::chrono::milliseconds(500), [this]() {
             return m_activeCallbacks.load(std::memory_order_acquire) == 0;
         });
     }
+
+    disconnectFromServer();
 
     qCDebug(dragonMultimediaAudio) << "PulseAudio close() complete";
 }
