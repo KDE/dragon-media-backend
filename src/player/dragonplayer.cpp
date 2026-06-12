@@ -113,25 +113,34 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
         return;
     }
 
-    if (audioOutput) {
-        audioOutput->close();
-        audioOutput->setQueueReady(false);
+    if (hadFatalError) {
+        if (audioOutput) {
+            audioOutput->close();
+            audioOutput->setQueueReady(false);
+        }
+        setStatus(DragonPlayer::MediaStatus::InvalidMedia);
+        setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+        qCDebug(dragonMultimediaPlayer) << "onDecodeFinished state/status changes complete (fatal)";
+        return;
     }
 
-    if (!hadFatalError && !nextSource.isEmpty()) {
+    if (!nextSource.isEmpty()) {
+        if (audioOutput) {
+            audioOutput->close();
+            audioOutput->setQueueReady(false);
+        }
         q->setSource(nextSource);
         return;
     }
 
-    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished emitting state/status changes, hadFatalError=" << hadFatalError;
-    if (hadFatalError) {
-        setStatus(DragonPlayer::MediaStatus::InvalidMedia);
-        setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
-    } else {
-        setStatus(DragonPlayer::MediaStatus::EndOfMedia);
-        setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
-    }
-    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished state/status changes complete";
+    // Normal end of track with no gapless handoff: mark EndOfMedia and
+    // StoppedState immediately (decoder is done), but let the position timer
+    // close the device once the output buffer has drained.  This preserves
+    // the ~200ms of audio tail and gives aboutToFinish time to fire.
+    decodeFinished = true;
+    setStatus(DragonPlayer::MediaStatus::EndOfMedia);
+    setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished deferred close, waiting for pipe drain";
 }
 
 void DragonPlayerPrivate::onDecodeError(const QString &)
@@ -174,11 +183,15 @@ void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
         if (positionTimer) {
             positionTimer->start();
         }
-    } else {
+    } else if (!decodeFinished) {
+        // Normal stop: stop the timer immediately.
         if (positionTimer) {
             positionTimer->stop();
         }
     }
+    // When decodeFinished is true, the position timer is still needed to
+    // drain the output buffer and emit aboutToFinish.  It will stop itself
+    // once the pipe is empty (see the timer callback below).
 
     currentPlaybackState = state;
 
@@ -270,7 +283,7 @@ void DragonPlayerPrivate::init()
 
         if (prefinishMark > 0) {
             qCDebug(dragonMultimediaPlayer) << "timer: prefinishMark=" << prefinishMark << "currentDuration=" << currentDuration
-                                            << "emitted=" << aboutToFinishEmitted << "pos=" << pos;
+                                            << "emitted=" << aboutToFinishEmitted << "decodeFinished=" << decodeFinished << "pos=" << pos;
             if (currentDuration > 0 && !aboutToFinishEmitted) {
                 const int64_t remaining = currentDuration - pos;
                 qCDebug(dragonMultimediaPlayer) << "timer: remaining=" << remaining;
@@ -280,6 +293,22 @@ void DragonPlayerPrivate::init()
                     Q_EMIT q->aboutToFinish();
                 }
             }
+        }
+
+        // When the decoder has finished and the pipe is empty, the output
+        // buffer has drained naturally.  Emit aboutToFinish if it hasn't
+        // fired yet (small tracks where position never reaches the mark),
+        // then close the device.
+        if (decodeFinished && audioOutput && audioOutput->isDeviceOpen() && audioPipe.consumer().ready() == 0) {
+            if (!aboutToFinishEmitted && prefinishMark > 0) {
+                aboutToFinishEmitted = true;
+                qCDebug(dragonMultimediaPlayer) << "aboutToFinish emitted decode finished, pipe empty";
+                Q_EMIT q->aboutToFinish();
+            }
+            decodeFinished = false;
+            audioOutput->close();
+            audioOutput->setQueueReady(false);
+            positionTimer->stop();
         }
     });
 

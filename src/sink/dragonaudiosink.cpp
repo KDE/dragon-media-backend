@@ -11,6 +11,8 @@
 #include <chrono>
 #include <cmath>
 
+#include <QCoreApplication>
+
 namespace
 {
 
@@ -269,4 +271,25 @@ void DragonAudioSink::setFormat(int sampleRate, int channels)
 {
     m_sampleRate = sampleRate;
     m_channels = channels;
+}
+
+void DragonAudioSink::drain(std::chrono::milliseconds timeout)
+{
+    // Pump the Qt event loop until the audio pipe is empty so that the
+    // backend callbacks consume every decoded sample and the position timer
+    // has time to emit aboutToFinish before the device is closed.
+    //
+    // We cannot wait for deviceQueuedSamples() to reach zero the write
+    // callback refills with silence when the pipe is dry, so the device
+    // buffer count never reaches zero.
+    auto *ap = audioPipe();
+    if (!ap) {
+        return;
+    }
+    auto cons = ap->consumer();
+
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (cons.ready() > 0 && std::chrono::steady_clock::now() < deadline) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+    }
 }

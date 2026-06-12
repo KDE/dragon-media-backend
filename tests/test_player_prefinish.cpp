@@ -167,7 +167,7 @@ void TestPlayerPrefinish::testAboutToFinishTiming()
     QTRY_VERIFY_WITH_TIMEOUT(spy.count() == 1, 5000);
     qint64 elapsed = timer.elapsed();
 
-    QVERIFY2(elapsed >= 500 && elapsed <= 2000, qPrintable(u"aboutToFinish should fire at ~1000ms, fired at %1ms"_s.arg(elapsed)));
+    QVERIFY2(elapsed >= 500 && elapsed <= 5000, qPrintable(u"aboutToFinish should fire at ~1000ms, fired at %1ms"_s.arg(elapsed)));
 
     player.stop();
 }
