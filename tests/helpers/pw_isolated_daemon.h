@@ -9,17 +9,46 @@
 #pragma once
 
 #include <QDebug>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
 #include <QString>
 #include <QTemporaryDir>
 
+#include <array>
 #include <chrono>
 #include <memory>
 #include <thread>
 
 using namespace Qt::StringLiterals;
+
+static QString findSpaPluginDir()
+{
+#ifdef SPA_PLUGIN_DIR
+    return QStringLiteral(SPA_PLUGIN_DIR);
+#else
+    for (const char *candidate : {"/usr/lib64/spa-0.2", "/usr/lib/x86_64-linux-gnu/spa-0.2", "/usr/lib/spa-0.2", "/usr/local/lib/spa-0.2"}) {
+        if (QFileInfo::exists(QString::fromLatin1(candidate)))
+            return QString::fromLatin1(candidate);
+    }
+    return {};
+#endif
+}
+
+static QString findPipeWireModuleDir()
+{
+#ifdef PIPEWIRE_MODULE_DIR
+    return QStringLiteral(PIPEWIRE_MODULE_DIR);
+#else
+    for (const char *candidate :
+         {"/usr/lib64/pipewire-0.3", "/usr/lib/x86_64-linux-gnu/pipewire-0.3", "/usr/lib/pipewire-0.3", "/usr/local/lib/pipewire-0.3"}) {
+        if (QFileInfo::exists(QString::fromLatin1(candidate)))
+            return QString::fromLatin1(candidate);
+    }
+    return {};
+#endif
+}
 
 class PwIsolatedDaemon
 {
@@ -54,11 +83,19 @@ public:
         }
 
         m_process = std::make_unique<QProcess>();
-        m_process->setProcessChannelMode(QProcess::ForwardedErrorChannel);
+        m_process->setStandardOutputFile(QProcess::nullDevice());
+        m_process->setStandardErrorFile(QProcess::nullDevice());
 
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-        env.insert(u"SPA_PLUGIN_DIR"_s, u"/usr/lib64/spa-0.2"_s);
-        env.insert(u"PIPEWIRE_MODULE_DIR"_s, u"/usr/lib64/pipewire-0.3"_s);
+        QString spaDir = findSpaPluginDir();
+        QString pwDir = findPipeWireModuleDir();
+        if (!spaDir.isEmpty()) {
+            env.insert(u"SPA_PLUGIN_DIR"_s, spaDir);
+        }
+        if (!pwDir.isEmpty()) {
+            env.insert(u"PIPEWIRE_MODULE_DIR"_s, pwDir);
+        }
+        env.insert(u"PIPEWIRE_CONFIG_DIR"_s, m_configDir.path());
         env.insert(u"PIPEWIRE_RUNTIME_DIR"_s, m_configDir.path());
         m_process->setProcessEnvironment(env);
 

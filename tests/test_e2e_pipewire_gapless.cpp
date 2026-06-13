@@ -21,7 +21,6 @@
 #include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
 
-#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -32,6 +31,95 @@ static constexpr int kDefaultChannels = 2;
 static constexpr int kDurationFrames = 25104;
 static constexpr int kQuantumFrames = 1024;
 static constexpr int kDrainMs = 100;
+static constexpr float kPcmTolerance = 1e-4f;
+
+static bool
+comparePcmRegions(const std::vector<float> &captured, const std::vector<float> &expected, int channels, float tolerance, QString *errorMsg = nullptr)
+{
+    if (captured.size() < expected.size()) {
+        if (errorMsg) {
+            *errorMsg = QStringLiteral("Captured PCM too short: %1 samples vs expected %2").arg(captured.size()).arg(expected.size());
+        }
+        return false;
+    }
+
+    const int extra = static_cast<int>(captured.size() - expected.size());
+    const int maxShift = channels * 16;
+    if (extra > maxShift) {
+        if (errorMsg) {
+            *errorMsg =
+                QStringLiteral("Captured PCM too long: %1 samples vs expected %2 (max extra %3)").arg(captured.size()).arg(expected.size()).arg(maxShift);
+        }
+        return false;
+    }
+
+    for (int shift = 0; shift <= extra; shift += channels) {
+        bool match = true;
+        for (size_t i = 0; i < expected.size(); ++i) {
+            if (std::abs(captured[shift + i] - expected[i]) > tolerance) {
+                match = false;
+                break;
+            }
+        }
+        if (match) {
+            return true;
+        }
+    }
+
+    for (size_t i = 0; i < expected.size(); ++i) {
+        float diff = std::abs(captured[i] - expected[i]);
+        if (diff > tolerance) {
+            if (errorMsg) {
+                *errorMsg = QStringLiteral("Sample %1 mismatch: captured=%2 expected=%3 diff=%4")
+                                .arg(i)
+                                .arg(static_cast<double>(captured[i]))
+                                .arg(static_cast<double>(expected[i]))
+                                .arg(static_cast<double>(diff));
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+static void trimSilence(std::vector<float> &pcm, int channels, float threshold = 1e-6f)
+{
+    int start = 0;
+    while (start < static_cast<int>(pcm.size())) {
+        bool silent = true;
+        for (int ch = 0; ch < channels; ++ch) {
+            if (std::abs(pcm[start + ch]) > threshold) {
+                silent = false;
+                break;
+            }
+        }
+        if (!silent) {
+            break;
+        }
+        start += channels;
+    }
+    if (start > 0) {
+        pcm.erase(pcm.begin(), pcm.begin() + start);
+    }
+
+    int end = static_cast<int>(pcm.size()) - channels;
+    while (end >= 0) {
+        bool silent = true;
+        for (int ch = 0; ch < channels; ++ch) {
+            if (std::abs(pcm[end + ch]) > threshold) {
+                silent = false;
+                break;
+            }
+        }
+        if (!silent) {
+            break;
+        }
+        end -= channels;
+    }
+    if (end + channels < static_cast<int>(pcm.size())) {
+        pcm.erase(pcm.begin() + end + channels, pcm.end());
+    }
+}
 
 class TestPipeWireGapless : public QObject
 {
@@ -45,9 +133,8 @@ private Q_SLOTS:
     void testGaplessFormatChange();
 
 private:
-    void runGaplessScenario(const BoundaryFixture &fixtureA, const BoundaryFixture &fixtureB, int64_t expectedMaxGapFrames);
+    void runGaplessScenario(const BoundaryFixture &fixtureA, const BoundaryFixture &fixtureB, int64_t expectedMaxGapFrames, bool comparePcm);
 
-    PwIsolatedDaemon *m_daemon = nullptr;
     QString m_oldPipeWireRemote;
 };
 
@@ -68,7 +155,7 @@ void TestPipeWireGapless::initTestCase()
             return false;
         const QByteArray config =
             "\n"
-            "context.properties = { support.dbus = false mem.allow-mlock = false core.daemon = true core.name = pipewire-0 }\n"
+            "context.properties = { support.dbus = false mem.allow-mlock = false core.daemon = false core.name = pipewire-0 }\n"
             "context.spa-libs = { support.* = support/libspa-support audio.convert.* = audioconvert/libspa-audioconvert }\n"
             "context.modules = [\n"
             "    { name = libpipewire-module-protocol-native }\n"
@@ -92,11 +179,19 @@ void TestPipeWireGapless::initTestCase()
         cfg.close();
 
         QProcess proc;
+        proc.setStandardOutputFile(QProcess::nullDevice());
+        proc.setStandardErrorFile(QProcess::nullDevice());
         QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
         env.insert(u"PIPEWIRE_CONFIG_DIR"_s, dir.path());
         env.insert(u"PIPEWIRE_RUNTIME_DIR"_s, dir.path());
-        env.insert(u"SPA_PLUGIN_DIR"_s, u"/usr/lib64/spa-0.2"_s);
-        env.insert(u"PIPEWIRE_MODULE_DIR"_s, u"/usr/lib64/pipewire-0.3"_s);
+        QString spaDir = findSpaPluginDir();
+        QString pwDir = findPipeWireModuleDir();
+        if (!spaDir.isEmpty()) {
+            env.insert(u"SPA_PLUGIN_DIR"_s, spaDir);
+        }
+        if (!pwDir.isEmpty()) {
+            env.insert(u"PIPEWIRE_MODULE_DIR"_s, pwDir);
+        }
         proc.setProcessEnvironment(env);
         proc.start(u"pipewire"_s, {u"-c"_s, configPath});
         if (!proc.waitForStarted(5000))
@@ -119,11 +214,6 @@ void TestPipeWireGapless::initTestCase()
 
 void TestPipeWireGapless::cleanupTestCase()
 {
-    if (m_daemon) {
-        m_daemon->stop();
-        delete m_daemon;
-        m_daemon = nullptr;
-    }
     if (m_oldPipeWireRemote.isEmpty()) {
         qunsetenv("PIPEWIRE_REMOTE");
     } else {
@@ -132,15 +222,21 @@ void TestPipeWireGapless::cleanupTestCase()
     qunsetenv("DRAGON_PW_TEST_SINK_NAME");
 }
 
-void TestPipeWireGapless::runGaplessScenario(const BoundaryFixture &fixtureA, const BoundaryFixture &fixtureB, int64_t expectedMaxGapFrames)
+void TestPipeWireGapless::runGaplessScenario(const BoundaryFixture &fixtureA, const BoundaryFixture &fixtureB, int64_t expectedMaxGapFrames, bool comparePcm)
 {
     const int channels = fixtureA.channels;
 
-    m_daemon = new PwIsolatedDaemon();
-    QVERIFY2(m_daemon->start(), "Failed to start isolated PipeWire daemon");
+    PwIsolatedDaemon daemon;
+    QVERIFY2(daemon.start(), "Failed to start isolated PipeWire daemon");
 
-    qputenv("PIPEWIRE_REMOTE", m_daemon->socketPath().toUtf8());
+    qputenv("PIPEWIRE_REMOTE", daemon.socketPath().toUtf8());
     qputenv("DRAGON_PW_TEST_SINK_NAME", "test-null-sink");
+
+    auto daemonGuard = qScopeGuard([&] {
+        daemon.stop();
+        qunsetenv("PIPEWIRE_REMOTE");
+        qunsetenv("DRAGON_PW_TEST_SINK_NAME");
+    });
 
     QTest::qWait(500);
 
@@ -151,7 +247,6 @@ void TestPipeWireGapless::runGaplessScenario(const BoundaryFixture &fixtureA, co
 
     DragonPlayer player;
     PlayerHelper helper(&player);
-    auto trackSpy = SignalSpyHelper::trackSpy(&player);
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
 
     QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(fixtureA.filePath)));
@@ -193,8 +288,8 @@ void TestPipeWireGapless::runGaplessScenario(const BoundaryFixture &fixtureA, co
         }
     }
 
-    QVERIFY2(aEnd.found, "Track A end marker (+1.0 left channel) not found in captured PCM");
-    QVERIFY2(bStart.found, "Track B start marker (-1.0 left channel) not found in captured PCM");
+    QVERIFY2(aEnd.found, "Track A end signature not found in captured PCM");
+    QVERIFY2(bStart.found, "Track B start signature not found in captured PCM");
 
     int64_t gap = gapFrames(aEnd, bStart);
     QVERIFY2(gap <= expectedMaxGapFrames,
@@ -202,11 +297,26 @@ void TestPipeWireGapless::runGaplessScenario(const BoundaryFixture &fixtureA, co
 
     QVERIFY2(bStart.frameIndex > aEnd.frameIndex, "Track B start marker must appear after Track A end marker");
 
-    player.stop();
+    if (comparePcm) {
+        const int sigLen = static_cast<int>(FixtureGenerator::kEndSignature.size());
 
-    m_daemon->stop();
-    delete m_daemon;
-    m_daemon = nullptr;
+        int64_t trackAEndSample = (aEnd.frameIndex + sigLen) * channels;
+        auto capturedA = std::vector<float>(pcm.begin(), pcm.begin() + trackAEndSample);
+
+        int64_t trackBStartSample = bStart.frameIndex * channels;
+        auto capturedB = std::vector<float>(pcm.begin() + trackBStartSample, pcm.end());
+
+        trimSilence(capturedA, channels);
+        trimSilence(capturedB, channels);
+
+        QString errorMsg;
+        QVERIFY2(comparePcmRegions(capturedA, fixtureA.expectedSamples, channels, kPcmTolerance, &errorMsg),
+                 qPrintable(QStringLiteral("Track A PCM mismatch: %1").arg(errorMsg)));
+        QVERIFY2(comparePcmRegions(capturedB, fixtureB.expectedSamples, channels, kPcmTolerance, &errorMsg),
+                 qPrintable(QStringLiteral("Track B PCM mismatch: %1").arg(errorMsg)));
+    }
+
+    player.stop();
 }
 
 void TestPipeWireGapless::testGaplessSameFormat()
@@ -219,7 +329,7 @@ void TestPipeWireGapless::testGaplessSameFormat()
     QVERIFY(QFileInfo::exists(fixtureA.filePath));
     QVERIFY(QFileInfo::exists(fixtureB.filePath));
 
-    runGaplessScenario(fixtureA, fixtureB, 0);
+    runGaplessScenario(fixtureA, fixtureB, 0, true);
 
     QFile::remove(fixtureA.filePath);
     QFile::remove(fixtureB.filePath);
@@ -235,7 +345,7 @@ void TestPipeWireGapless::testGaplessFormatChange()
     QVERIFY(QFileInfo::exists(fixtureA.filePath));
     QVERIFY(QFileInfo::exists(fixtureB.filePath));
 
-    runGaplessScenario(fixtureA, fixtureB, kQuantumFrames);
+    runGaplessScenario(fixtureA, fixtureB, kQuantumFrames, false);
 
     QFile::remove(fixtureA.filePath);
     QFile::remove(fixtureB.filePath);

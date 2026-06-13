@@ -2,8 +2,8 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-3.0-or-later
  *
- * Generates deterministic F32 stereo WAV fixtures with boundary markers
- * for gapless playback validation.
+ * Generates deterministic F32 WAV fixtures with multi-sample boundary
+ * signatures and low-amplitude background tone for gapless validation.
  */
 
 #pragma once
@@ -11,6 +11,8 @@
 #include <QString>
 #include <QTemporaryFile>
 
+#include <array>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -24,6 +26,12 @@ struct BoundaryFixture {
 
 namespace FixtureGenerator
 {
+
+static constexpr std::array<float, 4> kEndSignature = {+1.0f, -1.0f, +1.0f, -1.0f};
+static constexpr std::array<float, 4> kStartSignature = {-1.0f, +1.0f, -1.0f, +1.0f};
+static constexpr float kToneAmplitude = 0.1f;
+static constexpr double kEndToneFreq = 220.0;
+static constexpr double kStartToneFreq = 330.0;
 
 inline void writeWavHeader(QFile &file, int sampleRate, int channels, int totalFrames)
 {
@@ -62,24 +70,23 @@ BoundaryFixture makeEndMarkerFixture(int sampleRate, int channels, int durationF
     const int totalSamples = durationFrames * channels;
     f.expectedSamples.resize(totalSamples, 0.0f);
 
-    const double freq = 1000.0;
-    const int rampFrames = 50;
-    const int rampStart = durationFrames - rampFrames;
-
     for (int frm = 0; frm < durationFrames; ++frm) {
         double t = static_cast<double>(frm) / sampleRate;
-        float val = 0.0f;
-
-        if (frm >= rampStart) {
-            double rampFrac = static_cast<double>(frm - rampStart) / (rampFrames - 1);
-            val = static_cast<float>(std::sin(2.0 * M_PI * freq * t) * rampFrac);
-        }
-
-        if (frm == durationFrames - 1) {
-            val = 1.0f;
-        }
-
+        float val = static_cast<float>(std::sin(2.0 * M_PI * kEndToneFreq * t) * kToneAmplitude);
         f.expectedSamples[frm * channels] = val;
+        if (channels > 1) {
+            f.expectedSamples[frm * channels + 1] = val;
+        }
+    }
+
+    const int sigStart = durationFrames - static_cast<int>(kEndSignature.size());
+    for (int k = 0; k < static_cast<int>(kEndSignature.size()); ++k) {
+        int frm = sigStart + k;
+        float val = kEndSignature[k];
+        f.expectedSamples[frm * channels] = val;
+        if (channels > 1) {
+            f.expectedSamples[frm * channels + 1] = val;
+        }
     }
 
     QTemporaryFile tmpFile;
@@ -110,23 +117,22 @@ BoundaryFixture makeStartMarkerFixture(int sampleRate, int channels, int duratio
     const int totalSamples = durationFrames * channels;
     f.expectedSamples.resize(totalSamples, 0.0f);
 
-    const double freq = 880.0;
-    const int rampFrames = 50;
-
     for (int frm = 0; frm < durationFrames; ++frm) {
         double t = static_cast<double>(frm) / sampleRate;
-        float val = 0.0f;
-
-        if (frm < rampFrames) {
-            double rampFrac = 1.0 - static_cast<double>(frm) / (rampFrames - 1);
-            val = static_cast<float>(std::sin(2.0 * M_PI * freq * t) * rampFrac);
-        }
-
-        if (frm == 0) {
-            val = -1.0f;
-        }
-
+        float val = static_cast<float>(std::sin(2.0 * M_PI * kStartToneFreq * t) * kToneAmplitude);
         f.expectedSamples[frm * channels] = val;
+        if (channels > 1) {
+            f.expectedSamples[frm * channels + 1] = val;
+        }
+    }
+
+    for (int k = 0; k < static_cast<int>(kStartSignature.size()); ++k) {
+        int frm = k;
+        float val = kStartSignature[k];
+        f.expectedSamples[frm * channels] = val;
+        if (channels > 1) {
+            f.expectedSamples[frm * channels + 1] = val;
+        }
     }
 
     QTemporaryFile tmpFile;

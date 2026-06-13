@@ -14,7 +14,6 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
-#include <cstring>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -44,6 +43,7 @@ public:
         m_targetNode = targetNode.toStdString();
         m_connected.store(false, std::memory_order_release);
         m_error.store(false, std::memory_order_release);
+        m_receivingData.store(false, std::memory_order_release);
 
         m_thread = std::jthread([this](std::stop_token st) {
             runCaptureLoop(st);
@@ -61,9 +61,24 @@ public:
         return m_connected.load();
     }
 
+    bool waitForData(int timeoutMs = 5000)
+    {
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (m_receivingData.load(std::memory_order_acquire)) {
+                return true;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        return false;
+    }
+
     void stop()
     {
-        m_stopSource.request_stop();
+        if (m_stopped.exchange(true)) {
+            return;
+        }
+        m_thread.request_stop();
         if (m_thread.joinable()) {
             m_thread.join();
         }
@@ -160,12 +175,10 @@ private:
 
         m_connected.store(true, std::memory_order_release);
 
+        pw_loop *loop_impl = pw_main_loop_get_loop(loop);
         while (!st.stop_requested()) {
-            pw_main_loop_run(loop);
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+            pw_loop_iterate(loop_impl, 50);
         }
-
-        pw_main_loop_quit(loop);
 
         spa_hook_remove(&listener);
         pw_stream_destroy(m_stream);
@@ -206,6 +219,7 @@ private:
             m_pcm.insert(m_pcm.end(), src, src + numFloats);
         }
 
+        m_receivingData.store(true, std::memory_order_release);
         pw_stream_queue_buffer(m_stream, pwBuf);
     }
 
@@ -216,9 +230,10 @@ private:
     std::string m_targetNode;
 
     std::jthread m_thread;
-    std::stop_source m_stopSource;
     std::atomic<bool> m_connected{false};
     std::atomic<bool> m_error{false};
+    std::atomic<bool> m_receivingData{false};
+    std::atomic<bool> m_stopped{false};
 
     pw_stream *m_stream = nullptr;
 };
