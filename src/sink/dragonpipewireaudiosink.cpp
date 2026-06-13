@@ -147,6 +147,12 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
 
     pw_properties_set(props, PW_KEY_NODE_ALWAYS_PROCESS, "true");
 
+    const QByteArray testSinkName = qgetenv("DRAGON_PW_TEST_SINK_NAME");
+    if (!testSinkName.isEmpty()) {
+        pw_properties_set(props, PW_KEY_TARGET_OBJECT, testSinkName.constData());
+        qCDebug(dragonMultimediaAudio) << "PipeWire: overriding target to" << testSinkName;
+    }
+
     m_pw->stream = pw_stream_new_simple(pw_thread_loop_get_loop(m_pw->loop), nodeName, props, &s_streamEvents, this);
 
     if (!m_pw->stream) {
@@ -196,7 +202,9 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
         return;
     }
 
+    pw_thread_loop_lock(m_pw->loop);
     setChannelVolumes(m_cachedGain);
+    pw_thread_loop_unlock(m_pw->loop);
 
     guard.dismissed = true;
     m_paused.store(false, std::memory_order_release);

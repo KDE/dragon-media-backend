@@ -38,6 +38,14 @@ dragon_add_test(test_player_fft       LIBRARIES ${_player_libs})
 dragon_add_test(test_e2e              LIBRARIES Qt6::Network PkgConfig::FFmpeg)
 dragon_add_test(test_network_playback LIBRARIES ${_player_libs})
 
+# PipeWire gapless tests (requires pipewire binary and null-audio-sink)
+if(PIPEWIRE_FOUND)
+    dragon_add_test(test_e2e_pipewire_gapless
+        LIBRARIES ${_player_libs} PkgConfig::PIPEWIRE
+        ENVIRONMENT "QT_PLUGIN_PATH=${PROJECT_BINARY_DIR}/bin"
+    )
+endif()
+
 # Audio output tests (one executable, run once per backend via env var)
 dragon_add_test(test_audiooutput LIBRARIES SDL3::SDL3 spsc_queue)
 set_tests_properties(test_audiooutput PROPERTIES DISABLED TRUE)
