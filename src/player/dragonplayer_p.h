@@ -94,5 +94,4 @@ private:
 
     int32_t prefinishMark = 0;
     bool aboutToFinishEmitted = false;
-    bool decodeFinished = false;
 };

@@ -91,10 +91,6 @@ public:
 
     virtual void clearStream() = 0;
 
-    // Wait for the device output buffer to empty (blocking, with timeout).
-    // Purely reads deviceQueuedSamples(); does not touch PA/backend objects.
-    void drain(std::chrono::milliseconds timeout = std::chrono::seconds(5));
-
     void silence();
     void restoreVolume();
     void reset()
