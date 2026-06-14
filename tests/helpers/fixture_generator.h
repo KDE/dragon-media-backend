@@ -21,10 +21,10 @@
 
 struct BoundaryFixture {
     QString filePath;
-    std::vector<float> expectedSamples;
     int sampleRate;
     int channels;
     int totalFrames;
+    std::vector<float> expectedSamples;
 };
 
 namespace FixtureGenerator
@@ -82,13 +82,13 @@ inline bool writeFlac(const QString &path, const std::vector<float> &samples, in
     return true;
 }
 
-inline void generateSamples(std::vector<float> &out,
-                            int sampleRate,
+inline void generateSamples(int sampleRate,
                             int channels,
                             int durationFrames,
                             double toneFreq,
                             const std::array<float, 4> *signature,
-                            bool signatureAtEnd)
+                            bool signatureAtEnd,
+                            std::vector<float> &out)
 {
     const int totalSamples = durationFrames * channels;
     out.resize(totalSamples, 0.0f);
@@ -123,16 +123,18 @@ inline BoundaryFixture makeEndMarkerFixture(int sampleRate, int channels, int du
     f.channels = channels;
     f.totalFrames = durationFrames;
 
-    generateSamples(f.expectedSamples, sampleRate, channels, durationFrames, kEndToneFreq, &kEndSignature, true);
+    std::vector<float> samples;
+    generateSamples(sampleRate, channels, durationFrames, kEndToneFreq, &kEndSignature, true, samples);
 
     QTemporaryFile tmpFile;
     tmpFile.setFileTemplate(QStringLiteral("test-a-end-XXXXXX.flac"));
     (void)tmpFile.open();
     tmpFile.close();
 
-    writeFlac(tmpFile.fileName(), f.expectedSamples, sampleRate, channels, durationFrames);
+    writeFlac(tmpFile.fileName(), samples, sampleRate, channels, durationFrames);
 
     f.filePath = tmpFile.fileName();
+    f.expectedSamples = std::move(samples);
     tmpFile.setAutoRemove(false);
     return f;
 }
@@ -144,16 +146,18 @@ inline BoundaryFixture makeStartMarkerFixture(int sampleRate, int channels, int 
     f.channels = channels;
     f.totalFrames = durationFrames;
 
-    generateSamples(f.expectedSamples, sampleRate, channels, durationFrames, kStartToneFreq, &kStartSignature, false);
+    std::vector<float> samples;
+    generateSamples(sampleRate, channels, durationFrames, kStartToneFreq, &kStartSignature, false, samples);
 
     QTemporaryFile tmpFile;
     tmpFile.setFileTemplate(QStringLiteral("test-b-start-XXXXXX.flac"));
     (void)tmpFile.open();
     tmpFile.close();
 
-    writeFlac(tmpFile.fileName(), f.expectedSamples, sampleRate, channels, durationFrames);
+    writeFlac(tmpFile.fileName(), samples, sampleRate, channels, durationFrames);
 
     f.filePath = tmpFile.fileName();
+    f.expectedSamples = std::move(samples);
     tmpFile.setAutoRemove(false);
     return f;
 }

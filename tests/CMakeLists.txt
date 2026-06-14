@@ -38,12 +38,11 @@ dragon_add_test(test_player_fft       LIBRARIES ${_player_libs})
 dragon_add_test(test_e2e              LIBRARIES Qt6::Network PkgConfig::FFmpeg)
 dragon_add_test(test_network_playback LIBRARIES ${_player_libs})
 
-# SDL gapless tests (uses SDL dummy driver no hardware or session manager needed)
+# SDL gapless tests uses SDL disk driver for PCM capture verification
 if(FLAC_FOUND)
     dragon_add_test(test_e2e_sdl_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC)
     set_property(TEST test_e2e_sdl_gapless APPEND PROPERTY ENVIRONMENT
         "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink"
-        "SDL_AUDIODRIVER=dummy"
     )
 endif()
 
