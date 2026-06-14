@@ -150,8 +150,8 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
         }
     }
     setStatus(DragonPlayer::MediaStatus::EndOfMedia);
-    setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
-    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished media ended";
+    decodeFinished = true;
+    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished media ended, deferring StoppedState until pipe drains";
 }
 
 void DragonPlayerPrivate::onDecodeError(const QString &)
@@ -299,6 +299,17 @@ void DragonPlayerPrivate::init()
                     qCDebug(dragonMultimediaPlayer) << "aboutToFinish emitted remaining=" << remaining << "ms, prefinishMark=" << prefinishMark;
                     Q_EMIT q->aboutToFinish();
                 }
+            }
+        }
+
+        if (decodeFinished && audioOutput && audioOutput->isDeviceOpen()) {
+            const auto pipeReady = audioPipe.consumer().ready();
+            const auto queuedSamples = audioOutput->deviceQueuedSamples();
+            qCDebug(dragonMultimediaPlayer) << "drain check: pipeReady=" << pipeReady << "queuedSamples=" << queuedSamples;
+            if (pipeReady == 0 && queuedSamples <= 0) {
+                decodeFinished = false;
+                qCDebug(dragonMultimediaPlayer) << "pipe drained transitioning to StoppedState";
+                setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
             }
         }
     });
@@ -452,6 +463,7 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->currentPosition = 0;
     d->currentDuration = 0;
     d->aboutToFinishEmitted = false;
+    d->decodeFinished = false;
     qCDebug(dragonMultimediaPlayer) << "setSource: reset aboutToFinishEmitted for" << source.toString();
     d->nextSource.clear();
     d->currentSampleRate = 0;
@@ -709,6 +721,8 @@ void DragonPlayer::stop()
     d->requestedPlaybackState = PlaybackState::StoppedState;
 
     d->decodePipeline.stopSession();
+
+    d->decodeFinished = false;
 
     if (d->audioOutput) {
         d->audioOutput->close();

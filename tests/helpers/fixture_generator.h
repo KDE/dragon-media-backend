@@ -162,4 +162,57 @@ inline BoundaryFixture makeStartMarkerFixture(int sampleRate, int channels, int 
     return f;
 }
 
+inline BoundaryFixture makeTenSecondFixture(int sampleRate, int channels, int durationFrames)
+{
+    BoundaryFixture f;
+    f.sampleRate = sampleRate;
+    f.channels = channels;
+    f.totalFrames = durationFrames;
+
+    const int totalSamples = durationFrames * channels;
+    f.expectedSamples.resize(totalSamples, 0.0f);
+
+    constexpr double kFreq = 440.0;
+    constexpr float kAmplitude = 0.5f;
+
+    for (int frm = 0; frm < durationFrames; ++frm) {
+        double t = static_cast<double>(frm) / sampleRate;
+        float val = static_cast<float>(std::sin(2.0 * M_PI * kFreq * t) * kAmplitude);
+        f.expectedSamples[frm * channels] = val;
+        if (channels > 1) {
+            f.expectedSamples[frm * channels + 1] = val;
+        }
+    }
+
+    // Overwrite first 4 frames with start marker
+    const int sigLen = static_cast<int>(kStartSignature.size());
+    for (int k = 0; k < sigLen; ++k) {
+        float val = kStartSignature[k];
+        f.expectedSamples[k * channels] = val;
+        if (channels > 1) {
+            f.expectedSamples[k * channels + 1] = val;
+        }
+    }
+
+    // Overwrite last 4 frames with end marker
+    const int endSigStart = durationFrames - sigLen;
+    for (int k = 0; k < sigLen; ++k) {
+        float val = kEndSignature[k];
+        f.expectedSamples[(endSigStart + k) * channels] = val;
+        if (channels > 1) {
+            f.expectedSamples[(endSigStart + k) * channels + 1] = val;
+        }
+    }
+
+    QTemporaryFile tmpFile;
+    tmpFile.setFileTemplate(QStringLiteral("test-10sec-XXXXXX.flac"));
+    (void)tmpFile.open();
+    tmpFile.close();
+
+    writeFlac(tmpFile.fileName(), f.expectedSamples, sampleRate, channels, durationFrames);
+
+    f.filePath = tmpFile.fileName();
+    tmpFile.setAutoRemove(false);
+    return f;
+}
 }
