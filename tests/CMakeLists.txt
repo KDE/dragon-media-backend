@@ -38,32 +38,13 @@ dragon_add_test(test_player_fft       LIBRARIES ${_player_libs})
 dragon_add_test(test_e2e              LIBRARIES Qt6::Network PkgConfig::FFmpeg)
 dragon_add_test(test_network_playback LIBRARIES ${_player_libs})
 
-# PipeWire gapless tests (requires pipewire binary and null-audio-sink)
-if(PIPEWIRE_FOUND)
-    execute_process(
-        COMMAND ${PKG_CONFIG_EXECUTABLE} --variable=libdir spa-0.2
-        OUTPUT_VARIABLE _spa_libdir OUTPUT_STRIP_TRAILING_WHITESPACE
-        RESULT_VARIABLE _spa_result ERROR_QUIET
+# SDL gapless tests (uses SDL dummy driver no hardware or session manager needed)
+if(FLAC_FOUND)
+    dragon_add_test(test_e2e_sdl_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC)
+    set_property(TEST test_e2e_sdl_gapless APPEND PROPERTY ENVIRONMENT
+        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink"
+        "SDL_AUDIODRIVER=dummy"
     )
-    execute_process(
-        COMMAND ${PKG_CONFIG_EXECUTABLE} --variable=libdir libpipewire-0.3
-        OUTPUT_VARIABLE _pw_libdir OUTPUT_STRIP_TRAILING_WHITESPACE
-        RESULT_VARIABLE _pw_result ERROR_QUIET
-    )
-    dragon_add_test(test_e2e_pipewire_gapless
-        LIBRARIES ${_player_libs} PkgConfig::PIPEWIRE
-        ENVIRONMENT "QT_PLUGIN_PATH=${PROJECT_BINARY_DIR}/bin"
-    )
-    if(_spa_result EQUAL 0 AND _spa_libdir)
-        target_compile_definitions(test_e2e_pipewire_gapless PRIVATE
-            SPA_PLUGIN_DIR="${_spa_libdir}/spa-0.2"
-        )
-    endif()
-    if(_pw_result EQUAL 0 AND _pw_libdir)
-        target_compile_definitions(test_e2e_pipewire_gapless PRIVATE
-            PIPEWIRE_MODULE_DIR="${_pw_libdir}/pipewire-0.3"
-        )
-    endif()
 endif()
 
 # Audio output tests (one executable, run once per backend via env var)

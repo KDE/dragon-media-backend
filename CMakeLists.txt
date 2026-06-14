@@ -57,6 +57,8 @@ pkg_check_modules(PIPEWIRE IMPORTED_TARGET libpipewire-0.3)
 
 pkg_check_modules(PULSEAUDIO IMPORTED_TARGET libpulse)
 
+pkg_check_modules(FLAC IMPORTED_TARGET flac)
+
 if(NOT TARGET PkgConfig::FFmpeg)
     add_library(PkgConfig::FFmpeg INTERFACE IMPORTED)
     foreach(_lib IN ITEMS avformat avcodec swresample avutil)
