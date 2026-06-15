@@ -319,8 +319,11 @@ void TestSdlGapless::testSingleTrackIntegrity()
     // With TIMESCALE=1 (real-time), a 10s track takes ~10s to play out.
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, 30000);
 
-    // After StoppedState, wait for SDL disk driver to flush remaining buffers to file.
-    QTest::qWait(500);
+    // The SDL disk driver writes to the capture file in real-time
+    // (TIMESCALE=1). After drain fires the stream is empty but the disk
+    // driver's device ring buffer still holds ~1s of audio. Wait for the
+    // virtual clock to consume the device buffer before reading the file.
+    QTest::qWait(2000);
 
     QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
     auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
