@@ -46,15 +46,19 @@ public:
     static void onProcess(void *userdata);
     static void onControlInfo(void *userdata, uint32_t id, const struct pw_stream_control *control);
     static void onParamChanged(void *userdata, uint32_t id, const struct spa_pod *param);
+    static void onDrained(void *userdata);
 
 private:
     void setChannelVolumes(float linearGain);
+    void resetDrainState() override;
 
     struct PwState;
     std::unique_ptr<PwState> m_pw;
 
     std::atomic<bool> m_paused{false};
     std::atomic<bool> m_open{false};
+
+    bool m_drainInitiated = false;
 
     std::mutex m_callbackDoneMutex;
     std::condition_variable m_callbackDoneCv;

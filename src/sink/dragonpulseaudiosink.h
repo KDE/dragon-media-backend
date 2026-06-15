@@ -52,11 +52,16 @@ public:
     static void writeCallback(pa_stream *s, size_t nbytes, void *userdata);
     static void streamStateCallback(pa_stream *s, void *userdata);
     static void contextStateCallback(pa_context *c, void *userdata);
+    static void drainCallback(pa_stream *s, int success, void *userdata);
+    static void underflowCallback(pa_stream *s, void *userdata);
 
 private:
     [[nodiscard]] bool connectToServer();
     void disconnectFromServer();
     void applyVolume(float linearGain);
+    void resetDrainState() override;
+
+    bool m_drainRequested = false;
 
     struct PaState {
         pa_threaded_mainloop *mainloop = nullptr;

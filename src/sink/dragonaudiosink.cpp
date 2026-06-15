@@ -188,6 +188,16 @@ void DragonAudioSink::restoreVolume()
     setGain(calculateGain(m_volume, m_muted));
 }
 
+void DragonAudioSink::notifyDecodeFinished()
+{
+    m_decodeFinished = true;
+}
+
+void DragonAudioSink::resetDrainState()
+{
+    m_decodeFinished = false;
+}
+
 std::span<const std::float32_t> DragonAudioSink::processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts)
 {
     if (m_positionResetPending.exchange(false, std::memory_order_acq_rel)) {

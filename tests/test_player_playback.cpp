@@ -422,7 +422,7 @@ void TestPlayerPlayback::testEndOfMediaTransitionsToStoppedState()
 
     QVERIFY2(SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::EndOfMedia), "End of media must emit EndOfMedia status");
 
-    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
 void TestPlayerPlayback::testPlayAtEndOfMediaRestarts()
@@ -436,7 +436,7 @@ void TestPlayerPlayback::testPlayAtEndOfMediaRestarts()
     QVERIFY(helper.playAndWait());
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 15000);
-    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.play();

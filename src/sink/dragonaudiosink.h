@@ -98,9 +98,13 @@ public:
         m_totalSamplesWritten.store(0, std::memory_order_relaxed);
     }
 
+    virtual void notifyDecodeFinished();
+    virtual void resetDrainState();
+
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();
+    void drained();
 
 protected Q_SLOTS:
     void onExternalVolumeChanged(float linearGain);
@@ -139,4 +143,7 @@ private:
     std::atomic<bool> m_flushPending{false};
     std::atomic<bool> m_positionResetPending{false};
     std::atomic<bool> m_queueReady{true};
+
+protected:
+    bool m_decodeFinished = false;
 };

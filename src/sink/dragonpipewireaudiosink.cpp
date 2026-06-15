@@ -43,6 +43,7 @@ static const struct pw_stream_events s_streamEvents = [] {
     ev.process = DragonPipeWireAudioSink::onProcess;
     ev.control_info = DragonPipeWireAudioSink::onControlInfo;
     ev.param_changed = DragonPipeWireAudioSink::onParamChanged;
+    ev.drained = DragonPipeWireAudioSink::onDrained;
     return ev;
 }();
 
@@ -415,15 +416,26 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
 
     auto *dst = static_cast<float *>(spaBuf->datas[0].data);
 
+    if (pcm.empty() && self->m_decodeFinished && !self->m_drainInitiated) {
+        self->m_drainInitiated = true;
+        spaBuf->datas[0].chunk->size = 0;
+        spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
+        pwBuf->size = 0;
+        pw_stream_queue_buffer(stream, pwBuf);
+        pw_stream_flush(stream, true);
+        return;
+    }
+
+    if (pcm.empty()) {
+        spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
+    }
+
     if (pcm.size() < maxSamples) {
         std::ranges::fill(std::span{dst + pcm.size(), maxSamples - pcm.size()}, 0.0f);
     }
 
     if (!pcm.empty()) {
         std::ranges::copy(pcm, dst);
-        spaBuf->datas[0].chunk->flags = 0;
-    } else {
-        spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
     }
 
     spaBuf->datas[0].chunk->offset = 0;
@@ -493,6 +505,17 @@ void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const 
             }
         }
     }
+}
+
+void DragonPipeWireAudioSink::onDrained(void *userdata)
+{
+    Q_EMIT static_cast<DragonPipeWireAudioSink *>(userdata)->drained();
+}
+
+void DragonPipeWireAudioSink::resetDrainState()
+{
+    m_drainInitiated = false;
+    DragonAudioSink::resetDrainState();
 }
 
 #include "dragonpipewireaudiosink.moc"

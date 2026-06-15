@@ -135,8 +135,8 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
     // normal end of track with no gapless handoff: mark EndOfMedia and
     // Normal end of track with no gapless handoff: emit aboutToFinish
     // here if all audio has been queued but positionMs() hasn't caught up
-    // yet (the ~200ms PA device buffer + pipe backlog).  Then transition
-    // to EndOfMedia/StoppedState.
+    // yet (the ~200ms PA device buffer + pipe backlog).  Defer
+    // EndOfMedia/StoppedState until the backend signals drained().
     if (prefinishMark > 0 && !aboutToFinishEmitted && audioOutput && currentDuration > 0) {
         const int64_t pipeBacklog = static_cast<int64_t>(audioPipe.consumer().ready());
         const int64_t eventualSamples = audioOutput->totalSamplesWritten() + pipeBacklog;
@@ -149,9 +149,8 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
             Q_EMIT q->aboutToFinish();
         }
     }
-    setStatus(DragonPlayer::MediaStatus::EndOfMedia);
-    decodeFinished = true;
-    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished media ended, deferring StoppedState until pipe drains";
+    audioOutput->notifyDecodeFinished();
+    qCDebug(dragonMultimediaPlayer) << "onDecodeFinished media ended, deferring StoppedState until drain";
 }
 
 void DragonPlayerPrivate::onDecodeError(const QString &)
@@ -282,6 +281,11 @@ void DragonPlayerPrivate::init()
 
     connect(audioOutput.get(), &DragonAudioSink::volumeChanged, q, &DragonPlayer::volumeChanged);
 
+    connect(audioOutput.get(), &DragonAudioSink::drained, this, [this]() {
+        setStatus(DragonPlayer::MediaStatus::EndOfMedia);
+        setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+    });
+
     positionTimer = new QTimer(this);
     positionTimer->setInterval(100);
     connect(positionTimer, &QTimer::timeout, this, [this]() {
@@ -302,16 +306,6 @@ void DragonPlayerPrivate::init()
             }
         }
 
-        if (decodeFinished && audioOutput && audioOutput->isDeviceOpen()) {
-            const auto pipeReady = audioPipe.consumer().ready();
-            const auto queuedSamples = audioOutput->deviceQueuedSamples();
-            qCDebug(dragonMultimediaPlayer) << "drain check: pipeReady=" << pipeReady << "queuedSamples=" << queuedSamples;
-            if (pipeReady == 0 && queuedSamples <= 0) {
-                decodeFinished = false;
-                qCDebug(dragonMultimediaPlayer) << "pipe drained transitioning to StoppedState";
-                setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
-            }
-        }
     });
 
     decodePipeline.setSamplesCallback([this](auto samples, const std::stop_token &st) {
@@ -451,6 +445,7 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     if (d->audioOutput) {
         d->audioOutput->silence();
         d->audioOutput->setQueueReady(false);
+        d->audioOutput->resetDrainState();
         d->audioOutput->setPositionOffset(0, DragonAudioSink::PositionResetMode::NormalTrackChange);
     }
 
@@ -463,7 +458,6 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->currentPosition = 0;
     d->currentDuration = 0;
     d->aboutToFinishEmitted = false;
-    d->decodeFinished = false;
     qCDebug(dragonMultimediaPlayer) << "setSource: reset aboutToFinishEmitted for" << source.toString();
     d->nextSource.clear();
     d->currentSampleRate = 0;
@@ -722,11 +716,10 @@ void DragonPlayer::stop()
 
     d->decodePipeline.stopSession();
 
-    d->decodeFinished = false;
-
     if (d->audioOutput) {
         d->audioOutput->close();
         d->audioOutput->reset();
+        d->audioOutput->resetDrainState();
     }
     d->fftPipeline.stop();
 

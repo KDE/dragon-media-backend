@@ -174,10 +174,14 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
             qCCritical(dragonMultimediaAudio) << "PulseAudio pa_stream_write failed:" << pa_strerror(pa_context_errno(self->m_pa->context));
         }
     } else {
-        // Use a thread_local static buffer to avoid heap allocation on every silence write.
-        thread_local std::vector<float> silence;
-        silence.resize(floatsNeeded, 0.0f);
-        pa_stream_write(s, silence.data(), silence.size() * sizeof(float), nullptr, 0, PA_SEEK_RELATIVE);
+        if (self->m_decodeFinished && !self->m_drainRequested) {
+            self->m_drainRequested = true;
+            pa_operation_unref(pa_stream_drain(s, DragonPulseAudioSink::drainCallback, self));
+        } else if (!self->m_decodeFinished) {
+            thread_local std::vector<float> silence;
+            silence.resize(floatsNeeded, 0.0f);
+            pa_stream_write(s, silence.data(), silence.size() * sizeof(float), nullptr, 0, PA_SEEK_RELATIVE);
+        }
     }
 }
 
@@ -355,6 +359,7 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
 
     pa_stream_set_state_callback(m_pa->stream, DragonPulseAudioSink::streamStateCallback, this);
     pa_stream_set_write_callback(m_pa->stream, DragonPulseAudioSink::writeCallback, this);
+    pa_stream_set_underflow_callback(m_pa->stream, DragonPulseAudioSink::underflowCallback, this);
 
     pa_buffer_attr bufferAttr;
     bufferAttr.maxlength = static_cast<uint32_t>(-1);
@@ -575,6 +580,25 @@ bool DragonPulseAudioSink::isPaused() const
 void DragonPulseAudioSink::setStreamName(const QString &name)
 {
     m_streamName = name.toStdString();
+}
+
+void DragonPulseAudioSink::drainCallback(pa_stream *s, int success, void *userdata)
+{
+    Q_UNUSED(s);
+    Q_UNUSED(success);
+    Q_EMIT static_cast<DragonPulseAudioSink *>(userdata)->drained();
+}
+
+void DragonPulseAudioSink::underflowCallback(pa_stream *s, void *userdata)
+{
+    Q_UNUSED(s);
+    Q_UNUSED(userdata);
+}
+
+void DragonPulseAudioSink::resetDrainState()
+{
+    m_drainRequested = false;
+    DragonAudioSink::resetDrainState();
 }
 
 #include "dragonpulseaudiosink.moc"

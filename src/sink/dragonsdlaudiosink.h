@@ -11,6 +11,8 @@
 
 #include <QVariant>
 
+#include <QTimer>
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -39,6 +41,9 @@ public:
 
     void setStreamName(const QString &name) override;
 
+    void notifyDecodeFinished() override;
+    void resetDrainState() override;
+
     // Diagnostic helpers
     [[nodiscard]] int audioBufferFrames() const override;
     [[nodiscard]] int audioBufferUs() const override;
@@ -57,6 +62,9 @@ private:
     std::condition_variable m_callbackDoneCv;
     std::atomic<int> m_activeCallbacks{0};
     float m_cachedGain = 1.0f;
+
+    QTimer *m_drainTimer = nullptr;
+    static constexpr int kDrainPollMs = 50;
 
     friend class DragonDiagnostics;
 };

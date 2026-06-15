@@ -143,6 +143,10 @@ void DragonSdlAudioSink::close()
 {
     qCDebug(dragonMultimediaAudio) << "close()";
 
+    if (m_drainTimer) {
+        m_drainTimer->stop();
+    }
+
     auto *oldSession = m_session.exchange(nullptr, std::memory_order_acq_rel);
 
     if (oldSession) {
@@ -210,6 +214,33 @@ int64_t DragonSdlAudioSink::deviceQueuedSamples() const
 void DragonSdlAudioSink::setStreamName(const QString &name)
 {
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME, name.toUtf8().constData());
+}
+
+void DragonSdlAudioSink::notifyDecodeFinished()
+{
+    DragonAudioSink::notifyDecodeFinished();
+
+    if (!m_drainTimer) {
+        m_drainTimer = new QTimer(this);
+        connect(m_drainTimer, &QTimer::timeout, this, [this]() {
+            auto *session = m_session.load(std::memory_order_acquire);
+            if (session && session->stream) {
+                if (SDL_GetAudioStreamQueued(session->stream) == 0 && SDL_GetAudioStreamAvailable(session->stream) == 0) {
+                    m_drainTimer->stop();
+                    Q_EMIT drained();
+                }
+            }
+        });
+    }
+    m_drainTimer->start(kDrainPollMs);
+}
+
+void DragonSdlAudioSink::resetDrainState()
+{
+    if (m_drainTimer) {
+        m_drainTimer->stop();
+    }
+    DragonAudioSink::resetDrainState();
 }
 
 bool DragonSdlAudioSink::isDeviceOpen() const
