@@ -27,10 +27,11 @@
 #include <thread>
 #include <utility>
 
-DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player)
+DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player, DragonPlayer::AudioSink requestedSink)
     : QObject(player)
     , q(player)
     , decodePipeline(player)
+    , requestedAudioSink(requestedSink)
     , aliveGuard(std::make_shared<AliveGuard>())
 {
 }
@@ -271,9 +272,11 @@ void DragonPlayerPrivate::stopPipeline()
 
 void DragonPlayerPrivate::init()
 {
-    audioOutput = createAudioSink();
-    audioOutput->setAudioPipe(&audioPipe);
-    audioOutput->setFftPipe(nullptr);
+    audioOutput = createAudioSink(requestedAudioSink, &selectedAudioSink);
+    if (audioOutput) {
+        audioOutput->setAudioPipe(&audioPipe);
+        audioOutput->setFftPipe(nullptr);
+    }
 
     connect(audioOutput.get(), &DragonAudioSink::errorOccurred, this, [this](const QString &) {
         setError(DragonPlayer::Error::ResourceError);
@@ -305,7 +308,6 @@ void DragonPlayerPrivate::init()
                 }
             }
         }
-
     });
 
     decodePipeline.setSamplesCallback([this](auto samples, const std::stop_token &st) {
@@ -340,10 +342,10 @@ void DragonPlayerPrivate::init()
     });
 }
 
-DragonPlayer::DragonPlayer(QObject *parent)
+DragonPlayer::DragonPlayer(AudioSink requestedSink, QObject *parent)
     : QObject(parent)
 {
-    d = std::make_unique<DragonPlayerPrivate>(this);
+    d = std::make_unique<DragonPlayerPrivate>(this, requestedSink);
     d->init();
 }
 
@@ -413,6 +415,10 @@ int DragonPlayer::fftRate() const
 double DragonPlayer::bufferProgress() const
 {
     return d->currentBufferProgress;
+}
+DragonPlayer::AudioSink DragonPlayer::selectedAudioSink() const
+{
+    return d->selectedAudioSink;
 }
 
 void DragonPlayer::setMuted(bool muted)

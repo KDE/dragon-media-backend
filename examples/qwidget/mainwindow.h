@@ -20,6 +20,8 @@ class QSlider;
 class QLabel;
 class QListWidget;
 class QLCDNumber;
+class QComboBox;
+class DragonDiagnostics;
 
 class MainWindow : public QMainWindow
 {
@@ -46,6 +48,7 @@ private Q_SLOTS:
     void updatePlaylistCurrentIndex(int index);
     void updateFftFrame(const DragonFftFrame &frame);
     void updateIcyMetadata(const DragonIcyMetadata &metadata);
+    void changeAudioSink(int index);
 
 private:
     void setupUi();
@@ -92,4 +95,8 @@ private:
     bool m_seeking = false;
     int64_t m_durationMs = 0;
     DragonIcyMetadata m_lastIcyMetadata;
+
+    QComboBox *m_sinkComboBox = nullptr;
+    QList<QMetaObject::Connection> m_playerConnections;
+    DragonDiagnostics *m_diagnostics = nullptr;
 };

@@ -14,6 +14,7 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDir>
 #include <QLCDNumber>
 
@@ -72,7 +73,6 @@ void MainWindow::setupUi()
     m_gaplessAction = playbackMenu->addAction(i18n("&Gapless Playback"));
     m_gaplessAction->setCheckable(true);
     m_gaplessAction->setChecked(true);
-    connect(m_gaplessAction, &QAction::toggled, m_playlist, &DragonPlaylist::setGaplessEnabled);
 
     auto *central = new QWidget(this);
     auto *mainLayout = new QHBoxLayout(central);
@@ -155,6 +155,24 @@ void MainWindow::setupUi()
 
     auto *rightPanel = new QWidget(this);
     auto *rightLayout = new QVBoxLayout(rightPanel);
+
+    auto *sinkLabel = new QLabel(i18n("Audio Sink"), this);
+    sinkLabel->setStyleSheet(u"font-weight: bold;"_s);
+    rightLayout->addWidget(sinkLabel);
+
+    m_sinkComboBox = new QComboBox(this);
+    m_sinkComboBox->addItem(i18n("Auto"), static_cast<int>(DragonPlayer::AudioSink::Auto));
+    m_sinkComboBox->addItem(i18n("PipeWire"), static_cast<int>(DragonPlayer::AudioSink::PipeWire));
+    m_sinkComboBox->addItem(i18n("PulseAudio"), static_cast<int>(DragonPlayer::AudioSink::PulseAudio));
+    m_sinkComboBox->addItem(i18n("SDL"), static_cast<int>(DragonPlayer::AudioSink::SDL));
+    int defaultIdx = m_sinkComboBox->findData(static_cast<int>(DragonPlayer::AudioSink::Auto));
+    if (defaultIdx >= 0)
+        m_sinkComboBox->setCurrentIndex(defaultIdx);
+
+    // We do not add the combo box to m_playerConnections, because the combo box outlives the player.
+    connect(m_sinkComboBox, &QComboBox::activated, this, &MainWindow::changeAudioSink);
+    rightLayout->addWidget(m_sinkComboBox);
+
     auto *playlistLabel = new QLabel(i18n("Playlist"), this);
     playlistLabel->setStyleSheet(u"font-weight: bold;"_s);
     rightLayout->addWidget(playlistLabel);
@@ -202,19 +220,22 @@ void MainWindow::setupUi()
     diagLayout->addWidget(m_fftDiagLabel);
     statusBar()->addPermanentWidget(diagContainer);
 
-    auto *diagnostics = new DragonDiagnostics(m_player);
+    m_diagnostics = new DragonDiagnostics(m_player);
+    m_diagnostics->setParent(this);
     auto *diagTimer = new QTimer(this);
-    connect(diagTimer, &QTimer::timeout, this, [this, diagnostics]() {
-        const int µs = diagnostics->sdlAudioBufferUs();
+    connect(diagTimer, &QTimer::timeout, this, [this]() {
+        if (!m_diagnostics)
+            return;
+        const int µs = m_diagnostics->sdlAudioBufferUs();
         m_sdlµsDiagLabel->display(µs);
 
-        const float callbackHz = diagnostics->audioCallbackHz();
+        const float callbackHz = m_diagnostics->audioCallbackHz();
         m_sdlDiagLabel->display(static_cast<int>(callbackHz));
 
-        const std::size_t decodeSamples = diagnostics->decodeQueueSize();
+        const std::size_t decodeSamples = m_diagnostics->decodeQueueSize();
         m_decodeDiagLabel->display(static_cast<int>(decodeSamples));
 
-        const std::size_t fftSamples = diagnostics->fftQueueSize();
+        const std::size_t fftSamples = m_diagnostics->fftQueueSize();
         m_fftDiagLabel->display(static_cast<int>(fftSamples));
     });
     diagTimer->start(500);
@@ -222,19 +243,24 @@ void MainWindow::setupUi()
 
 void MainWindow::connectPlayer()
 {
-    connect(m_playButton, &QPushButton::clicked, m_player, &DragonPlayer::play);
-    connect(m_stopButton, &QPushButton::clicked, m_player, &DragonPlayer::stop);
-    connect(m_pauseButton, &QPushButton::clicked, m_player, &DragonPlayer::pause);
-    connect(m_nextButton, &QPushButton::clicked, m_playlist, &DragonPlaylist::playNext);
-    connect(m_prevButton, &QPushButton::clicked, m_playlist, &DragonPlaylist::playPrevious);
-    connect(m_kexpButton, &QPushButton::clicked, this, &MainWindow::playKexp);
-    connect(m_playLandSongButton, &QPushButton::clicked, this, &MainWindow::playLandSong);
+    for (auto c : m_playerConnections) {
+        QObject::disconnect(c);
+    }
+    m_playerConnections.clear();
 
-    connect(m_playlistWidget, &QListWidget::activated, this, [this](const QModelIndex &index) {
+    m_playerConnections << connect(m_playButton, &QPushButton::clicked, m_player, &DragonPlayer::play);
+    m_playerConnections << connect(m_stopButton, &QPushButton::clicked, m_player, &DragonPlayer::stop);
+    m_playerConnections << connect(m_pauseButton, &QPushButton::clicked, m_player, &DragonPlayer::pause);
+    m_playerConnections << connect(m_nextButton, &QPushButton::clicked, m_playlist, &DragonPlaylist::playNext);
+    m_playerConnections << connect(m_prevButton, &QPushButton::clicked, m_playlist, &DragonPlaylist::playPrevious);
+    m_playerConnections << connect(m_kexpButton, &QPushButton::clicked, this, &MainWindow::playKexp);
+    m_playerConnections << connect(m_playLandSongButton, &QPushButton::clicked, this, &MainWindow::playLandSong);
+
+    m_playerConnections << connect(m_playlistWidget, &QListWidget::activated, this, [this](const QModelIndex &index) {
         m_playlist->setCurrentIndex(index.row());
     });
 
-    connect(m_playlist, &DragonPlaylist::tracksChanged, this, [this]() {
+    m_playerConnections << connect(m_playlist, &DragonPlaylist::tracksChanged, this, [this]() {
         m_playlistWidget->clear();
         for (const QUrl &url : m_playlist->tracks()) {
             QString name = url.fileName();
@@ -245,48 +271,92 @@ void MainWindow::connectPlayer()
         }
     });
 
-    connect(m_playlist, &DragonPlaylist::currentIndexChanged, this, &MainWindow::updatePlaylistCurrentIndex);
+    m_playerConnections << connect(m_playlist, &DragonPlaylist::currentIndexChanged, this, &MainWindow::updatePlaylistCurrentIndex);
 
-    connect(m_playlist, &DragonPlaylist::gaplessEnabledChanged, this, [this](bool enabled) {
+    m_playerConnections << connect(m_gaplessAction, &QAction::toggled, m_playlist, &DragonPlaylist::setGaplessEnabled);
+
+    m_playerConnections << connect(m_playlist, &DragonPlaylist::gaplessEnabledChanged, this, [this](bool enabled) {
         m_gaplessAction->setChecked(enabled);
     });
 
-    connect(m_seekSlider, &QSlider::sliderPressed, this, [this]() {
+    m_playerConnections << connect(m_seekSlider, &QSlider::sliderPressed, this, [this]() {
         m_seeking = true;
     });
-    connect(m_seekSlider, &QSlider::sliderMoved, this, [this](int position) {
+    m_playerConnections << connect(m_seekSlider, &QSlider::sliderMoved, this, [this](int position) {
         m_player->seek(static_cast<int64_t>(position));
     });
-    connect(m_seekSlider, &QSlider::sliderReleased, this, [this]() {
+    m_playerConnections << connect(m_seekSlider, &QSlider::sliderReleased, this, [this]() {
         m_seeking = false;
     });
-    connect(m_player, &DragonPlayer::positionChanged, this, &MainWindow::updatePosition);
-    connect(m_player, &DragonPlayer::durationChanged, this, &MainWindow::updateDuration);
+    m_playerConnections << connect(m_player, &DragonPlayer::positionChanged, this, &MainWindow::updatePosition);
+    m_playerConnections << connect(m_player, &DragonPlayer::durationChanged, this, &MainWindow::updateDuration);
 
-    connect(m_volumeSlider, &QSlider::valueChanged, this, &MainWindow::setVolumeFromSlider);
-    connect(m_player, &DragonPlayer::volumeChanged, this, [this]() {
+    m_playerConnections << connect(m_volumeSlider, &QSlider::valueChanged, this, &MainWindow::setVolumeFromSlider);
+    m_playerConnections << connect(m_player, &DragonPlayer::volumeChanged, this, [this]() {
         const int vol = static_cast<int>(m_player->volume() * 100.0f);
         if (m_volumeSlider->value() != vol)
             m_volumeSlider->setValue(vol);
     });
 
-    connect(m_player, &DragonPlayer::playbackStateChanged, this, &MainWindow::updatePlaybackState);
-    connect(m_player, &DragonPlayer::statusChanged, this, &MainWindow::updateStatus);
-    connect(m_player, &DragonPlayer::errorChanged, this, [this](DragonPlayer::Error error) {
+    m_playerConnections << connect(m_player, &DragonPlayer::playbackStateChanged, this, &MainWindow::updatePlaybackState);
+    m_playerConnections << connect(m_player, &DragonPlayer::statusChanged, this, &MainWindow::updateStatus);
+    m_playerConnections << connect(m_player, &DragonPlayer::errorChanged, this, [this](DragonPlayer::Error error) {
         if (error != DragonPlayer::Error::NoError)
             m_statusLabel->setText(i18n("Error: %1").arg(static_cast<int>(error)));
     });
 
-    connect(m_player, &DragonPlayer::trackChanged, this, [this]() {
+    m_playerConnections << connect(m_player, &DragonPlayer::trackChanged, this, [this]() {
         m_statusLabel->setText(i18n("Playing (seamless transition)"));
     });
 
-    connect(m_player, &DragonPlayer::fftFrameReady, this, &MainWindow::updateFftFrame);
-    connect(m_fftCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
+    m_playerConnections << connect(m_player, &DragonPlayer::fftFrameReady, this, &MainWindow::updateFftFrame);
+    m_playerConnections << connect(m_fftCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
         m_player->setFftMode(checked ? DragonPlayer::FftMode::Both : DragonPlayer::FftMode::Off);
     });
 
-    connect(m_player, &DragonPlayer::currentPlayingForRadiosChanged, this, &MainWindow::updateIcyMetadata);
+    m_playerConnections << connect(m_player, &DragonPlayer::currentPlayingForRadiosChanged, this, &MainWindow::updateIcyMetadata);
+}
+
+void MainWindow::changeAudioSink(int index)
+{
+    auto sink = static_cast<DragonPlayer::AudioSink>(m_sinkComboBox->itemData(index).toInt());
+
+    QList<QUrl> currentTracks = m_playlist->tracks();
+    int currentIndex = m_playlist->currentIndex();
+    int64_t currentPosition = m_player->position();
+    bool isPlaying = m_player->playbackState() == DragonPlayer::PlaybackState::PlayingState;
+    float currentVolume = m_player->volume();
+    bool gaplessEnabled = m_playlist->gaplessEnabled();
+    auto fftMode = m_player->fftMode();
+    auto fftRate = m_player->fftRate();
+
+    delete m_playlist;
+    m_playlist = nullptr;
+    delete m_diagnostics;
+    m_diagnostics = nullptr;
+    delete m_player;
+    m_player = nullptr;
+
+    m_player = new DragonPlayer(sink, this);
+    m_playlist = new DragonPlaylist(m_player, this);
+    m_diagnostics = new DragonDiagnostics(m_player);
+    m_diagnostics->setParent(this);
+
+    m_playlist->setGaplessEnabled(gaplessEnabled);
+    m_player->setVolume(currentVolume);
+    m_player->setFftMode(fftMode);
+    m_player->setFftRate(fftRate);
+
+    connectPlayer();
+
+    if (!currentTracks.isEmpty()) {
+        m_playlist->addTracks(currentTracks);
+        m_playlist->setCurrentIndex(currentIndex);
+        m_player->seek(currentPosition);
+        if (isPlaying) {
+            m_player->play();
+        }
+    }
 }
 
 void MainWindow::openFile()

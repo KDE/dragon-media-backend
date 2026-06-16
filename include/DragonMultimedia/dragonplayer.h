@@ -25,6 +25,14 @@ class DRAGONMULTIMEDIA_EXPORT DragonPlayer : public QObject
     Q_OBJECT
 
 public:
+    enum class AudioSink {
+        Auto,
+        PipeWire,
+        PulseAudio,
+        SDL
+    };
+    Q_ENUM(AudioSink)
+
     enum class PlaybackState {
         StoppedState,
         PlayingState,
@@ -61,7 +69,11 @@ public:
     };
     Q_ENUM(FftMode)
 
-    explicit DragonPlayer(QObject *parent = nullptr);
+    explicit DragonPlayer(AudioSink requestedSink = AudioSink::Auto, QObject *parent = nullptr);
+    explicit DragonPlayer(QObject *parent)
+        : DragonPlayer(AudioSink::Auto, parent)
+    {
+    }
     ~DragonPlayer() override;
 
     DragonPlayer(const DragonPlayer &) = delete;
@@ -83,6 +95,7 @@ public:
     Q_PROPERTY(int fftRate READ fftRate WRITE setFftRate NOTIFY fftRateChanged)
     Q_PROPERTY(double bufferProgress READ bufferProgress NOTIFY bufferProgressChanged)
     Q_PROPERTY(int32_t prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
+    Q_PROPERTY(AudioSink selectedAudioSink READ selectedAudioSink CONSTANT)
 
     [[nodiscard]] bool muted() const;
     [[nodiscard]] float volume() const;
@@ -101,6 +114,7 @@ public:
     [[nodiscard]] int fftRate() const;
     [[nodiscard]] double bufferProgress() const;
     [[nodiscard]] int32_t prefinishMark() const;
+    [[nodiscard]] AudioSink selectedAudioSink() const;
 
 Q_SIGNALS:
     void mutedChanged(bool muted);

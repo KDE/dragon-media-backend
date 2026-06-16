@@ -34,7 +34,7 @@ class DragonPlayerPrivate : public QObject
 {
     Q_OBJECT
 public:
-    explicit DragonPlayerPrivate(DragonPlayer *player);
+    explicit DragonPlayerPrivate(DragonPlayer *player, DragonPlayer::AudioSink requestedSink = DragonPlayer::AudioSink::Auto);
 
 private:
     friend class DragonDiagnostics;
@@ -84,6 +84,8 @@ private:
     DragonPlayer::FftMode currentFftMode = DragonPlayer::FftMode::Off;
     int currentFftRate = 60;
     double currentBufferProgress = 1.0;
+    DragonPlayer::AudioSink requestedAudioSink = DragonPlayer::AudioSink::Auto;
+    DragonPlayer::AudioSink selectedAudioSink = DragonPlayer::AudioSink::Auto;
 
     std::shared_ptr<AliveGuard> aliveGuard;
 
