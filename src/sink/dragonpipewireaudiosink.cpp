@@ -287,7 +287,7 @@ void DragonPipeWireAudioSink::setChannelVolumes(float linearGain)
 {
     const uint32_t ch = static_cast<uint32_t>(currentChannels());
     m_volumesScratch.assign(ch, linearGain);
-    pw_stream_set_control(m_pw->stream, SPA_PROP_channelVolumes, ch, m_volumesScratch.data());
+    pw_stream_set_control(m_pw->stream, SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
 }
 
 int64_t DragonPipeWireAudioSink::deviceQueuedSamples() const
@@ -428,6 +428,8 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
 
     if (pcm.empty()) {
         spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
+    } else {
+        spaBuf->datas[0].chunk->flags = 0;
     }
 
     if (pcm.size() < maxSamples) {
