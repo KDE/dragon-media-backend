@@ -24,7 +24,6 @@
 #include <stop_token>
 
 class QNetworkAccessManager;
-class QTimer;
 
 class DRAGONMULTIMEDIA_EXPORT DragonRadioStream : public DragonStream
 {
@@ -60,7 +59,6 @@ private Q_SLOTS:
     void onReplyReadyRead();
     void onReplyFinished();
     void onReplyError(QNetworkReply::NetworkError code);
-    void onWatchdogTimeout();
 
 private:
     void addToAudioBuffer(const QByteArray &data);
@@ -70,7 +68,6 @@ private:
     QUrl m_url;
     QPointer<QNetworkAccessManager> m_nam;
     QPointer<QNetworkReply> m_reply;
-    QPointer<QTimer> m_watchdogTimer;
 
     std::mutex m_bufferMutex;
     std::condition_variable_any m_bufferCv;
@@ -91,4 +88,10 @@ private:
     int m_icyBytesRead = 0;
     QByteArray m_icyPendingData;
     DragonIcyMetadata m_lastMetadata;
+
+    // Runtime buffer depth tracking
+    std::atomic<qint64> m_bufferDepth{0};
+    std::atomic<bool> m_isBuffering{false};
+    static constexpr qint64 LOW_WATER_MARK = 0;
+    static constexpr qint64 HIGH_WATER_MARK = 128 * 1024;
 };

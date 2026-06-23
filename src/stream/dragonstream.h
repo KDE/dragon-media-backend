@@ -51,4 +51,7 @@ public:
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void metadataReady(const DragonIcyMetadata &metadata);
+    void streamStalled();
+    void streamBuffering();
+    void streamBuffered();
 };

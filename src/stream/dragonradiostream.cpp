@@ -22,12 +22,8 @@ using namespace std::chrono_literals;
 DragonRadioStream::DragonRadioStream(QObject *parent)
     : DragonStream(parent)
     , m_nam(new QNetworkAccessManager(this))
-    , m_watchdogTimer(new QTimer(this))
     , m_bufferProgress(new DragonBufferProgress(this))
 {
-    m_watchdogTimer->setInterval(5000);
-    m_watchdogTimer->setSingleShot(true);
-    connect(m_watchdogTimer, &QTimer::timeout, this, &DragonRadioStream::onWatchdogTimeout);
 }
 
 DragonRadioStream::~DragonRadioStream()
@@ -65,6 +61,7 @@ void DragonRadioStream::start()
 
     QNetworkRequest request(m_url);
     request.setRawHeader("Icy-Metadata"_ba, "1"_ba);
+    request.setTransferTimeout(std::chrono::seconds(5));
     m_reply = m_nam->get(request);
 
     connect(m_reply, &QNetworkReply::encrypted, this, &DragonRadioStream::onReplyEncrypted);
@@ -75,17 +72,11 @@ void DragonRadioStream::start()
     connect(m_reply, &QNetworkReply::downloadProgress, this, [this](qint64 bytesReceived, qint64) {
         m_bufferProgress->setBytesReceived(bytesReceived);
     });
-
-    m_watchdogTimer->start();
 }
 
 void DragonRadioStream::stop()
 {
     m_abort = true;
-
-    if (m_watchdogTimer) {
-        m_watchdogTimer->stop();
-    }
 
     m_bufferCv.notify_all();
 
@@ -138,6 +129,15 @@ int DragonRadioStream::read(std::span<uint8_t> buf, std::stop_token st)
     }
 
     m_streamPosition += bytesRead;
+
+    if (bytesRead > 0) {
+        const auto prev = m_bufferDepth.fetch_sub(bytesRead);
+        if (prev > LOW_WATER_MARK && (prev - bytesRead) <= LOW_WATER_MARK) {
+            m_isBuffering = true;
+            Q_EMIT streamBuffering();
+        }
+    }
+
     return bytesRead;
 }
 
@@ -164,6 +164,7 @@ int64_t DragonRadioStream::seek(int64_t offset)
     QNetworkRequest request(m_url);
     request.setRawHeader("Icy-Metadata"_ba, "1"_ba);
     request.setRawHeader("Range"_ba, "bytes="_ba + QByteArray::number(offset) + "-"_ba);
+    request.setTransferTimeout(std::chrono::seconds(5));
     m_reply = m_nam->get(request);
 
     connect(m_reply, &QNetworkReply::encrypted, this, &DragonRadioStream::onReplyEncrypted);
@@ -175,7 +176,6 @@ int64_t DragonRadioStream::seek(int64_t offset)
         m_bufferProgress->setBytesReceived(bytesReceived);
     });
 
-    m_watchdogTimer->start();
     return offset;
 }
 
@@ -260,7 +260,6 @@ void DragonRadioStream::onReplyReadyRead()
     if (!m_reply) {
         return;
     }
-    m_watchdogTimer->start();
 
     const QByteArray data = m_reply->readAll();
     if (data.isEmpty()) {
@@ -277,7 +276,6 @@ void DragonRadioStream::onReplyReadyRead()
 void DragonRadioStream::onReplyFinished()
 {
     qCDebug(dragonMultimediaNetwork) << "reply finished";
-    m_watchdogTimer->stop();
 
     if (m_abort) {
         return;
@@ -300,23 +298,16 @@ void DragonRadioStream::onReplyFinished()
 void DragonRadioStream::onReplyError(QNetworkReply::NetworkError code)
 {
     qCWarning(dragonMultimediaNetwork) << "error:" << code;
-    m_watchdogTimer->stop();
     m_error = true;
     m_bufferCv.notify_all();
+
+    if (code == QNetworkReply::TimeoutError) {
+        Q_EMIT streamStalled();
+    }
 
     if (!m_abort) {
         Q_EMIT errorOccurred(QString::fromLatin1("Network error: %1").arg(static_cast<int>(code)));
     }
-}
-
-void DragonRadioStream::onWatchdogTimeout()
-{
-    if (m_abort) {
-        return;
-    }
-
-    qCDebug(dragonMultimediaNetwork) << "watchdog timeout reconnecting";
-    start();
 }
 
 void DragonRadioStream::addToAudioBuffer(const QByteArray &data)
@@ -325,7 +316,12 @@ void DragonRadioStream::addToAudioBuffer(const QByteArray &data)
         std::scoped_lock lock(m_bufferMutex);
         m_networkBuffer.push_back(data);
     }
+    const qint64 newDepth = m_bufferDepth += data.size();
     m_bufferCv.notify_all();
+
+    if (!m_isBuffering.exchange(false) && newDepth >= HIGH_WATER_MARK) {
+        Q_EMIT streamBuffered();
+    }
 }
 
 void DragonRadioStream::processIcyData(const QByteArray &data)
