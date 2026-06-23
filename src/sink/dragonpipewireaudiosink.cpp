@@ -37,7 +37,7 @@ struct DragonPipeWireAudioSink::PwState {
     spa_hook streamListener{};
 };
 
-static const struct pw_stream_events s_streamEvents = [] {
+static constexpr struct pw_stream_events s_streamEvents = [] {
     struct pw_stream_events ev{};
     ev.version = PW_VERSION_STREAM_EVENTS;
     ev.process = DragonPipeWireAudioSink::onProcess;
@@ -285,7 +285,7 @@ void DragonPipeWireAudioSink::clearStream()
 
 void DragonPipeWireAudioSink::setChannelVolumes(float linearGain)
 {
-    const uint32_t ch = static_cast<uint32_t>(currentChannels());
+    const auto ch = static_cast<uint32_t>(currentChannels());
     m_volumesScratch.assign(ch, linearGain);
     pw_stream_set_control(m_pw->stream, SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
 }
