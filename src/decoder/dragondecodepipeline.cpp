@@ -518,6 +518,10 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         connect(m_stream.get(), &DragonStream::metadataReady, m_player, &DragonPlayer::currentPlayingForRadiosChanged);
         connect(m_stream->bufferProgress(), &DragonBufferProgress::progressChanged, this, &DragonDecodePipeline::bufferProgressChanged);
 
+        connect(m_stream.get(), &DragonStream::streamStalled, this, &DragonDecodePipeline::streamStalled, Qt::QueuedConnection);
+        connect(m_stream.get(), &DragonStream::streamBuffering, this, &DragonDecodePipeline::streamBuffering, Qt::QueuedConnection);
+        connect(m_stream.get(), &DragonStream::streamBuffered, this, &DragonDecodePipeline::streamBuffered, Qt::QueuedConnection);
+
         m_stream->start();
 
         readCb = [this](const std::span<uint8_t> buf) -> int {

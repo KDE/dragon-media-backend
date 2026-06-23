@@ -50,6 +50,10 @@ private Q_SLOTS:
 
     void onGaplessTransition(const QUrl &newSource, int sampleRate, int channels, qint64 durationMs);
 
+    void onStreamStalled();
+    void onStreamBuffering();
+    void onStreamBuffered();
+
 private:
     void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);
 

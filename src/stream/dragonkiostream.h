@@ -21,6 +21,7 @@
 #include <stop_token>
 
 class DragonBufferProgress;
+class QTimer;
 
 class DRAGONMULTIMEDIA_EXPORT DragonKioStream : public DragonStream
 {
@@ -48,10 +49,12 @@ private Q_SLOTS:
     void onResult(KJob *job);
     void onTotalAmountChanged(KJob *job, KJob::Unit unit, qulonglong amount);
     void onProcessedAmountChanged(KJob *job, KJob::Unit unit, qulonglong amount);
+    void onWatchdogTimeout();
 
 private:
     QUrl m_url;
     QPointer<KIO::TransferJob> m_job;
+    QPointer<QTimer> m_watchdogTimer;
 
     std::mutex m_bufferMutex;
     std::condition_variable_any m_bufferCv;
@@ -66,4 +69,10 @@ private:
     std::atomic<qint64> m_streamPosition{0};
 
     DragonBufferProgress *m_bufferProgress;
+
+    // Runtime buffer depth tracking
+    std::atomic<qint64> m_bufferDepth{0};
+    std::atomic<bool> m_isBuffering{false};
+    static constexpr qint64 LOW_WATER_MARK = 0;
+    static constexpr qint64 HIGH_WATER_MARK = 128 * 1024;
 };

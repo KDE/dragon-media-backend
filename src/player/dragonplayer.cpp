@@ -163,6 +163,21 @@ void DragonPlayerPrivate::onDecodeError(const QString &)
     }
 }
 
+void DragonPlayerPrivate::onStreamStalled()
+{
+    setStatus(DragonPlayer::MediaStatus::StalledMedia);
+}
+
+void DragonPlayerPrivate::onStreamBuffering()
+{
+    setStatus(DragonPlayer::MediaStatus::BufferingMedia);
+}
+
+void DragonPlayerPrivate::onStreamBuffered()
+{
+    setStatus(DragonPlayer::MediaStatus::BufferedMedia);
+}
+
 void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st)
 {
     if (pcm.empty()) {
@@ -319,6 +334,10 @@ void DragonPlayerPrivate::init()
     connect(&decodePipeline, &DragonDecodePipeline::sessionFinished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
 
     connect(&decodePipeline, &DragonDecodePipeline::gaplessTransition, this, &DragonPlayerPrivate::onGaplessTransition, Qt::QueuedConnection);
+
+    connect(&decodePipeline, &DragonDecodePipeline::streamStalled, this, &DragonPlayerPrivate::onStreamStalled, Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::streamBuffering, this, &DragonPlayerPrivate::onStreamBuffering, Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::streamBuffered, this, &DragonPlayerPrivate::onStreamBuffered, Qt::QueuedConnection);
 
     connect(
         &decodePipeline,

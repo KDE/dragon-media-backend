@@ -9,12 +9,17 @@
 #include "dragonmultimedia_network_logging.h"
 
 #include <KIO/TransferJob>
+#include <QTimer>
 #include <QUrl>
 
 DragonKioStream::DragonKioStream(QObject *parent)
     : DragonStream(parent)
+    , m_watchdogTimer(new QTimer(this))
     , m_bufferProgress(new DragonBufferProgress(this))
 {
+    m_watchdogTimer->setInterval(5000);
+    m_watchdogTimer->setSingleShot(true);
+    connect(m_watchdogTimer, &QTimer::timeout, this, &DragonKioStream::onWatchdogTimeout);
 }
 
 DragonKioStream::~DragonKioStream()
@@ -47,12 +52,18 @@ void DragonKioStream::start()
     connect(m_job, &KJob::result, this, &DragonKioStream::onResult);
     connect(m_job, &KJob::totalAmountChanged, this, &DragonKioStream::onTotalAmountChanged);
     connect(m_job, &KJob::processedAmountChanged, this, &DragonKioStream::onProcessedAmountChanged);
+
+    m_watchdogTimer->start();
 }
 
 void DragonKioStream::stop()
 {
     m_abort = true;
     m_bufferCv.notify_all();
+
+    if (m_watchdogTimer) {
+        m_watchdogTimer->stop();
+    }
 
     if (m_job) {
         disconnect(m_job, nullptr, this, nullptr);
@@ -102,6 +113,15 @@ int DragonKioStream::read(std::span<uint8_t> buf, std::stop_token st)
     }
 
     m_streamPosition += bytesRead;
+
+    if (bytesRead > 0) {
+        const auto prev = m_bufferDepth.fetch_sub(bytesRead);
+        if (prev > LOW_WATER_MARK && (prev - bytesRead) <= LOW_WATER_MARK) {
+            m_isBuffering = true;
+            Q_EMIT streamBuffering();
+        }
+    }
+
     return bytesRead;
 }
 
@@ -123,6 +143,8 @@ int64_t DragonKioStream::seek(int64_t offset)
     connect(m_job, &KJob::result, this, &DragonKioStream::onResult);
     connect(m_job, &KJob::totalAmountChanged, this, &DragonKioStream::onTotalAmountChanged);
     connect(m_job, &KJob::processedAmountChanged, this, &DragonKioStream::onProcessedAmountChanged);
+
+    m_watchdogTimer->start();
 
     return offset;
 }
@@ -148,17 +170,30 @@ void DragonKioStream::onData(KIO::Job *job, const QByteArray &data)
         return;
     }
 
+    if (m_watchdogTimer) {
+        m_watchdogTimer->start();
+    }
+
     {
         std::scoped_lock lock(m_bufferMutex);
         m_networkBuffer.push_back(data);
     }
+    const qint64 newDepth = m_bufferDepth += data.size();
     m_bufferCv.notify_all();
+
+    if (!m_isBuffering.exchange(false) && newDepth >= HIGH_WATER_MARK) {
+        Q_EMIT streamBuffered();
+    }
 }
 
 void DragonKioStream::onResult(KJob *job)
 {
     if (job != m_job) {
         return;
+    }
+
+    if (m_watchdogTimer) {
+        m_watchdogTimer->stop();
     }
 
     if (job->error()) {
@@ -190,4 +225,20 @@ void DragonKioStream::onProcessedAmountChanged(KJob *job, KJob::Unit unit, qulon
     if (unit == KJob::Bytes) {
         m_bufferProgress->setBytesReceived(static_cast<qint64>(amount));
     }
+}
+
+void DragonKioStream::onWatchdogTimeout()
+{
+    if (m_abort) {
+        return;
+    }
+
+    qCDebug(dragonMultimediaNetwork) << "KIO watchdog timeout reconnecting";
+    Q_EMIT streamStalled();
+
+    if (m_job) {
+        m_job->kill(KJob::Quietly);
+        m_job = nullptr;
+    }
+    start();
 }

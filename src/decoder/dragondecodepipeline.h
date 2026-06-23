@@ -71,6 +71,10 @@ Q_SIGNALS:
 
     void bufferProgressChanged(double progress);
 
+    void streamStalled();
+    void streamBuffering();
+    void streamBuffered();
+
 private:
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless);
     void cancelPreWarm(const QString &reason);
