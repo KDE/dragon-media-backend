@@ -366,6 +366,13 @@ DragonPlayer::DragonPlayer(AudioSink requestedSink, QObject *parent)
 {
     d = std::make_unique<DragonPlayerPrivate>(this, requestedSink);
     d->init();
+
+    connect(this, &DragonPlayer::playbackStateChanged, this, [](PlaybackState state) {
+        qCDebug(dragonMultimediaPlayer) << "playbackState changed to" << state;
+    });
+    connect(this, &DragonPlayer::statusChanged, this, [](MediaStatus status) {
+        qCDebug(dragonMultimediaPlayer) << "mediaStatus changed to" << status;
+    });
 }
 
 DragonPlayer::~DragonPlayer()
