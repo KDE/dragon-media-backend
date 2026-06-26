@@ -102,6 +102,8 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     if (currentDuration >= 0) {
         Q_EMIT q->durationChanged(currentDuration);
     }
+
+    inGaplessSetSource = true;
 }
 
 void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalError)
@@ -486,6 +488,14 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->audioOutput->setFftPipe(d->currentFftMode != FftMode::Off ? &d->fftPipe : nullptr);
     d->fftPipeline.restart();
 
+    const bool isGapless = d->inGaplessSetSource;
+    d->inGaplessSetSource = false;
+
+    const bool wasPlayingOrPaused = d->currentPlaybackState == PlaybackState::PlayingState || d->currentPlaybackState == PlaybackState::PausedState;
+
+    const bool hadValidMedia = d->currentStatus == MediaStatus::LoadedMedia || d->currentStatus == MediaStatus::BufferedMedia
+        || d->currentStatus == MediaStatus::StalledMedia || d->currentStatus == MediaStatus::BufferingMedia || d->currentStatus == MediaStatus::EndOfMedia;
+
     d->currentSource = source;
     d->currentPosition = 0;
     d->currentDuration = 0;
@@ -495,32 +505,39 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->currentSampleRate = 0;
     d->currentChannels = 0;
 
-    Q_EMIT sourceChanged();
-    Q_EMIT nextSourceChanged();
-
-    if (source.isEmpty()) {
-        if (d->audioOutput) {
-            d->audioOutput->close();
-            d->audioOutput->reset();
+    if (!isGapless) {
+        if (wasPlayingOrPaused) {
+            d->setPlaybackState(PlaybackState::StoppedState);
         }
-        d->setStatus(MediaStatus::NoMedia);
-        d->setPlaybackState(PlaybackState::StoppedState);
-        co_return;
-    }
+        if (hadValidMedia || d->currentStatus == MediaStatus::InvalidMedia) {
+            Q_EMIT statusChanged(MediaStatus::LoadedMedia);
+        }
 
-    if (d->currentPlaybackState != PlaybackState::StoppedState) {
-        d->setPlaybackState(PlaybackState::StoppedState);
-    } else {
-        Q_EMIT playbackStateChanged(PlaybackState::StoppedState);
-        Q_EMIT stopped();
-    }
+        if (source.isEmpty()) {
+            if (d->audioOutput) {
+                d->audioOutput->close();
+                d->audioOutput->reset();
+            }
+            if (d->currentError != Error::NoError) {
+                d->currentError = Error::NoError;
+                Q_EMIT errorChanged(Error::NoError);
+            }
+            d->setStatus(MediaStatus::NoMedia);
+            Q_EMIT nextSourceChanged();
+            Q_EMIT sourceChanged();
+            co_return;
+        }
 
-    if (d->currentError != Error::NoError) {
-        d->currentError = Error::NoError;
-        Q_EMIT errorChanged(Error::NoError);
-    }
+        if (d->currentError != Error::NoError) {
+            d->currentError = Error::NoError;
+            Q_EMIT errorChanged(Error::NoError);
+        }
 
-    d->setStatus(MediaStatus::LoadingMedia);
+        d->setStatus(MediaStatus::LoadingMedia);
+
+        Q_EMIT nextSourceChanged();
+        Q_EMIT sourceChanged();
+    }
 
     const bool isLocal = source.isLocalFile();
     const bool isHttp = source.scheme() == QStringLiteral("http") || source.scheme() == QStringLiteral("https");

@@ -229,16 +229,14 @@ void TestPlayerSignals::testSourceChangedFirstInSetSource()
     QVERIFY2(tracker.contains(u"sourceChanged()"_s), "setSource() must emit sourceChanged");
 
     int sourceIdx = tracker.events().indexOf(u"sourceChanged()"_s);
-    int stateIdx = tracker.events().indexOf(u"stateChanged(StoppedState)"_s);
     int statusIdx = tracker.events().indexOf(u"statusChanged(LoadingMedia)"_s);
 
     QVERIFY2(sourceIdx >= 0, "sourceChanged must be emitted");
-    if (stateIdx >= 0) {
-        QVERIFY2(sourceIdx < stateIdx, "sourceChanged must precede stateChanged(StoppedState)");
-    }
     if (statusIdx >= 0) {
-        QVERIFY2(sourceIdx < statusIdx, "sourceChanged must precede statusChanged(LoadingMedia)");
+        QVERIFY2(statusIdx < sourceIdx, "statusChanged(LoadingMedia) must precede sourceChanged (QM order)");
     }
+
+    QVERIFY2(!tracker.contains(u"stateChanged(StoppedState)"_s), "setSource from StoppedState must NOT force-emit playbackStateChanged(StoppedState)");
 }
 
 void TestPlayerSignals::testSetSourceSameUrlStopsFirst()

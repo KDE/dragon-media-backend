@@ -319,7 +319,7 @@ void DragonRadioStream::addToAudioBuffer(const QByteArray &data)
     const qint64 newDepth = m_bufferDepth += data.size();
     m_bufferCv.notify_all();
 
-    if (!m_isBuffering.exchange(false) && newDepth >= HIGH_WATER_MARK) {
+    if (m_isBuffering.exchange(false) && newDepth >= HIGH_WATER_MARK) {
         Q_EMIT streamBuffered();
     }
 }

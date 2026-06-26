@@ -31,6 +31,7 @@ set(_player_libs Qt6::Network SDL3::SDL3 PkgConfig::FFmpeg spsc_queue kissfft::k
 dragon_add_test(test_player_basics    LIBRARIES ${_player_libs})
 dragon_add_test(test_player_playback  LIBRARIES ${_player_libs})
 dragon_add_test(test_player_signals   LIBRARIES ${_player_libs})
+dragon_add_test(test_player_setsource LIBRARIES ${_player_libs})
 dragon_add_test(test_player_prefinish LIBRARIES ${_player_libs})
 dragon_add_test(test_player_fft       LIBRARIES ${_player_libs})
 

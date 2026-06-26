@@ -910,7 +910,7 @@ void TestE2E::testGaplessPreWarmError()
 
     QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() > 0 || player.error() != DragonPlayer::Error::NoError, 15000);
 
-    QVERIFY(sourceSpy.count() >= 2);
+    QVERIFY2(sourceSpy.count() >= 2, "Pre-warm failure setSource must emit sourceChanged");
 
     QVERIFY(player.error() != DragonPlayer::Error::NoError);
 

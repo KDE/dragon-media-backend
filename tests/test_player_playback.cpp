@@ -130,8 +130,7 @@ void TestPlayerPlayback::testSetSourceDoesNotEmitPlayingState()
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
-    QCOMPARE(stateSpy.count(), 1);
-    QCOMPARE(stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QVERIFY2(!player.isAudioActive(), "Audio must NOT be open without play()");
 }
@@ -146,7 +145,7 @@ void TestPlayerPlayback::testSetSourceDoesNotAutoStartAudio()
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
-    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QVERIFY2(!player.isAudioActive(), "Audio must NOT be open after setSource()");
 }
@@ -194,16 +193,16 @@ void TestPlayerPlayback::testPlayDuringLoadingDefers()
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
-    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(stateSpy.count(), 0);
 
     player.play();
-    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
-    QTRY_VERIFY(stateSpy.count() == 2);
-    QCOMPARE(stateSpy.at(1).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::PlayingState);
+    QTRY_VERIFY(stateSpy.count() == 1);
+    QCOMPARE(stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::PlayingState);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
 }
 
@@ -215,16 +214,16 @@ void TestPlayerPlayback::testPauseDuringLoadingDefers()
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
-    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(stateSpy.count(), 0);
 
     player.pause();
-    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
-    QTRY_VERIFY(stateSpy.count() == 2);
-    QCOMPARE(stateSpy.at(1).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::PausedState);
+    QTRY_VERIFY(stateSpy.count() == 1);
+    QCOMPARE(stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::PausedState);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
 }
 
@@ -236,10 +235,10 @@ void TestPlayerPlayback::testStopDuringLoadingDefers()
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
-    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(stateSpy.count(), 0);
 
     player.stop();
-    QCOMPARE(stateSpy.count(), 1);
+    QCOMPARE(stateSpy.count(), 0);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
@@ -512,8 +511,8 @@ void TestPlayerPlayback::testSignalOrderOnSetSource()
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
     QVERIFY2(tracker.contains(u"statusChanged(LoadingMedia)"_s), "setSource() must emit LoadingMedia");
-    QVERIFY2(tracker.contains(u"stateChanged(StoppedState)"_s), "setSource() must emit StoppedState");
-    QVERIFY2(tracker.verifyOrder(u"stateChanged(StoppedState)"_s, u"statusChanged(LoadingMedia)"_s), "StoppedState must come before LoadingMedia");
+    QVERIFY2(tracker.contains(u"sourceChanged()"_s), "setSource() must emit sourceChanged");
+    QVERIFY2(tracker.verifyOrder(u"statusChanged(LoadingMedia)"_s, u"sourceChanged()"_s), "LoadingMedia must come before sourceChanged");
 }
 void TestPlayerPlayback::testSignalOrderOnStop()
 {
