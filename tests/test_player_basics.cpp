@@ -225,8 +225,13 @@ void TestPlayerBasics::testPlay()
 void TestPlayerBasics::testPause()
 {
     DragonPlayer player;
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.pause();
-    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState || player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(stateSpy.count(), 0);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
 void TestPlayerBasics::testStop()

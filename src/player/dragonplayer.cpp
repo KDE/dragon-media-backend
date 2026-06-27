@@ -159,6 +159,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
 void DragonPlayerPrivate::onDecodeError(const QString &)
 {
     auto err = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
+    setStatus(DragonPlayer::MediaStatus::InvalidMedia);
     if (currentError != err) {
         currentError = err;
         Q_EMIT q->errorChanged(currentError);
@@ -250,11 +251,6 @@ void DragonPlayerPrivate::setStatus(DragonPlayer::MediaStatus status)
     currentStatus = status;
     qCDebug(dragonMultimediaPlayer) << "setStatus emitting statusChanged";
     Q_EMIT q->statusChanged(status);
-
-    if (status == DragonPlayer::MediaStatus::InvalidMedia && currentError != DragonPlayer::Error::FormatError) {
-        currentError = DragonPlayer::Error::FormatError;
-        Q_EMIT q->errorChanged(currentError);
-    }
 }
 
 void DragonPlayerPrivate::setError(DragonPlayer::Error error)
@@ -430,7 +426,10 @@ bool DragonPlayer::seekable() const
 }
 bool DragonPlayer::isAudioActive() const
 {
-    return d->audioOutput && d->audioOutput->isDeviceOpen() && d->currentPlaybackState != PlaybackState::StoppedState;
+    bool hasOutput = (d->audioOutput != nullptr);
+    bool isOpen = hasOutput ? d->audioOutput->isDeviceOpen() : false;
+    qCDebug(dragonMultimediaPlayer) << "isAudioActive() -> hasOutput:" << hasOutput << "isOpen:" << isOpen;
+    return hasOutput && isOpen && d->currentPlaybackState != PlaybackState::StoppedState;
 }
 DragonPlayer::FftMode DragonPlayer::fftMode() const
 {
@@ -476,6 +475,21 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
 
     auto aliveGuard = d->aliveGuard;
 
+    bool internalReload = d->forceReload;
+    d->forceReload = false;
+
+    if (!internalReload && d->currentSource == source && source.isValid()) {
+        qCDebug(dragonMultimediaPlayer) << "setSource(sameUrl) early return";
+        if (d->currentStatus == MediaStatus::LoadingMedia) {
+            d->requestedPlaybackState = PlaybackState::StoppedState;
+            co_return; // Let the existing initialization finish
+        }
+
+        d->requestedPlaybackState = PlaybackState::StoppedState;
+        stop();
+        co_return;
+    }
+
     if (d->audioOutput) {
         d->audioOutput->silence();
         d->audioOutput->setQueueReady(false);
@@ -505,7 +519,8 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->currentSampleRate = 0;
     d->currentChannels = 0;
 
-    if (!isGapless) {
+    if (!isGapless && !internalReload) {
+        d->requestedPlaybackState = PlaybackState::StoppedState;
         if (wasPlayingOrPaused) {
             d->setPlaybackState(PlaybackState::StoppedState);
         }
@@ -563,9 +578,9 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
             qCDebug(dragonMultimediaPlayer) << "setSource coroutine cancelled, returning without state change";
             co_return;
         }
+        d->setStatus(MediaStatus::InvalidMedia);
         d->currentError = d->currentIsLocal ? Error::FormatError : Error::NetworkError;
         Q_EMIT errorChanged(d->currentError);
-        d->setStatus(MediaStatus::InvalidMedia);
         d->setPlaybackState(PlaybackState::StoppedState);
         co_return;
     }
@@ -711,12 +726,14 @@ void DragonPlayer::play()
 
     if (d->currentStatus == MediaStatus::EndOfMedia) {
         qCDebug(dragonMultimediaPlayer) << "play() status is EndOfMedia, reloading source";
+        d->forceReload = true;
         setSource(d->currentSource);
         return;
     }
 
     if (!d->decodePipeline.isActive() && !d->currentSource.isEmpty()) {
         qCDebug(dragonMultimediaPlayer) << "play() decoder not active, restarting decode pipeline";
+        d->forceReload = true;
         setSource(d->currentSource);
         return;
     }
@@ -775,10 +792,7 @@ void DragonPlayer::stop()
     d->setPlaybackState(PlaybackState::StoppedState);
 
     if (d->currentStatus != MediaStatus::NoMedia && d->currentStatus != MediaStatus::InvalidMedia) {
-        if (d->currentStatus != MediaStatus::LoadedMedia) {
-            d->currentStatus = MediaStatus::LoadedMedia;
-        }
-        Q_EMIT statusChanged(MediaStatus::LoadedMedia);
+        d->setStatus(MediaStatus::LoadedMedia);
     }
 }
 

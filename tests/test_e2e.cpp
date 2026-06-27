@@ -142,7 +142,7 @@ private Q_SLOTS:
     void testSeamlessPlaybackWithFormatChange();
     void testFftFramesDuringGaplessTransition();
 
-    void testSeamlessPlaybackWhilePaused();
+    void testTrackChangeWhilePaused();
     void testGaplessGenerationCheck();
     void testNonGaplessEofWithFftOn();
 
@@ -618,7 +618,7 @@ void TestE2E::testFftFramesDuringGaplessTransition()
     player.stop();
 }
 
-void TestE2E::testSeamlessPlaybackWhilePaused()
+void TestE2E::testTrackChangeWhilePaused()
 {
     VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
     VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.m4a"_s);
@@ -641,10 +641,10 @@ void TestE2E::testSeamlessPlaybackWhilePaused()
     QVERIFY(sourceSpy.count() > 0);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::PausedState);
+    QTRY_VERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
 
     QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.m4a"_s)));
-    VERIFY_AUDIO_ACTIVE(player);
+    VERIFY_AUDIO_INACTIVE(player);
 
     QVERIFY(helper.playAndWait());
     VERIFY_PLAYING_STATE(player);

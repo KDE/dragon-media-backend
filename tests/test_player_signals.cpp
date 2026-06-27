@@ -119,7 +119,7 @@ void TestPlayerSignals::testMediaStatusChangedNoDedup()
             ++loadedMediaCount;
         }
     }
-    QVERIFY2(loadedMediaCount >= 2, "Multiple stop() must emit mediaStatusChanged(LoadedMedia) every time (no dedup)");
+    QVERIFY2(loadedMediaCount == 0, "Multiple stop() from LoadedMedia must emit mediaStatusChanged(LoadedMedia) zero times (Qt dedup)");
 }
 
 void TestPlayerSignals::testSignalOrderOnPlay()
@@ -185,8 +185,8 @@ void TestPlayerSignals::testSignalOrderOnEndOfMedia()
     QTRY_VERIFY_WITH_TIMEOUT(helper.waitForEndOfMedia(15000), 15000);
 
     QVERIFY2(tracker.containsPrefix(u"positionChanged("_s), "EndOfMedia must emit positionChanged(duration)");
-    QVERIFY2(tracker.contains(u"statusChanged(EndOfMedia)"_s), "EndOfMedia must emit mediaStatusChanged(EndOfMedia)");
     QVERIFY2(tracker.contains(u"stateChanged(StoppedState)"_s), "EndOfMedia must emit playbackStateChanged(StoppedState)");
+    QVERIFY2(tracker.contains(u"statusChanged(EndOfMedia)"_s), "EndOfMedia must emit mediaStatusChanged(EndOfMedia)");
 
     QVERIFY2(tracker.verifyOrderPrefix(u"positionChanged("_s, u"statusChanged(EndOfMedia)"_s),
              "positionChanged(duration) must precede mediaStatusChanged(EndOfMedia)");
@@ -251,13 +251,15 @@ void TestPlayerSignals::testSetSourceSameUrlStopsFirst()
 
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+    QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QTRY_VERIFY_WITH_TIMEOUT(stateSpy.count() >= 1, 5000);
 
     QVERIFY2(SignalSpyHelper::containsState(stateSpy, DragonPlayer::PlaybackState::StoppedState), "setSource(sameUrl) must emit StoppedState (implicit stop)");
 
-    QVERIFY2(SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadingMedia), "setSource(sameUrl) must emit LoadingMedia");
+    QVERIFY2(!SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadingMedia),
+             "setSource(sameUrl) must NOT emit LoadingMedia, per Qt setSource early return");
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 }
@@ -296,6 +298,8 @@ void TestPlayerSignals::testNextWhilePlayingWithoutExplicitStop()
     QTRY_VERIFY_WITH_TIMEOUT(stateSpy.count() >= 1, 5000);
 
     QVERIFY2(SignalSpyHelper::containsState(stateSpy, DragonPlayer::PlaybackState::StoppedState), "setSource(newUrl) while playing must emit StoppedState");
+    QVERIFY2(SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadedMedia),
+             "setSource(newUrl) while playing must emit LoadedMedia from implicit stop");
     QVERIFY2(SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadingMedia), "setSource(newUrl) while playing must emit LoadingMedia");
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
@@ -350,7 +354,7 @@ void TestPlayerSignals::testMultipleStopIdempotent()
             ++loadedCount;
         }
     }
-    QVERIFY2(loadedCount >= 2, "Multiple stop() must emit mediaStatusChanged(LoadedMedia) every time");
+    QVERIFY2(loadedCount == 0, "Multiple stop() from LoadedMedia must emit mediaStatusChanged(LoadedMedia) zero times (Qt dedup)");
 }
 
 void TestPlayerSignals::testErrorChangedBeforeInvalidMedia()
@@ -363,10 +367,11 @@ void TestPlayerSignals::testErrorChangedBeforeInvalidMedia()
     player.setSource(QUrl::fromLocalFile("/nonexistent/file.mp3"_L1));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::InvalidMedia, 5000);
 
+    QVERIFY2(tracker.containsPrefix(u"statusChanged(InvalidMedia)"_s), "InvalidMedia must emit statusChanged(InvalidMedia)");
     QVERIFY2(tracker.containsPrefix(u"errorChanged("_s), "InvalidMedia must emit errorChanged");
-    QVERIFY2(tracker.contains(u"statusChanged(InvalidMedia)"_s), "InvalidMedia must emit statusChanged(InvalidMedia)");
 
-    QVERIFY2(tracker.verifyOrderPrefix(u"errorChanged("_s, u"statusChanged(InvalidMedia)"_s), "errorChanged must precede mediaStatusChanged(InvalidMedia)");
+    QVERIFY2(tracker.verifyOrderPrefix(u"statusChanged(InvalidMedia)"_s, u"errorChanged("_s),
+             "mediaStatusChanged(InvalidMedia) must precede errorChanged per Qt");
 }
 
 void TestPlayerSignals::testRapidSetSourceOnlyLastProcessed()

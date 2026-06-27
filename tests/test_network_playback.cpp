@@ -208,16 +208,16 @@ void TestNetworkPlayback::testRadioToLocalFileTransition()
 
 void TestNetworkPlayback::testSeekHttpFile()
 {
-    QString mp3Path = fixturePath(u"sample-3s.mp3"_s);
-    QVERIFY2(QFile::exists(mp3Path), qPrintable(u"MP3 fixture not found: %1"_s.arg(mp3Path)));
+    QString wmaPath = fixturePath(u"gs-16b-1c-44100hz.wma"_s);
+    QVERIFY2(QFile::exists(wmaPath), qPrintable(u"WMA fixture not found: %1"_s.arg(wmaPath)));
 
-    m_server->serveFile(mp3Path);
+    m_server->serveFile(wmaPath);
 
     QUrl url;
     url.setScheme(u"http"_s);
     url.setHost(u"localhost"_s);
     url.setPort(m_server->port());
-    url.setPath(u"/sample-3s.mp3"_s);
+    url.setPath(u"/gs-16b-1c-44100hz.wma"_s);
 
     qDebug() << "Testing seek with HTTP file:" << url.toString();
 
