@@ -15,6 +15,7 @@
 #include "testhttpserver.h"
 
 #include <QHash>
+#include <QScopeGuard>
 #include <atomic>
 #include <stop_token>
 #include <thread>
@@ -48,6 +49,8 @@ private Q_SLOTS:
     void testIsAbortedFlag();
     void testMultipleStartStopCycles();
     void testSeekingCapabilities();
+
+    void testBufferingSignals();
 
 private:
     TestHttpServer *m_server = nullptr;
@@ -410,4 +413,130 @@ QByteArray TestRadioStream::createHttpResponse(const QByteArray &body, bool incl
 }
 
 QTEST_MAIN(TestRadioStream)
+
+void TestRadioStream::testBufferingSignals()
+{
+    QString wmaPath = TestFixture::fixturePath(u"gs-16b-1c-44100hz.wma"_s);
+    QVERIFY(QFile::exists(wmaPath));
+
+    QFile f(wmaPath);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    const QByteArray fileData = f.readAll();
+    f.close();
+    QVERIFY(!fileData.isEmpty());
+
+    // Create a ~4MB pseudo-stream by repeating the fixture
+    const qint64 targetSize = 4 * 1024 * 1024;
+    QByteArray bigPayload;
+    bigPayload.reserve(targetSize);
+    while (bigPayload.size() < targetSize) {
+        bigPayload.append(fileData);
+    }
+    bigPayload.resize(targetSize);
+
+    QTcpServer server;
+    QList<QTcpSocket *> clients;
+
+    QObject::connect(&server, &QTcpServer::newConnection, &server, [&]() {
+        while (server.hasPendingConnections()) {
+            auto *sock = server.nextPendingConnection();
+            clients.append(sock);
+
+            QByteArray headers;
+            headers.append("HTTP/1.1 200 OK\r\n");
+            headers.append("Content-Type: application/octet-stream\r\n");
+            headers.append("Content-Length: " + QByteArray::number(bigPayload.size()) + "\r\n");
+            headers.append("Connection: keep-alive\r\n");
+            headers.append("\r\n");
+            sock->write(headers);
+            sock->flush();
+
+            // Send steadily at a moderate rate the reader controls
+            // buffering transitions by alternating drain and wait phases
+            auto *timer = new QTimer(sock);
+            auto offset = std::make_shared<int>(0);
+            QObject::connect(timer, &QTimer::timeout, sock, [&, sock, timer, offset]() {
+                if (*offset >= bigPayload.size()) {
+                    sock->disconnectFromHost();
+                    timer->stop();
+                    return;
+                }
+                const int len = std::min<int>(8192, bigPayload.size() - *offset);
+                sock->write(bigPayload.mid(*offset, len));
+                sock->flush();
+                *offset += len;
+            });
+            timer->start(1);
+        }
+    });
+
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(server.serverPort());
+    url.setPath(u"/stream"_s);
+
+    DragonRadioStream stream;
+    QSignalSpy bufferingSpy(&stream, &DragonRadioStream::streamBuffering);
+    QSignalSpy bufferedSpy(&stream, &DragonRadioStream::streamBuffered);
+
+    stream.setUrl(url);
+    stream.start();
+
+    // Give the server time to fill the initial buffer above HIGH_WATER_MARK
+    QTest::qWait(200);
+
+    std::stop_source ss;
+    std::vector<uint8_t> buf(65536);
+    std::atomic<int> totalRead{0};
+    // Phase control: 0=drain, 1=pause (let buffer refill), 2=done
+    std::atomic<int> phase{0};
+
+    std::thread reader([&]() {
+        while (!ss.stop_requested()) {
+            const int p = phase.load(std::memory_order_acquire);
+            if (p == 2)
+                break;
+            if (p == 1) {
+                // Pause phase: don't read, let buffer accumulate
+                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                continue;
+            }
+            // Drain phase: read everything available
+            int n = stream.read(buf, ss.get_token());
+            if (n <= 0)
+                break;
+            totalRead += n;
+        }
+    });
+
+    auto cleanup = qScopeGuard([&]() {
+        phase.store(2, std::memory_order_release);
+        ss.request_stop();
+        if (reader.joinable())
+            reader.join();
+        stream.stop();
+        server.close();
+        for (auto *c : clients)
+            c->deleteLater();
+    });
+
+    // Let the drain phase run until buffer is empty and streamBuffering fires
+    QTRY_VERIFY_WITH_TIMEOUT(bufferingSpy.count() > 0, 10000);
+
+    // Switch to pause phase: reader stops reading, buffer accumulates
+    phase.store(1, std::memory_order_release);
+
+    // Wait for buffer to refill above HIGH_WATER_MARK and streamBuffered to fire
+    QTRY_VERIFY_WITH_TIMEOUT(bufferedSpy.count() > 0, 10000);
+
+    // Resume reading to consume more data
+    phase.store(0, std::memory_order_release);
+    QTRY_VERIFY_WITH_TIMEOUT(totalRead.load() > 262144, 10000);
+
+    QVERIFY2(totalRead.load() > 0, "Should have read some data");
+}
+
 #include "test_radiostream.moc"
