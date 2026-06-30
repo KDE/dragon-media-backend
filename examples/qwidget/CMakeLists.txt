@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
-# SPDX-License-Identifier: LGPL-3.0-or-later
+# SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
 
 # AUTOMOC and INCLUDE_CURRENT_DIR are already set at the top level,
 # but we set them explicitly here for clarity and independence from parent.

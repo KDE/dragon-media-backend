@@ -1,6 +1,6 @@
 /*
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
- * SPDX-License-Identifier: LGPL-3.0-or-later
+ * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
  * Spawns an isolated PipeWire daemon with a null-audio-sink for testing.
  * No system daemon, no session manager, no hardware required.
