@@ -424,13 +424,6 @@ bool DragonPlayer::seekable() const
 {
     return d->currentSeekable;
 }
-bool DragonPlayer::isAudioActive() const
-{
-    bool hasOutput = (d->audioOutput != nullptr);
-    bool isOpen = hasOutput ? d->audioOutput->isDeviceOpen() : false;
-    qCDebug(dragonMultimediaPlayer) << "isAudioActive() -> hasOutput:" << hasOutput << "isOpen:" << isOpen;
-    return hasOutput && isOpen && d->currentPlaybackState != PlaybackState::StoppedState;
-}
 DragonPlayer::FftMode DragonPlayer::fftMode() const
 {
     return d->currentFftMode;

@@ -17,6 +17,7 @@
 #include <QtTest>
 
 #include "decoder/dragondecoder.h"
+#include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
 
 #include <atomic>
@@ -225,11 +226,12 @@ public:
 
     bool wasAudioEverInactive(int durationMs, int pollIntervalMs = 10)
     {
+        DragonDiagnostics diagnostics(m_player);
         std::atomic<bool> audioEverInactive{false};
 
         QTimer pollTimer;
         QObject::connect(&pollTimer, &QTimer::timeout, [&]() {
-            if (!m_player->isAudioActive()) {
+            if (!diagnostics.isAudioActive()) {
                 audioEverInactive.store(true);
             }
         });
@@ -567,9 +569,9 @@ private:
 #define VERIFY_STOPPED_STATE(player)                                                                                                                           \
     QVERIFY2((player).playbackState() == DragonPlayer::PlaybackState::StoppedState, u"Expected StoppedState"_s.toUtf8().constData())
 
-#define VERIFY_AUDIO_ACTIVE(player) QVERIFY2((player).isAudioActive(), u"Audio should be active"_s.toUtf8().constData())
+#define VERIFY_AUDIO_ACTIVE(diagnostics) QVERIFY2((diagnostics).isAudioActive(), u"Audio should be active"_s.toUtf8().constData())
 
-#define VERIFY_AUDIO_INACTIVE(player) QVERIFY2(!(player).isAudioActive(), u"Audio should be inactive"_s.toUtf8().constData())
+#define VERIFY_AUDIO_INACTIVE(diagnostics) QVERIFY2(!(diagnostics).isAudioActive(), u"Audio should be inactive"_s.toUtf8().constData())
 #define VERIFY_POSITION_NEAR(actual, expected, tolerance)                                                                                                      \
     QVERIFY2(std::llabs(static_cast<int64_t>(actual) - static_cast<int64_t>(expected)) < static_cast<int64_t>(tolerance),                                      \
              qPrintable(u"Position mismatch: expected ~%1ms, got %2ms (tolerance %3ms)"_s.arg(expected).arg(actual).arg(tolerance)))

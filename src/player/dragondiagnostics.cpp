@@ -98,6 +98,17 @@ bool DragonDiagnostics::hasActiveDecoder() const
     return priv->decodePipeline.isActive();
 }
 
+bool DragonDiagnostics::isAudioActive() const
+{
+    DragonPlayerPrivate *priv = d->m_player->d.get();
+    if (!priv) {
+        return false;
+    }
+    bool hasOutput = (priv->audioOutput != nullptr);
+    bool isOpen = hasOutput ? priv->audioOutput->isDeviceOpen() : false;
+    return hasOutput && isOpen && priv->currentPlaybackState != DragonPlayer::PlaybackState::StoppedState;
+}
+
 float DragonDiagnostics::audioCallbackHz() const
 {
     return d->m_callbackHz.load(std::memory_order_relaxed);

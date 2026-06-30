@@ -12,6 +12,7 @@
 
 #include "logging_timestamp_init.h"
 
+#include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
 
 #include "testhttpserver.h"
@@ -113,7 +114,8 @@ void TestNetworkPlayback::testPlayLocalWmaFileOverHttp()
 
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 5000);
 
-    QVERIFY2(player.isAudioActive(), "Audio should be active during playback");
+    DragonDiagnostics diag(&player);
+    QVERIFY2(diag.isAudioActive(), "Audio should be active during playback");
     qDebug() << "Playback started! Position:" << player.position() << "ms";
 
     QTRY_VERIFY_WITH_TIMEOUT(
@@ -128,7 +130,7 @@ void TestNetworkPlayback::testPlayLocalWmaFileOverHttp()
 
     QVERIFY2(player.status() == DragonPlayer::MediaStatus::EndOfMedia, "Status should be EndOfMedia");
     QVERIFY2(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, "Playback state should be Stopped");
-    QVERIFY2(!player.isAudioActive(), "Audio should be inactive");
+    QVERIFY2(!diag.isAudioActive(), "Audio should be inactive");
 
     qDebug() << "Network playback test completed successfully!";
 }

@@ -35,6 +35,8 @@ public:
 
     [[nodiscard]] bool hasActiveDecoder() const;
 
+    [[nodiscard]] bool isAudioActive() const;
+
     [[nodiscard]] float audioCallbackHz() const;
 
 private:

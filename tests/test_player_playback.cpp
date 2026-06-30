@@ -12,6 +12,7 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
+#include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
 
 #include <QSignalSpy>
@@ -123,6 +124,7 @@ void TestPlayerPlayback::testSetSourceDoesNotEmitPlayingState()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
@@ -132,7 +134,7 @@ void TestPlayerPlayback::testSetSourceDoesNotEmitPlayingState()
 
     QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
-    QVERIFY2(!player.isAudioActive(), "Audio must NOT be open without play()");
+    QVERIFY2(!diag.isAudioActive(), "Audio must NOT be open without play()");
 }
 
 void TestPlayerPlayback::testSetSourceDoesNotAutoStartAudio()
@@ -140,6 +142,7 @@ void TestPlayerPlayback::testSetSourceDoesNotAutoStartAudio()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
@@ -147,7 +150,7 @@ void TestPlayerPlayback::testSetSourceDoesNotAutoStartAudio()
 
     QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
-    QVERIFY2(!player.isAudioActive(), "Audio must NOT be open after setSource()");
+    QVERIFY2(!diag.isAudioActive(), "Audio must NOT be open after setSource()");
 }
 
 void TestPlayerPlayback::testSetSourceWhilePlayingEmitsStoppedState()
@@ -233,6 +236,7 @@ void TestPlayerPlayback::testStopDuringLoadingDefers()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
@@ -244,7 +248,7 @@ void TestPlayerPlayback::testStopDuringLoadingDefers()
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
-    QVERIFY2(!player.isAudioActive(), "Audio must NOT be open after stop() during loading");
+    QVERIFY2(!diag.isAudioActive(), "Audio must NOT be open after stop() during loading");
 }
 
 void TestPlayerPlayback::testDeferredStateResetOnNewSource()
@@ -267,6 +271,7 @@ void TestPlayerPlayback::testPauseFromPlayingState()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -278,7 +283,7 @@ void TestPlayerPlayback::testPauseFromPlayingState()
     QCOMPARE(stateSpy.count(), 1);
     QCOMPARE(stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>(), DragonPlayer::PlaybackState::PausedState);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
-    QVERIFY2(player.isAudioActive(), "Audio should stay open after pause");
+    QVERIFY2(diag.isAudioActive(), "Audio should stay open after pause");
 
     player.stop();
 }
@@ -288,6 +293,7 @@ void TestPlayerPlayback::testStopFromPlayingStateEmitsLoadedMedia()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -300,7 +306,7 @@ void TestPlayerPlayback::testStopFromPlayingStateEmitsLoadedMedia()
 
     QTRY_VERIFY(stateSpy.count() >= 1);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
-    QVERIFY2(!player.isAudioActive(), "Audio should be closed after stop()");
+    QVERIFY2(!diag.isAudioActive(), "Audio should be closed after stop()");
 
     QVERIFY2(!SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadedMedia),
              "stop() must NOT emit LoadedMedia if already LoadedMedia per Qt dedup");
@@ -457,6 +463,7 @@ void TestPlayerPlayback::testPlayDuringLoadingStartsAudioOnComplete()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 
@@ -467,7 +474,7 @@ void TestPlayerPlayback::testPlayDuringLoadingStartsAudioOnComplete()
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
 
-    QVERIFY2(player.isAudioActive(), "play() during LoadingMedia must start audio when init completes");
+    QVERIFY2(diag.isAudioActive(), "play() during LoadingMedia must start audio when init completes");
 
     player.stop();
 }
@@ -477,6 +484,7 @@ void TestPlayerPlayback::testStopDuringLoadingPreventsAudioStart()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 
@@ -485,13 +493,14 @@ void TestPlayerPlayback::testStopDuringLoadingPreventsAudioStart()
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
-    QVERIFY2(!player.isAudioActive(), "stop() during LoadingMedia must prevent audio from starting");
+    QVERIFY2(!diag.isAudioActive(), "stop() during LoadingMedia must prevent audio from starting");
 }
 
 void TestPlayerPlayback::testPlayThenStopDuringLoadingCancelsStart()
 {
     skipIfMissing(u"sample-3s.mp3"_s);
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 
@@ -501,7 +510,7 @@ void TestPlayerPlayback::testPlayThenStopDuringLoadingCancelsStart()
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
-    QVERIFY2(!player.isAudioActive(), "stop() overriding play() during LoadingMedia must cancel audio start");
+    QVERIFY2(!diag.isAudioActive(), "stop() overriding play() during LoadingMedia must cancel audio start");
 }
 
 void TestPlayerPlayback::testSignalOrderOnSetSource()
@@ -546,6 +555,7 @@ void TestPlayerPlayback::testDeferredPlayIntentDuringFormatResolution()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
@@ -553,7 +563,7 @@ void TestPlayerPlayback::testDeferredPlayIntentDuringFormatResolution()
 
     QVERIFY(helper.waitForState(DragonPlayer::PlaybackState::PlayingState, 10000));
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::LoadedMedia);
-    QVERIFY(player.isAudioActive());
+    QVERIFY(diag.isAudioActive());
 
     player.stop();
 }
@@ -563,13 +573,14 @@ void TestPlayerPlayback::testSetSourceThenPlayFirstTrack()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     QVERIFY(helper.playAndWait());
-    QVERIFY(player.isAudioActive());
+    QVERIFY(diag.isAudioActive());
 
     player.stop();
 }
@@ -579,18 +590,19 @@ void TestPlayerPlayback::testPlayNextTrackWhilePlaying()
     skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s});
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
-    QVERIFY(player.isAudioActive());
+    QVERIFY(diag.isAudioActive());
 
     player.stop();
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
     player.play();
 
     QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
-    QVERIFY(player.isAudioActive());
+    QVERIFY(diag.isAudioActive());
 
     player.stop();
 }
@@ -600,6 +612,7 @@ void TestPlayerPlayback::testPlayRapidNextNext()
     skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s, u"sample-3s.aac"_s});
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -614,7 +627,7 @@ void TestPlayerPlayback::testPlayRapidNextNext()
     player.play();
 
     QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
-    QVERIFY(player.isAudioActive());
+    QVERIFY(diag.isAudioActive());
 
     player.stop();
 }
@@ -624,6 +637,7 @@ void TestPlayerPlayback::testDeferredPlayAfterFormatReady()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     player.play();
@@ -632,7 +646,7 @@ void TestPlayerPlayback::testDeferredPlayAfterFormatReady()
 
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
     QVERIFY(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::BufferingMedia);
-    QVERIFY2(player.isAudioActive(), "Deferred play must start audio after format ready");
+    QVERIFY2(diag.isAudioActive(), "Deferred play must start audio after format ready");
 }
 
 QTEST_MAIN(TestPlayerPlayback)

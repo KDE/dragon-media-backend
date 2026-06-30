@@ -175,7 +175,7 @@ void TestSdlGapless::runGaplessStateCheck(const BoundaryFixture &fixtureA, const
     player.setNextSource(QUrl::fromLocalFile(fixtureB.filePath));
 
     QVERIFY(helper.playAndWait());
-    VERIFY_AUDIO_ACTIVE(player);
+    VERIFY_AUDIO_ACTIVE(diagnostics);
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
     auto statusSpy = SignalSpyHelper::statusSpy(&player);
@@ -185,7 +185,7 @@ void TestSdlGapless::runGaplessStateCheck(const BoundaryFixture &fixtureA, const
     QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during gapless transition");
     QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "EndOfMedia should not be emitted during gapless transition");
 
-    VERIFY_AUDIO_ACTIVE(player);
+    VERIFY_AUDIO_ACTIVE(diagnostics);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, 15000);
     QTest::qWait(2000);
@@ -310,10 +310,11 @@ void TestSdlGapless::testSingleTrackIntegrity()
     QFile::remove(m_pcmCapturePath);
 
     DragonPlayer player;
+    DragonDiagnostics diagnostics(&player);
     PlayerHelper helper(&player);
     QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(fixture.filePath)));
     QVERIFY(helper.playAndWait());
-    VERIFY_AUDIO_ACTIVE(player);
+    VERIFY_AUDIO_ACTIVE(diagnostics);
 
     // The drain fix defers StoppedState until pipe + device buffer empty.
     // With TIMESCALE=1 (real-time), a 10s track takes ~10s to play out.

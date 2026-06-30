@@ -108,8 +108,6 @@ public:
     [[nodiscard]] int64_t position() const;
     [[nodiscard]] bool seekable() const;
 
-    [[nodiscard]] bool isAudioActive() const;
-
     [[nodiscard]] FftMode fftMode() const;
     [[nodiscard]] int fftRate() const;
     [[nodiscard]] double bufferProgress() const;
