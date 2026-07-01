@@ -1,0 +1,13 @@
+version = 1
+
+[[annotations]]
+path = [
+  "gs-16b-1c-44100hz.flac",
+  "gs-16b-1c-44100hz.wma",
+  "gs-16b-2c-44100hz.m4a",
+  "gs-16b-2c-44100hz.ogg",
+  "sample-3s.aac",
+  "sample-3s.mp3"
+]
+SPDX-FileCopyrightText = "Kevin MacLeod (incompetech.com)"
+SPDX-License-Identifier = "CC-BY-3.0"

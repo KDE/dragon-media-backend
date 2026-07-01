@@ -1,3 +1,7 @@
+/*
+ * SPDX-License-Identifier: MIT
+ */
+
 // "LockFreeSpscQueue.h"
 // Version:v1.0.3
 

@@ -17,7 +17,7 @@ using namespace Qt::StringLiterals;
 
 std::unique_ptr<DragonAudioSink> createAudioSink(DragonPlayer::AudioSink requestedSink, DragonPlayer::AudioSink *selectedSinkOut)
 {
-    auto plugins = KPluginMetaData::findPlugins(QStringLiteral("DragonMultimedia/audiosink"));
+    auto plugins = KPluginMetaData::findPlugins(QStringLiteral("DragonMultimedia/AudioSink"));
 
     std::ranges::sort(plugins, [](const KPluginMetaData &a, const KPluginMetaData &b) {
         return a.value(QStringLiteral("Priority"), 0) > b.value(QStringLiteral("Priority"), 0);
