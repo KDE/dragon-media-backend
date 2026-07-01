@@ -50,7 +50,7 @@ target_link_libraries(DragonMultimedia
 # --- Audio sink plugins ---
 kcoreaddons_add_plugin(dragonsdlaudiosink
     SOURCES sink/dragonsdlaudiosink.cpp ${dragonsdlaudiosink_SOURCES}
-    INSTALL_NAMESPACE "DragonMultimedia/audiosink"
+    INSTALL_NAMESPACE "DragonMultimedia/AudioSink"
 )
 target_include_directories(dragonsdlaudiosink PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -61,7 +61,7 @@ target_link_libraries(dragonsdlaudiosink PRIVATE DragonMultimedia SDL3::SDL3 KF6
 if(PULSEAUDIO_FOUND)
     kcoreaddons_add_plugin(dragonpulseaudiosink
         SOURCES sink/dragonpulseaudiosink.cpp ${dragonpulseaudiosink_SOURCES}
-        INSTALL_NAMESPACE "DragonMultimedia/audiosink"
+        INSTALL_NAMESPACE "DragonMultimedia/AudioSink"
     )
     target_include_directories(dragonpulseaudiosink PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
@@ -73,7 +73,7 @@ endif()
 if(PIPEWIRE_FOUND)
     kcoreaddons_add_plugin(dragonpipewireaudiosink
         SOURCES sink/dragonpipewireaudiosink.cpp ${dragonpipewireaudiosink_SOURCES}
-        INSTALL_NAMESPACE "DragonMultimedia/audiosink"
+        INSTALL_NAMESPACE "DragonMultimedia/AudioSink"
     )
     target_include_directories(dragonpipewireaudiosink PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
