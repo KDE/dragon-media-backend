@@ -31,9 +31,90 @@ using namespace Qt::StringLiterals;
 static constexpr int PW_POD_BUFFER_LENGTH = 1024;
 static constexpr uint32_t kDefaultQuantumFrames = 1024;
 
+struct PwThreadLoopDeleter {
+    void operator()(pw_thread_loop *loop) const noexcept
+    {
+        if (loop) {
+            pw_thread_loop_stop(loop);
+            pw_thread_loop_destroy(loop);
+        }
+    }
+};
+
+struct PwStreamDeleter {
+    void operator()(pw_stream *stream) const noexcept
+    {
+        if (stream) {
+            pw_stream_destroy(stream);
+        }
+    }
+};
+
+struct PwPropertiesDeleter {
+    void operator()(pw_properties *props) const noexcept
+    {
+        if (props) {
+            pw_properties_free(props);
+        }
+    }
+};
+
+struct PwLoopDeleter {
+    void operator()(pw_loop *loop) const noexcept
+    {
+        if (loop) {
+            pw_loop_destroy(loop);
+        }
+    }
+};
+
+struct PwContextDeleter {
+    void operator()(pw_context *ctx) const noexcept
+    {
+        if (ctx) {
+            pw_context_destroy(ctx);
+        }
+    }
+};
+
+struct PwCoreDisconnector {
+    void operator()(pw_core *core) const noexcept
+    {
+        if (core) {
+            pw_core_disconnect(core);
+        }
+    }
+};
+
+using PwThreadLoopPtr = std::unique_ptr<pw_thread_loop, PwThreadLoopDeleter>;
+using PwStreamPtr = std::unique_ptr<pw_stream, PwStreamDeleter>;
+using PwPropertiesPtr = std::unique_ptr<pw_properties, PwPropertiesDeleter>;
+using PwLoopPtr = std::unique_ptr<pw_loop, PwLoopDeleter>;
+using PwContextPtr = std::unique_ptr<pw_context, PwContextDeleter>;
+using PwCorePtr = std::unique_ptr<pw_core, PwCoreDisconnector>;
+
+class PwThreadLoopLock
+{
+public:
+    explicit PwThreadLoopLock(pw_thread_loop *loop)
+        : m_loop(loop)
+    {
+        pw_thread_loop_lock(m_loop);
+    }
+    ~PwThreadLoopLock()
+    {
+        pw_thread_loop_unlock(m_loop);
+    }
+    PwThreadLoopLock(const PwThreadLoopLock &) = delete;
+    PwThreadLoopLock &operator=(const PwThreadLoopLock &) = delete;
+
+private:
+    pw_thread_loop *m_loop;
+};
+
 struct DragonPipeWireAudioSink::PwState {
-    pw_thread_loop *loop = nullptr;
-    pw_stream *stream = nullptr;
+    PwThreadLoopPtr loop;
+    PwStreamPtr stream;
     spa_hook streamListener{};
 };
 
@@ -66,31 +147,26 @@ bool DragonPipeWireAudioSink::probe()
 {
     qCDebug(dragonMultimediaAudio) << "PipeWire probe() checking daemon connectivity";
 
-    auto *loop = pw_loop_new(nullptr);
+    PwLoopPtr loop(pw_loop_new(nullptr));
     if (!loop) {
         qCDebug(dragonMultimediaAudio) << "PipeWire probe() pw_loop_new failed";
         return false;
     }
 
-    struct pw_context *context = pw_context_new(loop, nullptr, 0);
+    PwContextPtr context(pw_context_new(loop.get(), nullptr, 0));
     if (!context) {
         qCDebug(dragonMultimediaAudio) << "PipeWire probe() pw_context_new failed";
-        pw_loop_destroy(loop);
         return false;
     }
 
-    struct pw_core *core = pw_context_connect(context, nullptr, 0);
-    const bool alive = (core != nullptr);
+    PwCorePtr core(pw_context_connect(context.get(), nullptr, 0));
+    const bool alive = static_cast<bool>(core);
 
     if (alive) {
         qCDebug(dragonMultimediaAudio) << "PipeWire probe() daemon reachable, connection confirmed";
-        pw_core_disconnect(core);
     } else {
         qCDebug(dragonMultimediaAudio) << "PipeWire probe() daemon unreachable, errno =" << errno;
     }
-
-    pw_context_destroy(context);
-    pw_loop_destroy(loop);
 
     return alive;
 }
@@ -107,56 +183,35 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     setFormat(sampleRate, channels);
     reset();
 
-    struct PwOpenGuard {
-        struct PwState &pw;
-        bool dismissed = false;
-
-        ~PwOpenGuard()
-        {
-            if (dismissed)
-                return;
-            if (pw.stream) {
-                pw_stream_destroy(pw.stream);
-                pw.stream = nullptr;
-            }
-            if (pw.loop) {
-                pw_thread_loop_destroy(pw.loop);
-                pw.loop = nullptr;
-            }
-        }
-    };
-
-    PwOpenGuard guard{*m_pw};
-
-    m_pw->loop = pw_thread_loop_new("dragon-pw", nullptr);
-    if (!m_pw->loop) {
+    PwThreadLoopPtr loop(pw_thread_loop_new("dragon-pw", nullptr));
+    if (!loop) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to create thread loop";
         Q_EMIT errorOccurred(u"PipeWire: failed to create thread loop"_s);
         return;
     }
 
-    auto *props = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_MEDIA_ROLE, "Music", nullptr);
+    PwPropertiesPtr props(pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_MEDIA_ROLE, "Music", nullptr));
 
     const QString appName = QGuiApplication::applicationDisplayName();
     const QByteArray appNameUtf8 = appName.toUtf8();
     const char *nodeName = appNameUtf8.isEmpty() ? "DragonMultimedia" : appNameUtf8.constData();
 
-    pw_properties_set(props, PW_KEY_APP_NAME, nodeName);
-    pw_properties_set(props, PW_KEY_NODE_NAME, nodeName);
-    pw_properties_set(props, PW_KEY_NODE_DESCRIPTION, nodeName);
-    pw_properties_set(props, PW_KEY_MEDIA_NAME, nodeName);
-
-    pw_properties_set(props, PW_KEY_NODE_ALWAYS_PROCESS, "true");
+    pw_properties_set(props.get(), PW_KEY_APP_NAME, nodeName);
+    pw_properties_set(props.get(), PW_KEY_NODE_NAME, nodeName);
+    pw_properties_set(props.get(), PW_KEY_NODE_DESCRIPTION, nodeName);
+    pw_properties_set(props.get(), PW_KEY_MEDIA_NAME, nodeName);
+    pw_properties_set(props.get(), PW_KEY_NODE_ALWAYS_PROCESS, "true");
 
     const QByteArray testSinkName = qgetenv("DRAGON_PW_TEST_SINK_NAME");
     if (!testSinkName.isEmpty()) {
-        pw_properties_set(props, PW_KEY_TARGET_OBJECT, testSinkName.constData());
+        pw_properties_set(props.get(), PW_KEY_TARGET_OBJECT, testSinkName.constData());
         qCDebug(dragonMultimediaAudio) << "PipeWire: overriding target to" << testSinkName;
     }
 
-    m_pw->stream = pw_stream_new_simple(pw_thread_loop_get_loop(m_pw->loop), nodeName, props, &s_streamEvents, this);
+    // pw_stream_new_simple takes ownership of props release the unique_ptr so it doesn't double-free.
+    PwStreamPtr stream(pw_stream_new_simple(pw_thread_loop_get_loop(loop.get()), nodeName, props.release(), &s_streamEvents, this));
 
-    if (!m_pw->stream) {
+    if (!stream) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to create stream";
         Q_EMIT errorOccurred(u"PipeWire: failed to create stream"_s);
         return;
@@ -188,26 +243,32 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
 
     constexpr auto streamFlags = static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
 
-    int res = pw_stream_connect(m_pw->stream, PW_DIRECTION_OUTPUT, PW_ID_ANY, streamFlags, &params, 1);
-
+    int res = pw_stream_connect(stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, streamFlags, &params, 1);
     if (res != 0) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to connect stream:" << res;
         Q_EMIT errorOccurred(u"PipeWire: failed to connect stream"_s);
         return;
     }
 
-    res = pw_thread_loop_start(m_pw->loop);
+    res = pw_thread_loop_start(loop.get());
     if (res != 0) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to start thread loop:" << res;
         Q_EMIT errorOccurred(u"PipeWire: failed to start thread loop"_s);
         return;
     }
 
-    pw_thread_loop_lock(m_pw->loop);
-    setChannelVolumes(m_cachedGain);
-    pw_thread_loop_unlock(m_pw->loop);
+    // Set initial channel volumes under the loop lock
+    {
+        const auto ch = static_cast<uint32_t>(currentChannels());
+        m_volumesScratch.assign(ch, m_cachedGain);
+        PwThreadLoopLock lock(loop.get());
+        pw_stream_set_control(stream.get(), SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
+    }
 
-    guard.dismissed = true;
+    // Success transfer ownership to m_pw
+    m_pw->loop = std::move(loop);
+    m_pw->stream = std::move(stream);
+
     m_paused.store(false, std::memory_order_release);
     m_open.store(true, std::memory_order_release);
 
@@ -221,18 +282,15 @@ void DragonPipeWireAudioSink::close()
     m_open.store(false, std::memory_order_release);
     m_paused.store(false, std::memory_order_release);
 
+    // pw_stream_destroy must be called under the thread loop lock.
     if (m_pw->loop && m_pw->stream) {
-        pw_thread_loop_lock(m_pw->loop);
-        pw_stream_destroy(m_pw->stream);
-        m_pw->stream = nullptr;
-        pw_thread_loop_unlock(m_pw->loop);
+        PwThreadLoopLock lock(m_pw->loop.get());
+        m_pw->stream.reset();
     }
 
-    if (auto *loop = std::exchange(m_pw->loop, nullptr)) {
-        pw_thread_loop_stop(loop);
-        pw_thread_loop_destroy(loop);
-    }
+    m_pw->loop.reset();
 
+    // Wait for in-flight callbacks to finish before fully returning.
     {
         std::unique_lock lock(m_callbackDoneMutex);
         m_callbackDoneCv.wait_for(lock, std::chrono::milliseconds(500), [this]() {
@@ -248,9 +306,8 @@ void DragonPipeWireAudioSink::pause()
     m_paused.store(true, std::memory_order_release);
 
     if (m_pw->loop && m_pw->stream) {
-        pw_thread_loop_lock(m_pw->loop);
-        pw_stream_set_active(m_pw->stream, false);
-        pw_thread_loop_unlock(m_pw->loop);
+        PwThreadLoopLock lock(m_pw->loop.get());
+        pw_stream_set_active(m_pw->stream.get(), false);
     }
 }
 
@@ -259,9 +316,8 @@ void DragonPipeWireAudioSink::resume()
     m_paused.store(false, std::memory_order_release);
 
     if (m_pw->loop && m_pw->stream) {
-        pw_thread_loop_lock(m_pw->loop);
-        pw_stream_set_active(m_pw->stream, true);
-        pw_thread_loop_unlock(m_pw->loop);
+        PwThreadLoopLock lock(m_pw->loop.get());
+        pw_stream_set_active(m_pw->stream.get(), true);
     }
 }
 
@@ -270,16 +326,15 @@ void DragonPipeWireAudioSink::setGain(float linearGain)
     m_cachedGain = linearGain;
 
     if (m_pw->stream && m_open.load(std::memory_order_acquire)) {
-        pw_thread_loop_lock(m_pw->loop);
+        PwThreadLoopLock lock(m_pw->loop.get());
         setChannelVolumes(linearGain);
-        pw_thread_loop_unlock(m_pw->loop);
     }
 }
 
 void DragonPipeWireAudioSink::clearStream()
 {
     if (m_pw->stream) {
-        pw_stream_flush(m_pw->stream, false);
+        pw_stream_flush(m_pw->stream.get(), false);
     }
 }
 
@@ -287,7 +342,7 @@ void DragonPipeWireAudioSink::setChannelVolumes(float linearGain)
 {
     const auto ch = static_cast<uint32_t>(currentChannels());
     m_volumesScratch.assign(ch, linearGain);
-    pw_stream_set_control(m_pw->stream, SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
+    pw_stream_set_control(m_pw->stream.get(), SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
 }
 
 int64_t DragonPipeWireAudioSink::deviceQueuedSamples() const
@@ -297,7 +352,7 @@ int64_t DragonPipeWireAudioSink::deviceQueuedSamples() const
     }
 
     struct pw_time time{};
-    if (pw_stream_get_time_n(m_pw->stream, &time, sizeof(time)) != 0) {
+    if (pw_stream_get_time_n(m_pw->stream.get(), &time, sizeof(time)) != 0) {
         return 0;
     }
 
@@ -311,7 +366,7 @@ int DragonPipeWireAudioSink::audioBufferFrames() const
     }
 
     struct pw_time time{};
-    if (pw_stream_get_time_n(m_pw->stream, &time, sizeof(time)) != 0) {
+    if (pw_stream_get_time_n(m_pw->stream.get(), &time, sizeof(time)) != 0) {
         return -1;
     }
 
@@ -356,7 +411,7 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
         audioThreadNamed = true;
     }
 
-    auto *stream = self->m_pw->stream;
+    auto *stream = self->m_pw->stream.get();
     if (!stream) {
         return;
     }
