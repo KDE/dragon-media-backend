@@ -19,7 +19,6 @@ K_PLUGIN_CLASS_WITH_JSON(DragonPulseAudioSink, "pulseaudio_sink.json")
 #include <pulse/stream.h>
 #include <pulse/thread-mainloop.h>
 
-#include <algorithm>
 #include <chrono>
 #include <span>
 
@@ -130,7 +129,7 @@ bool DragonPulseAudioSink::probe()
         pa_context_state_t state = pa_context_get_state(ctx.get());
         auto startTime = std::chrono::steady_clock::now();
         constexpr auto kProbeTimeout = std::chrono::milliseconds(500);
-        while (state != PA_CONTEXT_READY && state != PA_CONTEXT_FAILED) {
+        while (PA_CONTEXT_IS_GOOD(state) && state != PA_CONTEXT_READY) {
             pa_threaded_mainloop_wait(ml.get());
             state = pa_context_get_state(ctx.get());
             auto elapsed = std::chrono::steady_clock::now() - startTime;
@@ -140,7 +139,7 @@ bool DragonPulseAudioSink::probe()
             }
         }
 
-        bool alive = (state == PA_CONTEXT_READY);
+        bool alive = PA_CONTEXT_IS_GOOD(state) && (state == PA_CONTEXT_READY);
         if (alive) {
             qCDebug(dragonMultimediaAudio) << "PulseAudio probe() daemon reachable";
         } else {
@@ -211,7 +210,12 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
     } else {
         if (self->m_decodeFinished && !self->m_drainRequested) {
             self->m_drainRequested = true;
-            pa_operation_unref(pa_stream_drain(s, DragonPulseAudioSink::drainCallback, self));
+            pa_operation *op = pa_stream_drain(s, DragonPulseAudioSink::drainCallback, self);
+            if (op) {
+                pa_operation_unref(op);
+            } else {
+                qCWarning(dragonMultimediaAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_pa->context));
+            }
         } else if (!self->m_decodeFinished) {
             thread_local std::vector<float> silence;
             silence.resize(floatsNeeded, 0.0f);
@@ -284,12 +288,12 @@ bool DragonPulseAudioSink::connectToServer()
         }
 
         pa_context_state_t state = pa_context_get_state(ctx.get());
-        while (state != PA_CONTEXT_READY && state != PA_CONTEXT_FAILED) {
+        while (PA_CONTEXT_IS_GOOD(state) && state != PA_CONTEXT_READY) {
             pa_threaded_mainloop_wait(m_pa->mainloop);
             state = pa_context_get_state(ctx.get());
         }
 
-        if (state != PA_CONTEXT_READY) {
+        if (!PA_CONTEXT_IS_GOOD(state) || state != PA_CONTEXT_READY) {
             qCCritical(dragonMultimediaAudio) << "PulseAudio: context did not become ready:" << state;
             Q_EMIT errorOccurred(u"PulseAudio: context not ready"_s);
             return false;
@@ -309,31 +313,23 @@ void DragonPulseAudioSink::disconnectFromServer()
 {
     m_pa->contextReady = false;
 
-    // PA's threaded mainloop API requires the lock to be held when
-    // manipulating context/stream objects.  Failure to do so races with
-    // the mainloop thread and can corrupt internal state, leading to
-    // assertions or use-after-free in pa_mainloop_free().
     if (m_pa->mainloop) {
-        pa_threaded_mainloop_lock(m_pa->mainloop);
-    }
+        ScopedMainloopLock lock(m_pa->mainloop);
 
-    if (m_pa->stream) {
-        pa_stream_set_state_callback(m_pa->stream, nullptr, nullptr);
-        pa_stream_set_write_callback(m_pa->stream, nullptr, nullptr);
-        pa_stream_set_underflow_callback(m_pa->stream, nullptr, nullptr);
-        pa_stream_disconnect(m_pa->stream);
-        pa_stream_unref(m_pa->stream);
-        m_pa->stream = nullptr;
-    }
+        if (m_pa->stream) {
+            pa_stream_set_state_callback(m_pa->stream, nullptr, nullptr);
+            pa_stream_set_write_callback(m_pa->stream, nullptr, nullptr);
+            pa_stream_set_underflow_callback(m_pa->stream, nullptr, nullptr);
+            pa_stream_disconnect(m_pa->stream);
+            pa_stream_unref(m_pa->stream);
+            m_pa->stream = nullptr;
+        }
 
-    if (m_pa->context) {
-        pa_context_disconnect(m_pa->context);
-        pa_context_unref(m_pa->context);
-        m_pa->context = nullptr;
-    }
-
-    if (m_pa->mainloop) {
-        pa_threaded_mainloop_unlock(m_pa->mainloop);
+        if (m_pa->context) {
+            pa_context_disconnect(m_pa->context);
+            pa_context_unref(m_pa->context);
+            m_pa->context = nullptr;
+        }
     }
 
     if (m_pa->mainloop) {
@@ -424,12 +420,12 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
     }
 
     pa_stream_state_t streamState = pa_stream_get_state(m_pa->stream);
-    while (streamState != PA_STREAM_READY && streamState != PA_STREAM_FAILED) {
+    while (PA_STREAM_IS_GOOD(streamState) && streamState != PA_STREAM_READY) {
         pa_threaded_mainloop_wait(m_pa->mainloop);
         streamState = pa_stream_get_state(m_pa->stream);
     }
 
-    if (streamState != PA_STREAM_READY) {
+    if (!PA_STREAM_IS_GOOD(streamState) || streamState != PA_STREAM_READY) {
         qCCritical(dragonMultimediaAudio) << "PulseAudio: stream did not become ready";
         Q_EMIT errorOccurred(u"PulseAudio: stream not ready"_s);
         disconnectFromServer();
@@ -472,12 +468,11 @@ void DragonPulseAudioSink::pause()
     m_paused.store(true, std::memory_order_release);
 
     if (m_pa->mainloop && m_pa->stream) {
-        pa_threaded_mainloop_lock(m_pa->mainloop);
+        ScopedMainloopLock lock(m_pa->mainloop);
         pa_operation *op = pa_stream_cork(m_pa->stream, 1, nullptr, nullptr);
         if (op) {
             pa_operation_unref(op);
         }
-        pa_threaded_mainloop_unlock(m_pa->mainloop);
     }
 }
 
@@ -486,12 +481,11 @@ void DragonPulseAudioSink::resume()
     m_paused.store(false, std::memory_order_release);
 
     if (m_pa->mainloop && m_pa->stream) {
-        pa_threaded_mainloop_lock(m_pa->mainloop);
+        ScopedMainloopLock lock(m_pa->mainloop);
         pa_operation *op = pa_stream_cork(m_pa->stream, 0, nullptr, nullptr);
         if (op) {
             pa_operation_unref(op);
         }
-        pa_threaded_mainloop_unlock(m_pa->mainloop);
     }
 }
 
@@ -500,9 +494,8 @@ void DragonPulseAudioSink::setGain(float linearGain)
     m_cachedGain = linearGain;
 
     if (m_pa->stream && m_pa->mainloop && m_open.load(std::memory_order_acquire)) {
-        pa_threaded_mainloop_lock(m_pa->mainloop);
+        ScopedMainloopLock lock(m_pa->mainloop);
         applyVolume(linearGain);
-        pa_threaded_mainloop_unlock(m_pa->mainloop);
     }
 }
 
@@ -528,12 +521,11 @@ void DragonPulseAudioSink::applyVolume(float linearGain)
 void DragonPulseAudioSink::clearStream()
 {
     if (m_pa->mainloop && m_pa->stream) {
-        pa_threaded_mainloop_lock(m_pa->mainloop);
+        ScopedMainloopLock lock(m_pa->mainloop);
         pa_operation *op = pa_stream_flush(m_pa->stream, nullptr, nullptr);
         if (op) {
             pa_operation_unref(op);
         }
-        pa_threaded_mainloop_unlock(m_pa->mainloop);
     }
 }
 
@@ -612,14 +604,18 @@ void DragonPulseAudioSink::setStreamName(const QString &name)
 void DragonPulseAudioSink::drainCallback(pa_stream *s, int success, void *userdata)
 {
     Q_UNUSED(s);
-    Q_UNUSED(success);
-    Q_EMIT static_cast<DragonPulseAudioSink *>(userdata)->drained();
+    auto *self = static_cast<DragonPulseAudioSink *>(userdata);
+    if (!success) {
+        qCWarning(dragonMultimediaAudio) << "PulseAudio stream drain failed";
+    }
+    Q_EMIT self->drained();
 }
 
 void DragonPulseAudioSink::underflowCallback(pa_stream *s, void *userdata)
 {
     Q_UNUSED(s);
     Q_UNUSED(userdata);
+    qCDebug(dragonMultimediaAudio) << "PulseAudio underflow detected";
 }
 
 void DragonPulseAudioSink::resetDrainState()
