@@ -46,38 +46,3 @@ target_link_libraries(DragonMultimedia
         kissfft::kissfft
         QCoro6::Network
 )
-
-# --- Audio sink plugins ---
-kcoreaddons_add_plugin(dragonsdlaudiosink
-    SOURCES sink/dragonsdlaudiosink.cpp ${dragonsdlaudiosink_SOURCES}
-    INSTALL_NAMESPACE "DragonMultimedia/AudioSink"
-)
-target_include_directories(dragonsdlaudiosink PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
-)
-target_link_libraries(dragonsdlaudiosink PRIVATE DragonMultimedia SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
-
-if(PULSEAUDIO_FOUND)
-    kcoreaddons_add_plugin(dragonpulseaudiosink
-        SOURCES sink/dragonpulseaudiosink.cpp ${dragonpulseaudiosink_SOURCES}
-        INSTALL_NAMESPACE "DragonMultimedia/AudioSink"
-    )
-    target_include_directories(dragonpulseaudiosink PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
-    )
-    target_link_libraries(dragonpulseaudiosink PRIVATE DragonMultimedia PkgConfig::PULSEAUDIO KF6::CoreAddons Qt6::Gui)
-endif()
-
-if(PIPEWIRE_FOUND)
-    kcoreaddons_add_plugin(dragonpipewireaudiosink
-        SOURCES sink/dragonpipewireaudiosink.cpp ${dragonpipewireaudiosink_SOURCES}
-        INSTALL_NAMESPACE "DragonMultimedia/AudioSink"
-    )
-    target_include_directories(dragonpipewireaudiosink PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
-    )
-    target_link_libraries(dragonpipewireaudiosink PRIVATE DragonMultimedia PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui)
-endif()

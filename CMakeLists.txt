@@ -130,32 +130,6 @@ endif()
 
 include(CheckCXXSourceCompiles)
 set(CMAKE_REQUIRED_FLAGS "-std=c++23")
-check_cxx_source_compiles("
-#include <generator>
-#include <variant>
-#include <cstdint>
-
-struct FormatReady { int sampleRate = 0; };
-struct SamplesChunk {};
-struct DecodeError {};
-struct DecodeEof {};
-using DecodeEvent = std::variant<FormatReady, SamplesChunk, DecodeError, DecodeEof>;
-std::generator<DecodeEvent> test_generator() {
-    co_yield FormatReady{44100};
-    co_yield DecodeEof{};
-}
-int main() {
-    for (auto e : test_generator()) { (void)e; }
-    return 0;
-}
-" HAVE_CXX23_GENERATOR)
-
-if(NOT HAVE_CXX23_GENERATOR)
-    message(FATAL_ERROR "C++23 <generator> header is required but not available. "
-                        "Please use GCC >= 16 or Clang with -std=c++23 -stdlib=libc++")
-endif()
-message(STATUS "C++23 <generator> header: supported")
-
 add_library(spsc_queue INTERFACE)
 target_include_directories(spsc_queue INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue>
@@ -236,7 +210,6 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOMOC_RELY_ON_EXPORTS ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-# --- Build ---
 add_subdirectory(src)
 
 include(GenerateExportHeader)
@@ -247,7 +220,6 @@ generate_export_header(DragonMultimedia
     EXPORT_FILE_NAME dragonmultimedia_export.h
 )
 
-# --- Install & export ---
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dragonmultimedia_export.h
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DragonMultimedia
 )
