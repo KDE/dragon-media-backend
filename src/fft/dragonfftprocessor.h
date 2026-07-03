@@ -89,7 +89,7 @@ private:
 
     void fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float decayRate);
 
-    void emitFrame(const DragonFftFrame &frame, int frameCount, FftMode mode);
+    void emitFrame(const DragonFftFrame &frame);
 
     FrameCallback m_frameCallback;
 

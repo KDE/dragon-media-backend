@@ -15,58 +15,60 @@
 
 using namespace Qt::StringLiterals;
 
+static void assignSelectedSink(DragonPlayer::AudioSink *selectedSinkOut, const QString &pluginId)
+{
+    if (!selectedSinkOut)
+        return;
+    if (pluginId == u"dragonpipewireaudiosink"_s) {
+        *selectedSinkOut = DragonPlayer::AudioSink::PipeWire;
+    } else if (pluginId == u"dragonpulseaudiosink"_s) {
+        *selectedSinkOut = DragonPlayer::AudioSink::PulseAudio;
+    } else if (pluginId == u"dragonsdlaudiosink"_s) {
+        *selectedSinkOut = DragonPlayer::AudioSink::SDL;
+    } else {
+        *selectedSinkOut = DragonPlayer::AudioSink::Auto;
+    }
+}
+
+static std::unique_ptr<DragonAudioSink> tryLoad(const KPluginMetaData &md, DragonPlayer::AudioSink *selectedSinkOut)
+{
+    auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(md);
+    if (!result) {
+        qCWarning(dragonMultimediaFactory) << "Failed to load audio sink plugin:" << md.pluginId() << "-" << result.errorString;
+        return nullptr;
+    }
+    auto sink = std::unique_ptr<DragonAudioSink>(result.plugin);
+    if (!sink->probe()) {
+        qCWarning(dragonMultimediaFactory) << "Audio sink plugin" << md.pluginId() << "failed runtime probe, falling through";
+        return nullptr;
+    }
+    qCDebug(dragonMultimediaFactory) << "Audio sink plugin" << md.pluginId() << "passed probe, selected";
+    assignSelectedSink(selectedSinkOut, md.pluginId());
+    return sink;
+}
+
 std::unique_ptr<DragonAudioSink> createAudioSink(DragonPlayer::AudioSink requestedSink, DragonPlayer::AudioSink *selectedSinkOut)
 {
-    auto plugins = KPluginMetaData::findPlugins(QStringLiteral("DragonMultimedia/AudioSink"));
+    auto plugins = KPluginMetaData::findPlugins(u"DragonMultimedia/AudioSink"_s);
 
     std::ranges::sort(plugins, [](const KPluginMetaData &a, const KPluginMetaData &b) {
-        return a.value(QStringLiteral("Priority"), 0) > b.value(QStringLiteral("Priority"), 0);
+        return a.value(u"Priority"_s, 0) > b.value(u"Priority"_s, 0);
     });
 
     for (const auto &md : plugins) {
-        qCDebug(dragonMultimediaFactory) << "Found audio sink plugin:" << md.pluginId() << "with priority:" << md.value(QStringLiteral("Priority"), 0);
+        qCDebug(dragonMultimediaFactory) << "Found audio sink plugin:" << md.pluginId() << "with priority:" << md.value(u"Priority"_s, 0);
     }
-
-    auto assignSelectedSink = [selectedSinkOut](const QString &pluginId) {
-        if (!selectedSinkOut)
-            return;
-        if (pluginId == QStringLiteral("dragonpipewireaudiosink")) {
-            *selectedSinkOut = DragonPlayer::AudioSink::PipeWire;
-        } else if (pluginId == QStringLiteral("dragonpulseaudiosink")) {
-            *selectedSinkOut = DragonPlayer::AudioSink::PulseAudio;
-        } else if (pluginId == QStringLiteral("dragonsdlaudiosink")) {
-            *selectedSinkOut = DragonPlayer::AudioSink::SDL;
-        } else {
-            *selectedSinkOut = DragonPlayer::AudioSink::Auto;
-        }
-    };
-
-    auto tryLoad = [&](const KPluginMetaData &md) -> std::unique_ptr<DragonAudioSink> {
-        auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(md);
-        if (!result) {
-            qCWarning(dragonMultimediaFactory) << "Failed to load audio sink plugin:" << md.pluginId() << "-" << result.errorString;
-            return nullptr;
-        }
-        auto sink = std::unique_ptr<DragonAudioSink>(result.plugin);
-        if (!sink->probe()) {
-            qCWarning(dragonMultimediaFactory) << "Audio sink plugin" << md.pluginId() << "failed runtime probe, falling through";
-            return nullptr;
-        }
-        qCDebug(dragonMultimediaFactory) << "Audio sink plugin" << md.pluginId() << "passed probe, selected";
-        assignSelectedSink(md.pluginId());
-        return sink;
-    };
 
     QString requestedPluginId;
     switch (requestedSink) {
     case DragonPlayer::AudioSink::PipeWire:
-        requestedPluginId = QStringLiteral("dragonpipewireaudiosink");
+        requestedPluginId = u"dragonpipewireaudiosink"_s;
         break;
     case DragonPlayer::AudioSink::PulseAudio:
-        requestedPluginId = QStringLiteral("dragonpulseaudiosink");
+        requestedPluginId = u"dragonpulseaudiosink"_s;
         break;
     case DragonPlayer::AudioSink::SDL:
-        requestedPluginId = QStringLiteral("dragonsdlaudiosink");
+        requestedPluginId = u"dragonsdlaudiosink"_s;
         break;
     case DragonPlayer::AudioSink::Auto:
     default:
@@ -78,7 +80,7 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonPlayer::AudioSink request
             return md.pluginId() == requestedPluginId;
         });
         if (it != plugins.end()) {
-            if (auto sink = tryLoad(*it)) {
+            if (auto sink = tryLoad(*it, selectedSinkOut)) {
                 return sink;
             }
         } else {
@@ -92,7 +94,7 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonPlayer::AudioSink request
             return md.pluginId() == envSink;
         });
         if (it != plugins.end()) {
-            if (auto sink = tryLoad(*it)) {
+            if (auto sink = tryLoad(*it, selectedSinkOut)) {
                 return sink;
             }
         } else {
@@ -102,7 +104,7 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonPlayer::AudioSink request
     }
 
     for (const auto &md : plugins) {
-        if (auto sink = tryLoad(md)) {
+        if (auto sink = tryLoad(md, selectedSinkOut)) {
             return sink;
         }
     }

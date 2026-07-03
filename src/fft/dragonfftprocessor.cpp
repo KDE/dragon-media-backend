@@ -104,7 +104,6 @@ DragonFftFrame DragonFftProcessor::takeLatestFrame()
 
 void DragonFftProcessor::processLoop(std::stop_token st)
 {
-    int frameCount = 0;
     auto prevMode = FftMode::Off;
     bool primed = false;
 
@@ -156,14 +155,16 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             const float binToFreq = static_cast<float>(sr) / static_cast<float>(FFT_SIZE);
             DragonFftFrame frame;
 
-            if (mode == FftMode::DetailedOnly || mode == FftMode::Both)
+            if (mode == FftMode::DetailedOnly || mode == FftMode::Both) {
                 fillDetailedBins(frame, fftOut, binToFreq);
-            if (mode == FftMode::BarsOnly || mode == FftMode::Both)
+            }
+            if (mode == FftMode::BarsOnly || mode == FftMode::Both) {
                 fillBarBins(frame, fftOut, binToFreq, decayRate);
+            }
 
             frame.timestamp = m_newestBlockPts;
 
-            emitFrame(frame, ++frameCount, mode);
+            emitFrame(frame);
 
             m_lastFrameAtSample += step;
         }
@@ -308,26 +309,15 @@ void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std:
     frame.barData.assign_range(barBins);
 }
 
-void DragonFftProcessor::emitFrame(const DragonFftFrame &frame, int frameCount, FftMode mode)
+void DragonFftProcessor::emitFrame(const DragonFftFrame &frame)
 {
     {
         std::scoped_lock lock(m_frameMutex);
         m_latestFrame = frame;
     }
 
-    if (m_frameCallback)
+    if (m_frameCallback) {
         m_frameCallback(frame);
-
-    if (frameCount <= 3 || frameCount % 60 == 0) {
-        if (!frame.barData.empty()) {
-            qCDebug(dragonMultimediaFft) << "frame emitted count=" << frameCount << "mode=" << mode << "barData[0]=" << frame.barData[0]
-                                         << "barData[11]=" << frame.barData[11] << "barData[23]=" << frame.barData[23];
-        } else if (!frame.frequenciesDb.empty()) {
-            qCDebug(dragonMultimediaFft) << "frame emitted count=" << frameCount << "mode=" << mode << "freqDb[0]=" << frame.frequenciesDb[0]
-                                         << "freqDb[256]=" << frame.frequenciesDb[256];
-        } else {
-            qCDebug(dragonMultimediaFft) << "frame emitted count=" << frameCount << "mode=" << mode;
-        }
     }
 }
 
