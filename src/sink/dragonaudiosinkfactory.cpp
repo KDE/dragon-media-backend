@@ -47,6 +47,18 @@ static std::unique_ptr<DragonAudioSink> tryLoad(const KPluginMetaData &md, Drago
     return sink;
 }
 
+static std::unique_ptr<DragonAudioSink> tryLoadById(const QList<KPluginMetaData> &plugins, const QString &pluginId, DragonPlayer::AudioSink *selectedSinkOut)
+{
+    auto it = std::ranges::find_if(plugins, [&](const KPluginMetaData &md) {
+        return md.pluginId() == pluginId;
+    });
+    if (it != plugins.end()) {
+        return tryLoad(*it, selectedSinkOut);
+    }
+    qCWarning(dragonMultimediaFactory) << "Requested audio sink plugin not found:" << pluginId;
+    return nullptr;
+}
+
 std::unique_ptr<DragonAudioSink> createAudioSink(DragonPlayer::AudioSink requestedSink, DragonPlayer::AudioSink *selectedSinkOut)
 {
     auto plugins = KPluginMetaData::findPlugins(u"DragonMultimedia/AudioSink"_s);
@@ -76,31 +88,14 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonPlayer::AudioSink request
     }
 
     if (!requestedPluginId.isEmpty()) {
-        auto it = std::ranges::find_if(plugins, [&](const KPluginMetaData &md) {
-            return md.pluginId() == requestedPluginId;
-        });
-        if (it != plugins.end()) {
-            if (auto sink = tryLoad(*it, selectedSinkOut)) {
-                return sink;
-            }
-        } else {
-            qCWarning(dragonMultimediaFactory) << "Requested audio sink plugin not found:" << requestedPluginId;
+        if (auto sink = tryLoadById(plugins, requestedPluginId, selectedSinkOut)) {
+            return sink;
         }
     }
 
     const QString envSink = qEnvironmentVariable("DRAGONMULTIMEDIA_AUDIO_SINK");
     if (!envSink.isEmpty()) {
-        auto it = std::ranges::find_if(plugins, [&](const KPluginMetaData &md) {
-            return md.pluginId() == envSink;
-        });
-        if (it != plugins.end()) {
-            if (auto sink = tryLoad(*it, selectedSinkOut)) {
-                return sink;
-            }
-        } else {
-            qCWarning(dragonMultimediaFactory) << "Requested audio sink plugin not found:" << envSink;
-        }
-        return nullptr;
+        return tryLoadById(plugins, envSink, selectedSinkOut);
     }
 
     for (const auto &md : plugins) {
