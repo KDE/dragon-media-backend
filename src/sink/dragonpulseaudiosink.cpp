@@ -208,15 +208,14 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
             qCCritical(dragonMultimediaAudio) << "PulseAudio pa_stream_write failed:" << pa_strerror(pa_context_errno(self->m_pa->context));
         }
     } else {
-        if (self->m_decodeFinished && !self->m_drainRequested) {
-            self->m_drainRequested = true;
+        if (self->m_decodeFinished.load(std::memory_order_acquire) && !self->m_drainRequested.exchange(true, std::memory_order_acq_rel)) {
             pa_operation *op = pa_stream_drain(s, DragonPulseAudioSink::drainCallback, self);
             if (op) {
                 pa_operation_unref(op);
             } else {
                 qCWarning(dragonMultimediaAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_pa->context));
             }
-        } else if (!self->m_decodeFinished) {
+        } else if (!self->m_decodeFinished.load(std::memory_order_acquire)) {
             thread_local std::vector<float> silence;
             silence.resize(floatsNeeded, 0.0f);
             pa_stream_write(s, silence.data(), silence.size() * sizeof(float), nullptr, 0, PA_SEEK_RELATIVE);
@@ -354,6 +353,8 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
     m_lastSampleRate = sampleRate;
     m_lastChannels = channels;
 
+    preAllocateCallbackBuffer(static_cast<size_t>(sampleRate) * static_cast<size_t>(channels));
+
     if (!connectToServer()) {
         return;
     }
@@ -403,7 +404,7 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
     bufferAttr.fragsize = sizeof(float) * 1024;
 
     pa_cvolume cvol;
-    pa_cvolume_set(&cvol, channels, pa_sw_volume_from_linear(m_cachedGain));
+    pa_cvolume_set(&cvol, channels, pa_sw_volume_from_linear(m_cachedGain.load(std::memory_order_relaxed)));
 
     int ret = pa_stream_connect_playback(m_pa->stream,
                                          nullptr,
@@ -491,7 +492,7 @@ void DragonPulseAudioSink::resume()
 
 void DragonPulseAudioSink::setGain(float linearGain)
 {
-    m_cachedGain = linearGain;
+    m_cachedGain.store(linearGain, std::memory_order_relaxed);
 
     if (m_pa->stream && m_pa->mainloop && m_open.load(std::memory_order_acquire)) {
         ScopedMainloopLock lock(m_pa->mainloop);
@@ -620,7 +621,7 @@ void DragonPulseAudioSink::underflowCallback(pa_stream *s, void *userdata)
 
 void DragonPulseAudioSink::resetDrainState()
 {
-    m_drainRequested = false;
+    m_drainRequested.store(false, std::memory_order_release);
     DragonAudioSink::resetDrainState();
 }
 

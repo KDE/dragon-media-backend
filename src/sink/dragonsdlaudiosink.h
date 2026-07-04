@@ -61,7 +61,7 @@ private:
     std::mutex m_callbackDoneMutex;
     std::condition_variable m_callbackDoneCv;
     std::atomic<int> m_activeCallbacks{0};
-    float m_cachedGain = 1.0f;
+    std::atomic<float> m_cachedGain{1.0f};
 
     QTimer *m_drainTimer = nullptr;
     static constexpr int kDrainPollMs = 50;

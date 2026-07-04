@@ -94,6 +94,8 @@ void DragonSdlAudioSink::open(int sampleRate, int channels)
 
     const SDL_AudioSpec spec = {SDL_AUDIO_F32, channels, sampleRate};
 
+    preAllocateCallbackBuffer(spec.freq * spec.channels);
+
     SDL_AudioStream *stream = SDL_CreateAudioStream(&spec, nullptr);
     if (!stream) {
         qCCritical(dragonMultimediaAudio) << "SDL_CreateAudioStream failed:" << SDL_GetError();
@@ -122,7 +124,7 @@ void DragonSdlAudioSink::open(int sampleRate, int channels)
         return;
     }
 
-    SDL_SetAudioStreamGain(stream, m_cachedGain);
+    SDL_SetAudioStreamGain(stream, m_cachedGain.load(std::memory_order_relaxed));
 
     if (!SDL_SetAudioStreamGetCallback(stream, &DragonSdlAudioSink::audioStreamCallback, this)) {
         qCCritical(dragonMultimediaAudio) << "SDL_SetAudioStreamGetCallback FAILED:" << SDL_GetError();
@@ -186,7 +188,7 @@ void DragonSdlAudioSink::resume()
 {
     if (auto *session = m_session.load(std::memory_order_acquire)) {
         if (session->stream) {
-            SDL_SetAudioStreamGain(session->stream, m_cachedGain);
+            SDL_SetAudioStreamGain(session->stream, m_cachedGain.load(std::memory_order_relaxed));
         }
         if (session->deviceId != 0) {
             SDL_ResumeAudioDevice(session->deviceId);
@@ -196,7 +198,7 @@ void DragonSdlAudioSink::resume()
 
 void DragonSdlAudioSink::setGain(float linearGain)
 {
-    m_cachedGain = linearGain;
+    m_cachedGain.store(linearGain, std::memory_order_relaxed);
     if (auto *session = m_session.load(std::memory_order_acquire); session && session->stream) {
         SDL_SetAudioStreamGain(session->stream, linearGain);
     }

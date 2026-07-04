@@ -112,13 +112,15 @@ protected:
 
     int currentSampleRate() const
     {
-        return m_sampleRate;
+        return m_sampleRate.load(std::memory_order_relaxed);
     }
     int currentChannels() const
     {
-        return m_channels;
+        return m_channels.load(std::memory_order_relaxed);
     }
     void setFormat(int sampleRate, int channels);
+
+    void preAllocateCallbackBuffer(size_t maxSamples);
 
 private:
     DragonPipe<std::float32_t> *audioPipe() const;
@@ -132,8 +134,8 @@ private:
     float m_volume = 1.0f;
     bool m_muted = false;
 
-    int m_sampleRate = 0;
-    int m_channels = 0;
+    std::atomic<int> m_sampleRate{0};
+    std::atomic<int> m_channels{0};
 
     std::vector<std::float32_t> m_callbackBuffer;
 
@@ -143,5 +145,5 @@ private:
     std::atomic<bool> m_queueReady{true};
 
 protected:
-    bool m_decodeFinished = false;
+    std::atomic<bool> m_decodeFinished{false};
 };

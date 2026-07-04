@@ -58,7 +58,7 @@ private:
     std::atomic<bool> m_paused{false};
     std::atomic<bool> m_open{false};
 
-    bool m_drainInitiated = false;
+    std::atomic<bool> m_drainInitiated{false};
 
     std::mutex m_callbackDoneMutex;
     std::condition_variable m_callbackDoneCv;
@@ -66,5 +66,5 @@ private:
 
     std::vector<float> m_volumesScratch;
 
-    float m_cachedGain = 1.0f;
+    std::atomic<float> m_cachedGain{1.0f};
 };

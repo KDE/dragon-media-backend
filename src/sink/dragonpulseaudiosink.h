@@ -61,7 +61,7 @@ private:
     void applyVolume(float linearGain);
     void resetDrainState() override;
 
-    bool m_drainRequested = false;
+    std::atomic<bool> m_drainRequested{false};
 
     struct PaState {
         pa_threaded_mainloop *mainloop = nullptr;
@@ -80,7 +80,7 @@ private:
     std::condition_variable m_callbackDoneCv;
     std::atomic<int> m_activeCallbacks{0};
 
-    float m_cachedGain = 1.0f;
+    std::atomic<float> m_cachedGain{1.0f};
     std::string m_streamName;
     int m_lastSampleRate = 0;
     int m_lastChannels = 0;

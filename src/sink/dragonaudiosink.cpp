@@ -147,7 +147,9 @@ void DragonAudioSink::setStreamName(const QString &name)
 
 int64_t DragonAudioSink::positionMs() const
 {
-    if (m_channels <= 0 || m_sampleRate <= 0) {
+    int channels = m_channels.load(std::memory_order_relaxed);
+    int sampleRate = m_sampleRate.load(std::memory_order_relaxed);
+    if (channels <= 0 || sampleRate <= 0) {
         return m_positionOffsetMs.load(std::memory_order_relaxed);
     }
 
@@ -158,13 +160,13 @@ int64_t DragonAudioSink::positionMs() const
         written = std::max(int64_t{0}, written - queued);
     }
 
-    const int64_t frameCount = written / m_channels;
-    return (frameCount * 1000 / m_sampleRate) + m_positionOffsetMs.load(std::memory_order_relaxed);
+    const int64_t frameCount = written / channels;
+    return (frameCount * 1000 / sampleRate) + m_positionOffsetMs.load(std::memory_order_relaxed);
 }
 
 bool DragonAudioSink::hasFormat(int sampleRate, int channels) const
 {
-    return m_sampleRate == sampleRate && m_channels == channels;
+    return m_sampleRate.load(std::memory_order_relaxed) == sampleRate && m_channels.load(std::memory_order_relaxed) == channels;
 }
 
 int64_t DragonAudioSink::totalSamplesWritten() const
@@ -180,12 +182,12 @@ void DragonAudioSink::resetPositionTracking()
 
 void DragonAudioSink::notifyDecodeFinished()
 {
-    m_decodeFinished = true;
+    m_decodeFinished.store(true, std::memory_order_release);
 }
 
 void DragonAudioSink::resetDrainState()
 {
-    m_decodeFinished = false;
+    m_decodeFinished.store(false, std::memory_order_release);
 }
 
 std::span<const std::float32_t> DragonAudioSink::processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts)
@@ -208,7 +210,9 @@ std::span<const std::float32_t> DragonAudioSink::processAudioCallback(size_t max
         return {};
     }
 
-    m_callbackBuffer.resize(maxSamples);
+    if (m_callbackBuffer.size() < maxSamples) {
+        m_callbackBuffer.resize(maxSamples);
+    }
     size_t totalRead = 0;
 
     ap->consumer().readSomeWith(maxSamples, [&](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
@@ -267,6 +271,11 @@ DragonPipe<DragonFftBlock> *DragonAudioSink::fftPipe() const
 
 void DragonAudioSink::setFormat(int sampleRate, int channels)
 {
-    m_sampleRate = sampleRate;
-    m_channels = channels;
+    m_sampleRate.store(sampleRate, std::memory_order_relaxed);
+    m_channels.store(channels, std::memory_order_relaxed);
+}
+
+void DragonAudioSink::preAllocateCallbackBuffer(size_t maxSamples)
+{
+    m_callbackBuffer.resize(maxSamples);
 }

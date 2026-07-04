@@ -183,6 +183,8 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     setFormat(sampleRate, channels);
     reset();
 
+    preAllocateCallbackBuffer(kDefaultQuantumFrames * static_cast<size_t>(channels));
+
     PwThreadLoopPtr loop(pw_thread_loop_new("dragon-pw", nullptr));
     if (!loop) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to create thread loop";
@@ -260,7 +262,7 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     // Set initial channel volumes under the loop lock
     {
         const auto ch = static_cast<uint32_t>(currentChannels());
-        m_volumesScratch.assign(ch, m_cachedGain);
+        m_volumesScratch.assign(ch, m_cachedGain.load(std::memory_order_relaxed));
         PwThreadLoopLock lock(loop.get());
         pw_stream_set_control(stream.get(), SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
     }
@@ -323,7 +325,7 @@ void DragonPipeWireAudioSink::resume()
 
 void DragonPipeWireAudioSink::setGain(float linearGain)
 {
-    m_cachedGain = linearGain;
+    m_cachedGain.store(linearGain, std::memory_order_relaxed);
 
     if (m_pw->stream && m_open.load(std::memory_order_acquire)) {
         PwThreadLoopLock lock(m_pw->loop.get());
@@ -471,8 +473,7 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
 
     auto *dst = static_cast<float *>(spaBuf->datas[0].data);
 
-    if (pcm.empty() && self->m_decodeFinished && !self->m_drainInitiated) {
-        self->m_drainInitiated = true;
+    if (pcm.empty() && self->m_decodeFinished.load(std::memory_order_acquire) && !self->m_drainInitiated.exchange(true, std::memory_order_acq_rel)) {
         spaBuf->datas[0].chunk->size = 0;
         spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
         pwBuf->size = 0;
@@ -520,10 +521,11 @@ void DragonPipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const s
         }
         const float avgGain = sum / static_cast<float>(control->n_values);
 
-        if (qAbs(avgGain - self->m_cachedGain) < 0.001f) {
+        float cached = self->m_cachedGain.load(std::memory_order_relaxed);
+        if (qAbs(avgGain - cached) < 0.001f) {
             return;
         }
-        self->m_cachedGain = avgGain;
+        self->m_cachedGain.store(avgGain, std::memory_order_relaxed);
 
         qCDebug(dragonMultimediaAudio) << "PipeWire external volume change via control_info, avgGain:" << avgGain;
         QMetaObject::invokeMethod(
@@ -571,7 +573,7 @@ void DragonPipeWireAudioSink::onDrained(void *userdata)
 
 void DragonPipeWireAudioSink::resetDrainState()
 {
-    m_drainInitiated = false;
+    m_drainInitiated.store(false, std::memory_order_release);
     DragonAudioSink::resetDrainState();
 }
 
