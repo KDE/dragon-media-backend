@@ -484,7 +484,6 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     }
 
     if (d->audioOutput) {
-        d->audioOutput->silence();
         d->audioOutput->setQueueReady(false);
         d->audioOutput->resetDrainState();
         d->audioOutput->setPositionOffset(0, DragonAudioSink::PositionResetMode::NormalTrackChange);
@@ -592,10 +591,6 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     if (!d->currentIsLocal && d->decodePipeline.streamSize() > 0) {
         d->currentSeekable = true;
         Q_EMIT seekableChanged(true);
-    }
-
-    if (d->audioOutput) {
-        d->audioOutput->restoreVolume();
     }
 
     d->setStatus(MediaStatus::LoadedMedia);

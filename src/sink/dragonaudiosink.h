@@ -91,8 +91,6 @@ public:
 
     virtual void clearStream() = 0;
 
-    void silence();
-    void restoreVolume();
     void reset()
     {
         m_totalSamplesWritten.store(0, std::memory_order_relaxed);

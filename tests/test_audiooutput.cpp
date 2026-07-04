@@ -51,7 +51,6 @@ private Q_SLOTS:
     void testRapidStartStopCycles();
     void testStopDuringStarvation();
 
-    void testSilence();
     void testQueueReadyApi();
     void testFlushOpensGate();
 
@@ -393,28 +392,6 @@ void TestAudioOutput::testStopDuringStarvation()
 
     output->reset();
     QVERIFY(output->positionMs() == 0);
-}
-
-void TestAudioOutput::testSilence()
-{
-    auto output = createAudioSink();
-
-    DragonPipe<std::float32_t> pipe(65536);
-    output->setAudioPipe(&pipe);
-
-    output->open(44100, 2);
-    QVERIFY(output->isDeviceOpen());
-
-    output->silence();
-    QVERIFY(output->isDeviceOpen());
-
-    fillQueue(&pipe, std::vector<std::float32_t>(4096, 0.5f));
-    QTest::qWait(100);
-
-    QVERIFY(output->isDeviceOpen());
-
-    output->close();
-    QVERIFY(!output->isDeviceOpen());
 }
 
 void TestAudioOutput::testQueueReadyApi()

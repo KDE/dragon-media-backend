@@ -178,16 +178,6 @@ void DragonAudioSink::resetPositionTracking()
     m_positionOffsetMs.store(0, std::memory_order_relaxed);
 }
 
-void DragonAudioSink::silence()
-{
-    setGain(0.0f);
-}
-
-void DragonAudioSink::restoreVolume()
-{
-    setGain(calculateGain(m_volume, m_muted));
-}
-
 void DragonAudioSink::notifyDecodeFinished()
 {
     m_decodeFinished = true;
