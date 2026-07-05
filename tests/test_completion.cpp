@@ -27,6 +27,8 @@ private Q_SLOTS:
     void testSetResultBeforeAwait();
     void testSetResultFromOtherThread();
     void testCancelFromOtherThread();
+    void testDestroyBeforeResumeFires();
+    void testDestroyDuringSuspend();
 };
 
 struct CompletionCapture {
@@ -36,6 +38,14 @@ struct CompletionCapture {
 };
 
 static QCoro::Task<void> captureAwait(std::shared_ptr<DragonCompletion> c, CompletionCapture *cap)
+{
+    cap->result = co_await *c;
+    cap->resumeThreadId = QThread::currentThreadId();
+    cap->done = true;
+}
+
+// Raw-pointer variant: the coroutine does NOT hold a shared_ptr to the completion.
+static QCoro::Task<void> captureAwaitRaw(DragonCompletion *c, CompletionCapture *cap)
 {
     cap->result = co_await *c;
     cap->resumeThreadId = QThread::currentThreadId();
@@ -183,6 +193,49 @@ void TestCompletion::testCancelFromOtherThread()
     QVERIFY(!cap.result.success);
     QVERIFY(cap.result.cancelled);
     QCOMPARE(cap.resumeThreadId, mainThreadId);
+}
+
+void TestCompletion::testDestroyBeforeResumeFires()
+{
+    CompletionCapture cap;
+
+    auto c = std::make_shared<DragonCompletion>();
+    auto task = captureAwait(c, &cap);
+
+    InitResult r;
+    r.success = true;
+    r.sampleRate = 48000;
+    QVERIFY(c->setResult(r));
+
+    // Drop our last external reference before the queued event fires.
+    c.reset();
+
+    // Process events the queued lambda should still fire because
+    // shared_from_this() captured a ref that keeps the completion alive.
+    waitForDone(&cap);
+    QVERIFY(cap.done);
+    QVERIFY(cap.result.success);
+    QCOMPARE(cap.result.sampleRate, 48000);
+}
+
+void TestCompletion::testDestroyDuringSuspend()
+{
+    CompletionCapture cap;
+
+    auto c = std::make_shared<DragonCompletion>();
+    // Start the coroutine with a raw pointer no shared_ptr in the frame.
+    auto task = captureAwaitRaw(c.get(), &cap);
+
+    // The coroutine has started eagerly and suspended at co_await *c.
+    // m_handle is now set inside the completion.
+    QVERIFY(!cap.done);
+
+    c.reset();
+
+    // Process events to be sure no queued resume fires.
+    QTest::qWait(50);
+
+    QVERIFY(!cap.done);
 }
 
 QTEST_MAIN(TestCompletion)

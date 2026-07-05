@@ -7,6 +7,7 @@
 
 #include <atomic>
 #include <coroutine>
+#include <memory>
 #include <mutex>
 #include <optional>
 
@@ -29,9 +30,10 @@ struct InitResult {
     QString errorMessage;
 };
 
-class DragonCompletion
+class DragonCompletion : public std::enable_shared_from_this<DragonCompletion>
 {
 public:
+    // Must only be constructed via std::make_shared required by enable_shared_from_this.
     explicit DragonCompletion(QObject *context = nullptr)
         : m_context(context)
     {
@@ -39,11 +41,19 @@ public:
 
     ~DragonCompletion()
     {
-        const bool wasResumed = m_resumed.load(std::memory_order_acquire);
-        if (m_handle && !wasResumed) {
-            qDebug() << "DragonCompletion::~DragonCompletion() destroying un-resumed handle:" << m_handle.address()
+        std::coroutine_handle<> handleToDestroy = nullptr;
+        {
+            std::lock_guard lock(m_mutex);
+            const bool wasResumed = m_resumed.load(std::memory_order_acquire);
+            if (m_handle && !wasResumed) {
+                handleToDestroy = m_handle;
+                m_handle = nullptr;
+            }
+        }
+        if (handleToDestroy) {
+            qDebug() << "DragonCompletion::~DragonCompletion() destroying un-resumed handle:" << handleToDestroy.address()
                      << "(context was destroyed before posted event fired)";
-            m_handle.destroy();
+            handleToDestroy.destroy();
         }
     }
 
@@ -69,6 +79,7 @@ public:
 
     InitResult await_resume()
     {
+        std::lock_guard lock(m_mutex);
         return std::move(*m_result);
     }
 
@@ -86,10 +97,11 @@ public:
             qDebug() << "DragonCompletion::setResult() scheduling resume via" << (onMainThread ? "QueuedConnection(on-main)" : "QueuedConnection(off-main)")
                      << "handle:" << m_handle.address() << "success:" << m_result->success << "receiver:" << receiver;
 
+            auto self = shared_from_this();
             QMetaObject::invokeMethod(
                 receiver,
-                [h = m_handle, resumed = &m_resumed]() {
-                    resumed->store(true, std::memory_order_release);
+                [self, h = m_handle]() {
+                    self->m_resumed.store(true, std::memory_order_release);
                     qDebug() << "DragonCompletion::setResult() lambda executing, resuming handle:" << h.address();
                     if (h) {
                         h.resume();
@@ -121,10 +133,11 @@ public:
             const bool onMainThread = QThread::currentThread() == qApp->thread();
             qDebug() << "DragonCompletion::cancel() scheduling resume via" << (onMainThread ? "QueuedConnection(on-main)" : "QueuedConnection(off-main)")
                      << "handle:" << m_handle.address() << "reason:" << reason << "receiver:" << receiver;
+            auto self = shared_from_this();
             QMetaObject::invokeMethod(
                 receiver,
-                [h = m_handle, resumed = &m_resumed]() {
-                    resumed->store(true, std::memory_order_release);
+                [self, h = m_handle]() {
+                    self->m_resumed.store(true, std::memory_order_release);
                     qDebug() << "DragonCompletion::cancel() lambda executing, resuming handle:" << h.address();
                     if (h) {
                         h.resume();

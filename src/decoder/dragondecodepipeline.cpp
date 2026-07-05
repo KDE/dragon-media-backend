@@ -435,20 +435,24 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
         return;
     }
 
-    m_pendingGaplessCompletion = std::make_shared<DragonCompletion>(this);
+    auto completion = std::make_shared<DragonCompletion>(this);
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        m_pendingGaplessCompletion = completion;
+    }
 
-    m_preWarmThread = std::jthread([this, next](std::stop_token st) {
+    m_preWarmThread = std::jthread([this, next, completion](std::stop_token st) {
         pthread_setname_np(pthread_self(), "dragon-prewarm");
         auto decoder = createDecoder(next, true);
         if (st.stop_requested()) {
-            if (m_pendingGaplessCompletion) {
-                m_pendingGaplessCompletion->cancel(QStringLiteral("Pre-warm stopped"));
+            if (completion) {
+                completion->cancel(QStringLiteral("Pre-warm stopped"));
             }
             return;
         }
         if (!decoder) {
-            if (m_pendingGaplessCompletion) {
-                m_pendingGaplessCompletion->setResult(makeErrorResult(QStringLiteral("Failed to create decoder"), true));
+            if (completion) {
+                completion->setResult(makeErrorResult(QStringLiteral("Failed to create decoder"), true));
             }
             return;
         }
@@ -467,8 +471,8 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
             }
         }
 
-        if (m_pendingGaplessCompletion) {
-            m_pendingGaplessCompletion->setResult(result);
+        if (completion) {
+            completion->setResult(result);
         }
     });
 }
