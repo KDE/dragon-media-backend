@@ -63,14 +63,7 @@ private:
 
     std::atomic<bool> m_drainRequested{false};
 
-    struct PaState {
-        pa_threaded_mainloop *mainloop = nullptr;
-        pa_context *context = nullptr;
-        pa_stream *stream = nullptr;
-        uint32_t sinkInputIndex = static_cast<uint32_t>(-1);
-        bool contextReady = false;
-    };
-
+    struct PaState;
     std::unique_ptr<PaState> m_pa;
 
     std::atomic<bool> m_paused{false};

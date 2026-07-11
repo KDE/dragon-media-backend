@@ -50,8 +50,19 @@ struct ContextDeleter {
     }
 };
 
+struct StreamDeleter {
+    void operator()(pa_stream *s) const noexcept
+    {
+        if (s) {
+            pa_stream_disconnect(s);
+            pa_stream_unref(s);
+        }
+    }
+};
+
 using MainloopPtr = std::unique_ptr<pa_threaded_mainloop, MainloopDeleter>;
 using ContextPtr = std::unique_ptr<pa_context, ContextDeleter>;
+using StreamPtr = std::unique_ptr<pa_stream, StreamDeleter>;
 
 class ScopedMainloopLock
 {
@@ -75,6 +86,14 @@ private:
 };
 
 } // namespace
+
+struct DragonPulseAudioSink::PaState {
+    MainloopPtr mainloop;
+    ContextPtr context;
+    StreamPtr stream;
+    uint32_t sinkInputIndex = static_cast<uint32_t>(-1);
+    bool contextReady = false;
+};
 
 DragonPulseAudioSink::DragonPulseAudioSink(QObject *parent, const QVariantList &args)
     : DragonAudioSink(parent)
@@ -153,14 +172,14 @@ void DragonPulseAudioSink::contextStateCallback(pa_context *c, void *userdata)
 {
     Q_UNUSED(c);
     auto *self = static_cast<DragonPulseAudioSink *>(userdata);
-    pa_threaded_mainloop_signal(self->m_pa->mainloop, 0);
+    pa_threaded_mainloop_signal(self->m_pa->mainloop.get(), 0);
 }
 
 void DragonPulseAudioSink::streamStateCallback(pa_stream *s, void *userdata)
 {
     Q_UNUSED(s);
     auto *self = static_cast<DragonPulseAudioSink *>(userdata);
-    pa_threaded_mainloop_signal(self->m_pa->mainloop, 0);
+    pa_threaded_mainloop_signal(self->m_pa->mainloop.get(), 0);
 }
 
 void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *userdata)
@@ -205,7 +224,7 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
         size_t bytes = pcm.size() * sizeof(float);
         int ret = pa_stream_write(s, pcm.data(), bytes, nullptr, 0, PA_SEEK_RELATIVE);
         if (ret < 0) {
-            qCCritical(dragonMultimediaAudio) << "PulseAudio pa_stream_write failed:" << pa_strerror(pa_context_errno(self->m_pa->context));
+            qCCritical(dragonMultimediaAudio) << "PulseAudio pa_stream_write failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
         }
     } else {
         if (self->m_decodeFinished.load(std::memory_order_acquire) && !self->m_drainRequested.exchange(true, std::memory_order_acq_rel)) {
@@ -213,7 +232,7 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
             if (op) {
                 pa_operation_unref(op);
             } else {
-                qCWarning(dragonMultimediaAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_pa->context));
+                qCWarning(dragonMultimediaAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
             }
         } else if (!self->m_decodeFinished.load(std::memory_order_acquire)) {
             thread_local std::vector<float> silence;
@@ -242,14 +261,13 @@ bool DragonPulseAudioSink::connectToServer()
 
     // From this point onward the PA thread may signal, so publish the mainloop
     // pointer that the state callback uses.
-    m_pa->mainloop = ml.get();
-    ml.release();
+    m_pa->mainloop = std::move(ml);
 
     auto cleanupGuard = qScopeGuard([this]() {
         disconnectFromServer();
     });
 
-    pa_mainloop_api *api = pa_threaded_mainloop_get_api(m_pa->mainloop);
+    pa_mainloop_api *api = pa_threaded_mainloop_get_api(m_pa->mainloop.get());
     if (!api) {
         qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_threaded_mainloop_get_api returned null";
         Q_EMIT errorOccurred(u"PulseAudio: failed to get mainloop API"_s);
@@ -276,7 +294,7 @@ bool DragonPulseAudioSink::connectToServer()
     }
 
     {
-        ScopedMainloopLock lock(m_pa->mainloop);
+        ScopedMainloopLock lock(m_pa->mainloop.get());
 
         pa_context_set_state_callback(ctx.get(), DragonPulseAudioSink::contextStateCallback, this);
 
@@ -288,7 +306,7 @@ bool DragonPulseAudioSink::connectToServer()
 
         pa_context_state_t state = pa_context_get_state(ctx.get());
         while (PA_CONTEXT_IS_GOOD(state) && state != PA_CONTEXT_READY) {
-            pa_threaded_mainloop_wait(m_pa->mainloop);
+            pa_threaded_mainloop_wait(m_pa->mainloop.get());
             state = pa_context_get_state(ctx.get());
         }
 
@@ -299,8 +317,7 @@ bool DragonPulseAudioSink::connectToServer()
         }
     }
 
-    m_pa->context = ctx.get();
-    ctx.release();
+    m_pa->context = std::move(ctx);
     m_pa->contextReady = true;
     cleanupGuard.dismiss();
 
@@ -313,29 +330,21 @@ void DragonPulseAudioSink::disconnectFromServer()
     m_pa->contextReady = false;
 
     if (m_pa->mainloop) {
-        ScopedMainloopLock lock(m_pa->mainloop);
+        ScopedMainloopLock lock(m_pa->mainloop.get());
 
         if (m_pa->stream) {
-            pa_stream_set_state_callback(m_pa->stream, nullptr, nullptr);
-            pa_stream_set_write_callback(m_pa->stream, nullptr, nullptr);
-            pa_stream_set_underflow_callback(m_pa->stream, nullptr, nullptr);
-            pa_stream_disconnect(m_pa->stream);
-            pa_stream_unref(m_pa->stream);
-            m_pa->stream = nullptr;
+            pa_stream_set_state_callback(m_pa->stream.get(), nullptr, nullptr);
+            pa_stream_set_write_callback(m_pa->stream.get(), nullptr, nullptr);
+            pa_stream_set_underflow_callback(m_pa->stream.get(), nullptr, nullptr);
+            m_pa->stream.reset();
         }
 
         if (m_pa->context) {
-            pa_context_disconnect(m_pa->context);
-            pa_context_unref(m_pa->context);
-            m_pa->context = nullptr;
+            m_pa->context.reset();
         }
     }
 
-    if (m_pa->mainloop) {
-        pa_threaded_mainloop_stop(m_pa->mainloop);
-        pa_threaded_mainloop_free(m_pa->mainloop);
-        m_pa->mainloop = nullptr;
-    }
+    m_pa->mainloop.reset();
 }
 
 void DragonPulseAudioSink::open(int sampleRate, int channels)
@@ -359,7 +368,7 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
         return;
     }
 
-    ScopedMainloopLock lock(m_pa->mainloop);
+    ScopedMainloopLock lock(m_pa->mainloop.get());
 
     pa_sample_spec ss;
     ss.format = PA_SAMPLE_FLOAT32LE;
@@ -375,26 +384,24 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
     }
 
     const char *streamName = m_streamName.empty() ? "DragonMultimedia" : m_streamName.c_str();
-    m_pa->stream = pa_stream_new(m_pa->context, streamName, &ss, &channelMap);
+    m_pa->stream.reset(pa_stream_new(m_pa->context.get(), streamName, &ss, &channelMap));
     if (!m_pa->stream) {
-        qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_stream_new failed:" << pa_strerror(pa_context_errno(m_pa->context));
+        qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_stream_new failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
         Q_EMIT errorOccurred(u"PulseAudio: failed to create stream"_s);
         disconnectFromServer();
         return;
     }
 
     auto streamGuard = qScopeGuard([this]() {
-        pa_stream_set_state_callback(m_pa->stream, nullptr, nullptr);
-        pa_stream_set_write_callback(m_pa->stream, nullptr, nullptr);
-        pa_stream_set_underflow_callback(m_pa->stream, nullptr, nullptr);
-        pa_stream_disconnect(m_pa->stream);
-        pa_stream_unref(m_pa->stream);
-        m_pa->stream = nullptr;
+        pa_stream_set_state_callback(m_pa->stream.get(), nullptr, nullptr);
+        pa_stream_set_write_callback(m_pa->stream.get(), nullptr, nullptr);
+        pa_stream_set_underflow_callback(m_pa->stream.get(), nullptr, nullptr);
+        m_pa->stream.reset();
     });
 
-    pa_stream_set_state_callback(m_pa->stream, DragonPulseAudioSink::streamStateCallback, this);
-    pa_stream_set_write_callback(m_pa->stream, DragonPulseAudioSink::writeCallback, this);
-    pa_stream_set_underflow_callback(m_pa->stream, DragonPulseAudioSink::underflowCallback, this);
+    pa_stream_set_state_callback(m_pa->stream.get(), DragonPulseAudioSink::streamStateCallback, this);
+    pa_stream_set_write_callback(m_pa->stream.get(), DragonPulseAudioSink::writeCallback, this);
+    pa_stream_set_underflow_callback(m_pa->stream.get(), DragonPulseAudioSink::underflowCallback, this);
 
     pa_buffer_attr bufferAttr;
     bufferAttr.maxlength = static_cast<uint32_t>(-1);
@@ -406,7 +413,7 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
     pa_cvolume cvol;
     pa_cvolume_set(&cvol, channels, pa_sw_volume_from_linear(m_cachedGain.load(std::memory_order_relaxed)));
 
-    int ret = pa_stream_connect_playback(m_pa->stream,
+    int ret = pa_stream_connect_playback(m_pa->stream.get(),
                                          nullptr,
                                          &bufferAttr,
                                          static_cast<pa_stream_flags_t>(PA_STREAM_ADJUST_LATENCY | PA_STREAM_AUTO_TIMING_UPDATE | PA_STREAM_INTERPOLATE_TIMING),
@@ -414,16 +421,16 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
                                          nullptr);
 
     if (ret < 0) {
-        qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_stream_connect_playback failed:" << pa_strerror(pa_context_errno(m_pa->context));
+        qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_stream_connect_playback failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
         Q_EMIT errorOccurred(u"PulseAudio: failed to connect stream"_s);
         disconnectFromServer();
         return;
     }
 
-    pa_stream_state_t streamState = pa_stream_get_state(m_pa->stream);
+    pa_stream_state_t streamState = pa_stream_get_state(m_pa->stream.get());
     while (PA_STREAM_IS_GOOD(streamState) && streamState != PA_STREAM_READY) {
-        pa_threaded_mainloop_wait(m_pa->mainloop);
-        streamState = pa_stream_get_state(m_pa->stream);
+        pa_threaded_mainloop_wait(m_pa->mainloop.get());
+        streamState = pa_stream_get_state(m_pa->stream.get());
     }
 
     if (!PA_STREAM_IS_GOOD(streamState) || streamState != PA_STREAM_READY) {
@@ -433,7 +440,7 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
         return;
     }
 
-    m_pa->sinkInputIndex = pa_stream_get_index(m_pa->stream);
+    m_pa->sinkInputIndex = pa_stream_get_index(m_pa->stream.get());
 
     streamGuard.dismiss();
 
@@ -469,8 +476,8 @@ void DragonPulseAudioSink::pause()
     m_paused.store(true, std::memory_order_release);
 
     if (m_pa->mainloop && m_pa->stream) {
-        ScopedMainloopLock lock(m_pa->mainloop);
-        pa_operation *op = pa_stream_cork(m_pa->stream, 1, nullptr, nullptr);
+        ScopedMainloopLock lock(m_pa->mainloop.get());
+        pa_operation *op = pa_stream_cork(m_pa->stream.get(), 1, nullptr, nullptr);
         if (op) {
             pa_operation_unref(op);
         }
@@ -482,8 +489,8 @@ void DragonPulseAudioSink::resume()
     m_paused.store(false, std::memory_order_release);
 
     if (m_pa->mainloop && m_pa->stream) {
-        ScopedMainloopLock lock(m_pa->mainloop);
-        pa_operation *op = pa_stream_cork(m_pa->stream, 0, nullptr, nullptr);
+        ScopedMainloopLock lock(m_pa->mainloop.get());
+        pa_operation *op = pa_stream_cork(m_pa->stream.get(), 0, nullptr, nullptr);
         if (op) {
             pa_operation_unref(op);
         }
@@ -495,7 +502,7 @@ void DragonPulseAudioSink::setGain(float linearGain)
     m_cachedGain.store(linearGain, std::memory_order_relaxed);
 
     if (m_pa->stream && m_pa->mainloop && m_open.load(std::memory_order_acquire)) {
-        ScopedMainloopLock lock(m_pa->mainloop);
+        ScopedMainloopLock lock(m_pa->mainloop.get());
         applyVolume(linearGain);
     }
 }
@@ -513,7 +520,7 @@ void DragonPulseAudioSink::applyVolume(float linearGain)
 
     pa_cvolume cvol;
     pa_cvolume_set(&cvol, static_cast<unsigned>(channels), pa_sw_volume_from_linear(linearGain));
-    pa_operation *op = pa_context_set_sink_input_volume(m_pa->context, m_pa->sinkInputIndex, &cvol, nullptr, nullptr);
+    pa_operation *op = pa_context_set_sink_input_volume(m_pa->context.get(), m_pa->sinkInputIndex, &cvol, nullptr, nullptr);
     if (op) {
         pa_operation_unref(op);
     }
@@ -522,8 +529,8 @@ void DragonPulseAudioSink::applyVolume(float linearGain)
 void DragonPulseAudioSink::clearStream()
 {
     if (m_pa->mainloop && m_pa->stream) {
-        ScopedMainloopLock lock(m_pa->mainloop);
-        pa_operation *op = pa_stream_flush(m_pa->stream, nullptr, nullptr);
+        ScopedMainloopLock lock(m_pa->mainloop.get());
+        pa_operation *op = pa_stream_flush(m_pa->stream.get(), nullptr, nullptr);
         if (op) {
             pa_operation_unref(op);
         }
@@ -536,9 +543,9 @@ int64_t DragonPulseAudioSink::deviceQueuedSamples() const
         return 0;
     }
 
-    ScopedMainloopLock lock(m_pa->mainloop);
+    ScopedMainloopLock lock(m_pa->mainloop.get());
 
-    const pa_timing_info *ti = pa_stream_get_timing_info(m_pa->stream);
+    const pa_timing_info *ti = pa_stream_get_timing_info(m_pa->stream.get());
     if (!ti) {
         return 0;
     }
@@ -562,9 +569,9 @@ int DragonPulseAudioSink::audioBufferFrames() const
         return -1;
     }
 
-    ScopedMainloopLock lock(m_pa->mainloop);
+    ScopedMainloopLock lock(m_pa->mainloop.get());
 
-    const pa_timing_info *ti = pa_stream_get_timing_info(m_pa->stream);
+    const pa_timing_info *ti = pa_stream_get_timing_info(m_pa->stream.get());
     if (!ti) {
         return -1;
     }
