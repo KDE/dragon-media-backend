@@ -7,11 +7,6 @@
 #include "sink/dragonaudiosink.h"
 #include <DragonMultimedia/dragondiagnostics.h>
 
-#include <SDL3/SDL_audio.h>
-#include <SDL3/SDL_timer.h>
-
-#include <atomic>
-#include <cstdint>
 #include <memory>
 
 class DragonDiagnosticsPrivate
@@ -23,12 +18,6 @@ public:
     }
 
     DragonPlayer *m_player;
-
-    std::atomic<std::uint64_t> m_callbackCount{0};
-    std::atomic<std::uint64_t> m_callbackTimestampUs{0};
-    std::atomic<float> m_callbackHz{0.0f};
-
-    std::atomic<int> m_starvationCount{0};
 };
 
 DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
@@ -39,12 +28,7 @@ DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
 
 DragonDiagnostics::~DragonDiagnostics() = default;
 
-int DragonDiagnostics::audioStarvationCount() const
-{
-    return d->m_starvationCount;
-}
-
-int DragonDiagnostics::sdlAudioBufferUs() const
+int DragonDiagnostics::audioBufferUs() const
 {
     DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->audioOutput) {
@@ -53,7 +37,7 @@ int DragonDiagnostics::sdlAudioBufferUs() const
     return priv->audioOutput->audioBufferUs();
 }
 
-int DragonDiagnostics::sdlAudioBufferFrames() const
+int DragonDiagnostics::audioBufferFrames() const
 {
     DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->audioOutput) {
@@ -109,7 +93,11 @@ bool DragonDiagnostics::isAudioActive() const
     return hasOutput && isOpen && priv->currentPlaybackState != DragonPlayer::PlaybackState::StoppedState;
 }
 
-float DragonDiagnostics::audioCallbackHz() const
+int DragonDiagnostics::audioUnderrunCount() const
 {
-    return d->m_callbackHz.load(std::memory_order_relaxed);
+    DragonPlayerPrivate *priv = d->m_player->d.get();
+    if (!priv || !priv->audioOutput) {
+        return 0;
+    }
+    return priv->audioOutput->underrunCount();
 }

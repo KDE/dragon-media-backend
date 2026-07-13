@@ -227,6 +227,9 @@ std::span<const std::float32_t> DragonAudioSink::processAudioCallback(size_t max
     });
 
     if (totalRead == 0) {
+        if (!m_decodeFinished.load(std::memory_order_acquire)) {
+            m_underrunCount.fetch_add(1, std::memory_order_relaxed);
+        }
         return {};
     }
 

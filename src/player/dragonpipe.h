@@ -19,8 +19,6 @@
 #include <thread>
 #include <vector>
 
-class DragonDiagnostics;
-
 template<typename T>
 class DragonPipe
 {
@@ -82,8 +80,6 @@ public:
     {
         return Consumer(this);
     }
-
-    friend class DragonDiagnostics;
 
 private:
     std::vector<T> m_buffer;

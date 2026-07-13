@@ -152,7 +152,6 @@ private Q_SLOTS:
     void testGaplessFormatMismatch();
     void testGaplessPreWarmError();
     void testGaplessStarvation();
-
     void testDiagnosticsBasicFunctionality();
 };
 
@@ -334,8 +333,8 @@ void TestE2E::testPlayerStopActuallyStopsAudio()
     QVERIFY(helper.playAndWait());
 
     VERIFY_AUDIO_ACTIVE(diagnostics);
-    QTRY_VERIFY(diagnostics.sdlAudioBufferFrames() >= 0);
-    QTRY_VERIFY(diagnostics.sdlAudioBufferUs() >= 0);
+    QTRY_VERIFY(diagnostics.audioBufferFrames() >= 0);
+    QTRY_VERIFY(diagnostics.audioBufferUs() >= 0);
     QVERIFY(diagnostics.hasActiveDecoder());
     QVERIFY(diagnostics.decodeLoopActive() || diagnostics.decodeQueueSize() > 0);
 
@@ -343,8 +342,8 @@ void TestE2E::testPlayerStopActuallyStopsAudio()
     VERIFY_STOPPED_STATE(player);
     VERIFY_AUDIO_INACTIVE(diagnostics);
 
-    QTRY_VERIFY_WITH_TIMEOUT(diagnostics.sdlAudioBufferUs() == -1, 1000);
-    QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 after stop");
+    QTRY_VERIFY_WITH_TIMEOUT(diagnostics.audioBufferUs() == -1, 1000);
+    QVERIFY2(diagnostics.audioBufferFrames() == -1, "Audio buffer frames should return -1 after stop");
     QVERIFY2(!diagnostics.hasActiveDecoder(), "Should not have active decoder after stop");
     QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active after stop");
 }
@@ -800,29 +799,29 @@ void TestE2E::testDiagnosticsBasicFunctionality()
     DragonDiagnostics diagnostics(&player);
     PlayerHelper helper(&player);
 
-    QVERIFY2(diagnostics.sdlAudioBufferUs() == -1, "SDL buffer should return -1 when stopped (no device)");
-    QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 when stopped (no device)");
+    QVERIFY2(diagnostics.audioBufferUs() == -1, "Audio buffer should return -1 when stopped (no device)");
+    QVERIFY2(diagnostics.audioBufferFrames() == -1, "Audio buffer frames should return -1 when stopped (no device)");
     QVERIFY2(diagnostics.decodeQueueSize() == 0, "Decode queue should be 0 when stopped");
     QVERIFY2(diagnostics.fftQueueSize() == 0, "FFT queue should be 0 when stopped");
     QVERIFY2(!diagnostics.hasActiveDecoder(), "Should not have active decoder when stopped");
     QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active when stopped");
-    QVERIFY2(diagnostics.audioCallbackHz() == 0.0f, "Audio callback Hz should be 0 when stopped");
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
-    QVERIFY2(diagnostics.sdlAudioBufferUs() == -1, "SDL buffer should return -1 before playback starts (no device yet)");
+    QVERIFY2(diagnostics.audioBufferUs() == -1, "Audio buffer should return -1 before playback starts (no device yet)");
 
     QVERIFY(helper.playAndWait());
     QTest::qWait(100);
 
     VERIFY_AUDIO_ACTIVE(diagnostics);
-    QVERIFY2(diagnostics.sdlAudioBufferFrames() >= 0, "SDL hardware buffer should report >=0 frames during playback");
-    QVERIFY2(diagnostics.sdlAudioBufferUs() >= 0, "SDL hardware buffer should report >=0 µs during playback");
+    QVERIFY2(diagnostics.audioBufferFrames() >= 0, "Audio buffer should report >=0 frames during playback");
+    QVERIFY2(diagnostics.audioBufferUs() >= 0, "Audio buffer should report >=0 µs during playback");
     QVERIFY2(diagnostics.hasActiveDecoder(), "Should have active decoder during playback");
+    QVERIFY2(diagnostics.decodeQueueSize() > 0, "Decode queue should have samples during playback");
 
     QVERIFY(helper.stopAndWait());
 
-    QTRY_VERIFY_WITH_TIMEOUT(diagnostics.sdlAudioBufferUs() == -1, 1000);
-    QVERIFY2(diagnostics.sdlAudioBufferFrames() == -1, "SDL buffer frames should return -1 after stop");
+    QTRY_VERIFY_WITH_TIMEOUT(diagnostics.audioBufferUs() == -1, 1000);
+    QVERIFY2(diagnostics.audioBufferFrames() == -1, "Audio buffer frames should return -1 after stop");
     QVERIFY2(!diagnostics.hasActiveDecoder(), "Should not have active decoder after stop");
     QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active after stop");
 
@@ -954,21 +953,21 @@ void TestE2E::testGaplessStarvation()
 
     QTest::qWait(1000);
 
-    int starvationBefore = diagnostics.audioStarvationCount();
+    const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QVERIFY(helper.waitForTrackChange());
 
     QTest::qWait(1500);
 
-    int starvationAfter = diagnostics.audioStarvationCount();
+    const int underrunsAfter = diagnostics.audioUnderrunCount();
 
-    qDebug() << "Starvation before:" << starvationBefore << "after:" << starvationAfter;
+    qDebug() << "Underruns before:" << underrunsBefore << "after:" << underrunsAfter << "delta:" << underrunsAfter - underrunsBefore;
 
     qunsetenv("DRAGON_TEST_SLOW_OPEN");
 
     player.stop();
 
-    QCOMPARE(starvationAfter - starvationBefore, 0);
+    QCOMPARE(underrunsAfter - underrunsBefore, 0);
 }
 
 QTEST_MAIN(TestE2E)

@@ -84,13 +84,13 @@ private:
     QLabel *m_statusLabel = nullptr;
 
     QLCDNumber *m_sdlµsDiagLabel = nullptr;
-    QLCDNumber *m_sdlDiagLabel = nullptr;
     QLCDNumber *m_decodeDiagLabel = nullptr;
     QLCDNumber *m_fftDiagLabel = nullptr;
+    QLCDNumber *m_underrunDiagLabel = nullptr;
     QLabel *m_sdlµsLabel = nullptr;
-    QLabel *m_sdlLabel = nullptr;
     QLabel *m_decodeLabel = nullptr;
     QLabel *m_fftLabel = nullptr;
+    QLabel *m_underrunLabel = nullptr;
 
     bool m_seeking = false;
     int64_t m_durationMs = 0;

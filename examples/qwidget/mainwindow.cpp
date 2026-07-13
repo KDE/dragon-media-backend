@@ -191,20 +191,20 @@ void MainWindow::setupUi()
     m_sdlµsDiagLabel = new QLCDNumber(5, this);
     m_sdlµsDiagLabel->setSegmentStyle(QLCDNumber::Flat);
     m_sdlµsDiagLabel->setMinimumWidth(60);
-    m_sdlDiagLabel = new QLCDNumber(5, this);
-    m_sdlDiagLabel->setSegmentStyle(QLCDNumber::Flat);
-    m_sdlDiagLabel->setMinimumWidth(60);
     m_decodeDiagLabel = new QLCDNumber(5, this);
     m_decodeDiagLabel->setSegmentStyle(QLCDNumber::Flat);
     m_decodeDiagLabel->setMinimumWidth(60);
     m_fftDiagLabel = new QLCDNumber(5, this);
     m_fftDiagLabel->setSegmentStyle(QLCDNumber::Flat);
     m_fftDiagLabel->setMinimumWidth(60);
+    m_underrunDiagLabel = new QLCDNumber(5, this);
+    m_underrunDiagLabel->setSegmentStyle(QLCDNumber::Flat);
+    m_underrunDiagLabel->setMinimumWidth(60);
 
-    m_sdlµsLabel = new QLabel(i18n("SDL buffer µs:"), this);
-    m_sdlLabel = new QLabel(i18n("Hz:"), this);
+    m_sdlµsLabel = new QLabel(i18n("Buffer µs:"), this);
     m_decodeLabel = new QLabel(i18n("Decode:"), this);
     m_fftLabel = new QLabel(i18n("FFT:"), this);
+    m_underrunLabel = new QLabel(i18n("Underruns:"), this);
 
     auto *diagContainer = new QWidget(this);
     auto *diagLayout = new QHBoxLayout(diagContainer);
@@ -212,12 +212,12 @@ void MainWindow::setupUi()
     diagLayout->setSpacing(8);
     diagLayout->addWidget(m_sdlµsLabel);
     diagLayout->addWidget(m_sdlµsDiagLabel);
-    diagLayout->addWidget(m_sdlLabel);
-    diagLayout->addWidget(m_sdlDiagLabel);
     diagLayout->addWidget(m_decodeLabel);
     diagLayout->addWidget(m_decodeDiagLabel);
     diagLayout->addWidget(m_fftLabel);
     diagLayout->addWidget(m_fftDiagLabel);
+    diagLayout->addWidget(m_underrunLabel);
+    diagLayout->addWidget(m_underrunDiagLabel);
     statusBar()->addPermanentWidget(diagContainer);
 
     m_diagnostics = new DragonDiagnostics(m_player);
@@ -226,19 +226,19 @@ void MainWindow::setupUi()
     connect(diagTimer, &QTimer::timeout, this, [this]() {
         if (!m_diagnostics)
             return;
-        const int µs = m_diagnostics->sdlAudioBufferUs();
+        const int µs = m_diagnostics->audioBufferUs();
         m_sdlµsDiagLabel->display(µs);
-
-        const float callbackHz = m_diagnostics->audioCallbackHz();
-        m_sdlDiagLabel->display(static_cast<int>(callbackHz));
 
         const std::size_t decodeSamples = m_diagnostics->decodeQueueSize();
         m_decodeDiagLabel->display(static_cast<int>(decodeSamples));
 
         const std::size_t fftSamples = m_diagnostics->fftQueueSize();
         m_fftDiagLabel->display(static_cast<int>(fftSamples));
+
+        const int underruns = m_diagnostics->audioUnderrunCount();
+        m_underrunDiagLabel->display(underruns);
     });
-    diagTimer->start(500);
+    diagTimer->start(50);
 }
 
 void MainWindow::connectPlayer()

@@ -17,8 +17,6 @@
 #include <condition_variable>
 #include <mutex>
 
-class DragonDiagnostics;
-
 class DragonSdlAudioSink : public DragonAudioSink
 {
     Q_OBJECT
@@ -65,6 +63,4 @@ private:
 
     QTimer *m_drainTimer = nullptr;
     static constexpr int kDrainPollMs = 50;
-
-    friend class DragonDiagnostics;
 };

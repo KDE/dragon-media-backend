@@ -9,6 +9,7 @@
 
 #include <QObject>
 
+#include <cstddef>
 #include <memory>
 
 class DragonPlayer;
@@ -21,11 +22,9 @@ public:
     explicit DragonDiagnostics(DragonPlayer *player);
     ~DragonDiagnostics() override;
 
-    [[nodiscard]] int sdlAudioBufferUs() const;
+    [[nodiscard]] int audioBufferUs() const;
 
-    [[nodiscard]] int sdlAudioBufferFrames() const;
-
-    [[nodiscard]] int audioStarvationCount() const;
+    [[nodiscard]] int audioBufferFrames() const;
 
     [[nodiscard]] std::size_t decodeQueueSize() const;
 
@@ -37,7 +36,7 @@ public:
 
     [[nodiscard]] bool isAudioActive() const;
 
-    [[nodiscard]] float audioCallbackHz() const;
+    [[nodiscard]] int audioUnderrunCount() const;
 
 private:
     std::unique_ptr<DragonDiagnosticsPrivate> d;

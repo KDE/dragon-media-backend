@@ -61,6 +61,10 @@ public:
     {
         return -1;
     }
+    [[nodiscard]] int underrunCount() const
+    {
+        return m_underrunCount.load(std::memory_order_relaxed);
+    }
 
     // --- Shared logic (in base class, not virtual) ---
     void setAudioPipe(DragonPipe<std::float32_t> *pipe);
@@ -146,4 +150,5 @@ private:
 
 protected:
     std::atomic<bool> m_decodeFinished{false};
+    std::atomic<int> m_underrunCount{0};
 };

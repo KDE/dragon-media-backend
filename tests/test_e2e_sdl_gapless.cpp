@@ -199,8 +199,7 @@ void TestSdlGapless::runGaplessStateCheck(const BoundaryFixture &fixtureA, const
     qDebug() << "Gapless scenario:"
              << "trackA=" << durationAMs << "ms"
              << "trackB=" << durationBMs << "ms"
-             << "totalExpected=" << totalExpectedMs << "ms"
-             << "starvationCount=" << diagnostics.audioStarvationCount() << "callbackHz=" << diagnostics.audioCallbackHz();
+             << "totalExpected=" << totalExpectedMs << "ms";
 }
 
 void TestSdlGapless::testGaplessSameFormat()
