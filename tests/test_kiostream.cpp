@@ -388,6 +388,16 @@ void TestKioStream::testHttpKioRapidSeek()
     }
 
     QVERIFY2(bytesRead.load() > 0, qPrintable(u"Stream broken after rapid seeks returned %1"_s.arg(bytesRead.load())));
+
+    const int finalOffset = 4 * 1024;
+    for (int i = 0; i < bytesRead.load(); ++i) {
+        char expected = '0' + ((finalOffset + i) % 10);
+        QVERIFY2(static_cast<char>(buffer[static_cast<size_t>(i)]) == expected,
+                 qPrintable(u"Content mismatch at offset %1 (byte %2): expected '%3', got '%4'"_s.arg(finalOffset + i)
+                                .arg(i)
+                                .arg(expected)
+                                .arg(static_cast<char>(buffer[static_cast<size_t>(i)]))));
+    }
 }
 
 void TestKioStream::testHttpKioSeekWhileReading()
@@ -422,6 +432,16 @@ void TestKioStream::testHttpKioSeekWhileReading()
     }
 
     QVERIFY2(secondRead.load() > 0, qPrintable(u"Stream unusable after seek-while-reading second read returned %1"_s.arg(secondRead.load())));
+
+    const int seekOffset = 1024;
+    for (int i = 0; i < secondRead.load(); ++i) {
+        char expected = '0' + ((seekOffset + i) % 10);
+        QVERIFY2(static_cast<char>(buffer[static_cast<size_t>(i)]) == expected,
+                 qPrintable(u"Content mismatch at offset %1 (byte %2): expected '%3', got '%4'"_s.arg(seekOffset + i)
+                                .arg(i)
+                                .arg(expected)
+                                .arg(static_cast<char>(buffer[static_cast<size_t>(i)]))));
+    }
 }
 
 QTEST_MAIN(TestKioStream)

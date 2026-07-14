@@ -2,63 +2,37 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
- * Phase 1: std::generator<DecodeEvent> infrastructure tests.
- *
- * These tests verify that the C++23 std::generator coroutine works correctly
- * with the DecodeEvent variant type, specifically:
- *   - Event ordering: FormatReady -> SamplesChunk* -> DecodeEof
- *   - Span lifetime: SamplesChunk span is valid for one iteration
- *   - Exception propagation: exceptions in generator are catchable
+ * Tests for the std::generator<DecodeEvent> coroutine infrastructure using
+ * the production DragonMultimedia event types, plus integration tests that
+ * exercise the real DragonDecoder::decodeLoop() generator.
  */
 
 #include <QtCore>
 #include <QtTest>
+#include <stdfloat>
 
+#include "logging_timestamp_init.h"
+
+#include "decoder/dragondecoder.h"
+#include "player/dragonevent.h"
+
+#include <algorithm>
+#include <atomic>
+#include <cmath>
 #include <generator>
+#include <numbers>
 #include <optional>
 #include <span>
-#include <stdfloat>
+#include <stop_token>
+#include <thread>
 #include <variant>
 #include <vector>
 
 using namespace Qt::StringLiterals;
+using namespace DragonMultimedia;
 
-namespace TestGenerator
+namespace
 {
-
-struct FormatReady {
-    int sampleRate = 0;
-    int channels = 0;
-    int64_t durationMs = -1;
-    bool operator==(const FormatReady &other) const = default;
-};
-
-struct SamplesChunk {
-    std::span<const std::float32_t> data;
-    int sampleRate = 0;
-    int channels = 0;
-};
-
-struct DecodeError {
-    QString message;
-    bool operator==(const DecodeError &other) const
-    {
-        return message == other.message;
-    }
-};
-
-struct DecodeEof {
-};
-
-using DecodeEvent = std::variant<FormatReady, SamplesChunk, DecodeError, DecodeEof>;
-
-template<class... Ts>
-struct overloaded : Ts... {
-    using Ts::operator()...;
-};
-template<class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
-
 std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, int64_t durationMs, std::vector<std::vector<std::float32_t>> sampleBatches)
 {
     co_yield FormatReady{sampleRate, channels, durationMs};
@@ -86,6 +60,62 @@ std::generator<DecodeEvent> createErrorMidStreamGenerator()
     co_yield DecodeEof{};
 }
 
+QByteArray createTestWavData(int sampleRate, int channels, int durationMs)
+{
+    const int numSamples = sampleRate * channels * durationMs / 1000;
+    const int dataSize = numSamples * sizeof(int16_t);
+    const int totalSize = 44 + dataSize;
+
+    QByteArray wav(totalSize, '\0');
+    auto *header = reinterpret_cast<char *>(wav.data());
+
+    auto writeU32 = [&](int offset, quint32 val) {
+        std::memcpy(header + offset, &val, 4);
+    };
+    auto writeU16 = [&](int offset, quint16 val) {
+        std::memcpy(header + offset, &val, 2);
+    };
+
+    std::memcpy(header, "RIFF", 4);
+    writeU32(4, totalSize - 8);
+    std::memcpy(header + 8, "WAVE", 4);
+    std::memcpy(header + 12, "fmt ", 4);
+    writeU32(16, 16);
+    writeU16(20, 1);
+    writeU16(22, static_cast<quint16>(channels));
+    writeU32(24, static_cast<quint32>(sampleRate));
+    writeU32(28, static_cast<quint32>(sampleRate * channels * 2));
+    writeU16(32, static_cast<quint16>(channels * 2));
+    writeU16(34, 16);
+    std::memcpy(header + 36, "data", 4);
+    writeU32(40, static_cast<quint32>(dataSize));
+
+    auto *samples = reinterpret_cast<int16_t *>(header + 44);
+    for (int i = 0; i < numSamples; ++i) {
+        float t = static_cast<float>(i) / static_cast<float>(sampleRate * channels);
+        float val = 0.3f * std::sin(2.0f * std::numbers::pi_v<float> * 440.0f * t);
+        samples[i] = static_cast<int16_t>(val * 32767.0f);
+    }
+
+    return wav;
+}
+
+class MockReadCallback
+{
+public:
+    QByteArray data;
+    size_t offset = 0;
+
+    int operator()(std::span<uint8_t> buffer)
+    {
+        if (offset >= static_cast<size_t>(data.size()))
+            return 0;
+        size_t toCopy = std::min(buffer.size(), static_cast<size_t>(data.size()) - offset);
+        std::memcpy(buffer.data(), data.data() + offset, toCopy);
+        offset += toCopy;
+        return static_cast<int>(toCopy);
+    }
+};
 }
 
 class TestGeneratorInfrastructure : public QObject
@@ -97,18 +127,18 @@ private Q_SLOTS:
     void testSamplesChunkOrdering();
     void testDecodeEofLast();
     void testErrorOnlyYieldsError();
-    void testSpanLifetimeValidForIteration();
     void testSpanDataCopyableBeforeAdvance();
     void testEmptySampleBatches();
     void testErrorMidStream();
     void testMultipleGeneratorsIndependent();
     void testGeneratorPauseAndResume();
+    void testProductionDecoderGeneratorEventOrdering();
+    void testProductionDecoderGeneratorFormatReadyFromInitialize();
+    void testProductionDecoderGeneratorSampleContent();
 };
 
 void TestGeneratorInfrastructure::testFormatReadyFirst()
 {
-    using namespace TestGenerator;
-
     auto gen = createTestGenerator(44100, 2, 3000, {});
     auto it = gen.begin();
 
@@ -123,8 +153,6 @@ void TestGeneratorInfrastructure::testFormatReadyFirst()
 
 void TestGeneratorInfrastructure::testSamplesChunkOrdering()
 {
-    using namespace TestGenerator;
-
     std::vector<std::vector<std::float32_t>> batches = {{0.1f, 0.2f, 0.3f, 0.4f}, {0.5f, 0.6f, 0.7f, 0.8f}, {0.9f, 1.0f, 1.1f, 1.2f}};
 
     auto gen = createTestGenerator(48000, 2, 5000, batches);
@@ -168,8 +196,6 @@ void TestGeneratorInfrastructure::testSamplesChunkOrdering()
 
 void TestGeneratorInfrastructure::testDecodeEofLast()
 {
-    using namespace TestGenerator;
-
     std::vector<std::vector<std::float32_t>> batches = {{1.0f, 2.0f}};
 
     auto gen = createTestGenerator(44100, 1, 1000, batches);
@@ -185,8 +211,6 @@ void TestGeneratorInfrastructure::testDecodeEofLast()
 
 void TestGeneratorInfrastructure::testErrorOnlyYieldsError()
 {
-    using namespace TestGenerator;
-
     auto gen = createErrorGenerator(u"Test error message"_s);
 
     int eventCount = 0;
@@ -204,31 +228,8 @@ void TestGeneratorInfrastructure::testErrorOnlyYieldsError()
     QVERIFY(sawError);
 }
 
-void TestGeneratorInfrastructure::testSpanLifetimeValidForIteration()
-{
-    using namespace TestGenerator;
-
-    std::vector<std::float32_t> originalData = {0.1f, 0.2f, 0.3f, 0.4f};
-    std::vector<std::vector<std::float32_t>> batches = {originalData};
-
-    auto gen = createTestGenerator(44100, 2, 1000, batches);
-
-    auto it = gen.begin();
-    ++it;
-
-    QVERIFY(it != gen.end());
-    QVERIFY(std::holds_alternative<SamplesChunk>(*it));
-
-    auto sc = std::get<SamplesChunk>(*it);
-    QCOMPARE(sc.data.size(), 4);
-    QCOMPARE(sc.data[0], 0.1f);
-    QCOMPARE(sc.data[3], 0.4f);
-}
-
 void TestGeneratorInfrastructure::testSpanDataCopyableBeforeAdvance()
 {
-    using namespace TestGenerator;
-
     std::vector<std::float32_t> batch1 = {1.0f, 2.0f};
     std::vector<std::float32_t> batch2 = {3.0f, 4.0f};
     std::vector<std::vector<std::float32_t>> batches = {batch1, batch2};
@@ -254,13 +255,11 @@ void TestGeneratorInfrastructure::testSpanDataCopyableBeforeAdvance()
     QCOMPARE(sc2.data.size(), 2);
     QCOMPARE(sc2.data[0], 3.0f);
 
-    QCOMPARE(copiedData[0], 1.0f);
+    QVERIFY2(copiedData[0] == 1.0f, "Data copied from first span should remain valid after advancing iterator");
 }
 
 void TestGeneratorInfrastructure::testEmptySampleBatches()
 {
-    using namespace TestGenerator;
-
     std::vector<std::vector<std::float32_t>> batches = {{}, {1.0f, 2.0f}, {}};
 
     auto gen = createTestGenerator(44100, 2, 1000, batches);
@@ -287,8 +286,6 @@ void TestGeneratorInfrastructure::testEmptySampleBatches()
 
 void TestGeneratorInfrastructure::testErrorMidStream()
 {
-    using namespace TestGenerator;
-
     auto gen = createErrorMidStreamGenerator();
 
     int eventCount = 0;
@@ -324,8 +321,6 @@ void TestGeneratorInfrastructure::testErrorMidStream()
 
 void TestGeneratorInfrastructure::testMultipleGeneratorsIndependent()
 {
-    using namespace TestGenerator;
-
     auto gen1 = createTestGenerator(44100, 2, 3000, {{1.0f, 2.0f}});
     auto gen2 = createTestGenerator(48000, 1, 5000, {{3.0f, 4.0f, 5.0f}});
 
@@ -351,8 +346,6 @@ void TestGeneratorInfrastructure::testMultipleGeneratorsIndependent()
 
 void TestGeneratorInfrastructure::testGeneratorPauseAndResume()
 {
-    using namespace TestGenerator;
-
     std::vector<std::vector<std::float32_t>> batches;
     for (int i = 0; i < 5; ++i) {
         batches.push_back({static_cast<std::float32_t>(i)});
@@ -383,6 +376,136 @@ void TestGeneratorInfrastructure::testGeneratorPauseAndResume()
     }
 
     QCOMPARE(remaining, 4);
+}
+
+void TestGeneratorInfrastructure::testProductionDecoderGeneratorEventOrdering()
+{
+    QByteArray wavData = createTestWavData(44100, 2, 200);
+    MockReadCallback readCb;
+    readCb.data = wavData;
+
+    DragonDecoder decoder(
+        [&readCb](std::span<uint8_t> buf) {
+            return readCb(buf);
+        },
+        nullptr,
+        wavData.size(),
+        QString{});
+
+    auto initResult = decoder.initialize();
+    QVERIFY2(initResult.success, qPrintable(initResult.errorMessage));
+
+    std::stop_source stopSource;
+    bool sawSamples = false;
+    bool sawEof = false;
+    bool sawError = false;
+    int samplesChunkCount = 0;
+
+    for (auto event : decoder.decodeLoop(stopSource.get_token())) {
+        std::visit(overloaded{[&](auto &&ev) {
+                       using T = std::decay_t<decltype(ev)>;
+                       if constexpr (std::is_same_v<T, FormatReady>) {
+                           QFAIL("FormatReady should not be yielded by decodeLoop; it comes from initialize()");
+                       } else if constexpr (std::is_same_v<T, SamplesChunk>) {
+                           QVERIFY(!sawEof);
+                           sawSamples = true;
+                           ++samplesChunkCount;
+                       } else if constexpr (std::is_same_v<T, DecodeError>) {
+                           sawError = true;
+                       } else if constexpr (std::is_same_v<T, DecodeEof>) {
+                           QVERIFY(!sawEof);
+                           sawEof = true;
+                       }
+                   }},
+                   event);
+    }
+
+    QVERIFY2(!sawError, "Decoding valid WAV should not produce errors");
+    QVERIFY2(samplesChunkCount > 0, "Should have produced at least one SamplesChunk");
+    QVERIFY2(sawEof, "Should have seen DecodeEof at end of stream");
+    QVERIFY2(sawSamples, "Should have seen sample data before EOF");
+}
+
+void TestGeneratorInfrastructure::testProductionDecoderGeneratorFormatReadyFromInitialize()
+{
+    QByteArray wavData = createTestWavData(48000, 1, 200);
+    MockReadCallback readCb;
+    readCb.data = wavData;
+
+    DragonDecoder decoder(
+        [&readCb](std::span<uint8_t> buf) {
+            return readCb(buf);
+        },
+        nullptr,
+        wavData.size(),
+        QString{});
+
+    auto initResult = decoder.initialize();
+
+    QVERIFY2(initResult.success, "Initialization should succeed for valid WAV data");
+    QCOMPARE(initResult.sampleRate, 48000);
+    QCOMPARE(initResult.channels, 1);
+
+    std::stop_source stopSource;
+    bool sawFormatReadyInGenerator = false;
+
+    for (auto event : decoder.decodeLoop(stopSource.get_token())) {
+        if (std::holds_alternative<FormatReady>(event)) {
+            sawFormatReadyInGenerator = true;
+        }
+    }
+
+    QVERIFY2(!sawFormatReadyInGenerator, "FormatReady should come from initialize(), not from decodeLoop() generator");
+}
+
+void TestGeneratorInfrastructure::testProductionDecoderGeneratorSampleContent()
+{
+    const int sampleRate = 44100;
+    const int channels = 1;
+    const int durationMs = 200;
+    QByteArray wavData = createTestWavData(sampleRate, channels, durationMs);
+    MockReadCallback readCb;
+    readCb.data = wavData;
+
+    DragonDecoder decoder(
+        [&readCb](std::span<uint8_t> buf) {
+            return readCb(buf);
+        },
+        nullptr,
+        wavData.size(),
+        QString{});
+
+    auto initResult = decoder.initialize();
+    QVERIFY2(initResult.success, qPrintable(initResult.errorMessage));
+
+    std::stop_source stopSource;
+    std::vector<std::float32_t> allSamples;
+
+    for (auto event : decoder.decodeLoop(stopSource.get_token())) {
+        if (auto *chunk = std::get_if<SamplesChunk>(&event)) {
+            allSamples.insert(allSamples.end(), chunk->data.begin(), chunk->data.end());
+        }
+    }
+
+    QVERIFY2(allSamples.size() > 100, qPrintable(u"Expected >100 samples, got %1"_s.arg(allSamples.size())));
+
+    bool hasNonZero = std::ranges::any_of(allSamples, [](float s) {
+        return std::abs(s) > 1e-6f;
+    });
+    QVERIFY2(hasNonZero, "Decoded samples should contain non-zero data (sine wave input)");
+
+    double sumSq = 0.0;
+    for (float s : allSamples) {
+        sumSq += static_cast<double>(s) * static_cast<double>(s);
+    }
+    double rms = std::sqrt(sumSq / allSamples.size());
+    QVERIFY2(rms > 0.01, qPrintable(u"RMS %1 too low for 0.3-amplitude sine wave"_s.arg(rms)));
+    QVERIFY2(rms < 0.5, qPrintable(u"RMS %1 too high for 0.3-amplitude sine wave"_s.arg(rms)));
+
+    for (float s : allSamples) {
+        QVERIFY2(!std::isnan(s), "Decoded samples should not contain NaN");
+        QVERIFY2(!std::isinf(s), "Decoded samples should not contain Inf");
+    }
 }
 
 QTEST_MAIN(TestGeneratorInfrastructure)

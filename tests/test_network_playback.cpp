@@ -169,7 +169,8 @@ void TestNetworkPlayback::testRadioToLocalFileTransition()
 
     double progressBeforeSwitch = player.bufferProgress();
     qDebug() << "Buffer progress before switch:" << progressBeforeSwitch;
-    QVERIFY2(progressBeforeSwitch >= 0.0, "Buffer progress should be >= 0.0 for network stream");
+    QVERIFY2(progressBeforeSwitch > 0.0 || player.status() == DragonPlayer::MediaStatus::LoadedMedia,
+             "Buffer progress should be positive or media should be loaded for network stream");
 
     QString localPath = fixturePath(u"sample-3s.mp3"_s);
     QVERIFY2(QFile::exists(localPath), qPrintable(u"MP3 fixture not found: %1"_s.arg(localPath)));

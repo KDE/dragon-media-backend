@@ -132,11 +132,35 @@ void TestFftProcessor::testSetSampleRate()
 
 void TestFftProcessor::testReset()
 {
+    DragonPipe<DragonFftBlock> pipe(256);
+    constexpr int sampleRate = 44100;
+    auto sineWave = createSineWave(440.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
+
     DragonFftProcessor processor;
+    processor.setConsumer(pipe.consumer());
+    processor.setChannelCount(1);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::Both);
+
+    const auto written = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written > 0, "writeBlocks wrote zero blocks");
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    QTest::qWait(100);
+    stopSource.request_stop();
+    processorThread.join();
+
+    auto frameBefore = processor.takeLatestFrame();
+    QVERIFY2(!frameBefore.frequenciesDb.empty(), "Should have frequency data before reset");
+
     processor.reset();
-    auto frame = processor.takeLatestFrame();
-    QVERIFY(frame.frequenciesDb.empty());
-    QVERIFY(frame.barData.empty());
+    auto frameAfter = processor.takeLatestFrame();
+    QVERIFY2(frameAfter.frequenciesDb.empty(), "Frequency data should be empty after reset");
+    QVERIFY2(frameAfter.barData.empty(), "Bar data should be empty after reset");
 }
 
 void TestFftProcessor::testTakeLatestFrameEmpty()
@@ -173,7 +197,8 @@ void TestFftProcessor::testProcessLoopSineWave()
 
     DragonPipe<DragonFftBlock> pipe(256);
 
-    [[maybe_unused]] const auto written1 = writeBlocks(pipe.producer(), sineWave);
+    const auto written1 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -202,13 +227,25 @@ void TestFftProcessor::testProcessLoopSineWave()
     QVERIFY2(callbackInvoked.load(), "Frame callback should have been invoked");
 
     float peakMag = -80.0f;
+    int peakBin = 0;
     for (size_t i = 0; i < frame.frequenciesDb.size(); ++i) {
         if (frame.frequenciesDb[i] > peakMag) {
             peakMag = frame.frequenciesDb[i];
+            peakBin = static_cast<int>(i);
         }
     }
 
     QVERIFY2(peakMag > -60.0f, qPrintable(QString("Peak magnitude %1 dB too low for sine wave"_L1).arg(peakMag)));
+
+    const float melMin = 2595.0f * std::log10(1.0f + DragonFftProcessor::MIN_FREQ / 700.0f);
+    const float melMax = 2595.0f * std::log10(1.0f + std::min(DragonFftProcessor::MAX_FREQ, static_cast<float>(sampleRate) / 2.0f) / 700.0f);
+    const float inputMel = 2595.0f * std::log10(1.0f + freq / 700.0f);
+    const float t = (inputMel - melMin) / (melMax - melMin);
+    const int expectedBin = static_cast<int>(t * DragonFftProcessor::NUM_LOG_BINS);
+    const int binTolerance = 20;
+
+    QVERIFY2(std::abs(peakBin - expectedBin) <= binTolerance,
+             qPrintable(u"440 Hz sine: peak at bin %1, expected ~%2 (tolerance +/- %3)"_s.arg(peakBin).arg(expectedBin).arg(binTolerance)));
 }
 
 void TestFftProcessor::testProcessLoopSilence()
@@ -217,7 +254,8 @@ void TestFftProcessor::testProcessLoopSilence()
     auto silence = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), silence);
+    const auto written = writeBlocks(pipe.producer(), silence);
+    QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -255,7 +293,8 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     DragonPipe<DragonFftBlock> pipe(256);
 
     for (int frame = 0; frame < 3; ++frame) {
-        [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), sine1kHz);
+        const auto written = writeBlocks(pipe.producer(), sine1kHz);
+        QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
     }
 
     DragonFftProcessor processor;
@@ -283,7 +322,7 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     processorThread.join();
 
     std::scoped_lock lock(framesMutex);
-    QVERIFY2(frames.size() >= 1, qPrintable(QString("Expected at least 1 frame, got %1"_L1).arg(frames.size())));
+    QVERIFY2(frames.size() >= 2, qPrintable(QString("Expected at least 2 frames from 3x FFT_SIZE data, got %1"_L1).arg(frames.size())));
 
     for (const auto &frame : frames) {
         QVERIFY2(!frame.frequenciesDb.empty(), "Each frame should have frequency data");
@@ -299,7 +338,8 @@ void TestFftProcessor::testFrameCallbackInvoked()
     auto noise = createSineWave(2000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), noise);
+    const auto written = writeBlocks(pipe.producer(), noise);
+    QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -328,10 +368,14 @@ void TestFftProcessor::testFrameCallbackInvoked()
 void TestFftProcessor::testPeakHoldDecay()
 {
     constexpr int sampleRate = 44100;
-    auto silence = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), silence);
+
+    auto sine = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE) * 2);
+    auto silence = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE) * 4);
+
+    const auto writtenSine = writeBlocks(pipe.producer(), sine);
+    QVERIFY2(writtenSine > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -356,17 +400,30 @@ void TestFftProcessor::testPeakHoldDecay()
     });
 
     QTest::qWait(300);
+    const auto writtenSilence = writeBlocks(pipe.producer(), silence);
+    QVERIFY2(writtenSilence > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
+    QTest::qWait(300);
 
     stopSource.request_stop();
     processorThread.join();
 
     std::scoped_lock lock(mutex);
-    if (peakValues.size() >= 2) {
-        for (size_t i = 1; i < peakValues.size(); ++i) {
-            QVERIFY2(peakValues[i] <= peakValues[i - 1] + 2.0f,
-                     qPrintable(u"Peak decay not working: frame %1 = %2, frame %3 = %4"_s.arg(i - 1).arg(peakValues[i - 1]).arg(i).arg(peakValues[i])));
+    QVERIFY2(peakValues.size() >= 2, qPrintable(u"Expected at least 2 frames for decay verification, got %1"_s.arg(peakValues.size())));
+
+    float initialPeak = peakValues.front();
+    QVERIFY2(initialPeak > -20.0f, qPrintable(u"Initial peak from sine wave should be significant, got %1 dB"_s.arg(initialPeak)));
+
+    float finalPeak = peakValues.back();
+    QVERIFY2(finalPeak < initialPeak, qPrintable(u"Peak should decay after silence: initial=%1 dB, final=%2 dB"_s.arg(initialPeak).arg(finalPeak)));
+
+    bool sawStrictDecay = false;
+    for (size_t i = 1; i < peakValues.size(); ++i) {
+        if (peakValues[i] < peakValues[i - 1] - 0.1f) {
+            sawStrictDecay = true;
+            break;
         }
     }
+    QVERIFY2(sawStrictDecay, "Expected at least one strict decay step (> 0.1 dB decrease) after silence");
 }
 
 void TestFftProcessor::testBarDataSizeValidation()
@@ -376,7 +433,8 @@ void TestFftProcessor::testBarDataSizeValidation()
     auto sineWave = createSineWave(freq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written2 = writeBlocks(pipe.producer(), sineWave);
+    const auto written2 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written2 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -423,7 +481,8 @@ void TestFftProcessor::testFftProducesOutputAboveThreshold()
     auto sineWave = createSineWave(frequency, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written3 = writeBlocks(pipe.producer(), sineWave);
+    const auto written3 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written3 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -466,7 +525,8 @@ void TestFftProcessor::testFrameTimestamp()
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written1 = writeBlocks(pipe.producer(), sineWave);
+    const auto written1 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -507,7 +567,8 @@ void TestFftProcessor::testSampleRateChange()
     processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     auto sine44k = createSineWave(1000.0f, 44100, static_cast<int>(DragonFftProcessor::FFT_SIZE));
-    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), sine44k);
+    const auto written = writeBlocks(pipe.producer(), sine44k);
+    QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
@@ -533,7 +594,8 @@ void TestFftProcessor::testFftModeOff()
 
     DragonPipe<DragonFftBlock> pipe(256);
 
-    [[maybe_unused]] const auto written2 = writeBlocks(pipe.producer(), sineWave);
+    const auto written2 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written2 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -565,7 +627,8 @@ void TestFftProcessor::testFftModeBarsOnly()
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written3 = writeBlocks(pipe.producer(), sineWave);
+    const auto written3 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written3 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -602,7 +665,8 @@ void TestFftProcessor::testFftModeDetailedOnly()
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written4 = writeBlocks(pipe.producer(), sineWave);
+    const auto written4 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written4 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -656,7 +720,8 @@ void TestFftProcessor::testFftModeSwitch()
         processor.processLoop(stopSource.get_token());
     });
 
-    [[maybe_unused]] const auto written5 = writeBlocks(pipe.producer(), sineWave);
+    const auto written5 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written5 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     QTest::qWait(100);
     int framesPhase1 = frameCount.load();
@@ -665,7 +730,8 @@ void TestFftProcessor::testFftModeSwitch()
     processor.setFftMode(DragonFftProcessor::FftMode::Off);
     int framesPhase2Start = frameCount.load();
 
-    [[maybe_unused]] const auto written6 = writeBlocks(pipe.producer(), sineWave);
+    const auto written6 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written6 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     QTest::qWait(300);
     int framesPhase2End = frameCount.load();
@@ -673,7 +739,8 @@ void TestFftProcessor::testFftModeSwitch()
              qPrintable(QString("Off mode should not produce new frames: started at %1, ended at %2"_L1).arg(framesPhase2Start).arg(framesPhase2End)));
 
     processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
-    [[maybe_unused]] const auto written7 = writeBlocks(pipe.producer(), sineWave);
+    const auto written7 = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written7 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     QTest::qWait(200);
     int framesPhase3 = frameCount.load();
@@ -718,7 +785,8 @@ void TestFftProcessor::testFrameCountForThreeSecondsStereo()
     });
 
     // Dump the entire 3-second burst (matches what the SDL dummy driver does in CI).
-    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), audio);
+    const auto written = writeBlocks(pipe.producer(), audio);
+    QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     // Give the processor thread time to drain the pipe and emit all owed frames.
     QTest::qWait(500);
@@ -764,7 +832,8 @@ void TestFftProcessor::testConfigurableRate()
         processor.processLoop(stopSource.get_token());
     });
 
-    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), audio);
+    const auto written = writeBlocks(pipe.producer(), audio);
+    QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     QTest::qWait(500);
 
@@ -803,7 +872,8 @@ void TestFftProcessor::testFftResumesAfterModeToggle()
     // Feed a large burst to build up a deep history simulates a long-running session.
     constexpr int totalFloats = sampleRate * 10 * channels;
     auto audio = createSilence(totalFloats);
-    [[maybe_unused]] const auto written1 = writeBlocks(pipe.producer(), audio);
+    const auto written1 = writeBlocks(pipe.producer(), audio);
+    QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     QTest::qWait(300);
     int framesPhase1 = frameCount.load(std::memory_order_relaxed);
@@ -816,7 +886,8 @@ void TestFftProcessor::testFftResumesAfterModeToggle()
 
     // Turn back On with a small amount of NEW data.
     auto newAudio = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE));
-    [[maybe_unused]] const auto written2 = writeBlocks(pipe.producer(), newAudio);
+    const auto written2 = writeBlocks(pipe.producer(), newAudio);
+    QVERIFY2(written2 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
     processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
 
     // Give time to drain and emit frames from new data only.
@@ -854,7 +925,8 @@ void TestFftProcessor::testFftStopTokenHonoredInInnerLoop()
     // the inner while-loop to have a lot of work to do.
     constexpr int totalFloats = sampleRate * 30 * channels;
     auto audio = createSilence(totalFloats);
-    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), audio);
+    const auto written = writeBlocks(pipe.producer(), audio);
+    QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
@@ -887,7 +959,8 @@ void TestFftProcessor::testFftFrequencyLocalization()
     auto sineWave = createSineWave(inputFreq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), sineWave);
+    const auto written = writeBlocks(pipe.producer(), sineWave);
+    QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -949,7 +1022,8 @@ void TestFftProcessor::testFftMultiTonePeaks()
     }
 
     DragonPipe<DragonFftBlock> pipe(256);
-    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), wave);
+    const auto written = writeBlocks(pipe.producer(), wave);
+    QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -981,12 +1055,16 @@ void TestFftProcessor::testFftMultiTonePeaks()
     const int expectedBin1 = freqToBin(freq1);
     const int expectedBin2 = freqToBin(freq2);
 
-    auto findPeakInRange = [&](int centerBin, int range) -> std::pair<int, float> {
-        int bestBin = centerBin;
+    const int binTolerance = 20;
+
+    auto findGlobalPeakExcluding = [&](int excludeCenter, int excludeRange) -> std::pair<int, float> {
+        int bestBin = 0;
         float bestMag = -200.0f;
-        int lo = std::max(0, centerBin - range);
-        int hi = std::min(static_cast<int>(frame.frequenciesDb.size()) - 1, centerBin + range);
-        for (int i = lo; i <= hi; ++i) {
+        int excludeLo = std::max(0, excludeCenter - excludeRange);
+        int excludeHi = std::min(static_cast<int>(frame.frequenciesDb.size()) - 1, excludeCenter + excludeRange);
+        for (int i = 0; i < static_cast<int>(frame.frequenciesDb.size()); ++i) {
+            if (i >= excludeLo && i <= excludeHi)
+                continue;
             if (frame.frequenciesDb[static_cast<size_t>(i)] > bestMag) {
                 bestMag = frame.frequenciesDb[static_cast<size_t>(i)];
                 bestBin = i;
@@ -995,15 +1073,16 @@ void TestFftProcessor::testFftMultiTonePeaks()
         return {bestBin, bestMag};
     };
 
-    const int binTolerance = 20;
-    auto [peak1Bin, peak1Mag] = findPeakInRange(expectedBin1, binTolerance);
-    auto [peak2Bin, peak2Mag] = findPeakInRange(expectedBin2, binTolerance);
+    auto [peak1Bin, peak1Mag] = findGlobalPeakExcluding(expectedBin2, binTolerance);
+    auto [peak2Bin, peak2Mag] = findGlobalPeakExcluding(expectedBin1, binTolerance);
 
     QVERIFY2(peak1Mag > -50.0f, qPrintable(u"First tone (%1 Hz): peak %2 dB too low"_s.arg(freq1).arg(peak1Mag)));
     QVERIFY2(peak2Mag > -50.0f, qPrintable(u"Second tone (%1 Hz): peak %2 dB too low"_s.arg(freq2).arg(peak2Mag)));
 
-    QVERIFY2(std::abs(peak1Bin - expectedBin1) <= binTolerance, qPrintable(u"First tone: peak at bin %1, expected ~%2"_s.arg(peak1Bin).arg(expectedBin1)));
-    QVERIFY2(std::abs(peak2Bin - expectedBin2) <= binTolerance, qPrintable(u"Second tone: peak at bin %1, expected ~%2"_s.arg(peak2Bin).arg(expectedBin2)));
+    QVERIFY2(std::abs(peak1Bin - expectedBin1) <= binTolerance,
+             qPrintable(u"First tone: global peak at bin %1, expected ~%2"_s.arg(peak1Bin).arg(expectedBin1)));
+    QVERIFY2(std::abs(peak2Bin - expectedBin2) <= binTolerance,
+             qPrintable(u"Second tone: global peak at bin %1, expected ~%2"_s.arg(peak2Bin).arg(expectedBin2)));
 
     QVERIFY2(std::abs(peak1Bin - peak2Bin) > binTolerance,
              qPrintable(u"Two tones should produce distinguishable peaks: peak1 at bin %1, peak2 at bin %2"_s.arg(peak1Bin).arg(peak2Bin)));

@@ -402,13 +402,17 @@ void TestPlayerSignals::testSetSourceInterruptedByStop()
 {
     skipIfMissing(u"sample-3s.mp3"_s);
     DragonPlayer player;
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 
     player.stop();
 
     QTest::qWait(500);
 
-    QVERIFY(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::NoMedia);
+    QVERIFY2(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::NoMedia,
+             qPrintable(u"Expected LoadedMedia or NoMedia after stop-during-load, got status %1"_s.arg(static_cast<int>(player.status()))));
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }

@@ -394,7 +394,7 @@ void TestDecoder::testEmptySource()
     DragonDecoder decoder(std::move(readCb), {});
     auto result = runDecoderCollecting(decoder);
 
-    QVERIFY2(result.error.has_value() || !result.format.has_value(), "Empty source should fail to decode");
+    QVERIFY2(result.error.has_value(), "Empty source should produce a decode error");
 }
 
 void TestDecoder::testStopTokenCancellation()
@@ -404,27 +404,67 @@ void TestDecoder::testStopTokenCancellation()
     QString filePath = m_tempDir.filePath("test_stop.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
-    file.write(createTestWavData(44100, 2, 5000));
+    file.write(createTestWavData(44100, 2, 30000));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QByteArray wavData = file.readAll();
+    file.close();
+    QVERIFY(!wavData.isEmpty());
 
-    std::stop_source stopSource;
+    struct SlowReadCallback {
+        QByteArray data;
+        size_t offset = 0;
+        std::atomic<bool> stopRequested{false};
+
+        int operator()(std::span<uint8_t> buf)
+        {
+            if (stopRequested.load())
+                return 0;
+            if (offset >= static_cast<size_t>(data.size()))
+                return 0;
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+            if (stopRequested.load())
+                return 0;
+            size_t toCopy = std::min(buf.size(), static_cast<size_t>(data.size()) - offset);
+            std::memcpy(buf.data(), data.data() + offset, toCopy);
+            offset += toCopy;
+            return static_cast<int>(toCopy);
+        }
+    };
+
+    SlowReadCallback readCb;
+    readCb.data = wavData;
+
+    DragonDecoder decoder(
+        [&readCb](std::span<uint8_t> buf) {
+            return readCb(buf);
+        },
+        nullptr,
+        wavData.size(),
+        QString{});
+
+    QVERIFY(decoder.initialize().success);
+
     std::atomic<bool> startedDecoding{false};
+    std::atomic<bool> cancelledEarly{false};
 
     std::jthread decodeThread([&](std::stop_token st) {
         for (auto event : decoder.decodeLoop(st)) {
             startedDecoding = true;
         }
+        cancelledEarly.store(st.stop_requested());
     });
 
-    QThread::msleep(50);
+    QTRY_VERIFY_WITH_TIMEOUT(startedDecoding.load(), 5000);
 
-    stopSource.request_stop();
+    readCb.stopRequested.store(true);
+    decodeThread.get_stop_source().request_stop();
 
     decodeThread.join();
 
     QVERIFY(startedDecoding.load());
+    QVERIFY2(cancelledEarly.load(), "Decode thread should have been cancelled via jthread stop_token, not finished naturally");
 }
 
 void TestDecoder::testPersistentReadError()
@@ -566,7 +606,7 @@ void TestDecoder::testCorruptDataHandling()
     DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     auto result = runDecoderCollecting(decoder);
 
-    QVERIFY2(result.error.has_value() || !result.format.has_value(), "Corrupt data should fail gracefully");
+    QVERIFY2(result.error.has_value(), "Corrupt data should produce a decode error");
 }
 
 void TestDecoder::testPassthroughAt48k()
@@ -671,11 +711,12 @@ void TestDecoder::testGeneratorSpanLifetime()
     QVERIFY(!sc.data.empty());
 
     std::vector<std::float32_t> copiedData(sc.data.begin(), sc.data.end());
+    const auto originalFirst = copiedData.front();
 
     ++it;
 
-    QCOMPARE(copiedData.size(), sc.data.size());
-    QVERIFY(copiedData.size() > 0);
+    QVERIFY2(copiedData.front() == originalFirst, "Data copied from first span should remain valid after advancing iterator to next event");
+    QVERIFY2(copiedData.size() == sc.data.size(), "Copied data size should match original span size");
 }
 
 void TestDecoder::testGeneratorErrorYielded()
@@ -690,8 +731,8 @@ void TestDecoder::testGeneratorErrorYielded()
     DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     InitResult res = decoder.initialize();
 
-    QVERIFY(!res.success);
-    QVERIFY(!res.errorMessage.isEmpty());
+    QVERIFY2(!res.success, "Initialization should fail for corrupt data");
+    QVERIFY2(!res.errorMessage.isEmpty(), "Error message should be non-empty for failed initialization");
 }
 
 void TestDecoder::testGeneratorMultipleIterations()
@@ -707,9 +748,10 @@ void TestDecoder::testGeneratorMultipleIterations()
     InitResult res = decoder.initialize();
     QVERIFY(res.success);
 
-    std::vector<std::float32_t> allSamples;
-    int formatSampleRate = res.sampleRate;
-    int formatChannels = res.channels;
+    QCOMPARE(res.sampleRate, 44100);
+    QCOMPARE(res.channels, 2);
+
+    std::vector<std::float32_t> firstPassSamples;
 
     for (auto event : decoder.decodeLoop({})) {
         std::visit(overloaded{[&](const FormatReady &) {
@@ -717,16 +759,34 @@ void TestDecoder::testGeneratorMultipleIterations()
                               },
                               [&](const SamplesChunk &sc) {
                                   if (!sc.data.empty()) {
-                                      allSamples.insert(allSamples.end(), sc.data.begin(), sc.data.end());
+                                      firstPassSamples.insert(firstPassSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
                               [&](const auto &) { }},
                    event);
     }
 
-    QVERIFY(formatSampleRate > 0);
-    QVERIFY(formatChannels > 0);
-    QVERIFY(allSamples.size() > 0);
+    QVERIFY2(firstPassSamples.size() > 0, "First pass should produce samples");
+
+    std::vector<std::float32_t> secondPassSamples;
+    DragonDecoder decoder2(nullptr, nullptr, -1, filePath);
+    QVERIFY2(decoder2.initialize().success, "Second decoder instance should initialize successfully");
+
+    for (auto event : decoder2.decodeLoop({})) {
+        std::visit(overloaded{[&](const FormatReady &) {
+                                  QFAIL("FormatReady should not be yielded");
+                              },
+                              [&](const SamplesChunk &sc) {
+                                  if (!sc.data.empty()) {
+                                      secondPassSamples.insert(secondPassSamples.end(), sc.data.begin(), sc.data.end());
+                                  }
+                              },
+                              [&](const auto &) { }},
+                   event);
+    }
+
+    QVERIFY2(secondPassSamples.size() > 0, "Second pass should produce samples");
+    QCOMPARE_EQ(firstPassSamples.size(), secondPassSamples.size());
 }
 
 void TestDecoder::testDecodedSineWaveContent()

@@ -194,21 +194,22 @@ private Q_SLOTS:
         DragonPipe<std::float32_t> pipe(128);
 
         std::stop_source ss;
-        bool woken = false;
+        std::atomic<bool> enteredWait{false};
+        std::atomic<bool> waitReturned{false};
 
         std::jthread waiter([&] {
-            woken = true;
+            enteredWait.store(true);
             pipe.consumer().waitFor(999999, ss.get_token());
-            woken = true;
+            waitReturned.store(true);
         });
 
         std::this_thread::sleep_for(5ms);
-        pipe.producer().notify();
+        QVERIFY2(enteredWait.load(), "Consumer thread should have entered waitFor");
 
-        std::this_thread::sleep_for(5ms);
-        QVERIFY(woken);
         ss.request_stop();
         pipe.producer().notify();
+
+        QTRY_VERIFY_WITH_TIMEOUT(waitReturned.load(), 2000);
         waiter.join();
     }
 
@@ -219,7 +220,7 @@ private Q_SLOTS:
 
         std::array<std::float32_t, 4> d;
         writeAll(pipe.producer(), d);
-        QCOMPARE_LE(pipe.producer().available(), size_t{12});
+        QCOMPARE_EQ(pipe.producer().available(), size_t{12});
     }
 
     void testWrapAround()
@@ -272,6 +273,18 @@ private Q_SLOTS:
         });
         QCOMPARE_EQ(n, size_t{8});
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{8});
+
+        std::vector<std::float32_t> readData;
+        pipe.consumer().readSomeWith(8, [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+            for (auto v : b1)
+                readData.push_back(v);
+            for (auto v : b2)
+                readData.push_back(v);
+        });
+        QCOMPARE_EQ(readData.size(), size_t{8});
+        for (size_t i = 0; i < readData.size(); ++i) {
+            QCOMPARE_EQ(readData[i], static_cast<std::float32_t>(i + 1));
+        }
     }
 
     void testMultiThreadedCycle()
@@ -283,6 +296,8 @@ private Q_SLOTS:
 
         std::atomic<int> producerDone{0};
         std::atomic<int> consumerDone{0};
+        std::atomic<bool> mismatchDetected{false};
+        std::atomic<int> totalRead{0};
 
         std::jthread producer([&](std::stop_token st) {
             for (int round = 0; round < kRounds; ++round) {
@@ -304,12 +319,16 @@ private Q_SLOTS:
                     continue;
                 }
                 size_t read = pipe.consumer().readSomeWith(kBatchSize, [&](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
-                    QCOMPARE_EQ(b1.size() + b2.size(), size_t{kBatchSize});
+                    if (b1.size() + b2.size() != size_t{kBatchSize})
+                        mismatchDetected.store(true);
                     float expected = static_cast<float>(round * kBatchSize + 1);
                     float first = b1.empty() ? b2.front() : b1.front();
-                    QCOMPARE_EQ(first, expected);
+                    if (first != expected)
+                        mismatchDetected.store(true);
                 });
-                QCOMPARE_EQ(read, size_t{kBatchSize});
+                if (read != size_t{kBatchSize})
+                    mismatchDetected.store(true);
+                totalRead.fetch_add(static_cast<int>(read), std::memory_order_relaxed);
                 ++round;
             }
             consumerDone.store(1);
@@ -330,6 +349,8 @@ private Q_SLOTS:
 
         QCOMPARE_EQ(producerDone.load(), 1);
         QCOMPARE_EQ(consumerDone.load(), 1);
+        QVERIFY2(!mismatchDetected.load(), "Data mismatch or size error detected in multi-threaded cycle");
+        QCOMPARE_EQ(totalRead.load(), kRounds * kBatchSize);
     }
 };
 

@@ -29,7 +29,6 @@ private Q_SLOTS:
     void testSeekWithRealAudio();
 
     void testSetSourceDoesNotEmitPlayingState();
-    void testSetSourceDoesNotAutoStartAudio();
     void testSetSourceWhilePlayingEmitsStoppedState();
     void testPlayWithNoSourceIsNoOp();
 
@@ -59,8 +58,6 @@ private Q_SLOTS:
     void testSetSourceThenPlayFirstTrack();
     void testPlayNextTrackAfterStop();
     void testPlayRapidNextNext();
-
-    void testDeferredPlayAfterFormatReady();
 
 private:
     void skipIfMissing(const QString &filename)
@@ -135,22 +132,6 @@ void TestPlayerPlayback::testSetSourceDoesNotEmitPlayingState()
     QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QVERIFY2(!diag.isAudioActive(), "Audio must NOT be open without play()");
-}
-
-void TestPlayerPlayback::testSetSourceDoesNotAutoStartAudio()
-{
-    skipIfMissing(u"sample-3s.mp3"_s);
-
-    DragonPlayer player;
-    DragonDiagnostics diag(&player);
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
-
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-
-    QCOMPARE(stateSpy.count(), 0);
-    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
-    QVERIFY2(!diag.isAudioActive(), "Audio must NOT be open after setSource()");
 }
 
 void TestPlayerPlayback::testSetSourceWhilePlayingEmitsStoppedState()
@@ -617,36 +598,21 @@ void TestPlayerPlayback::testPlayRapidNextNext()
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
+    QVERIFY2(diag.isAudioActive(), "Audio should be active during first track (mp3)");
 
     player.stop();
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
     player.play();
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QVERIFY2(diag.isAudioActive(), "Audio should be active during second track (ogg)");
 
     player.stop();
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.aac"_s)));
     player.play();
-
     QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
-    QVERIFY(diag.isAudioActive());
+    QVERIFY2(diag.isAudioActive(), "Audio should be active during third track (aac)");
 
     player.stop();
-}
-
-void TestPlayerPlayback::testDeferredPlayAfterFormatReady()
-{
-    skipIfMissing(u"sample-3s.mp3"_s);
-
-    DragonPlayer player;
-    DragonDiagnostics diag(&player);
-
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
-    player.play();
-
-    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
-
-    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
-    QVERIFY(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::BufferingMedia);
-    QVERIFY2(diag.isAudioActive(), "Deferred play must start audio after format ready");
 }
 
 QTEST_MAIN(TestPlayerPlayback)

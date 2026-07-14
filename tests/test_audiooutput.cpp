@@ -33,7 +33,7 @@ private Q_SLOTS:
     void testVolumeMuteInteraction();
     void testVolumeChangedSignal();
     void testSetQueue();
-    void testSetStreamName();
+    void testSetStreamNameSmoke();
 
     void testPositionMsCalculation();
     void testTotalSamplesWritten();
@@ -73,12 +73,15 @@ private:
 void TestAudioOutput::testConstruction()
 {
     auto output = createAudioSink();
-    QVERIFY(output != nullptr);
+    if (!output)
+        QSKIP("No audio sink available");
 }
 
 void TestAudioOutput::testVolumeSetGet()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     QVERIFY(qAbs(output->volume() - 1.0f) < 0.01f);
 
@@ -98,6 +101,8 @@ void TestAudioOutput::testVolumeSetGet()
 void TestAudioOutput::testMuteSetGet()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     QVERIFY(!output->muted());
 
@@ -116,6 +121,8 @@ void TestAudioOutput::testMuteSetGet()
 void TestAudioOutput::testVolumeMuteInteraction()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     output->setVolume(0.5f);
     output->setMuted(true);
@@ -135,6 +142,8 @@ void TestAudioOutput::testVolumeMuteInteraction()
 void TestAudioOutput::testVolumeChangedSignal()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
     QSignalSpy spy(output.get(), &DragonAudioSink::volumeChanged);
 
     output->setVolume(0.7f);
@@ -152,6 +161,8 @@ void TestAudioOutput::testVolumeChangedSignal()
 void TestAudioOutput::testSetQueue()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
     DragonPipe<std::float32_t> pipe(65536);
 
     output->setAudioPipe(&pipe);
@@ -161,19 +172,23 @@ void TestAudioOutput::testSetQueue()
     QVERIFY(!output->isDeviceOpen());
 }
 
-void TestAudioOutput::testSetStreamName()
+void TestAudioOutput::testSetStreamNameSmoke()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     output->setStreamName("Test Audio"_L1);
     output->setStreamName(""_L1);
     output->setStreamName("Longer Name With Spaces"_L1);
-    QVERIFY(!output->isDeviceOpen());
+    QVERIFY2(!output->isDeviceOpen(), "setStreamName should not open the audio device");
 }
 
 void TestAudioOutput::testPositionMsCalculation()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     QVERIFY(output->positionMs() == 0);
 
@@ -183,6 +198,8 @@ void TestAudioOutput::testPositionMsCalculation()
 void TestAudioOutput::testTotalSamplesWritten()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     QVERIFY(output->totalSamplesWritten() == 0);
 }
@@ -190,6 +207,8 @@ void TestAudioOutput::testTotalSamplesWritten()
 void TestAudioOutput::testReset()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     output->reset();
     QVERIFY(output->positionMs() == 0);
@@ -199,6 +218,8 @@ void TestAudioOutput::testReset()
 void TestAudioOutput::testStopWithoutStart()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     output->close();
     QVERIFY(!output->isDeviceOpen());
@@ -210,6 +231,8 @@ void TestAudioOutput::testStopWithoutStart()
 void TestAudioOutput::testStartStopLifecycle()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -229,6 +252,8 @@ void TestAudioOutput::testStartStopLifecycle()
 void TestAudioOutput::testMultipleStartStopCycles()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -246,6 +271,8 @@ void TestAudioOutput::testMultipleStartStopCycles()
 void TestAudioOutput::testAudioDataProcessing()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -261,7 +288,7 @@ void TestAudioOutput::testAudioDataProcessing()
     QTest::qWait(100);
 
     int64_t samples = output->totalSamplesWritten();
-    QVERIFY(samples >= 0);
+    QVERIFY2(samples > 0, qPrintable(u"Expected some samples to be processed, got %1"_s.arg(samples)));
 
     output->close();
 }
@@ -269,6 +296,8 @@ void TestAudioOutput::testAudioDataProcessing()
 void TestAudioOutput::testPositionTrackingWithData()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -281,7 +310,7 @@ void TestAudioOutput::testPositionTrackingWithData()
     QTest::qWait(1500);
 
     int64_t posMs = output->positionMs();
-    QVERIFY(posMs >= 0);
+    QVERIFY2(posMs > 0, qPrintable(u"Expected position to advance after feeding 1s of audio, got %1 ms"_s.arg(posMs)));
 
     output->close();
     output->reset();
@@ -292,6 +321,8 @@ void TestAudioOutput::testPositionTrackingWithData()
 void TestAudioOutput::testQueueBehavior()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
 
@@ -299,20 +330,28 @@ void TestAudioOutput::testQueueBehavior()
     QVERIFY(!output->isDeviceOpen());
 
     auto output2 = createAudioSink();
+    if (!output2)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe2(65536);
     output2->setAudioPipe(&pipe2);
     output2->open(44100, 2);
+    QVERIFY2(output2->isDeviceOpen(), "Second sink device should be open after open()");
 
     fillQueue(&pipe2, std::vector<std::float32_t>(4096, 0.5f));
     QTest::qWait(100);
 
+    QVERIFY2(output2->totalSamplesWritten() > 0, "Second sink should have consumed samples from pipe");
+
     output2->close();
+    QVERIFY2(!output2->isDeviceOpen(), "Second sink should be closed after close()");
 }
 
 void TestAudioOutput::testStartWhileAlreadyStarted()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -330,6 +369,8 @@ void TestAudioOutput::testStartWhileAlreadyStarted()
 void TestAudioOutput::testStopWithActiveCallbacks()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -353,6 +394,8 @@ void TestAudioOutput::testStopWithActiveCallbacks()
 void TestAudioOutput::testRapidStartStopCycles()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -378,6 +421,8 @@ void TestAudioOutput::testRapidStartStopCycles()
 void TestAudioOutput::testStopDuringStarvation()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -397,6 +442,8 @@ void TestAudioOutput::testStopDuringStarvation()
 void TestAudioOutput::testQueueReadyApi()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     QVERIFY(output->isQueueReady());
 
@@ -417,6 +464,8 @@ void TestAudioOutput::testQueueReadyApi()
 void TestAudioOutput::testFlushOpensGate()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -445,6 +494,8 @@ void TestAudioOutput::testFlushOpensGate()
 void TestAudioOutput::testGaplessTransition()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -477,6 +528,8 @@ void TestAudioOutput::testGaplessTransition()
 void TestAudioOutput::testStartPaused()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -484,6 +537,7 @@ void TestAudioOutput::testStartPaused()
     output->open(44100, 2);
     output->pause();
 
+    QVERIFY(output->isPaused());
     QVERIFY(output->isDeviceOpen());
     QVERIFY(output->hasFormat(44100, 2));
 
@@ -491,6 +545,7 @@ void TestAudioOutput::testStartPaused()
     QCOMPARE(output->totalSamplesWritten(), 0);
 
     output->resume();
+    QVERIFY(!output->isPaused());
     QVERIFY(output->isDeviceOpen());
     QVERIFY(output->hasFormat(44100, 2));
 
@@ -501,6 +556,8 @@ void TestAudioOutput::testStartPaused()
 void TestAudioOutput::testPauseResumeCycle()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -541,6 +598,8 @@ void TestAudioOutput::testPauseResumeCycle()
 void TestAudioOutput::testIsPausedBasic()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     QVERIFY(!output->isPaused());
 
@@ -563,6 +622,8 @@ void TestAudioOutput::testIsPausedBasic()
 void TestAudioOutput::testIsPausedAfterStop()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -579,6 +640,8 @@ void TestAudioOutput::testIsPausedAfterStop()
 void TestAudioOutput::testSeekWhilePaused()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -619,6 +682,8 @@ void TestAudioOutput::testSeekWhilePaused()
 void TestAudioOutput::testPositionStabilityDuringPause()
 {
     auto output = createAudioSink();
+    if (!output)
+        QSKIP("No audio sink available");
 
     DragonPipe<std::float32_t> pipe(65536);
     output->setAudioPipe(&pipe);
@@ -648,7 +713,6 @@ void TestAudioOutput::testPositionStabilityDuringPause()
 
 void TestAudioOutput::fillQueue(DragonPipe<std::float32_t> *pipe, const std::vector<std::float32_t> &data)
 {
-    QVERIFY(pipe != nullptr);
     pipe->producer().write(data, std::stop_token{});
 }
 

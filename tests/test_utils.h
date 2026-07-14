@@ -98,43 +98,54 @@ public:
             return false;
         }
 
+        const auto statusBefore = m_player->status();
         QSignalSpy statusSpy(m_player, &DragonPlayer::statusChanged);
         QSignalSpy errorSpy(m_player, &DragonPlayer::errorChanged);
 
         m_player->setSource(QUrl::fromLocalFile(path));
 
-        return QTest::qWaitFor(
+        const bool reached = QTest::qWaitFor(
             [&]() {
-                return m_player->status() == DragonPlayer::MediaStatus::LoadedMedia || errorSpy.count() > 0;
+                return m_player->status() == DragonPlayer::MediaStatus::LoadedMedia || m_player->status() == DragonPlayer::MediaStatus::BufferedMedia
+                    || errorSpy.count() > 0;
             },
             timeoutMs);
+
+        return reached && errorSpy.count() == 0 && (statusSpy.count() > 0 || statusBefore == m_player->status());
     }
 
     bool setSourceAndWait(const QUrl &url, int timeoutMs = 10000)
     {
+        const auto statusBefore = m_player->status();
         QSignalSpy statusSpy(m_player, &DragonPlayer::statusChanged);
         QSignalSpy errorSpy(m_player, &DragonPlayer::errorChanged);
 
         m_player->setSource(url);
 
-        return QTest::qWaitFor(
+        const bool reached = QTest::qWaitFor(
             [&]() {
-                return m_player->status() == DragonPlayer::MediaStatus::LoadedMedia || errorSpy.count() > 0;
+                return m_player->status() == DragonPlayer::MediaStatus::LoadedMedia || m_player->status() == DragonPlayer::MediaStatus::BufferedMedia
+                    || errorSpy.count() > 0;
             },
             timeoutMs);
+
+        return reached && errorSpy.count() == 0 && (statusSpy.count() > 0 || statusBefore == m_player->status());
     }
 
     bool playAndWait(int timeoutMs = 5000)
     {
+        const auto stateBefore = m_player->playbackState();
         QSignalSpy stateSpy(m_player, &DragonPlayer::playbackStateChanged);
 
         m_player->play();
 
-        return QTest::qWaitFor(
+        const bool reached = QTest::qWaitFor(
             [&]() {
                 return m_player->playbackState() == DragonPlayer::PlaybackState::PlayingState;
             },
             timeoutMs);
+
+        return reached && (stateSpy.count() > 0 || stateBefore == DragonPlayer::PlaybackState::PlayingState);
     }
 
     bool pauseAndWait(int timeoutMs = 2000)
@@ -555,7 +566,11 @@ private:
 
 #define VERIFY_FIXTURE_EXISTS(filename) QVERIFY2(QFileInfo::exists(TestFixture::fixturePath(filename)), qPrintable(u"Fixture not found: %1"_s.arg(filename)))
 
-#define VERIFY_DECODE_SUCCESS(result, filename) QVERIFY2(!(result).hadError, qPrintable(u"Decode failed for %1: %2"_s.arg(filename).arg((result).errorMessage)))
+#define VERIFY_DECODE_SUCCESS(result, filename)                                                                                                                \
+    do {                                                                                                                                                       \
+        QVERIFY2(!(result).hadError, qPrintable(u"Decode failed for %1: %2"_s.arg(filename).arg((result).errorMessage)));                                      \
+        QVERIFY2(!(result).sawUnexpectedFormatReady, qPrintable(u"Unexpected FormatReady event during decode of %1"_s.arg(filename)));                         \
+    } while (false)
 
 #define VERIFY_PLAYER_LOADED(player, filename)                                                                                                                 \
     QVERIFY2((player).status() == DragonPlayer::MediaStatus::LoadedMedia, qPrintable(u"Failed to load: %1"_s.arg(filename)))

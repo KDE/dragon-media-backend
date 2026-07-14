@@ -36,7 +36,7 @@ private Q_SLOTS:
     void testAboutToFinishResetsOnNewSource();
     void testAboutToFinishResetsOnSeekBack();
     void testAboutToFinishResetsOnGaplessTransition();
-    void testPrefinishMarkIncreaseResets();
+    void testPrefinishMarkChangeResets();
     void testShortTrackEmitsImmediately();
 
 private:
@@ -123,7 +123,7 @@ void TestPlayerPrefinish::testAboutToFinishNeverEmittedWhenDisabled()
     player.play();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 5000);
 
-    QTest::qWait(2500);
+    QVERIFY2(helper.waitForEndOfMedia(10000), "Track should reach EndOfMedia to fully verify aboutToFinish is never emitted when disabled");
 
     QCOMPARE(spy.count(), 0);
 
@@ -161,14 +161,15 @@ void TestPlayerPrefinish::testAboutToFinishTiming()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
 
     QElapsedTimer timer;
-    timer.start();
     player.play();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 5000);
+    timer.start();
 
     QTRY_VERIFY_WITH_TIMEOUT(spy.count() == 1, 5000);
     qint64 elapsed = timer.elapsed();
 
-    QVERIFY2(elapsed >= 500 && elapsed <= 5000, qPrintable(u"aboutToFinish should fire at ~1000ms, fired at %1ms"_s.arg(elapsed)));
+    QVERIFY2(elapsed >= 500 && elapsed <= 2000,
+             qPrintable(u"aboutToFinish should fire at ~1000ms (3000ms track - 2000ms mark), fired at %1ms after playback start"_s.arg(elapsed)));
 
     player.stop();
 }
@@ -225,6 +226,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnSeekBack()
 void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
 {
     skipIfMissing(u"sample-3s.mp3"_s);
+    skipIfMissing(u"gs-16b-2c-44100hz.ogg"_s);
 
     DragonPlayer player;
     DragonDiagnostics diagnostics(&player);
@@ -237,8 +239,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
-    player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
-
+    player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
     QVERIFY(helper.playAndWait());
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
@@ -251,7 +252,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
     QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during gapless transition");
     QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "EndOfMedia should not be emitted during gapless transition");
 
-    QTRY_COMPARE(aboutToFinishSpy.count(), 2);
+    QTRY_COMPARE_WITH_TIMEOUT(aboutToFinishSpy.count(), 2, 15000);
 
     VERIFY_AUDIO_ACTIVE(diagnostics);
     const int underrunsAfter = diagnostics.audioUnderrunCount();
@@ -261,7 +262,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
     player.stop();
 }
 
-void TestPlayerPrefinish::testPrefinishMarkIncreaseResets()
+void TestPlayerPrefinish::testPrefinishMarkChangeResets()
 {
     skipIfMissing(u"sample-3s.mp3"_s);
 
@@ -282,7 +283,7 @@ void TestPlayerPrefinish::testPrefinishMarkIncreaseResets()
 
     spy.clear();
 
-    player.setPrefinishMark(2500);
+    player.setPrefinishMark(2800);
 
     QTRY_COMPARE(spy.count(), 1);
 

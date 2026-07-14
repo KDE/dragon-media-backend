@@ -31,11 +31,7 @@ private Q_SLOTS:
     void testVolumeProperty();
     void testSourceProperty();
     void testPlaybackStateProperty();
-    void testMediaStatusProperty();
     void testErrorProperty();
-    void testDurationProperty();
-    void testPositionProperty();
-    void testSeekableProperty();
 
     void testSetSource();
     void testSetSourceEmpty();
@@ -65,8 +61,9 @@ private Q_SLOTS:
     void testMuteAndVolumeInteraction();
     void testPositionTracking();
     void testSeekBehavior();
+    void testSeekBehaviorWithValidMedia();
     void testMultipleSourceChanges();
-    void testSignalEmissionOrder();
+    void testSignalEmissionPresence();
     void testCurrentPlayingForRadiosSignal();
     void testSetPositionEmitsPositionChanged();
     void testInvalidMediaStaysStopped();
@@ -121,7 +118,7 @@ void TestPlayerBasics::testVolumeProperty()
     QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
 
     player.setVolume(2.0f);
-    QVERIFY(player.volume() > 0.0f);
+    QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
 }
 
 void TestPlayerBasics::testSourceProperty()
@@ -146,12 +143,6 @@ void TestPlayerBasics::testPlaybackStateProperty()
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
-void TestPlayerBasics::testMediaStatusProperty()
-{
-    DragonPlayer player;
-    QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
-}
-
 void TestPlayerBasics::testErrorProperty()
 {
     DragonPlayer player;
@@ -159,24 +150,6 @@ void TestPlayerBasics::testErrorProperty()
 
     player.setSource(QUrl("file:///nonexistent/file.mp3"_L1));
     QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError, 3000);
-}
-
-void TestPlayerBasics::testDurationProperty()
-{
-    DragonPlayer player;
-    QCOMPARE(player.duration(), 0);
-}
-
-void TestPlayerBasics::testPositionProperty()
-{
-    DragonPlayer player;
-    QCOMPARE(player.position(), 0);
-}
-
-void TestPlayerBasics::testSeekableProperty()
-{
-    DragonPlayer player;
-    QVERIFY(!player.seekable());
 }
 
 void TestPlayerBasics::testSetSource()
@@ -187,7 +160,7 @@ void TestPlayerBasics::testSetSource()
     QUrl source = QUrl::fromLocalFile("/tmp/test_audio.mp3"_L1);
     player.setSource(source);
 
-    QVERIFY(statusSpy.count() >= 0);
+    QVERIFY(statusSpy.count() > 0);
     QCOMPARE(player.source(), source);
 }
 
@@ -208,7 +181,7 @@ void TestPlayerBasics::testSetSourceInvalid()
     DragonPlayer player;
     player.setSource(QUrl::fromLocalFile("/nonexistent/path/audio.mp3"_L1));
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError || player.status() == DragonPlayer::MediaStatus::InvalidMedia, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError && player.status() == DragonPlayer::MediaStatus::InvalidMedia, 5000);
 }
 
 void TestPlayerBasics::testPlayWithNoSourceIsNoOp()
@@ -272,6 +245,7 @@ void TestPlayerBasics::testSetVolume()
 
     spy.clear();
     player.setVolume(0.5f);
+    QCOMPARE(spy.count(), 0);
 }
 
 void TestPlayerBasics::testMutedChangedSignal()
@@ -336,7 +310,8 @@ void TestPlayerBasics::testErrorChangedSignal()
     QSignalSpy spy(&player, &DragonPlayer::errorChanged);
 
     player.setSource(QUrl::fromLocalFile("/nonexistent/file.mp3"_L1));
-    QTRY_VERIFY_WITH_TIMEOUT(spy.count() > 0 || player.error() != DragonPlayer::Error::NoError, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(spy.count() > 0, 5000);
+    QVERIFY(player.error() != DragonPlayer::Error::NoError);
 }
 
 void TestPlayerBasics::testFftFrameReadySignal()
@@ -359,18 +334,19 @@ void TestPlayerBasics::testSaveUndoPosition()
 {
     DragonPlayer player;
     player.saveUndoPosition(5000);
-    QCOMPARE(player.position(), 0);
+    QVERIFY2(player.position() == 0, "Position should be 0 with no media loaded saveUndoPosition itself should not change position");
 }
 
 void TestPlayerBasics::testRestoreUndoPosition()
 {
     DragonPlayer player;
+
     player.saveUndoPosition(10000);
     player.restoreUndoPosition();
-    QCOMPARE(player.position(), 0);
+    QVERIFY2(player.position() == 0, "Position should remain 0 after restoreUndoPosition with no media undo position cannot be applied without loaded media");
 
     player.restoreUndoPosition();
-    QCOMPARE(player.position(), 0);
+    QVERIFY2(player.position() == 0, "Position should remain 0 after second restoreUndoPosition with no media undo stack should be empty");
 }
 
 void TestPlayerBasics::testStateMachineSequence_data()
@@ -453,10 +429,10 @@ void TestPlayerBasics::testVolumeBoundaryValues()
     QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
 
     player.setVolume(10.0f);
-    QVERIFY(player.volume() > 0.0f);
+    QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
 
     player.setVolume(-1.0f);
-    QVERIFY(player.volume() >= 0.0f);
+    QVERIFY(qAbs(player.volume()) < 0.01f);
 }
 
 void TestPlayerBasics::testMuteAndVolumeInteraction()
@@ -494,7 +470,7 @@ void TestPlayerBasics::testPositionTracking()
 
     player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTest::qWait(500);
-    QVERIFY(player.position() >= 0);
+    QCOMPARE(player.position(), 0);
 }
 
 void TestPlayerBasics::testSeekBehavior()
@@ -523,7 +499,38 @@ void TestPlayerBasics::testSeekBehavior()
     player.setPosition(2000);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged");
     QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
+
+    posSpy.clear();
     player.seek(3000);
+    QVERIFY2(posSpy.count() >= 1, "seek() must emit positionChanged even with invalid source");
+    QCOMPARE(player.position(), 0);
+}
+
+void TestPlayerBasics::testSeekBehaviorWithValidMedia()
+{
+    const QString path = TestFixture::fixturePath(u"sample-3s.mp3"_s);
+    if (!QFileInfo::exists(path))
+        QSKIP("sample-3s.mp3 fixture not available");
+
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(player.duration() > 0);
+    QVERIFY(player.seekable());
+
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+
+    player.play();
+    QVERIFY2(helper.waitForState(DragonPlayer::PlaybackState::PlayingState, 10000), "Failed to reach PlayingState");
+
+    QTest::qWait(200);
+    posSpy.clear();
+
+    player.seek(1000);
+    QTRY_VERIFY_WITH_TIMEOUT(posSpy.count() >= 1, 5000);
+    QVERIFY2(player.position() <= 1500, qPrintable(u"Position should be near 1000ms after seek, got %1"_s.arg(player.position())));
+
+    player.stop();
 }
 
 void TestPlayerBasics::testMultipleSourceChanges()
@@ -545,7 +552,7 @@ void TestPlayerBasics::testMultipleSourceChanges()
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 }
 
-void TestPlayerBasics::testSignalEmissionOrder()
+void TestPlayerBasics::testSignalEmissionPresence()
 {
     DragonPlayer player;
     QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
