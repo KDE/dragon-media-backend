@@ -23,6 +23,8 @@
 
 using namespace Qt::StringLiterals;
 
+using FieldHash = QHash<QString, QString>;
+
 class TestRadioStream : public QObject
 {
     Q_OBJECT
@@ -78,7 +80,7 @@ void TestRadioStream::cleanupTestCase()
 void TestRadioStream::testConstruction()
 {
     DragonRadioStream stream;
-    QVERIFY(true);
+    QVERIFY(!stream.isAborted());
 }
 
 void TestRadioStream::testSetUrl()
@@ -87,10 +89,10 @@ void TestRadioStream::testSetUrl()
 
     QUrl testUrl("http://example.com/stream"_L1);
     stream.setUrl(testUrl);
-    QVERIFY(true);
+    QVERIFY(!stream.isAborted());
 
     stream.setUrl(QUrl{});
-    QVERIFY(true);
+    QVERIFY(!stream.isAborted());
 }
 
 void TestRadioStream::testStartStop()
@@ -102,10 +104,10 @@ void TestRadioStream::testStartStop()
     stream.start();
 
     stream.stop();
-    QVERIFY(true);
+    QVERIFY(stream.isAborted());
 
     stream.stop();
-    QVERIFY(true);
+    QVERIFY(stream.isAborted());
 }
 
 void TestRadioStream::testReadBlocksUntilData()
@@ -148,7 +150,7 @@ void TestRadioStream::testReadReturnsZeroOnAbort()
 
     stream.stop();
 
-    QVERIFY(true);
+    QVERIFY(stream.isAborted());
 }
 
 void TestRadioStream::testReadCancellation()
@@ -157,7 +159,7 @@ void TestRadioStream::testReadCancellation()
     stream.setUrl(QUrl("http://example.com"_L1));
 
     std::atomic<bool> readStarted{false};
-    std::atomic<bool> readCancelled{false};
+    std::atomic<int> readResult{-2};
     std::vector<uint8_t> buffer(1024);
 
     std::thread readThread([&]() {
@@ -165,9 +167,7 @@ void TestRadioStream::testReadCancellation()
         std::stop_source cancelSource;
         std::stop_token st = cancelSource.get_token();
 
-        int result = stream.read(buffer, st);
-
-        readCancelled = (result < 0 || result == 0);
+        readResult = stream.read(buffer, st);
     });
 
     QTRY_VERIFY(readStarted.load());
@@ -178,7 +178,7 @@ void TestRadioStream::testReadCancellation()
 
     readThread.join();
 
-    QVERIFY(readCancelled.load() || true);
+    QVERIFY(readResult.load() == -1);
 }
 
 void TestRadioStream::testErrorSignal()
@@ -198,34 +198,34 @@ void TestRadioStream::testErrorSignal()
 void TestRadioStream::testMetadataParsing_data()
 {
     QTest::addColumn<QByteArray>("metadata");
-    QTest::addColumn<QHash<QString, QString>>("expectedFields");
+    QTest::addColumn<FieldHash>("expectedFields");
 
     {
-        QHash<QString, QString> expected;
+        FieldHash expected;
         expected.insert("StreamTitle"_L1, "The Beatles - Hey Jude"_L1);
         QTest::newRow("single-field") << QByteArray("StreamTitle='The Beatles - Hey Jude';") << expected;
     }
 
     {
-        QHash<QString, QString> expected;
+        FieldHash expected;
         expected.insert("StreamTitle"_L1, "Some Song"_L1);
         QTest::newRow("title-only") << QByteArray("StreamTitle='Some Song';") << expected;
     }
 
     {
-        QHash<QString, QString> expected;
+        FieldHash expected;
         QTest::newRow("empty-value") << QByteArray("StreamTitle='';") << expected;
     }
 
     {
-        QHash<QString, QString> expected;
+        FieldHash expected;
         expected.insert("StreamTitle"_L1, "Artist - Song"_L1);
         expected.insert("StreamUrl"_L1, "http://example.com"_L1);
         QTest::newRow("multiple-fields") << QByteArray("StreamTitle='Artist - Song';StreamUrl='http://example.com';") << expected;
     }
 
     {
-        QHash<QString, QString> expected;
+        FieldHash expected;
         expected.insert("StreamTitle"_L1, "Rock & Roll - Don't Stop"_L1);
         QTest::newRow("escaped-quote") << QByteArray("StreamTitle='Rock & Roll - Don''t Stop';") << expected;
     }
@@ -233,14 +233,44 @@ void TestRadioStream::testMetadataParsing_data()
 
 void TestRadioStream::testMetadataParsing()
 {
+    QFETCH(QByteArray, metadata);
+    QFETCH(FieldHash, expectedFields);
+
+    qRegisterMetaType<DragonIcyMetadata>("DragonIcyMetadata");
+
     DragonRadioStream stream;
     stream.setUrl(QUrl("http://example.com"_L1));
 
     QSignalSpy metadataSpy(&stream, &DragonRadioStream::metadataReady);
-
     QVERIFY(metadataSpy.isValid());
 
-    QVERIFY(true);
+    stream.processMetadata(metadata);
+
+    if (expectedFields.isEmpty()) {
+        QCOMPARE(metadataSpy.count(), 0);
+    } else {
+        QCOMPARE(metadataSpy.count(), 1);
+
+        const auto emitted = qvariant_cast<DragonIcyMetadata>(metadataSpy.takeFirst().at(0));
+
+        if (expectedFields.contains("StreamTitle"_L1)) {
+            QVERIFY2(emitted.hasStreamTitle(), "Expected StreamTitle to be set");
+            QCOMPARE(emitted.streamTitle(), expectedFields.value("StreamTitle"_L1));
+        }
+
+        if (expectedFields.contains("StreamUrl"_L1)) {
+            QVERIFY2(emitted.hasStreamUrl(), "Expected StreamUrl to be set");
+            QCOMPARE(emitted.streamUrl(), expectedFields.value("StreamUrl"_L1));
+        }
+
+        const auto custom = emitted.customFields();
+        for (auto it = expectedFields.constBegin(); it != expectedFields.constEnd(); ++it) {
+            if (it.key() == "StreamTitle"_L1 || it.key() == "StreamUrl"_L1)
+                continue;
+            QVERIFY2(custom.contains(it.key()), qPrintable(u"Expected custom field '%1' to be present"_s.arg(it.key())));
+            QCOMPARE(custom.value(it.key()), it.value());
+        }
+    }
 }
 
 void TestRadioStream::testBufferOverflow()
@@ -251,7 +281,7 @@ void TestRadioStream::testBufferOverflow()
     stream.start();
 
     stream.stop();
-    QVERIFY(true);
+    QVERIFY(stream.isAborted());
 }
 
 void TestRadioStream::testReadBehaviorWithStopToken()
@@ -299,7 +329,7 @@ void TestRadioStream::testUrlChangeBehavior()
     QTest::qWait(100);
     stream.stop();
 
-    QVERIFY(true);
+    QVERIFY(stream.isAborted());
 }
 
 void TestRadioStream::testIsAbortedFlag()
@@ -332,7 +362,7 @@ void TestRadioStream::testMultipleStartStopCycles()
         stream.stop();
     }
 
-    QVERIFY(true);
+    QVERIFY(stream.isAborted());
 }
 
 void TestRadioStream::testSeekingCapabilities()

@@ -94,4 +94,6 @@ private:
     std::atomic<bool> m_isBuffering{false};
     static constexpr qint64 LOW_WATER_MARK = 0;
     static constexpr qint64 HIGH_WATER_MARK = 128 * 1024;
+
+    friend class TestRadioStream;
 };

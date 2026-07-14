@@ -75,7 +75,8 @@ private Q_SLOTS:
 void TestPlayerBasics::testConstruction()
 {
     DragonPlayer player;
-    QVERIFY(true);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 }
 
 void TestPlayerBasics::testInitialState()
@@ -142,7 +143,7 @@ void TestPlayerBasics::testPlaybackStateProperty()
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     player.play();
-    QVERIFY(true);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
 void TestPlayerBasics::testMediaStatusProperty()
@@ -219,7 +220,7 @@ void TestPlayerBasics::testPlay()
     player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTest::qWait(100);
     player.play();
-    QVERIFY(true);
+    QVERIFY(player.playbackState() != DragonPlayer::PlaybackState::PlayingState);
 }
 
 void TestPlayerBasics::testPause()
@@ -309,10 +310,12 @@ void TestPlayerBasics::testPlaybackStateChangedSignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::playbackStateChanged);
 
-    player.setSource(QUrl::fromLocalFile("/tmp/test.mp3"_L1));
+    player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() != DragonPlayer::MediaStatus::LoadingMedia, 5000);
     player.stop();
-    Q_UNUSED(spy);
+
+    QVERIFY2(!SignalSpyHelper::containsState(spy, DragonPlayer::PlaybackState::PlayingState), "Loading an invalid source must never emit PlayingState");
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
 void TestPlayerBasics::testStatusChangedSignal()
@@ -341,13 +344,22 @@ void TestPlayerBasics::testFftFrameReadySignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::fftFrameReady);
     QVERIFY(spy.isValid());
+
+    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+    player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() != DragonPlayer::MediaStatus::LoadingMedia, 5000);
+    player.play();
+    QTest::qWait(200);
+
+    QVERIFY2(spy.count() == 0, "FFT frames must not be emitted when no audio is playing");
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
 void TestPlayerBasics::testSaveUndoPosition()
 {
     DragonPlayer player;
     player.saveUndoPosition(5000);
-    QVERIFY(true);
+    QCOMPARE(player.position(), 0);
 }
 
 void TestPlayerBasics::testRestoreUndoPosition()
@@ -355,10 +367,10 @@ void TestPlayerBasics::testRestoreUndoPosition()
     DragonPlayer player;
     player.saveUndoPosition(10000);
     player.restoreUndoPosition();
-    QVERIFY(true);
+    QCOMPARE(player.position(), 0);
 
     player.restoreUndoPosition();
-    QVERIFY(true);
+    QCOMPARE(player.position(), 0);
 }
 
 void TestPlayerBasics::testStateMachineSequence_data()
@@ -444,7 +456,7 @@ void TestPlayerBasics::testVolumeBoundaryValues()
     QVERIFY(player.volume() > 0.0f);
 
     player.setVolume(-1.0f);
-    QVERIFY(true);
+    QVERIFY(player.volume() >= 0.0f);
 }
 
 void TestPlayerBasics::testMuteAndVolumeInteraction()
@@ -552,6 +564,11 @@ void TestPlayerBasics::testCurrentPlayingForRadiosSignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::currentPlayingForRadiosChanged);
     QVERIFY(spy.isValid());
+
+    player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() != DragonPlayer::MediaStatus::LoadingMedia, 5000);
+
+    QVERIFY2(spy.count() == 0, "currentPlayingForRadiosChanged must not fire for local file sources");
 }
 
 void TestPlayerBasics::testSetPositionEmitsPositionChanged()

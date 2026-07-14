@@ -242,10 +242,10 @@ void TestDecoder::testConstruction()
         return 0;
     };
     DragonDecoder decoder(std::move(readCb), {});
-    QVERIFY(true);
+    QVERIFY(!decoder.hasFatalError());
 
     DragonDecoder decoder2(nullptr, nullptr, -1, "/nonexistent/file.mp3"_L1);
-    QVERIFY(true);
+    QVERIFY(!decoder2.hasFatalError());
 }
 
 void TestDecoder::testLocalFileDecoding()
@@ -631,7 +631,7 @@ void TestDecoder::testGeneratorEventOrdering()
                                   QVERIFY(!sawEof);
                                   sawEof = true;
                               },
-                              [&](const DecodeError &) { }},
+                              [&](const DecodeError &) {}},
                    event);
     }
 
@@ -710,7 +710,7 @@ void TestDecoder::testGeneratorMultipleIterations()
                                       allSamples.insert(allSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
-                              [&](const auto &) { }},
+                              [&](const auto &) {}},
                    event);
     }
 

@@ -8,6 +8,7 @@
 #include "dragonmultimedia_export.h"
 
 #include <QHash>
+#include <QMetaType>
 #include <QSharedDataPointer>
 #include <QString>
 
@@ -48,3 +49,5 @@ public:
 private:
     QSharedDataPointer<DragonIcyMetadataPrivate> d;
 };
+
+Q_DECLARE_METATYPE(DragonIcyMetadata)

@@ -78,7 +78,7 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
                                                             result.hadError = true;
                                                             result.errorMessage = err.message;
                                                         },
-                                                        [](DecodeEof &) { }},
+                                                        [](DecodeEof &) {}},
                            event);
             }
             decodeComplete.store(true);
@@ -476,7 +476,7 @@ void TestE2E::testDecoderSignalEmissionOrder()
                                                             samplesChunkCount.fetch_add(1);
                                                             samplesCount.fetch_add(static_cast<int>(sc.data.size()));
                                                         },
-                                                        [](DecodeError &) { },
+                                                        [](DecodeError &) {},
                                                         [&eofCount](DecodeEof &) {
                                                             eofCount.fetch_add(1);
                                                         }},
@@ -777,16 +777,19 @@ void TestE2E::testSameFormatSeamlessTransition()
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
-    bool audioEverInactive = helper.wasAudioEverInactive(0, 10);
+    const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QVERIFY(helper.waitForTrackChange());
+
+    QTest::qWait(1500);
+    const int underrunsAfter = diagnostics.audioUnderrunCount();
 
     QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during same-format seamless transition");
 
     QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(stereo[1])));
     QVERIFY(!player.nextSource().isValid());
 
-    QVERIFY2(!audioEverInactive, "Audio device should remain active continuously during same-format gapless transition");
+    QVERIFY2(underrunsAfter - underrunsBefore == 0, "Audio should not underrun during same-format gapless transition");
 
     player.stop();
 }
@@ -889,13 +892,14 @@ void TestE2E::testGaplessFormatMismatch()
 
     QVERIFY(helper.waitForTrackChange());
 
+    QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during gapless format mismatch transition");
+    QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "EndOfMedia should not be emitted during gapless format mismatch transition");
+
     QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-1c-44100hz.flac"_s)));
     QVERIFY(!player.nextSource().isValid());
 
     QVERIFY(player.duration() > 0);
-
-    qDebug() << "Gapless format mismatch test passed:"
-             << "stateChanges=" << stateSpy.count() << "statusChanges=" << statusSpy.count();
+    VERIFY_AUDIO_ACTIVE(diagnostics);
 
     player.stop();
 }

@@ -90,14 +90,15 @@ void TestKioStream::cleanupTestCase()
 void TestKioStream::testConstruction()
 {
     DragonKioStream stream;
-    QVERIFY(true);
+    QCOMPARE(stream.size(), -1);
+    QCOMPARE(stream.position(), 0);
 }
 
 void TestKioStream::testSetUrl()
 {
     DragonKioStream stream;
     stream.setUrl(QUrl::fromLocalFile(m_testFilePath));
-    QVERIFY(true);
+    QCOMPARE(stream.size(), -1);
 }
 
 void TestKioStream::testStartStop()
@@ -106,7 +107,7 @@ void TestKioStream::testStartStop()
     stream.setUrl(QUrl::fromLocalFile(m_testFilePath));
     stream.start();
     stream.stop();
-    QVERIFY(true);
+    QCOMPARE(stream.position(), 0);
 }
 
 void TestKioStream::testReadLocalFile()
@@ -181,22 +182,21 @@ void TestKioStream::testReadBlocksUntilData()
 void TestKioStream::testReadCancellation()
 {
     DragonKioStream stream;
-    std::atomic<bool> readCompleted{false};
     std::vector<uint8_t> buffer(1024);
 
     std::stop_source stopSource;
+    std::atomic<int> bytesRead{-2};
     {
         std::jthread readThread([&]() {
-            stream.read(buffer, stopSource.get_token());
-            readCompleted = true;
+            bytesRead = stream.read(buffer, stopSource.get_token());
         });
 
         QTest::qWait(100);
-        QVERIFY(!readCompleted.load());
+        QVERIFY(bytesRead.load() == -2);
 
         stopSource.request_stop();
     }
-    QVERIFY(readCompleted.load());
+    QCOMPARE(bytesRead.load(), -1);
 }
 
 void TestKioStream::testSeeking()

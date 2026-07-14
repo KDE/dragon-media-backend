@@ -101,7 +101,9 @@ void TestFftProcessor::testHannWindow()
 void TestFftProcessor::testConstruction()
 {
     DragonFftProcessor processor;
-    QVERIFY(true);
+    auto frame = processor.takeLatestFrame();
+    QVERIFY(frame.frequenciesDb.empty());
+    QVERIFY(frame.barData.empty());
 }
 
 void TestFftProcessor::testSetQueue()
@@ -111,7 +113,7 @@ void TestFftProcessor::testSetQueue()
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
     processor.setChannelCount(1);
-    QVERIFY(true);
+    QVERIFY(processor.takeLatestFrame().frequenciesDb.empty());
 }
 
 void TestFftProcessor::testSetSampleRate()
@@ -119,17 +121,19 @@ void TestFftProcessor::testSetSampleRate()
     DragonFftProcessor processor;
 
     processor.setSampleRate(48000);
-    QVERIFY(true);
+    QVERIFY(processor.takeLatestFrame().frequenciesDb.empty());
 
     processor.setSampleRate(44100);
-    QVERIFY(true);
+    QVERIFY(processor.takeLatestFrame().frequenciesDb.empty());
 }
 
 void TestFftProcessor::testReset()
 {
     DragonFftProcessor processor;
     processor.reset();
-    QVERIFY(true);
+    auto frame = processor.takeLatestFrame();
+    QVERIFY(frame.frequenciesDb.empty());
+    QVERIFY(frame.barData.empty());
 }
 
 void TestFftProcessor::testTakeLatestFrameEmpty()

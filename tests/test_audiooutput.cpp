@@ -155,10 +155,10 @@ void TestAudioOutput::testSetQueue()
     DragonPipe<std::float32_t> pipe(65536);
 
     output->setAudioPipe(&pipe);
-    QVERIFY(true);
+    QVERIFY(!output->isDeviceOpen());
 
     output->setAudioPipe(nullptr);
-    QVERIFY(true);
+    QVERIFY(!output->isDeviceOpen());
 }
 
 void TestAudioOutput::testSetStreamName()
@@ -168,7 +168,7 @@ void TestAudioOutput::testSetStreamName()
     output->setStreamName("Test Audio"_L1);
     output->setStreamName(""_L1);
     output->setStreamName("Longer Name With Spaces"_L1);
-    QVERIFY(true);
+    QVERIFY(!output->isDeviceOpen());
 }
 
 void TestAudioOutput::testPositionMsCalculation()
@@ -193,7 +193,7 @@ void TestAudioOutput::testReset()
 
     output->reset();
     QVERIFY(output->positionMs() == 0);
-    QVERIFY(true);
+    QVERIFY(output->totalSamplesWritten() == 0);
 }
 
 void TestAudioOutput::testStopWithoutStart()
@@ -201,10 +201,10 @@ void TestAudioOutput::testStopWithoutStart()
     auto output = createAudioSink();
 
     output->close();
-    QVERIFY(true);
+    QVERIFY(!output->isDeviceOpen());
 
     output->close();
-    QVERIFY(true);
+    QVERIFY(!output->isDeviceOpen());
 }
 
 void TestAudioOutput::testStartStopLifecycle()
@@ -220,7 +220,7 @@ void TestAudioOutput::testStartStopLifecycle()
 
     output->close();
 
-    QVERIFY(true);
+    QVERIFY(!output->isDeviceOpen());
 
     output->reset();
     QVERIFY(output->positionMs() == 0);
@@ -240,7 +240,7 @@ void TestAudioOutput::testMultipleStartStopCycles()
         output->reset();
     }
 
-    QVERIFY(true);
+    QVERIFY(!output->isDeviceOpen());
 }
 
 void TestAudioOutput::testAudioDataProcessing()
@@ -296,7 +296,7 @@ void TestAudioOutput::testQueueBehavior()
     DragonPipe<std::float32_t> pipe(65536);
 
     output->setAudioPipe(&pipe);
-    QVERIFY(true);
+    QVERIFY(!output->isDeviceOpen());
 
     auto output2 = createAudioSink();
 
@@ -372,7 +372,7 @@ void TestAudioOutput::testRapidStartStopCycles()
         output->reset();
     }
 
-    QVERIFY(true);
+    QVERIFY(!output->isDeviceOpen());
 }
 
 void TestAudioOutput::testStopDuringStarvation()
