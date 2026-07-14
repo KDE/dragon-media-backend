@@ -37,15 +37,15 @@ private Q_SLOTS:
     void testSetUrl();
     void testStartStop();
 
-    void testReadBlocksUntilData();
-    void testReadReturnsZeroOnAbort();
+    void testReadBlocksUntilStop();
+    void testStopAbortsStreamWithoutRead();
     void testReadCancellation();
 
     void testErrorSignal();
     void testMetadataParsing_data();
     void testMetadataParsing();
 
-    void testBufferOverflow();
+    void testStopWithoutStartIsNoOp();
     void testReadBehaviorWithStopToken();
     void testUrlChangeBehavior();
     void testIsAbortedFlag();
@@ -110,7 +110,7 @@ void TestRadioStream::testStartStop()
     QVERIFY(stream.isAborted());
 }
 
-void TestRadioStream::testReadBlocksUntilData()
+void TestRadioStream::testReadBlocksUntilStop()
 {
     DragonRadioStream stream;
     stream.setUrl(QUrl("http://example.com"_L1));
@@ -136,7 +136,7 @@ void TestRadioStream::testReadBlocksUntilData()
     readThread.join();
 }
 
-void TestRadioStream::testReadReturnsZeroOnAbort()
+void TestRadioStream::testStopAbortsStreamWithoutRead()
 {
     DragonRadioStream stream;
     stream.setUrl(QUrl("http://example.com"_L1));
@@ -273,7 +273,7 @@ void TestRadioStream::testMetadataParsing()
     }
 }
 
-void TestRadioStream::testBufferOverflow()
+void TestRadioStream::testStopWithoutStartIsNoOp()
 {
     DragonRadioStream stream;
     stream.setUrl(QUrl("http://example.com"_L1));

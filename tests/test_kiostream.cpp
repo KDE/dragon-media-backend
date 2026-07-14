@@ -33,7 +33,7 @@ private Q_SLOTS:
 
     void testReadLocalFile();
     void testReadNonExistentFile();
-    void testReadBlocksUntilData();
+    void testReadBlocksUntilStop();
     void testReadCancellation();
     void testSeeking();
 
@@ -158,7 +158,7 @@ void TestKioStream::testReadNonExistentFile()
     QCOMPARE(result, -1);
 }
 
-void TestKioStream::testReadBlocksUntilData()
+void TestKioStream::testReadBlocksUntilStop()
 {
     DragonKioStream stream;
     std::atomic<bool> readCompleted{false};

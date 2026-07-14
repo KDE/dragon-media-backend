@@ -63,7 +63,7 @@ private Q_SLOTS:
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{0});
     }
 
-    void testBlockingWrite()
+    void testNonBlockingWriteSmallData()
     {
         DragonPipe<std::float32_t> pipe(16);
 

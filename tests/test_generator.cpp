@@ -98,7 +98,7 @@ private Q_SLOTS:
     void testDecodeEofLast();
     void testErrorOnlyYieldsError();
     void testSpanLifetimeValidForIteration();
-    void testSpanInvalidatesOnAdvance();
+    void testSpanDataCopyableBeforeAdvance();
     void testEmptySampleBatches();
     void testErrorMidStream();
     void testMultipleGeneratorsIndependent();
@@ -225,7 +225,7 @@ void TestGeneratorInfrastructure::testSpanLifetimeValidForIteration()
     QCOMPARE(sc.data[3], 0.4f);
 }
 
-void TestGeneratorInfrastructure::testSpanInvalidatesOnAdvance()
+void TestGeneratorInfrastructure::testSpanDataCopyableBeforeAdvance()
 {
     using namespace TestGenerator;
 

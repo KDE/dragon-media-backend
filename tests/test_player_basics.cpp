@@ -40,7 +40,7 @@ private Q_SLOTS:
     void testSetSource();
     void testSetSourceEmpty();
     void testSetSourceInvalid();
-    void testPlay();
+    void testPlayWithNoSourceIsNoOp();
     void testPause();
     void testStop();
 
@@ -211,7 +211,7 @@ void TestPlayerBasics::testSetSourceInvalid()
     QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError || player.status() == DragonPlayer::MediaStatus::InvalidMedia, 5000);
 }
 
-void TestPlayerBasics::testPlay()
+void TestPlayerBasics::testPlayWithNoSourceIsNoOp()
 {
     DragonPlayer player;
     player.play();

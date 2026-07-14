@@ -109,7 +109,7 @@ private Q_SLOTS:
     void cleanupTestCase();
 
     void testGaplessSameFormat();
-    void testGaplessFormatChange();
+    void testGaplessFormatChangeStateMachine();
     void testSingleTrackIntegrity();
 
 private:
@@ -277,7 +277,7 @@ void TestSdlGapless::testGaplessSameFormat()
     QFile::remove(m_pcmCapturePath);
 }
 
-void TestSdlGapless::testGaplessFormatChange()
+void TestSdlGapless::testGaplessFormatChangeStateMachine()
 {
     using namespace FixtureGenerator;
 

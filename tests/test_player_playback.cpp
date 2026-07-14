@@ -39,7 +39,7 @@ private Q_SLOTS:
     void testDeferredStateResetOnNewSource();
 
     void testPauseFromPlayingState();
-    void testStopFromPlayingStateEmitsLoadedMedia();
+    void testStopFromPlayingStateDoesNotEmitLoadedMedia();
     void testPlayFromPausedStateResumes();
     void testMultiplePlayCallsIdempotent();
     void testPlayAfterStopRestartsDecoder();
@@ -53,11 +53,11 @@ private Q_SLOTS:
     void testPlayThenStopDuringLoadingCancelsStart();
 
     void testSignalOrderOnSetSource();
-    void testSignalOrderOnStop();
+    void testSignalPresenceOnStop();
 
     void testDeferredPlayIntentDuringFormatResolution();
     void testSetSourceThenPlayFirstTrack();
-    void testPlayNextTrackWhilePlaying();
+    void testPlayNextTrackAfterStop();
     void testPlayRapidNextNext();
 
     void testDeferredPlayAfterFormatReady();
@@ -288,7 +288,7 @@ void TestPlayerPlayback::testPauseFromPlayingState()
     player.stop();
 }
 
-void TestPlayerPlayback::testStopFromPlayingStateEmitsLoadedMedia()
+void TestPlayerPlayback::testStopFromPlayingStateDoesNotEmitLoadedMedia()
 {
     skipIfMissing(u"sample-3s.mp3"_s);
 
@@ -528,7 +528,7 @@ void TestPlayerPlayback::testSignalOrderOnSetSource()
     QVERIFY2(tracker.contains(u"sourceChanged()"_s), "setSource() must emit sourceChanged");
     QVERIFY2(tracker.verifyOrder(u"statusChanged(LoadingMedia)"_s, u"sourceChanged()"_s), "LoadingMedia must come before sourceChanged");
 }
-void TestPlayerPlayback::testSignalOrderOnStop()
+void TestPlayerPlayback::testSignalPresenceOnStop()
 {
     skipIfMissing(u"sample-3s.mp3"_s);
 
@@ -585,7 +585,7 @@ void TestPlayerPlayback::testSetSourceThenPlayFirstTrack()
     player.stop();
 }
 
-void TestPlayerPlayback::testPlayNextTrackWhilePlaying()
+void TestPlayerPlayback::testPlayNextTrackAfterStop()
 {
     skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s});
 

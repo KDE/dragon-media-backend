@@ -137,7 +137,7 @@ private Q_SLOTS:
     void testSeamlessPlaybackTransition();
 
     void testDecoderMultipleFilesConsecutive();
-    void testDecoderNoMemoryLeaks();
+    void testDecoderMultipleDecodesNoCrash();
 
     void testSeamlessPlaybackWithFormatChange();
     void testFftFramesDuringGaplessTransition();
@@ -528,7 +528,7 @@ void TestE2E::testDecoderMultipleFilesConsecutive()
     }
 }
 
-void TestE2E::testDecoderNoMemoryLeaks()
+void TestE2E::testDecoderMultipleDecodesNoCrash()
 {
     VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 

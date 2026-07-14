@@ -169,10 +169,10 @@ private Q_SLOTS:
 
     void testDifferentSampleRates_data();
     void testDifferentSampleRates();
-    void testMonoToStereoConversion();
+    void testMonoFileStaysMono();
     void testMultipleDecoderInstances();
     void testCorruptDataHandling();
-    void testResamplerBehavior();
+    void testPassthroughAt48k();
     void testChannelConfiguration_data();
     void testChannelConfiguration();
 
@@ -502,7 +502,7 @@ void TestDecoder::testDifferentSampleRates()
     QCOMPARE(result.format->sampleRate, expectedRate);
 }
 
-void TestDecoder::testMonoToStereoConversion()
+void TestDecoder::testMonoFileStaysMono()
 {
     QVERIFY(m_tempDir.isValid());
     QString filePath = m_tempDir.filePath("test_mono.wav"_L1);
@@ -569,7 +569,7 @@ void TestDecoder::testCorruptDataHandling()
     QVERIFY2(result.error.has_value() || !result.format.has_value(), "Corrupt data should fail gracefully");
 }
 
-void TestDecoder::testResamplerBehavior()
+void TestDecoder::testPassthroughAt48k()
 {
     QVERIFY(m_tempDir.isValid());
     QString filePath = m_tempDir.filePath("test_resampler.wav"_L1);

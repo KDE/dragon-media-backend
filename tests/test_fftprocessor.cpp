@@ -45,8 +45,8 @@ private Q_SLOTS:
 
     void testPeakHoldDecay();
     void testBarDataSizeValidation();
-    void testFrequencyDetectionAccuracy_data();
-    void testFrequencyDetectionAccuracy();
+    void testFftProducesOutputAboveThreshold_data();
+    void testFftProducesOutputAboveThreshold();
     void testFrameTimestamp();
     void testSampleRateChange();
 
@@ -57,7 +57,7 @@ private Q_SLOTS:
     void testFrameCountForThreeSecondsStereo();
     void testConfigurableRate();
 
-    void testFftHistoryResetOnModeToggle();
+    void testFftResumesAfterModeToggle();
     void testFftStopTokenHonoredInInnerLoop();
 
     void testFftFrequencyLocalization();
@@ -402,7 +402,7 @@ void TestFftProcessor::testBarDataSizeValidation()
     }
 }
 
-void TestFftProcessor::testFrequencyDetectionAccuracy_data()
+void TestFftProcessor::testFftProducesOutputAboveThreshold_data()
 {
     QTest::addColumn<float>("frequency");
     QTest::addColumn<int>("sampleRate");
@@ -415,7 +415,7 @@ void TestFftProcessor::testFrequencyDetectionAccuracy_data()
     QTest::newRow("1kHz_48000") << 1000.0f << 48000;
 }
 
-void TestFftProcessor::testFrequencyDetectionAccuracy()
+void TestFftProcessor::testFftProducesOutputAboveThreshold()
 {
     QFETCH(float, frequency);
     QFETCH(int, sampleRate);
@@ -777,7 +777,7 @@ void TestFftProcessor::testConfigurableRate()
     QVERIFY2(count <= 95, qPrintable(u"Too many frames (%1) for 3-second burst at 30 Hz"_s.arg(count)));
 }
 
-void TestFftProcessor::testFftHistoryResetOnModeToggle()
+void TestFftProcessor::testFftResumesAfterModeToggle()
 {
     constexpr int sampleRate = 44100;
     constexpr int channels = 2;
