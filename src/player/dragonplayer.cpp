@@ -362,6 +362,8 @@ void DragonPlayerPrivate::init()
 DragonPlayer::DragonPlayer(AudioSink requestedSink, QObject *parent)
     : QObject(parent)
 {
+    qRegisterMetaType<DragonFftFrame>();
+
     d = std::make_unique<DragonPlayerPrivate>(this, requestedSink);
     d->init();
 

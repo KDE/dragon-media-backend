@@ -60,6 +60,9 @@ private Q_SLOTS:
     void testFftHistoryResetOnModeToggle();
     void testFftStopTokenHonoredInInnerLoop();
 
+    void testFftFrequencyLocalization();
+    void testFftMultiTonePeaks();
+
 private:
     std::vector<std::float32_t> createSineWave(float frequency, int sampleRate, int numSamples);
     std::vector<std::float32_t> createSilence(int numSamples);
@@ -234,14 +237,14 @@ void TestFftProcessor::testProcessLoopSilence()
 
     auto frame = processor.takeLatestFrame();
 
-    if (!frame.frequenciesDb.empty()) {
-        float sum = 0.0f;
-        for (float mag : frame.frequenciesDb) {
-            sum += mag;
-        }
-        float avg = sum / static_cast<float>(frame.frequenciesDb.size());
-        QVERIFY2(avg < -40.0f, qPrintable(QString("Silence average magnitude %1 dB too high"_L1).arg(avg)));
+    QVERIFY2(!frame.frequenciesDb.empty(), "Silence should still produce a frame with frequency data");
+
+    float maxMag = -200.0f;
+    for (float mag : frame.frequenciesDb) {
+        if (mag > maxMag)
+            maxMag = mag;
     }
+    QVERIFY2(maxMag < -60.0f, qPrintable(QString("Silence peak magnitude %1 dB too high should be below -60 dB"_L1).arg(maxMag)));
 }
 
 void TestFftProcessor::testProcessLoopMultipleFrames()
@@ -874,6 +877,139 @@ void TestFftProcessor::testFftStopTokenHonoredInInnerLoop()
     QVERIFY2(elapsed < std::chrono::seconds(5),
              qPrintable(u"Thread should stop quickly even with large backlog took %1 ms"_s.arg(
                  std::chrono::duration_cast<std::chrono::milliseconds>(elapsed).count())));
+}
+
+void TestFftProcessor::testFftFrequencyLocalization()
+{
+    constexpr int sampleRate = 44100;
+    constexpr float inputFreq = 1000.0f;
+
+    auto sineWave = createSineWave(inputFreq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
+
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), sineWave);
+
+    DragonFftProcessor processor;
+    processor.setConsumer(pipe.consumer());
+    processor.setChannelCount(1);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::DetailedOnly);
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    QTest::qWait(200);
+    stopSource.request_stop();
+    processorThread.join();
+
+    auto frame = processor.takeLatestFrame();
+    QVERIFY2(!frame.frequenciesDb.empty(), "Should have frequency data");
+    QVERIFY2(frame.frequenciesDb.size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS),
+             qPrintable(u"Expected %1 bins, got %2"_s.arg(DragonFftProcessor::NUM_LOG_BINS).arg(frame.frequenciesDb.size())));
+
+    const float melMin = 2595.0f * std::log10(1.0f + DragonFftProcessor::MIN_FREQ / 700.0f);
+    const float melMax = 2595.0f * std::log10(1.0f + std::min(DragonFftProcessor::MAX_FREQ, static_cast<float>(sampleRate) / 2.0f) / 700.0f);
+    const float inputMel = 2595.0f * std::log10(1.0f + inputFreq / 700.0f);
+    const float t = (inputMel - melMin) / (melMax - melMin);
+    const int expectedBin = static_cast<int>(t * DragonFftProcessor::NUM_LOG_BINS);
+
+    int peakBin = 0;
+    float peakMag = -200.0f;
+    for (int i = 0; i < static_cast<int>(frame.frequenciesDb.size()); ++i) {
+        if (frame.frequenciesDb[static_cast<size_t>(i)] > peakMag) {
+            peakMag = frame.frequenciesDb[static_cast<size_t>(i)];
+            peakBin = i;
+        }
+    }
+
+    QVERIFY2(peakMag > -50.0f, qPrintable(u"Peak magnitude %1 dB too low for %2 Hz sine"_s.arg(peakMag).arg(inputFreq)));
+
+    const int binTolerance = 20;
+    QVERIFY2(std::abs(peakBin - expectedBin) <= binTolerance,
+             qPrintable(u"Peak at bin %1, expected ~%2 (tolerance +/-%3) for %4 Hz"_s.arg(peakBin).arg(expectedBin).arg(binTolerance).arg(inputFreq)));
+
+    qDebug() << "Frequency localization: input" << inputFreq << "Hz -> peak at bin" << peakBin << "(expected" << expectedBin << ") magnitude" << peakMag
+             << "dB";
+}
+
+void TestFftProcessor::testFftMultiTonePeaks()
+{
+    constexpr int sampleRate = 44100;
+    constexpr float freq1 = 440.0f;
+    constexpr float freq2 = 5000.0f;
+
+    constexpr int numSamples = static_cast<int>(DragonFftProcessor::FFT_SIZE);
+    std::vector<std::float32_t> wave(static_cast<size_t>(numSamples));
+    for (int i = 0; i < numSamples; ++i) {
+        const float t = static_cast<float>(i) / static_cast<float>(sampleRate);
+        wave[static_cast<size_t>(i)] =
+            0.25f * std::sin(2.0f * std::numbers::pi_v<float> * freq1 * t) + 0.25f * std::sin(2.0f * std::numbers::pi_v<float> * freq2 * t);
+    }
+
+    DragonPipe<DragonFftBlock> pipe(256);
+    [[maybe_unused]] const auto written = writeBlocks(pipe.producer(), wave);
+
+    DragonFftProcessor processor;
+    processor.setConsumer(pipe.consumer());
+    processor.setChannelCount(1);
+    processor.setSampleRate(sampleRate);
+    processor.setFftMode(DragonFftProcessor::FftMode::DetailedOnly);
+
+    std::stop_source stopSource;
+    std::jthread processorThread([&](std::stop_token) {
+        processor.processLoop(stopSource.get_token());
+    });
+
+    QTest::qWait(200);
+    stopSource.request_stop();
+    processorThread.join();
+
+    auto frame = processor.takeLatestFrame();
+    QVERIFY2(!frame.frequenciesDb.empty(), "Should have frequency data");
+
+    const float melMin = 2595.0f * std::log10(1.0f + DragonFftProcessor::MIN_FREQ / 700.0f);
+    const float melMax = 2595.0f * std::log10(1.0f + std::min(DragonFftProcessor::MAX_FREQ, static_cast<float>(sampleRate) / 2.0f) / 700.0f);
+
+    auto freqToBin = [&](float freq) {
+        const float mel = 2595.0f * std::log10(1.0f + freq / 700.0f);
+        const float t = (mel - melMin) / (melMax - melMin);
+        return static_cast<int>(t * DragonFftProcessor::NUM_LOG_BINS);
+    };
+
+    const int expectedBin1 = freqToBin(freq1);
+    const int expectedBin2 = freqToBin(freq2);
+
+    auto findPeakInRange = [&](int centerBin, int range) -> std::pair<int, float> {
+        int bestBin = centerBin;
+        float bestMag = -200.0f;
+        int lo = std::max(0, centerBin - range);
+        int hi = std::min(static_cast<int>(frame.frequenciesDb.size()) - 1, centerBin + range);
+        for (int i = lo; i <= hi; ++i) {
+            if (frame.frequenciesDb[static_cast<size_t>(i)] > bestMag) {
+                bestMag = frame.frequenciesDb[static_cast<size_t>(i)];
+                bestBin = i;
+            }
+        }
+        return {bestBin, bestMag};
+    };
+
+    const int binTolerance = 20;
+    auto [peak1Bin, peak1Mag] = findPeakInRange(expectedBin1, binTolerance);
+    auto [peak2Bin, peak2Mag] = findPeakInRange(expectedBin2, binTolerance);
+
+    QVERIFY2(peak1Mag > -50.0f, qPrintable(u"First tone (%1 Hz): peak %2 dB too low"_s.arg(freq1).arg(peak1Mag)));
+    QVERIFY2(peak2Mag > -50.0f, qPrintable(u"Second tone (%1 Hz): peak %2 dB too low"_s.arg(freq2).arg(peak2Mag)));
+
+    QVERIFY2(std::abs(peak1Bin - expectedBin1) <= binTolerance, qPrintable(u"First tone: peak at bin %1, expected ~%2"_s.arg(peak1Bin).arg(expectedBin1)));
+    QVERIFY2(std::abs(peak2Bin - expectedBin2) <= binTolerance, qPrintable(u"Second tone: peak at bin %1, expected ~%2"_s.arg(peak2Bin).arg(expectedBin2)));
+
+    QVERIFY2(std::abs(peak1Bin - peak2Bin) > binTolerance,
+             qPrintable(u"Two tones should produce distinguishable peaks: peak1 at bin %1, peak2 at bin %2"_s.arg(peak1Bin).arg(peak2Bin)));
+
+    qDebug() << "Multi-tone: " << freq1 << "Hz -> bin" << peak1Bin << "(expected" << expectedBin1 << ")" << freq2 << "Hz -> bin" << peak2Bin << "(expected"
+             << expectedBin2 << ")";
 }
 
 QTEST_MAIN(TestFftProcessor)

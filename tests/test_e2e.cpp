@@ -78,7 +78,7 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
                                                             result.hadError = true;
                                                             result.errorMessage = err.message;
                                                         },
-                                                        [](DecodeEof &) {}},
+                                                        [](DecodeEof &) { }},
                            event);
             }
             decodeComplete.store(true);
@@ -153,6 +153,9 @@ private Q_SLOTS:
     void testGaplessPreWarmError();
     void testGaplessStarvation();
     void testDiagnosticsBasicFunctionality();
+
+    void testDecodedAudioContentValidation();
+    void testSampleCountForKnownDuration();
 };
 
 void TestE2E::testDecoderMp3File()
@@ -400,14 +403,31 @@ void TestE2E::testDecodeAndVerifySamples()
 
     if (checkSampleRange) {
         std::float32_t minSample = 1.0f;
-        std::float32_t maxSample = -1.0f;
+        std::float32_t maxSampleVal = -1.0f;
         for (const auto &s : result.allSamples) {
             minSample = std::min(minSample, s);
-            maxSample = std::max(maxSample, s);
+            maxSampleVal = std::max(maxSampleVal, s);
         }
 
-        qDebug() << filename << "sample range:" << minSample << "to" << maxSample;
-        QVERIFY2(minSample >= -2.0f && maxSample <= 2.0f, qPrintable(u"%1: sample range out of bounds [%2, %3]"_s.arg(filename).arg(minSample).arg(maxSample)));
+        qDebug() << filename << "sample range:" << minSample << "to" << maxSampleVal;
+        QVERIFY2(minSample >= -2.0f && maxSampleVal <= 2.0f,
+                 qPrintable(u"%1: sample range out of bounds [%2, %3]"_s.arg(filename).arg(minSample).arg(maxSampleVal)));
+
+        bool hasNonZero = false;
+        for (const auto &s : result.allSamples) {
+            if (std::abs(s) > 1e-5f) {
+                hasNonZero = true;
+                break;
+            }
+        }
+        QVERIFY2(hasNonZero, qPrintable(u"%1: all decoded samples are zero decoder may be broken"_s.arg(filename)));
+
+        float sumSq = 0.0f;
+        for (const auto &s : result.allSamples) {
+            sumSq += static_cast<float>(s) * static_cast<float>(s);
+        }
+        float rms = std::sqrt(sumSq / static_cast<float>(result.allSamples.size()));
+        QVERIFY2(rms > 0.001f, qPrintable(u"%1: RMS amplitude %2 is suspiciously low audio content not preserved"_s.arg(filename).arg(rms)));
     }
 
     if (checkNoNaNInf) {
@@ -476,7 +496,7 @@ void TestE2E::testDecoderSignalEmissionOrder()
                                                             samplesChunkCount.fetch_add(1);
                                                             samplesCount.fetch_add(static_cast<int>(sc.data.size()));
                                                         },
-                                                        [](DecodeError &) {},
+                                                        [](DecodeError &) { },
                                                         [&eofCount](DecodeEof &) {
                                                             eofCount.fetch_add(1);
                                                         }},
@@ -544,10 +564,15 @@ void TestE2E::testSeamlessPlaybackTransition()
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    const int underrunsBefore = diagnostics.audioUnderrunCount();
     QVERIFY(helper.waitForTrackChange());
 
     QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during seamless transition");
     QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "EndOfMedia should not be emitted during seamless transition");
+
+    const int underrunsAfter = diagnostics.audioUnderrunCount();
+    QVERIFY2(underrunsAfter - underrunsBefore == 0,
+             qPrintable(u"Audio should not underrun during seamless transition: before=%1, after=%2"_s.arg(underrunsBefore).arg(underrunsAfter)));
 
     VERIFY_AUDIO_ACTIVE(diagnostics);
     QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.m4a"_s)));
@@ -581,10 +606,17 @@ void TestE2E::testSeamlessPlaybackWithFormatChange()
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    const int underrunsBefore = diagnostics.audioUnderrunCount();
+
     QVERIFY(helper.waitForTrackChange());
+
+    QTest::qWait(1000);
+    const int underrunsAfter = diagnostics.audioUnderrunCount();
 
     QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during seamless transition");
     QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "EndOfMedia should not be emitted during seamless transition");
+    QVERIFY2(underrunsAfter - underrunsBefore == 0,
+             qPrintable(u"Audio should not underrun during format-change gapless transition: before=%1, after=%2"_s.arg(underrunsBefore).arg(underrunsAfter)));
 
     QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-1c-44100hz.flac"_s)));
     QVERIFY(!player.nextSource().isValid());
@@ -611,14 +643,18 @@ void TestE2E::testFftFramesDuringGaplessTransition()
 
     QTest::qWait(500);
     int framesBeforeTransition = counter.count();
+    const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QVERIFY(helper.waitForTrackChange());
 
     QTest::qWait(500);
     int framesAfterTransition = counter.count();
+    const int underrunsAfter = diagnostics.audioUnderrunCount();
 
     QVERIFY2(framesBeforeTransition > 0, "FFT frames should arrive during first track playback");
     QVERIFY2(framesAfterTransition > framesBeforeTransition, "FFT frames should continue arriving after gapless transition");
+    QVERIFY2(underrunsAfter - underrunsBefore == 0,
+             qPrintable(u"Audio should not underrun during gapless transition with FFT: before=%1, after=%2"_s.arg(underrunsBefore).arg(underrunsAfter)));
 
     player.stop();
 }
@@ -853,6 +889,7 @@ void TestE2E::testGaplessTransitionCoroutine()
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QVERIFY(helper.waitForTrackChange());
 
@@ -864,6 +901,9 @@ void TestE2E::testGaplessTransitionCoroutine()
     QVERIFY2(trackSpy.count() >= 1, qPrintable(u"Expected trackChanged signal, got %1"_s.arg(trackSpy.count())));
 
     VERIFY_AUDIO_ACTIVE(diagnostics);
+    const int underrunsAfter = diagnostics.audioUnderrunCount();
+    QVERIFY2(underrunsAfter - underrunsBefore == 0,
+             qPrintable(u"Audio should not underrun during coroutine gapless transition: before=%1, after=%2"_s.arg(underrunsBefore).arg(underrunsAfter)));
 
     qDebug() << "Coroutine-based gapless transition test passed:"
              << "trackChanged=" << trackSpy.count() << "sourceChanged=" << sourceSpy.count();
@@ -890,6 +930,8 @@ void TestE2E::testGaplessFormatMismatch()
     QVERIFY(helper.playAndWait());
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
+    const int underrunsBefore = diagnostics.audioUnderrunCount();
+
     QVERIFY(helper.waitForTrackChange());
 
     QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during gapless format mismatch transition");
@@ -900,6 +942,11 @@ void TestE2E::testGaplessFormatMismatch()
 
     QVERIFY(player.duration() > 0);
     VERIFY_AUDIO_ACTIVE(diagnostics);
+
+    const int underrunsAfter = diagnostics.audioUnderrunCount();
+    QVERIFY2(
+        underrunsAfter - underrunsBefore == 0,
+        qPrintable(u"Audio should not underrun during gapless format mismatch transition: before=%1, after=%2"_s.arg(underrunsBefore).arg(underrunsAfter)));
 
     player.stop();
 }
@@ -972,6 +1019,68 @@ void TestE2E::testGaplessStarvation()
     player.stop();
 
     QCOMPARE(underrunsAfter - underrunsBefore, 0);
+}
+
+void TestE2E::testDecodedAudioContentValidation()
+{
+    QStringList fixtures = {u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s, u"gs-16b-1c-44100hz.flac"_s};
+    for (const QString &filename : fixtures) {
+        VERIFY_FIXTURE_EXISTS(filename);
+        auto result = decodeFileSync(TestFixture::fixturePath(filename));
+
+        VERIFY_DECODE_SUCCESS(result, filename);
+        QVERIFY2(result.allSamples.size() > 1000, qPrintable(u"%1: expected many samples, got %2"_s.arg(filename).arg(result.allSamples.size())));
+
+        bool hasNonZero = false;
+        for (const auto &s : result.allSamples) {
+            if (std::abs(s) > 1e-5f) {
+                hasNonZero = true;
+                break;
+            }
+        }
+        QVERIFY2(hasNonZero, qPrintable(u"%1: all decoded samples are zero"_s.arg(filename)));
+
+        float sumSq = 0.0f;
+        for (const auto &s : result.allSamples) {
+            sumSq += static_cast<float>(s) * static_cast<float>(s);
+        }
+        float rms = std::sqrt(sumSq / static_cast<float>(result.allSamples.size()));
+        QVERIFY2(rms > 0.001f, qPrintable(u"%1: RMS amplitude %2 too low"_s.arg(filename).arg(rms)));
+
+        qDebug() << filename << "content validation: samples=" << result.allSamples.size() << "rms=" << rms;
+    }
+}
+
+void TestE2E::testSampleCountForKnownDuration()
+{
+    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    auto result = decodeFileSync(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s));
+
+    VERIFY_DECODE_SUCCESS(result, u"gs-16b-2c-44100hz.ogg"_s);
+
+    QVERIFY2(result.duration > 0, qPrintable(u"Duration should be positive, got %1"_s.arg(result.duration)));
+    QVERIFY2(result.sampleRate > 0, "Sample rate should be positive");
+    QVERIFY2(result.channels > 0, "Channels should be positive");
+
+    const int64_t expectedSamples = result.duration * result.sampleRate * result.channels / 1000;
+    const size_t tolerance = static_cast<size_t>(expectedSamples / 5);
+
+    QVERIFY2(result.allSamples.size() >= expectedSamples - tolerance,
+             qPrintable(u"Sample count %1 below expected ~%2 (duration=%3ms, sr=%4, ch=%5, tolerance=%6)"_s.arg(result.allSamples.size())
+                            .arg(expectedSamples)
+                            .arg(result.duration)
+                            .arg(result.sampleRate)
+                            .arg(result.channels)
+                            .arg(tolerance)));
+    QVERIFY2(result.allSamples.size() <= expectedSamples + tolerance,
+             qPrintable(u"Sample count %1 above expected ~%2 (duration=%3ms, sr=%4, ch=%5, tolerance=%6)"_s.arg(result.allSamples.size())
+                            .arg(expectedSamples)
+                            .arg(result.duration)
+                            .arg(result.sampleRate)
+                            .arg(result.channels)
+                            .arg(tolerance)));
+
+    qDebug() << "OGG sample count validation: actual=" << result.allSamples.size() << "expected~" << expectedSamples;
 }
 
 QTEST_MAIN(TestE2E)

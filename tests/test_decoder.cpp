@@ -183,6 +183,10 @@ private Q_SLOTS:
     void testGeneratorErrorYielded();
     void testGeneratorMultipleIterations();
 
+    void testDecodedSineWaveContent();
+    void testSampleCountValidation();
+    void testPerChunkMetadata();
+
 private:
     QTemporaryDir m_tempDir;
 };
@@ -193,6 +197,8 @@ struct DecodeResult {
     bool sawEof = false;
     std::optional<DecodeError> error;
     bool hadFatalError = false;
+    int chunkSampleRate = 0;
+    int chunkChannels = 0;
 };
 
 DecodeResult runDecoderCollecting(DragonDecoder &decoder, std::stop_token st = {})
@@ -221,6 +227,10 @@ DecodeResult runDecoderCollecting(DragonDecoder &decoder, std::stop_token st = {
                               [&](const SamplesChunk &sc) {
                                   if (!sc.data.empty()) {
                                       result.samples.insert(result.samples.end(), sc.data.begin(), sc.data.end());
+                                      if (sc.sampleRate > 0)
+                                          result.chunkSampleRate = sc.sampleRate;
+                                      if (sc.channels > 0)
+                                          result.chunkChannels = sc.channels;
                                   }
                               },
                               [&](const DecodeEof &) {
@@ -631,7 +641,7 @@ void TestDecoder::testGeneratorEventOrdering()
                                   QVERIFY(!sawEof);
                                   sawEof = true;
                               },
-                              [&](const DecodeError &) {}},
+                              [&](const DecodeError &) { }},
                    event);
     }
 
@@ -710,13 +720,164 @@ void TestDecoder::testGeneratorMultipleIterations()
                                       allSamples.insert(allSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
-                              [&](const auto &) {}},
+                              [&](const auto &) { }},
                    event);
     }
 
     QVERIFY(formatSampleRate > 0);
     QVERIFY(formatChannels > 0);
     QVERIFY(allSamples.size() > 0);
+}
+
+void TestDecoder::testDecodedSineWaveContent()
+{
+    QVERIFY(m_tempDir.isValid());
+
+    constexpr int sampleRate = 44100;
+    constexpr int channels = 2;
+    constexpr int durationMs = 200;
+    constexpr float frequency = 440.0f;
+    constexpr float amplitude = 0.3f;
+
+    QString filePath = m_tempDir.filePath("test_sine_content.wav"_L1);
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(sampleRate, channels, durationMs));
+    file.close();
+
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
+    auto result = runDecoderCollecting(decoder);
+
+    if (result.error) {
+        QFAIL(qPrintable(u"Decoder error: %1"_s.arg(result.error->message)));
+    }
+
+    QVERIFY2(!result.samples.empty(), "Should have decoded samples");
+
+    bool hasNonZero = false;
+    for (const auto &s : result.samples) {
+        if (std::abs(s) > 1e-5f) {
+            hasNonZero = true;
+            break;
+        }
+    }
+    QVERIFY2(hasNonZero, "Decoded samples should not all be zero");
+
+    float sumSq = 0.0f;
+    for (const auto &s : result.samples) {
+        sumSq += static_cast<float>(s) * static_cast<float>(s);
+    }
+    float rms = std::sqrt(sumSq / static_cast<float>(result.samples.size()));
+
+    const float expectedRms = amplitude / std::sqrt(2.0f);
+    QVERIFY2(rms > expectedRms * 0.5f && rms < expectedRms * 2.0f,
+             qPrintable(u"RMS amplitude %1 does not match expected ~%2 for a %3-amplitude sine"_s.arg(rms).arg(expectedRms).arg(amplitude)));
+
+    constexpr size_t N = 4096;
+    if (result.samples.size() >= N * static_cast<size_t>(channels)) {
+        std::vector<std::float32_t> mono;
+        mono.reserve(N);
+        for (size_t i = 0; i < N; ++i) {
+            float sum = 0.0f;
+            for (int c = 0; c < channels; ++c) {
+                sum += result.samples[i * static_cast<size_t>(channels) + c];
+            }
+            mono.push_back(sum / static_cast<float>(channels));
+        }
+
+        float maxMag = 0.0f;
+        size_t maxBin = 0;
+        for (size_t k = 1; k < N / 2; ++k) {
+            float re = 0.0f, im = 0.0f;
+            for (size_t n = 0; n < N; ++n) {
+                const float angle = -2.0f * std::numbers::pi_v<float> * static_cast<float>(k) * static_cast<float>(n) / static_cast<float>(N);
+                re += mono[n] * std::cos(angle);
+                im += mono[n] * std::sin(angle);
+            }
+            float mag = std::sqrt(re * re + im * im);
+            if (mag > maxMag) {
+                maxMag = mag;
+                maxBin = k;
+            }
+        }
+
+        const float detectedFreq = static_cast<float>(maxBin) * static_cast<float>(sampleRate) / static_cast<float>(N);
+        QVERIFY2(std::abs(detectedFreq - frequency) < 50.0f,
+                 qPrintable(u"FFT peak at %1 Hz, expected ~%2 Hz (bin %3)"_s.arg(detectedFreq).arg(frequency).arg(maxBin)));
+    }
+}
+
+void TestDecoder::testSampleCountValidation()
+{
+    QVERIFY(m_tempDir.isValid());
+
+    constexpr int sampleRate = 44100;
+    constexpr int channels = 2;
+    constexpr int durationMs = 500;
+
+    QString filePath = m_tempDir.filePath("test_sample_count.wav"_L1);
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(sampleRate, channels, durationMs));
+    file.close();
+
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
+    auto result = runDecoderCollecting(decoder);
+
+    if (result.error) {
+        QFAIL(qPrintable(u"Decoder error: %1"_s.arg(result.error->message)));
+    }
+
+    QVERIFY2(result.format.has_value(), "FormatReady should have been yielded");
+    QCOMPARE(result.format->sampleRate, sampleRate);
+    QCOMPARE(result.format->channels, channels);
+
+    const int64_t expectedSamples = static_cast<int64_t>(sampleRate) * channels * durationMs / 1000;
+    const size_t tolerance = static_cast<size_t>(expectedSamples / 10);
+
+    QVERIFY2(result.samples.size() >= expectedSamples - tolerance,
+             qPrintable(u"Sample count %1 is below expected ~%2 (tolerance %3)"_s.arg(result.samples.size()).arg(expectedSamples).arg(tolerance)));
+    QVERIFY2(result.samples.size() <= expectedSamples + tolerance,
+             qPrintable(u"Sample count %1 is above expected ~%2 (tolerance %3)"_s.arg(result.samples.size()).arg(expectedSamples).arg(tolerance)));
+}
+
+void TestDecoder::testPerChunkMetadata()
+{
+    QVERIFY(m_tempDir.isValid());
+
+    constexpr int sampleRate = 44100;
+    constexpr int channels = 2;
+    constexpr int durationMs = 200;
+
+    QString filePath = m_tempDir.filePath("test_chunk_meta.wav"_L1);
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(sampleRate, channels, durationMs));
+    file.close();
+
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
+
+    InitResult initRes = decoder.initialize();
+    QVERIFY2(initRes.success, "Initialize should succeed");
+
+    int chunkCount = 0;
+    for (auto event : decoder.decodeLoop({})) {
+        std::visit(overloaded{[&](const FormatReady &) {
+                                  QFAIL("FormatReady should not be yielded by decodeLoop");
+                              },
+                              [&](const SamplesChunk &sc) {
+                                  if (!sc.data.empty()) {
+                                      ++chunkCount;
+                                      QCOMPARE(sc.sampleRate, initRes.sampleRate);
+                                      QCOMPARE(sc.channels, initRes.channels);
+                                  }
+                              },
+                              [&](const DecodeEof &) { },
+                              [&](const DecodeError &) { }},
+                   event);
+    }
+
+    QVERIFY2(chunkCount > 0, "Should have received at least one SamplesChunk");
 }
 
 QTEST_MAIN(TestDecoder)

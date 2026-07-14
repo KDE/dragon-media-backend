@@ -167,9 +167,19 @@ void TestPlayerFft::testFftModeBothEmitsDetailedAndBarFrames()
     player.setFftMode(DragonPlayer::FftMode::Both);
     QTRY_VERIFY_WITH_TIMEOUT(fftSpy.size() >= 5, 3000);
 
+    bool sawDetailed = false;
+    bool sawBars = false;
     for (int i = 0; i < fftSpy.size(); ++i) {
         QVERIFY(fftSpy.at(i).at(0).isValid());
+        auto frame = fftSpy.at(i).at(0).value<DragonFftFrame>();
+        if (!frame.frequenciesDb.empty())
+            sawDetailed = true;
+        if (!frame.barData.empty())
+            sawBars = true;
     }
+
+    QVERIFY2(sawDetailed, "Both mode should emit frames with frequenciesDb populated");
+    QVERIFY2(sawBars, "Both mode should emit frames with barData populated");
 
     player.stop();
 }

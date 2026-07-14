@@ -8,6 +8,8 @@
 #include <chrono>
 #include <vector>
 
+#include <QMetaType>
+
 struct DragonFftFrame {
     std::vector<float> frequenciesDb;
 
@@ -15,3 +17,5 @@ struct DragonFftFrame {
 
     std::chrono::microseconds timestamp{};
 };
+
+Q_DECLARE_METATYPE(DragonFftFrame)

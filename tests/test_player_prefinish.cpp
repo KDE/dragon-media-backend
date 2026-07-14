@@ -12,6 +12,7 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
+#include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
 
 #include <QSignalSpy>
@@ -226,22 +227,36 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
+    DragonDiagnostics diagnostics(&player);
     PlayerHelper helper(&player);
 
     player.setPrefinishMark(2500);
     QSignalSpy aboutToFinishSpy(&player, &DragonPlayer::aboutToFinish);
     QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 
-    player.play();
+    QVERIFY(helper.playAndWait());
+    VERIFY_AUDIO_ACTIVE(diagnostics);
+
+    const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QTRY_COMPARE(aboutToFinishSpy.count(), 1);
 
     QTRY_COMPARE(trackChangedSpy.count(), 1);
 
+    QVERIFY2(helper.verifyNoStopState(stateSpy), "Playback state should never stop during gapless transition");
+    QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "EndOfMedia should not be emitted during gapless transition");
+
     QTRY_COMPARE(aboutToFinishSpy.count(), 2);
+
+    VERIFY_AUDIO_ACTIVE(diagnostics);
+    const int underrunsAfter = diagnostics.audioUnderrunCount();
+    QVERIFY2(underrunsAfter - underrunsBefore == 0,
+             qPrintable(u"Audio should not underrun during gapless transition: before=%1, after=%2"_s.arg(underrunsBefore).arg(underrunsAfter)));
 
     player.stop();
 }

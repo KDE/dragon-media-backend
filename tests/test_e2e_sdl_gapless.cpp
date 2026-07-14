@@ -179,6 +179,7 @@ void TestSdlGapless::runGaplessStateCheck(const BoundaryFixture &fixtureA, const
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
     auto statusSpy = SignalSpyHelper::statusSpy(&player);
+    const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QVERIFY2(helper.waitForTrackChange(30000), "Gapless track change should occur within timeout");
 
@@ -186,6 +187,9 @@ void TestSdlGapless::runGaplessStateCheck(const BoundaryFixture &fixtureA, const
     QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "EndOfMedia should not be emitted during gapless transition");
 
     VERIFY_AUDIO_ACTIVE(diagnostics);
+    const int underrunsAfter = diagnostics.audioUnderrunCount();
+    QVERIFY2(underrunsAfter - underrunsBefore == 0,
+             qPrintable(u"Audio should not underrun during gapless transition: before=%1, after=%2"_s.arg(underrunsBefore).arg(underrunsAfter)));
 
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, 15000);
     QTest::qWait(2000);
