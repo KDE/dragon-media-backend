@@ -25,7 +25,7 @@ class TestPlayerSignals : public QObject
 
 private Q_SLOTS:
     void testPlayingChangedSignal();
-    void testMediaStatusChangedNoDedup();
+    void testMediaStatusChangedDedupOnRedundantStop();
     void testSignalOrderOnPlay();
     void testSignalOrderOnPause();
     void testSignalOrderOnEndOfMedia();
@@ -96,7 +96,7 @@ void TestPlayerSignals::testPlayingChangedSignal()
     QCOMPARE(playingSpy.count(), 0);
 }
 
-void TestPlayerSignals::testMediaStatusChangedNoDedup()
+void TestPlayerSignals::testMediaStatusChangedDedupOnRedundantStop()
 {
     skipIfMissing(u"sample-3s.mp3"_s);
 
@@ -232,9 +232,8 @@ void TestPlayerSignals::testSourceChangedFirstInSetSource()
     int statusIdx = tracker.events().indexOf(u"statusChanged(LoadingMedia)"_s);
 
     QVERIFY2(sourceIdx >= 0, "sourceChanged must be emitted");
-    if (statusIdx >= 0) {
-        QVERIFY2(statusIdx < sourceIdx, "statusChanged(LoadingMedia) must precede sourceChanged (QM order)");
-    }
+    QVERIFY2(statusIdx >= 0, "statusChanged(LoadingMedia) must be emitted");
+    QVERIFY2(statusIdx < sourceIdx, "statusChanged(LoadingMedia) must precede sourceChanged (QM order)");
 
     QVERIFY2(!tracker.contains(u"stateChanged(StoppedState)"_s), "setSource from StoppedState must NOT force-emit playbackStateChanged(StoppedState)");
 }
@@ -393,9 +392,10 @@ void TestPlayerSignals::testRapidSetSourceOnlyLastProcessed()
 
     QCOMPARE(player.source(), sourceB);
 
-    QVERIFY(sourceSpy.count() >= 1);
+    QVERIFY2(sourceSpy.count() >= 2, "Both setSource calls must emit sourceChanged");
 
-    QVERIFY(player.duration() > 0);
+    QVERIFY2(player.duration() > 0, "Duration must be positive after loading");
+    QVERIFY2(player.source() == sourceB, "Player source must be the last-set source");
 }
 
 void TestPlayerSignals::testSetSourceInterruptedByStop()
@@ -411,8 +411,8 @@ void TestPlayerSignals::testSetSourceInterruptedByStop()
 
     QTest::qWait(500);
 
-    QVERIFY2(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::NoMedia,
-             qPrintable(u"Expected LoadedMedia or NoMedia after stop-during-load, got status %1"_s.arg(static_cast<int>(player.status()))));
+    QVERIFY2(player.status() == DragonPlayer::MediaStatus::LoadedMedia,
+             qPrintable(u"Expected LoadedMedia after stop-during-load completes, got status %1"_s.arg(static_cast<int>(player.status()))));
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }

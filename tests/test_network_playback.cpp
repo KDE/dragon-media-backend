@@ -225,9 +225,7 @@ void TestNetworkPlayback::testSeekHttpFile()
     qDebug() << "Testing seek with HTTP file:" << url.toString();
 
     DragonPlayer player;
-    QSignalSpy seekableSpy(&player, &DragonPlayer::seekableChanged);
     QSignalSpy positionSpy(&player, &DragonPlayer::positionChanged);
-    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     player.setSource(url);
 
@@ -248,7 +246,7 @@ void TestNetworkPlayback::testSeekHttpFile()
     QTRY_VERIFY_WITH_TIMEOUT(positionSpy.count() > 0, 5000);
 
     qDebug() << "Position after seek:" << player.position();
-    QVERIFY2(player.position() >= 900 && player.position() <= 2000, "Position should be near 1000ms");
+    QVERIFY2(player.position() >= 900 && player.position() <= 1200, "Position should be near 1000ms after seek");
 
     QTest::qWait(500);
     QVERIFY2(player.position() > 1000, "Playback should have advanced past 1000ms");

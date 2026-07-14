@@ -61,9 +61,12 @@ void TestPlayerFft::testLazyFftInitialization()
     skipIfMissing(u"sample-3s.mp3"_s);
 
     PlayerHelper helper(&player);
+    QSignalSpy fftSpy(&player, &DragonPlayer::fftFrameReady);
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
     QTest::qWait(500);
+
+    QVERIFY2(fftSpy.count() == 0, "FFT frames must not be emitted when fftMode is Off");
 
     player.stop();
 }
@@ -141,6 +144,7 @@ void TestPlayerFft::testFftOffSkipsInfrastructureOnTrackChange()
     DragonPlayer player;
 
     PlayerHelper helper(&player);
+    QSignalSpy fftSpy(&player, &DragonPlayer::fftFrameReady);
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
     QTest::qWait(500);
@@ -150,6 +154,7 @@ void TestPlayerFft::testFftOffSkipsInfrastructureOnTrackChange()
     QTest::qWait(500);
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY2(fftSpy.count() == 0, "FFT frames must not be emitted when fftMode is Off, even across track changes");
     player.stop();
 }
 
@@ -220,7 +225,7 @@ void TestPlayerFft::testFftFrameRateApproaches60Hz()
     // test_fftprocessor.cpp, which feeds a known sample count directly.
     // This integration test is a sanity check that the full pipeline emits
     // "many" frames (catches severe bugs like the old ~11 Hz bug).
-    QVERIFY2(count >= 60, qPrintable(u"Too few FFT frames (%1) full pipeline severely underproducing"_s.arg(count)));
+    QVERIFY2(count >= 120, qPrintable(u"Too few FFT frames (%1) full pipeline severely underproducing (expected ~180 for 3s at 60Hz)"_s.arg(count)));
     QVERIFY2(count <= 220, qPrintable(u"Too many FFT frames (%1) possible burst emission bug"_s.arg(count)));
 
     player.stop();

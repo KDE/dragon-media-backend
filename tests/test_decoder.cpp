@@ -681,7 +681,7 @@ void TestDecoder::testGeneratorEventOrdering()
                                   QVERIFY(!sawEof);
                                   sawEof = true;
                               },
-                              [&](const DecodeError &) { }},
+                              [&](const DecodeError &) {}},
                    event);
     }
 
@@ -762,7 +762,7 @@ void TestDecoder::testGeneratorMultipleIterations()
                                       firstPassSamples.insert(firstPassSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
-                              [&](const auto &) { }},
+                              [&](const auto &) {}},
                    event);
     }
 
@@ -781,7 +781,7 @@ void TestDecoder::testGeneratorMultipleIterations()
                                       secondPassSamples.insert(secondPassSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
-                              [&](const auto &) { }},
+                              [&](const auto &) {}},
                    event);
     }
 
@@ -830,7 +830,7 @@ void TestDecoder::testDecodedSineWaveContent()
     float rms = std::sqrt(sumSq / static_cast<float>(result.samples.size()));
 
     const float expectedRms = amplitude / std::sqrt(2.0f);
-    QVERIFY2(rms > expectedRms * 0.5f && rms < expectedRms * 2.0f,
+    QVERIFY2(rms > expectedRms * 0.8f && rms < expectedRms * 1.2f,
              qPrintable(u"RMS amplitude %1 does not match expected ~%2 for a %3-amplitude sine"_s.arg(rms).arg(expectedRms).arg(amplitude)));
 
     constexpr size_t N = 4096;
@@ -932,8 +932,8 @@ void TestDecoder::testPerChunkMetadata()
                                       QCOMPARE(sc.channels, initRes.channels);
                                   }
                               },
-                              [&](const DecodeEof &) { },
-                              [&](const DecodeError &) { }},
+                              [&](const DecodeEof &) {},
+                              [&](const DecodeError &) {}},
                    event);
     }
 

@@ -116,15 +116,15 @@ void TestRadioStream::testReadBlocksUntilStop()
     stream.setUrl(QUrl("http://example.com"_L1));
 
     std::atomic<bool> readCompleted{false};
+    std::atomic<int> readResult{-2};
     std::vector<uint8_t> readBuffer(1024);
 
     std::thread readThread([&]() {
         std::stop_source stopSource;
         std::stop_token st = stopSource.get_token();
 
-        int bytesRead = stream.read(readBuffer, st);
+        readResult = stream.read(readBuffer, st);
         readCompleted = true;
-        Q_UNUSED(bytesRead);
     });
 
     QTest::qWait(100);
@@ -134,6 +134,9 @@ void TestRadioStream::testReadBlocksUntilStop()
     stream.stop();
 
     readThread.join();
+
+    QVERIFY(readCompleted.load());
+    QCOMPARE(readResult.load(), -1);
 }
 
 void TestRadioStream::testStopAbortsStreamWithoutRead()
@@ -278,7 +281,12 @@ void TestRadioStream::testStopWithoutStartIsNoOp()
     DragonRadioStream stream;
     stream.setUrl(QUrl("http://example.com"_L1));
 
+    stream.stop();
+    QVERIFY(stream.isAborted());
+
     stream.start();
+    QTest::qWait(50);
+    QVERIFY(!stream.isAborted());
 
     stream.stop();
     QVERIFY(stream.isAborted());
@@ -289,30 +297,26 @@ void TestRadioStream::testReadBehaviorWithStopToken()
     DragonRadioStream stream;
     stream.setUrl(QUrl("http://example.com"_L1));
 
-    stream.start();
-    QTest::qWait(50);
-
     std::vector<uint8_t> buffer(1024);
     std::atomic<bool> readCompleted{false};
-    std::atomic<bool> stopTokenRespected{false};
+    std::atomic<int> readResult{-2};
+
+    std::stop_source source;
+    std::stop_token token = source.get_token();
 
     std::thread readThread([&]() {
-        std::stop_source source;
-        std::stop_token token = source.get_token();
-
-        [[maybe_unused]] int result = stream.read(buffer, token);
+        readResult = stream.read(buffer, token);
         readCompleted = true;
-
-        stopTokenRespected = source.stop_requested();
     });
 
     QTest::qWait(100);
 
-    stream.stop();
+    source.request_stop();
 
     readThread.join();
 
     QVERIFY(readCompleted.load());
+    QVERIFY2(readResult.load() <= 0, qPrintable(u"Read should return <=0 after stop token cancellation, got %1"_s.arg(readResult.load())));
 }
 
 void TestRadioStream::testUrlChangeBehavior()

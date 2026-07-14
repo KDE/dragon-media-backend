@@ -92,7 +92,7 @@ void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
     QTest::qWait(300);
 
     QVERIFY2(posSpy.count() > 0, "positionChanged must be emitted during playback");
-    QVERIFY2(player.position() >= 0, "position() must return non-negative value");
+    QVERIFY2(player.position() > 0, "position() must have advanced from 0 during playback");
 
     player.stop();
 }
@@ -111,7 +111,7 @@ void TestPlayerPlayback::testSeekWithRealAudio()
     player.seek(1000);
     QTest::qWait(200);
 
-    VERIFY_POSITION_NEAR(player.position(), 1000, 500);
+    VERIFY_POSITION_NEAR(player.position(), 1000, 200);
 
     player.stop();
 }
@@ -407,10 +407,9 @@ void TestPlayerPlayback::testEndOfMediaTransitionsToStoppedState()
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 15000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 10000);
 
     QVERIFY2(SignalSpyHelper::containsState(stateSpy, DragonPlayer::PlaybackState::StoppedState), "End of media must emit StoppedState");
-
     QVERIFY2(SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::EndOfMedia), "End of media must emit EndOfMedia status");
 
     QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
@@ -434,7 +433,7 @@ void TestPlayerPlayback::testPlayAtEndOfMediaRestarts()
 
     QTRY_VERIFY(stateSpy.count() >= 1);
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
-    VERIFY_POSITION_NEAR(player.position(), 0, 500);
+    VERIFY_POSITION_NEAR(player.position(), 0, 200);
 
     player.stop();
 }

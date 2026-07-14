@@ -487,7 +487,7 @@ void TestGeneratorInfrastructure::testProductionDecoderGeneratorSampleContent()
         }
     }
 
-    QVERIFY2(allSamples.size() > 100, qPrintable(u"Expected >100 samples, got %1"_s.arg(allSamples.size())));
+    QVERIFY2(allSamples.size() > 4000, qPrintable(u"Expected >4000 samples for 200ms of 44100Hz mono, got %1"_s.arg(allSamples.size())));
 
     bool hasNonZero = std::ranges::any_of(allSamples, [](float s) {
         return std::abs(s) > 1e-6f;
@@ -499,8 +499,8 @@ void TestGeneratorInfrastructure::testProductionDecoderGeneratorSampleContent()
         sumSq += static_cast<double>(s) * static_cast<double>(s);
     }
     double rms = std::sqrt(sumSq / allSamples.size());
-    QVERIFY2(rms > 0.01, qPrintable(u"RMS %1 too low for 0.3-amplitude sine wave"_s.arg(rms)));
-    QVERIFY2(rms < 0.5, qPrintable(u"RMS %1 too high for 0.3-amplitude sine wave"_s.arg(rms)));
+    QVERIFY2(rms > 0.15, qPrintable(u"RMS %1 too low for 0.3-amplitude sine wave (expected ~0.212)"_s.arg(rms)));
+    QVERIFY2(rms < 0.30, qPrintable(u"RMS %1 too high for 0.3-amplitude sine wave (expected ~0.212)"_s.arg(rms)));
 
     for (float s : allSamples) {
         QVERIFY2(!std::isnan(s), "Decoded samples should not contain NaN");

@@ -171,6 +171,7 @@ void TestCompletion::testSetResultFromOtherThread()
 
     QVERIFY(cap.done);
     QVERIFY(cap.result.success);
+    QCOMPARE(cap.result.sampleRate, 48000);
     QCOMPARE(cap.resumeThreadId, mainThreadId);
 }
 
@@ -192,6 +193,7 @@ void TestCompletion::testCancelFromOtherThread()
     QVERIFY(cap.done);
     QVERIFY(!cap.result.success);
     QVERIFY(cap.result.cancelled);
+    QCOMPARE(cap.result.errorMessage, QStringLiteral("Cancelled from worker"));
     QCOMPARE(cap.resumeThreadId, mainThreadId);
 }
 

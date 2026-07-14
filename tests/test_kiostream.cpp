@@ -162,12 +162,13 @@ void TestKioStream::testReadBlocksUntilStop()
 {
     DragonKioStream stream;
     std::atomic<bool> readCompleted{false};
+    std::atomic<int> readResult{-2};
     std::vector<uint8_t> buffer(1024);
 
     {
         std::jthread readThread([&]() {
             std::stop_source stopSource;
-            stream.read(buffer, stopSource.get_token());
+            readResult = stream.read(buffer, stopSource.get_token());
             readCompleted = true;
         });
 
@@ -177,6 +178,7 @@ void TestKioStream::testReadBlocksUntilStop()
         stream.stop();
     }
     QVERIFY(readCompleted.load());
+    QCOMPARE(readResult.load(), -1);
 }
 
 void TestKioStream::testReadCancellation()
@@ -422,6 +424,7 @@ void TestKioStream::testHttpKioSeekWhileReading()
     stream.seek(1024);
 
     QTRY_VERIFY_WITH_TIMEOUT(firstRead.load() != -2, 5000);
+    QVERIFY2(firstRead.load() >= 0, qPrintable(u"First read should have succeeded before seek, got %1"_s.arg(firstRead.load())));
 
     std::atomic<int> secondRead{-2};
     {

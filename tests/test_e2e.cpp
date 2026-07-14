@@ -80,7 +80,7 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
                                                             result.hadError = true;
                                                             result.errorMessage = err.message;
                                                         },
-                                                        [](DecodeEof &) { }},
+                                                        [](DecodeEof &) {}},
                            event);
             }
             decodeComplete.store(true);
@@ -136,7 +136,7 @@ private Q_SLOTS:
     void testDecoderNonExistentFile();
     void testDecoderInvalidFile();
 
-    void testDecoderSignalEmissionOrder();
+    void testDecoderSignalEventCounts();
 
     void testSeamlessPlaybackTransition();
 
@@ -305,6 +305,7 @@ void TestE2E::testPlayerWithMp3File()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(player.source() == QUrl::fromLocalFile(path));
 
+    QVERIFY2(durationSpy.count() >= 1, "durationChanged must be emitted after loading media");
     QVERIFY2(player.duration() > 0, "Duration should be positive after loading media");
     QVERIFY2(player.seekable(), "Player should be seekable after loading media");
 
@@ -417,7 +418,7 @@ void TestE2E::testDecodeAndVerifySamples()
         }
 
         qDebug() << filename << "sample range:" << minSample << "to" << maxSampleVal;
-        QVERIFY2(minSample >= -2.0f && maxSampleVal <= 2.0f,
+        QVERIFY2(minSample >= -1.2f && maxSampleVal <= 1.2f,
                  qPrintable(u"%1: sample range out of bounds [%2, %3]"_s.arg(filename).arg(minSample).arg(maxSampleVal)));
 
         bool hasNonZero = false;
@@ -478,7 +479,7 @@ void TestE2E::testDecoderInvalidFile()
     QVERIFY(!res.errorMessage.isEmpty());
 }
 
-void TestE2E::testDecoderSignalEmissionOrder()
+void TestE2E::testDecoderSignalEventCounts()
 {
     VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
@@ -503,7 +504,9 @@ void TestE2E::testDecoderSignalEmissionOrder()
                                                             samplesChunkCount.fetch_add(1);
                                                             samplesCount.fetch_add(static_cast<int>(sc.data.size()));
                                                         },
-                                                        [](DecodeError &) { },
+                                                        [](DecodeError &) {
+                                                            QFAIL("DecodeError should not occur when decoding valid file");
+                                                        },
                                                         [&eofCount](DecodeEof &) {
                                                             eofCount.fetch_add(1);
                                                         }},
@@ -1074,7 +1077,7 @@ void TestE2E::testSampleCountForKnownDuration()
     QVERIFY2(result.channels > 0, "Channels should be positive");
 
     const int64_t expectedSamples = result.duration * result.sampleRate * result.channels / 1000;
-    const size_t tolerance = static_cast<size_t>(expectedSamples / 5);
+    const size_t tolerance = static_cast<size_t>(expectedSamples / 10);
 
     QVERIFY2(result.allSamples.size() >= expectedSamples - tolerance,
              qPrintable(u"Sample count %1 below expected ~%2 (duration=%3ms, sr=%4, ch=%5, tolerance=%6)"_s.arg(result.allSamples.size())

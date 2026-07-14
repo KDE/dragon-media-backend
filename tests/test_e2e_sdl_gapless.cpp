@@ -413,8 +413,8 @@ void TestSdlGapless::testSingleTrackIntegrity()
             ++mismatches;
     }
     qDebug() << "PCM: compared=" << compareEnd << "mismatched=" << mismatches << "maxDev=" << maxDev;
-    QVERIFY2(mismatches <= std::max(100, compareEnd / 100),
-             qPrintable(u"Too many mismatches: %1/%2 (max %3) maxDev=%4"_s.arg(mismatches).arg(compareEnd).arg(std::max(100, compareEnd / 100)).arg(maxDev)));
+    QVERIFY2(mismatches <= std::max(50, compareEnd / 1000),
+             qPrintable(u"Too many mismatches: %1/%2 (max %3) maxDev=%4"_s.arg(mismatches).arg(compareEnd).arg(std::max(50, compareEnd / 1000)).arg(maxDev)));
 
     QFile::remove(fixture.filePath);
     QFile::remove(m_pcmCapturePath);

@@ -168,7 +168,7 @@ void TestPlayerPrefinish::testAboutToFinishTiming()
     QTRY_VERIFY_WITH_TIMEOUT(spy.count() == 1, 5000);
     qint64 elapsed = timer.elapsed();
 
-    QVERIFY2(elapsed >= 500 && elapsed <= 2000,
+    QVERIFY2(elapsed >= 700 && elapsed <= 1500,
              qPrintable(u"aboutToFinish should fire at ~1000ms (3000ms track - 2000ms mark), fired at %1ms after playback start"_s.arg(elapsed)));
 
     player.stop();

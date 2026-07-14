@@ -89,12 +89,18 @@ private Q_SLOTS:
 
         std::stop_source ss;
 
+        std::vector<std::float32_t> consumedData;
+        consumedData.reserve(64);
+
         std::jthread consumer([&](std::stop_token st) {
-            size_t totalRead = 0;
-            while (totalRead < 64 && !st.stop_requested()) {
+            while (consumedData.size() < 64 && !st.stop_requested()) {
                 if (pipe.consumer().ready() >= 4) {
-                    size_t n = pipe.consumer().readSomeWith(4, [](auto, auto) { });
-                    totalRead += n;
+                    pipe.consumer().readSomeWith(4, [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+                        for (size_t i = 0; i < b1.size(); ++i)
+                            consumedData.push_back(b1[i]);
+                        for (size_t i = 0; i < b2.size(); ++i)
+                            consumedData.push_back(b2[i]);
+                    });
                 } else {
                     std::this_thread::sleep_for(100us);
                 }
@@ -104,8 +110,12 @@ private Q_SLOTS:
         size_t n = pipe.producer().write(data, ss.get_token());
         QCOMPARE_EQ(n, size_t{64});
 
-        consumer.request_stop();
         consumer.join();
+
+        QCOMPARE_EQ(consumedData.size(), size_t{64});
+        for (size_t i = 0; i < 64; ++i) {
+            QCOMPARE_EQ(consumedData[i], static_cast<std::float32_t>(i + 1));
+        }
     }
 
     void testBlockingWriteStopRequested()
