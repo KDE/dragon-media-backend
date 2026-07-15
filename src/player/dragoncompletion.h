@@ -41,19 +41,14 @@ public:
 
     ~DragonCompletion()
     {
-        std::coroutine_handle<> handleToDestroy = nullptr;
         {
             std::lock_guard lock(m_mutex);
             const bool wasResumed = m_resumed.load(std::memory_order_acquire);
             if (m_handle && !wasResumed) {
-                handleToDestroy = m_handle;
+                qDebug() << "DragonCompletion::~DragonCompletion() abandoning un-resumed handle:" << m_handle.address()
+                         << "(context was destroyed before posted event fired; the owning Task will clean up the coroutine)";
                 m_handle = nullptr;
             }
-        }
-        if (handleToDestroy) {
-            qDebug() << "DragonCompletion::~DragonCompletion() destroying un-resumed handle:" << handleToDestroy.address()
-                     << "(context was destroyed before posted event fired)";
-            handleToDestroy.destroy();
         }
     }
 
