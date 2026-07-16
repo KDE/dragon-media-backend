@@ -7,8 +7,30 @@
 
 #include "player/dragonpipe.h"
 
+#include <QtTest>
+
+#include <atomic>
+#include <chrono>
 #include <ranges>
 #include <span>
+
+template<typename T>
+T quiescencePolling(std::atomic<T> &counter, int maxWaitMs = 5000, int pollIntervalMs = 20, int stabilityRequired = 2)
+{
+    T prevValue = counter.load(std::memory_order_relaxed);
+    int stableCount = 0;
+    for (int elapsed = 0; elapsed < maxWaitMs && stableCount < stabilityRequired; elapsed += pollIntervalMs) {
+        QTest::qWait(pollIntervalMs);
+        T curValue = counter.load(std::memory_order_relaxed);
+        if (curValue == prevValue) {
+            ++stableCount;
+        } else {
+            stableCount = 0;
+        }
+        prevValue = curValue;
+    }
+    return prevValue;
+}
 
 inline size_t writeAll(DragonPipe<std::float32_t>::Producer producer, std::span<const std::float32_t> data)
 {

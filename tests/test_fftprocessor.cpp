@@ -145,12 +145,17 @@ void TestFftProcessor::testReset()
     const auto written = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks");
 
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
     stopSource.request_stop();
     processorThread.join();
 
@@ -206,9 +211,9 @@ void TestFftProcessor::testProcessLoopSineWave()
     processor.setSampleRate(sampleRate);
     processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
-    std::atomic<bool> callbackInvoked{false};
+    std::atomic<int> frameCount{0};
     processor.setFrameCallback([&](DragonFftFrame) {
-        callbackInvoked = true;
+        frameCount.fetch_add(1, std::memory_order_relaxed);
     });
 
     std::stop_source stopSource;
@@ -216,7 +221,7 @@ void TestFftProcessor::testProcessLoopSineWave()
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
 
     stopSource.request_stop();
     processorThread.join();
@@ -224,7 +229,7 @@ void TestFftProcessor::testProcessLoopSineWave()
     auto frame = processor.takeLatestFrame();
     QVERIFY2(!frame.frequenciesDb.empty(), "FFT frame should have frequency data");
     QVERIFY2(!frame.barData.empty(), "FFT frame should have bar data");
-    QVERIFY2(callbackInvoked.load(), "Frame callback should have been invoked");
+    QVERIFY2(frameCount.load() > 0, "Frame callback should have been invoked");
 
     float peakMag = -80.0f;
     int peakBin = 0;
@@ -263,12 +268,17 @@ void TestFftProcessor::testProcessLoopSilence()
     processor.setSampleRate(sampleRate);
     processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
 
     stopSource.request_stop();
     processorThread.join();
@@ -305,10 +315,12 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
 
     std::vector<DragonFftFrame> frames;
     std::mutex framesMutex;
+    std::atomic<int> frameCount{0};
 
     processor.setFrameCallback([&](DragonFftFrame frame) {
         std::scoped_lock lock(framesMutex);
         frames.push_back(std::move(frame));
+        frameCount.fetch_add(1, std::memory_order_relaxed);
     });
 
     std::stop_source stopSource;
@@ -316,7 +328,7 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(500);
+    quiescencePolling(frameCount);
 
     stopSource.request_stop();
     processorThread.join();
@@ -349,7 +361,7 @@ void TestFftProcessor::testFrameCallbackInvoked()
 
     std::atomic<int> callbackCount{0};
     processor.setFrameCallback([&](DragonFftFrame) {
-        callbackCount.fetch_add(1);
+        callbackCount.fetch_add(1, std::memory_order_relaxed);
     });
 
     std::stop_source stopSource;
@@ -357,7 +369,7 @@ void TestFftProcessor::testFrameCallbackInvoked()
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(200);
+    quiescencePolling(callbackCount, 5000);
 
     stopSource.request_stop();
     processorThread.join();
@@ -385,6 +397,7 @@ void TestFftProcessor::testPeakHoldDecay()
 
     std::vector<std::float32_t> peakValues;
     std::mutex mutex;
+    std::atomic<int> frameCount{0};
 
     processor.setFrameCallback([&](const DragonFftFrame &frame) {
         std::scoped_lock lock(mutex);
@@ -392,6 +405,7 @@ void TestFftProcessor::testPeakHoldDecay()
             float maxVal = *std::max_element(frame.barData.begin(), frame.barData.end());
             peakValues.push_back(maxVal);
         }
+        frameCount.fetch_add(1, std::memory_order_relaxed);
     });
 
     std::stop_source stopSource;
@@ -399,10 +413,10 @@ void TestFftProcessor::testPeakHoldDecay()
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(300);
+    quiescencePolling(frameCount, 5000);
     const auto writtenSilence = writeBlocks(pipe.producer(), silence);
     QVERIFY2(writtenSilence > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
-    QTest::qWait(300);
+    quiescencePolling(frameCount, 5000);
 
     stopSource.request_stop();
     processorThread.join();
@@ -442,12 +456,17 @@ void TestFftProcessor::testBarDataSizeValidation()
     processor.setSampleRate(sampleRate);
     processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
     stopSource.request_stop();
     processorThread.join();
 
@@ -490,12 +509,17 @@ void TestFftProcessor::testFftProducesOutputAboveThreshold()
     processor.setSampleRate(sampleRate);
     processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
     stopSource.request_stop();
     processorThread.join();
 
@@ -535,11 +559,13 @@ void TestFftProcessor::testFrameTimestamp()
     processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
     std::optional<std::chrono::microseconds> firstTimestamp;
+    std::atomic<int> frameCount{0};
 
     processor.setFrameCallback([&](const DragonFftFrame &frame) {
         if (!firstTimestamp.has_value()) {
             firstTimestamp = frame.timestamp;
         }
+        frameCount.fetch_add(1, std::memory_order_relaxed);
     });
 
     std::stop_source stopSource;
@@ -547,7 +573,7 @@ void TestFftProcessor::testFrameTimestamp()
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
     stopSource.request_stop();
     processorThread.join();
 
@@ -570,12 +596,17 @@ void TestFftProcessor::testSampleRateChange()
     const auto written = writeBlocks(pipe.producer(), sine44k);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
 
     processor.setSampleRate(48000);
 
@@ -636,9 +667,9 @@ void TestFftProcessor::testFftModeBarsOnly()
     processor.setSampleRate(sampleRate);
     processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
 
-    std::atomic<bool> callbackInvoked{false};
+    std::atomic<int> frameCount{0};
     processor.setFrameCallback([&](DragonFftFrame) {
-        callbackInvoked.store(true);
+        frameCount.fetch_add(1, std::memory_order_relaxed);
     });
 
     std::stop_source stopSource;
@@ -646,7 +677,7 @@ void TestFftProcessor::testFftModeBarsOnly()
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
 
     stopSource.request_stop();
     processorThread.join();
@@ -656,7 +687,7 @@ void TestFftProcessor::testFftModeBarsOnly()
     QVERIFY2(frame.barData.size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS),
              qPrintable(QString("barData should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_BAR_BINS).arg(frame.barData.size())));
     QVERIFY2(frame.frequenciesDb.empty(), "BarsOnly mode should not produce frequenciesDb");
-    QVERIFY2(callbackInvoked.load(), "Callback should have been invoked");
+    QVERIFY2(frameCount.load() > 0, "Callback should have been invoked");
 }
 
 void TestFftProcessor::testFftModeDetailedOnly()
@@ -674,9 +705,9 @@ void TestFftProcessor::testFftModeDetailedOnly()
     processor.setSampleRate(sampleRate);
     processor.setFftMode(DragonFftProcessor::FftMode::DetailedOnly);
 
-    std::atomic<bool> callbackInvoked{false};
+    std::atomic<int> frameCount{0};
     processor.setFrameCallback([&](DragonFftFrame) {
-        callbackInvoked.store(true);
+        frameCount.fetch_add(1, std::memory_order_relaxed);
     });
 
     std::stop_source stopSource;
@@ -684,7 +715,7 @@ void TestFftProcessor::testFftModeDetailedOnly()
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
 
     stopSource.request_stop();
     processorThread.join();
@@ -694,7 +725,7 @@ void TestFftProcessor::testFftModeDetailedOnly()
     QVERIFY2(frame.frequenciesDb.size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS),
              qPrintable(QString("frequenciesDb should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_LOG_BINS).arg(frame.frequenciesDb.size())));
     QVERIFY2(frame.barData.empty(), "DetailedOnly mode should not produce barData");
-    QVERIFY2(callbackInvoked.load(), "Callback should have been invoked");
+    QVERIFY2(frameCount.load() > 0, "Callback should have been invoked");
 }
 
 void TestFftProcessor::testFftModeSwitch()
@@ -723,7 +754,7 @@ void TestFftProcessor::testFftModeSwitch()
     const auto written5 = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written5 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    QTest::qWait(100);
+    quiescencePolling(frameCount, 5000);
     int framesPhase1 = frameCount.load();
     QVERIFY2(framesPhase1 >= 1, qPrintable(QString("Both mode should produce at least 1 frame, got %1"_L1).arg(framesPhase1)));
 
@@ -742,7 +773,7 @@ void TestFftProcessor::testFftModeSwitch()
     const auto written7 = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written7 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    QTest::qWait(200);
+    quiescencePolling(frameCount, 5000);
     int framesPhase3 = frameCount.load();
     QVERIFY2(framesPhase3 > framesPhase2End,
              qPrintable(QString("BarsOnly mode should resume producing frames: had %1, now %2"_L1).arg(framesPhase2End).arg(framesPhase3)));
@@ -788,13 +819,14 @@ void TestFftProcessor::testFrameCountForThreeSecondsStereo()
     const auto written = writeBlocks(pipe.producer(), audio);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    // Give the processor thread time to drain the pipe and emit all owed frames.
-    QTest::qWait(500);
+    // Wait for the processor to drain all blocks and emit all owed frames.
+    // A fixed qWait(500) is flaky under CPU contention: the processor thread
+    // may not drain all 259 blocks in time when prior tests have loaded the
+    // scheduler. Polling for quiescence makes the test deterministic.
+    const int count = quiescencePolling(frameCount);
 
     stopSource.request_stop();
     processorThread.join();
-
-    const int count = frameCount.load(std::memory_order_relaxed);
 
     // Total mono samples after downmix: 264600 / 2 = 132300.
     // First frame at FFT_SIZE (4096), then every hop = sampleRate/60 = 735 samples.
@@ -835,7 +867,7 @@ void TestFftProcessor::testConfigurableRate()
     const auto written = writeBlocks(pipe.producer(), audio);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    QTest::qWait(500);
+    quiescencePolling(frameCount);
 
     stopSource.request_stop();
     processorThread.join();
@@ -875,7 +907,7 @@ void TestFftProcessor::testFftResumesAfterModeToggle()
     const auto written1 = writeBlocks(pipe.producer(), audio);
     QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    QTest::qWait(300);
+    quiescencePolling(frameCount);
     int framesPhase1 = frameCount.load(std::memory_order_relaxed);
     QVERIFY2(framesPhase1 > 0, "Should have produced frames during initial playback");
 
@@ -890,8 +922,8 @@ void TestFftProcessor::testFftResumesAfterModeToggle()
     QVERIFY2(written2 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
     processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
 
-    // Give time to drain and emit frames from new data only.
-    QTest::qWait(500);
+    // Wait for the processor to drain and emit frames from the new data.
+    quiescencePolling(frameCount);
     int framesPhase2 = frameCount.load(std::memory_order_relaxed);
 
     stopSource.request_stop();
@@ -968,12 +1000,17 @@ void TestFftProcessor::testFftFrequencyLocalization()
     processor.setSampleRate(sampleRate);
     processor.setFftMode(DragonFftProcessor::FftMode::DetailedOnly);
 
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(200);
+    quiescencePolling(frameCount, 5000);
     stopSource.request_stop();
     processorThread.join();
 
@@ -1031,12 +1068,17 @@ void TestFftProcessor::testFftMultiTonePeaks()
     processor.setSampleRate(sampleRate);
     processor.setFftMode(DragonFftProcessor::FftMode::DetailedOnly);
 
+    std::atomic<int> frameCount{0};
+    processor.setFrameCallback([&](DragonFftFrame) {
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    });
+
     std::stop_source stopSource;
     std::jthread processorThread([&](std::stop_token) {
         processor.processLoop(stopSource.get_token());
     });
 
-    QTest::qWait(200);
+    quiescencePolling(frameCount, 5000);
     stopSource.request_stop();
     processorThread.join();
 

@@ -80,7 +80,7 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
                                                             result.hadError = true;
                                                             result.errorMessage = err.message;
                                                         },
-                                                        [](DecodeEof &) {}},
+                                                        [](DecodeEof &) { }},
                            event);
             }
             decodeComplete.store(true);
