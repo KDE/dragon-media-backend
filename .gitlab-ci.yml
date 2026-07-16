@@ -1,0 +1,8 @@
+include:
+  - project: sysadmin/ci-utilities
+    file:
+      - /gitlab-templates/clang-format.yml
+      - /gitlab-templates/reuse-lint.yml
+      - /gitlab-templates/linux-qt6.yml
+      - /gitlab-templates/freebsd-qt6.yml
+
