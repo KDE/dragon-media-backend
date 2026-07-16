@@ -5,6 +5,8 @@ Dependencies:
 - 'on': ['@all']
   'require':
     'frameworks/kio': '@stable-kf6'
+    'libraries/qcoro': '@stable-kf6'
 
 Options:
- clang-format-versions: [22]
+  clang-format-versions: [22]
+  cmake-options: '-DECM_QMLCACHE_UNITY_BUILD=ON -DFETCHCONTENT_SOURCE_DIR_KISSFFT=$CI_PROJECT_DIR/kissfft-src'
