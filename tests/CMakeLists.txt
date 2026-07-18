@@ -13,8 +13,12 @@ function(dragon_add_test name)
         DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
     )
     add_test(NAME ${name} COMMAND ${name})
+    set(_qt_plugin_path "${PROJECT_BINARY_DIR}/bin")
+    if(DEFINED ENV{QT_PLUGIN_PATH} AND NOT "$ENV{QT_PLUGIN_PATH}" STREQUAL "")
+        string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
+    endif()
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
-        "QT_PLUGIN_PATH=${PROJECT_BINARY_DIR}/bin"
+        "QT_PLUGIN_PATH=${_qt_plugin_path}"
         ${ARG_ENVIRONMENT}
     )
 endfunction()
@@ -58,19 +62,19 @@ set_tests_properties(test_audiooutput PROPERTIES DISABLED TRUE)
 add_test(NAME test_audiooutput_sdl COMMAND test_audiooutput)
 set_property(TEST test_audiooutput_sdl APPEND PROPERTY ENVIRONMENT
     "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink"
-    "QT_PLUGIN_PATH=${PROJECT_BINARY_DIR}/bin"
+    "QT_PLUGIN_PATH=${_qt_plugin_path}"
 )
 if(PULSEAUDIO_FOUND)
     add_test(NAME test_audiooutput_pulseaudio COMMAND test_audiooutput)
     set_property(TEST test_audiooutput_pulseaudio APPEND PROPERTY ENVIRONMENT
         "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpulseaudiosink"
-        "QT_PLUGIN_PATH=${PROJECT_BINARY_DIR}/bin"
+        "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
 endif()
 if(PIPEWIRE_FOUND)
     add_test(NAME test_audiooutput_pipewire COMMAND test_audiooutput)
     set_property(TEST test_audiooutput_pipewire APPEND PROPERTY ENVIRONMENT
         "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpipewireaudiosink"
-        "QT_PLUGIN_PATH=${PROJECT_BINARY_DIR}/bin"
+        "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
 endif()
