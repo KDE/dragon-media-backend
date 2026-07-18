@@ -4,6 +4,8 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Core Test)
 
+option(DRAGON_CI_PIPEWIRE "Start a headless PipeWire daemon for audio tests" OFF)
+
 function(dragon_add_test name)
     cmake_parse_arguments(ARG "" "" "LIBRARIES;ENVIRONMENT" ${ARGN})
     add_executable(${name} ${name}.cpp)
@@ -22,6 +24,36 @@ function(dragon_add_test name)
         ${ARG_ENVIRONMENT}
     )
 endfunction()
+
+set(_dragon_audio_tests
+    test_player_basics
+    test_player_playback
+    test_player_signals
+    test_player_prefinish
+    test_player_fft
+    test_e2e
+    test_network_playback
+    test_audiooutput_sdl
+    test_audiooutput_pulseaudio
+    test_audiooutput_pipewire
+)
+
+if(DRAGON_CI_PIPEWIRE)
+    add_test(NAME pipewire_setup
+        COMMAND bash ${CMAKE_SOURCE_DIR}/ci/start-pipewire.sh
+                ${CMAKE_SOURCE_DIR}/ci/pipewire-daemon.conf
+    )
+    set_tests_properties(pipewire_setup PROPERTIES
+        FIXTURES_SETUP "dragon_pipewire"
+    )
+
+    add_test(NAME pipewire_cleanup
+        COMMAND bash -c "killall pipewire wireplumber 2>/dev/null || true"
+    )
+    set_tests_properties(pipewire_cleanup PROPERTIES
+        FIXTURES_CLEANUP "dragon_pipewire"
+    )
+endif()
 
 # Unit tests
 dragon_add_test(test_generator LIBRARIES Qt6::Core)
@@ -77,4 +109,14 @@ if(PIPEWIRE_FOUND)
         "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpipewireaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
+endif()
+
+if(DRAGON_CI_PIPEWIRE)
+    foreach(_test ${_dragon_audio_tests})
+        if(TEST ${_test})
+            set_tests_properties(${_test} PROPERTIES
+                FIXTURES_REQUIRED "dragon_pipewire"
+            )
+        endif()
+    endforeach()
 endif()

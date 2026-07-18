@@ -9,4 +9,5 @@ Dependencies:
 
 Options:
   clang-format-versions: [22]
-  cmake-options: '-DECM_QMLCACHE_UNITY_BUILD=ON -DFETCHCONTENT_SOURCE_DIR_KISSFFT=$CI_PROJECT_DIR/kissfft-src'
+  per-test-timeout: 300
+  cmake-options: '-DECM_QMLCACHE_UNITY_BUILD=ON -DFETCHCONTENT_SOURCE_DIR_KISSFFT=$CI_PROJECT_DIR/kissfft-src -DDRAGON_CI_PIPEWIRE=ON'
