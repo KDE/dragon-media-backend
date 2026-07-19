@@ -88,7 +88,7 @@ if(FLAC_FOUND)
 endif()
 
 # Audio output tests (one executable, run once per backend via env var)
-dragon_add_test(test_audiooutput LIBRARIES SDL3::SDL3 spsc_queue)
+dragon_add_test(test_audiooutput LIBRARIES SDL3::SDL3 spsc_queue Qt6::Gui)
 set_tests_properties(test_audiooutput PROPERTIES DISABLED TRUE)
 
 add_test(NAME test_audiooutput_sdl COMMAND test_audiooutput)

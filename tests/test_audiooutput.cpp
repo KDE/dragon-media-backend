@@ -14,9 +14,18 @@
 #include "sink/dragonaudiosink.h"
 #include "sink/dragonaudiosinkfactory.h"
 
+#include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QProcess>
+#include <QRegularExpression>
+#include <QScopeGuard>
+
 #include <atomic>
 #include <chrono>
 #include <memory>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -66,8 +75,16 @@ private Q_SLOTS:
     void testSeekWhilePaused();
     void testPositionStabilityDuringPause();
 
+    void testVolumeChangeWhilePlaying();
+    void testExternalVolumeChangePropagates();
+
 private:
     void fillQueue(DragonPipe<std::float32_t> *pipe, const std::vector<std::float32_t> &data);
+    static QString currentSinkBackend();
+    static bool findSinkInputByApplicationName(const QString &appName, uint32_t &sinkInputIndexOut);
+    static bool setSinkInputVolume(uint32_t sinkInputIndex, int percent);
+    static bool findPwNodeByApplicationName(const QString &appName, uint32_t &nodeIdOut);
+    static bool setPwNodeVolume(uint32_t nodeId, float linearGain);
 };
 
 void TestAudioOutput::testConstruction()
@@ -707,6 +724,201 @@ void TestAudioOutput::testPositionStabilityDuringPause()
 void TestAudioOutput::fillQueue(DragonPipe<std::float32_t> *pipe, const std::vector<std::float32_t> &data)
 {
     pipe->producer().write(data, std::stop_token{});
+}
+
+QString TestAudioOutput::currentSinkBackend()
+{
+    return qEnvironmentVariable("DRAGONMULTIMEDIA_AUDIO_SINK");
+}
+
+bool TestAudioOutput::findSinkInputByApplicationName(const QString &appName, uint32_t &sinkInputIndexOut)
+{
+    QProcess pactl;
+    pactl.start(u"pactl"_s, QStringList{u"--format"_s, u"json"_s, u"list"_s, u"sink-inputs"_s});
+    if (!pactl.waitForFinished(5000)) {
+        return false;
+    }
+    const QByteArray output = pactl.readAllStandardOutput();
+    if (output.isEmpty()) {
+        return false;
+    }
+
+    QJsonParseError parseError{};
+    const QJsonDocument doc = QJsonDocument::fromJson(output, &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isArray()) {
+        return false;
+    }
+
+    const QJsonArray root = doc.array();
+    for (const QJsonValue &entry : root) {
+        if (!entry.isObject()) {
+            continue;
+        }
+        const QJsonObject obj = entry.toObject();
+        const QJsonValue props = obj.value(u"properties"_s);
+        if (!props.isObject()) {
+            continue;
+        }
+        const QString name = props.toObject().value(u"application.name"_s).toString();
+        if (name.compare(appName, Qt::CaseInsensitive) == 0) {
+            const QJsonValue idxVal = obj.value(u"index"_s);
+            if (!idxVal.isDouble()) {
+                continue;
+            }
+            sinkInputIndexOut = static_cast<uint32_t>(idxVal.toDouble());
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TestAudioOutput::setSinkInputVolume(uint32_t sinkInputIndex, int percent)
+{
+    QProcess pactl;
+    pactl.start(u"pactl"_s, QStringList{u"set-sink-input-volume"_s, QString::number(sinkInputIndex), QString::number(percent) + u"%"_s});
+    return pactl.waitForFinished(3000) && pactl.exitCode() == 0;
+}
+
+bool TestAudioOutput::findPwNodeByApplicationName(const QString &appName, uint32_t &nodeIdOut)
+{
+    QProcess pwcli;
+    pwcli.start(u"pw-cli"_s, QStringList{u"ls"_s, u"Node"_s});
+    if (!pwcli.waitForFinished(5000)) {
+        return false;
+    }
+    const QString output = QString::fromUtf8(pwcli.readAllStandardOutput());
+
+    QRegularExpression idRe(u"^\\s*id (\\d+), type PipeWire:Interface:Node"_s);
+    QRegularExpression appRe(u"application.name = \"%1\""_s.arg(QRegularExpression::escape(appName)));
+
+    std::optional<uint32_t> currentNode;
+    const QStringList lines = output.split(u'\n');
+    for (const QString &line : lines) {
+        const QRegularExpressionMatch idMatch = idRe.match(line);
+        if (idMatch.hasMatch()) {
+            bool ok = false;
+            const uint32_t id = idMatch.captured(1).toUInt(&ok);
+            if (ok) {
+                currentNode = id;
+            }
+            continue;
+        }
+        if (currentNode.has_value() && appRe.match(line).hasMatch()) {
+            nodeIdOut = *currentNode;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool TestAudioOutput::setPwNodeVolume(uint32_t nodeId, float linearGain)
+{
+    QProcess pwcli;
+    const QString pod = u"{ channelVolumes = [ %1, %1 ] }"_s.arg(linearGain);
+    pwcli.start(u"pw-cli"_s, QStringList{u"set-param"_s, QString::number(nodeId), u"Props"_s, pod});
+    return pwcli.waitForFinished(3000) && pwcli.exitCode() == 0;
+}
+
+void TestAudioOutput::testVolumeChangeWhilePlaying()
+{
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    DragonPipe<std::float32_t> pipe(65536);
+    output->setAudioPipe(&pipe);
+
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    fillQueue(&pipe, std::vector<std::float32_t>(8192, 0.5f));
+    QTest::qWait(100);
+
+    QSignalSpy spy(output.get(), &DragonAudioSink::volumeChanged);
+    spy.clear();
+
+    output->setVolume(0.4f);
+    QVERIFY(qAbs(output->volume() - 0.4f) < 0.01f);
+    QVERIFY(spy.count() >= 1);
+
+    spy.clear();
+    output->setMuted(true);
+    QVERIFY(output->muted());
+    QVERIFY(spy.count() >= 1);
+
+    spy.clear();
+    output->setMuted(false);
+    QVERIFY(!output->muted());
+    QVERIFY(spy.count() >= 1);
+
+    output->close();
+}
+
+void TestAudioOutput::testExternalVolumeChangePropagates()
+{
+    const QString backend = currentSinkBackend();
+    if (backend != u"dragonpipewireaudiosink"_s && backend != u"dragonpulseaudiosink"_s) {
+        QSKIP("External volume propagation only applies to PipeWire and PulseAudio backends");
+    }
+
+    const QString uniqueTag = u"DragonVolumeTest_%1"_s.arg(QCoreApplication::applicationPid());
+    const QString priorDisplayName = QGuiApplication::applicationDisplayName();
+    QGuiApplication::setApplicationDisplayName(uniqueTag);
+    auto nameGuard = qScopeGuard([&priorDisplayName]() {
+        QGuiApplication::setApplicationDisplayName(priorDisplayName);
+    });
+
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    DragonPipe<std::float32_t> pipe(65536);
+    output->setAudioPipe(&pipe);
+
+    output->setStreamName(uniqueTag);
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    fillQueue(&pipe, std::vector<std::float32_t>(16384, 0.5f));
+    QTest::qWait(300);
+
+    const float initialVolume = output->volume();
+
+    QSignalSpy spy(output.get(), &DragonAudioSink::volumeChanged);
+
+    bool changed = false;
+    if (backend == u"dragonpulseaudiosink"_s) {
+        uint32_t sinkInputIndex = 0;
+        if (!findSinkInputByApplicationName(uniqueTag, sinkInputIndex)) {
+            output->close();
+            QSKIP("Could not locate PulseAudio sink-input for test stream");
+        }
+        if (!setSinkInputVolume(sinkInputIndex, 30)) {
+            output->close();
+            QSKIP("pactl set-sink-input-volume failed");
+        }
+        changed = true;
+    } else {
+        uint32_t nodeId = 0;
+        if (!findPwNodeByApplicationName(uniqueTag, nodeId)) {
+            output->close();
+            QSKIP("Could not locate PipeWire node for test stream");
+        }
+        if (!setPwNodeVolume(nodeId, 0.3f)) {
+            output->close();
+            QSKIP("pw-cli set-param failed");
+        }
+        changed = true;
+    }
+
+    if (changed) {
+        const bool propagated = QTest::qWaitFor(
+            [&]() {
+                return spy.count() > 0 && qAbs(output->volume() - initialVolume) > 0.05f;
+            },
+            5000);
+        QVERIFY2(propagated, "External volume change should propagate to DragonAudioSink::volumeChanged()");
+    }
+
+    output->close();
 }
 
 QTEST_MAIN(TestAudioOutput)

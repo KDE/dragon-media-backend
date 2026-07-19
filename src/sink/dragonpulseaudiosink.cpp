@@ -315,6 +315,14 @@ bool DragonPulseAudioSink::connectToServer()
             Q_EMIT errorOccurred(u"PulseAudio: context not ready"_s);
             return false;
         }
+
+        pa_context_set_subscribe_callback(ctx.get(), DragonPulseAudioSink::subscribeCallback, this);
+        pa_operation *subOp = pa_context_subscribe(ctx.get(), PA_SUBSCRIPTION_MASK_SINK_INPUT, nullptr, nullptr);
+        if (subOp) {
+            pa_operation_unref(subOp);
+        } else {
+            qCWarning(dragonMultimediaAudio) << "PulseAudio: pa_context_subscribe failed";
+        }
     }
 
     m_pa->context = std::move(ctx);
@@ -340,6 +348,7 @@ void DragonPulseAudioSink::disconnectFromServer()
         }
 
         if (m_pa->context) {
+            pa_context_set_subscribe_callback(m_pa->context.get(), nullptr, nullptr);
             m_pa->context.reset();
         }
     }
@@ -624,6 +633,73 @@ void DragonPulseAudioSink::underflowCallback(pa_stream *s, void *userdata)
     Q_UNUSED(s);
     Q_UNUSED(userdata);
     qCDebug(dragonMultimediaAudio) << "PulseAudio underflow detected";
+}
+
+void DragonPulseAudioSink::subscribeCallback(pa_context *c, pa_subscription_event_type_t type, uint32_t idx, void *userdata)
+{
+    Q_UNUSED(c);
+    auto *self = static_cast<DragonPulseAudioSink *>(userdata);
+    if (!self) {
+        return;
+    }
+
+    const auto facility = type & PA_SUBSCRIPTION_EVENT_FACILITY_MASK;
+    if (facility != PA_SUBSCRIPTION_EVENT_SINK_INPUT) {
+        return;
+    }
+
+    if (idx != self->m_pa->sinkInputIndex) {
+        return;
+    }
+
+    const auto eventType = type & PA_SUBSCRIPTION_EVENT_TYPE_MASK;
+    if (eventType == PA_SUBSCRIPTION_EVENT_REMOVE) {
+        return;
+    }
+
+    qCDebug(dragonMultimediaAudio) << "PulseAudio sink_input" << idx << "changed, fetching info";
+    self->requestSinkInputInfo();
+}
+
+void DragonPulseAudioSink::sinkInputInfoCallback(pa_context *c, const pa_sink_input_info *info, int eol, void *userdata)
+{
+    Q_UNUSED(c);
+    auto *self = static_cast<DragonPulseAudioSink *>(userdata);
+    if (!self || !info || eol != 0) {
+        return;
+    }
+
+    if (!info->has_volume) {
+        return;
+    }
+
+    const pa_volume_t avg = pa_cvolume_avg(&info->volume);
+    const float linearGain = static_cast<float>(pa_sw_volume_to_linear(avg));
+
+    float cached = self->m_cachedGain.load(std::memory_order_relaxed);
+    if (qAbs(linearGain - cached) < 0.001f) {
+        return;
+    }
+    self->m_cachedGain.store(linearGain, std::memory_order_relaxed);
+
+    qCDebug(dragonMultimediaAudio) << "PulseAudio external volume change, linearGain:" << linearGain;
+    QMetaObject::invokeMethod(
+        self,
+        [self, linearGain]() {
+            self->onExternalVolumeChanged(linearGain);
+        },
+        Qt::QueuedConnection);
+}
+
+void DragonPulseAudioSink::requestSinkInputInfo()
+{
+    if (!m_pa->context || !m_pa->mainloop) {
+        return;
+    }
+    pa_operation *op = pa_context_get_sink_input_info(m_pa->context.get(), m_pa->sinkInputIndex, DragonPulseAudioSink::sinkInputInfoCallback, this);
+    if (op) {
+        pa_operation_unref(op);
+    }
 }
 
 void DragonPulseAudioSink::resetDrainState()

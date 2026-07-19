@@ -9,6 +9,10 @@
 
 #include <QVariant>
 
+#include <pulse/def.h>
+#include <pulse/introspect.h>
+#include <pulse/subscribe.h>
+
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
@@ -19,8 +23,6 @@
 struct pa_threaded_mainloop;
 struct pa_context;
 struct pa_stream;
-struct pa_sample_spec;
-struct pa_channel_map;
 
 class DragonPulseAudioSink : public DragonAudioSink
 {
@@ -54,11 +56,14 @@ public:
     static void contextStateCallback(pa_context *c, void *userdata);
     static void drainCallback(pa_stream *s, int success, void *userdata);
     static void underflowCallback(pa_stream *s, void *userdata);
+    static void subscribeCallback(pa_context *c, pa_subscription_event_type_t type, uint32_t idx, void *userdata);
+    static void sinkInputInfoCallback(pa_context *c, const pa_sink_input_info *info, int eol, void *userdata);
 
 private:
     [[nodiscard]] bool connectToServer();
     void disconnectFromServer();
     void applyVolume(float linearGain);
+    void requestSinkInputInfo();
     void resetDrainState() override;
 
     std::atomic<bool> m_drainRequested{false};
