@@ -80,69 +80,102 @@ public:
 
     bool setResult(InitResult result)
     {
-        std::lock_guard lock(m_mutex);
-        if (m_ready.exchange(true, std::memory_order_acq_rel)) {
-            qDebug() << "DragonCompletion::setResult() already completed, skipping, handle:" << m_handle.address();
-            return false;
+        std::coroutine_handle<> handle;
+        std::shared_ptr<DragonCompletion> self;
+        QObject *receiver = nullptr;
+        bool onMainThread = false;
+
+        {
+            std::lock_guard lock(m_mutex);
+            if (m_ready.exchange(true, std::memory_order_acq_rel)) {
+                qDebug() << "DragonCompletion::setResult() already completed, skipping, handle:" << m_handle.address();
+                return false;
+            }
+            m_result = std::move(result);
+            if (m_handle) {
+                handle = m_handle;
+                self = shared_from_this();
+                receiver = m_context ? m_context : qApp;
+                onMainThread = QThread::currentThread() == qApp->thread();
+            } else {
+                qDebug() << "DragonCompletion::setResult() no handle to resume";
+            }
         }
-        m_result = std::move(result);
-        if (m_handle) {
-            QObject *receiver = m_context ? m_context : qApp;
-            const bool onMainThread = QThread::currentThread() == qApp->thread();
-            qDebug() << "DragonCompletion::setResult() scheduling resume via" << (onMainThread ? "QueuedConnection(on-main)" : "QueuedConnection(off-main)")
-                     << "handle:" << m_handle.address() << "success:" << m_result->success << "receiver:" << receiver;
 
-            auto self = shared_from_this();
-            QMetaObject::invokeMethod(
-                receiver,
-                [self, h = m_handle]() {
-                    self->m_resumed.store(true, std::memory_order_release);
-                    qDebug() << "DragonCompletion::setResult() lambda executing, resuming handle:" << h.address();
-                    if (h) {
-                        h.resume();
-                    }
-                    qDebug() << "DragonCompletion::setResult() lambda done, handle:" << h.address();
-                },
-                Qt::QueuedConnection);
-
-        } else {
-            qDebug() << "DragonCompletion::setResult() no handle to resume";
+        if (handle) {
+            if (onMainThread) {
+                qDebug() << "DragonCompletion::setResult() resuming directly on main thread, handle:" << handle.address() << "success:" << m_result->success;
+                m_resumed.store(true, std::memory_order_release);
+                handle.resume();
+                qDebug() << "DragonCompletion::setResult() direct resume done, handle:" << handle.address();
+            } else {
+                qDebug() << "DragonCompletion::setResult() scheduling resume via QueuedConnection(off-main)"
+                         << "handle:" << handle.address() << "success:" << m_result->success << "receiver:" << receiver;
+                QMetaObject::invokeMethod(
+                    receiver,
+                    [self, handle]() mutable {
+                        self->m_resumed.store(true, std::memory_order_release);
+                        qDebug() << "DragonCompletion::setResult() lambda executing, resuming handle:" << handle.address();
+                        if (handle) {
+                            handle.resume();
+                        }
+                        qDebug() << "DragonCompletion::setResult() lambda done, handle:" << handle.address();
+                    },
+                    Qt::QueuedConnection);
+            }
         }
         return true;
     }
 
     bool cancel(const QString &reason = {})
     {
-        std::lock_guard lock(m_mutex);
-        if (m_ready.exchange(true, std::memory_order_acq_rel)) {
-            qDebug() << "DragonCompletion::cancel() already completed, skipping, handle:" << m_handle.address();
-            return false;
-        }
-        InitResult result;
-        result.cancelled = true;
-        result.success = false;
-        result.errorMessage = reason;
-        m_result = std::move(result);
-        if (m_handle) {
-            QObject *receiver = m_context ? m_context : qApp;
-            const bool onMainThread = QThread::currentThread() == qApp->thread();
-            qDebug() << "DragonCompletion::cancel() scheduling resume via" << (onMainThread ? "QueuedConnection(on-main)" : "QueuedConnection(off-main)")
-                     << "handle:" << m_handle.address() << "reason:" << reason << "receiver:" << receiver;
-            auto self = shared_from_this();
-            QMetaObject::invokeMethod(
-                receiver,
-                [self, h = m_handle]() {
-                    self->m_resumed.store(true, std::memory_order_release);
-                    qDebug() << "DragonCompletion::cancel() lambda executing, resuming handle:" << h.address();
-                    if (h) {
-                        h.resume();
-                    }
-                    qDebug() << "DragonCompletion::cancel() lambda done, handle:" << h.address();
-                },
-                Qt::QueuedConnection);
+        std::coroutine_handle<> handle;
+        std::shared_ptr<DragonCompletion> self;
+        QObject *receiver = nullptr;
+        bool onMainThread = false;
 
-        } else {
-            qDebug() << "DragonCompletion::cancel() no handle to resume";
+        {
+            std::lock_guard lock(m_mutex);
+            if (m_ready.exchange(true, std::memory_order_acq_rel)) {
+                qDebug() << "DragonCompletion::cancel() already completed, skipping, handle:" << m_handle.address();
+                return false;
+            }
+            InitResult result;
+            result.cancelled = true;
+            result.success = false;
+            result.errorMessage = reason;
+            m_result = std::move(result);
+            if (m_handle) {
+                handle = m_handle;
+                self = shared_from_this();
+                receiver = m_context ? m_context : qApp;
+                onMainThread = QThread::currentThread() == qApp->thread();
+            } else {
+                qDebug() << "DragonCompletion::cancel() no handle to resume";
+            }
+        }
+
+        if (handle) {
+            if (onMainThread) {
+                qDebug() << "DragonCompletion::cancel() resuming directly on main thread, handle:" << handle.address() << "reason:" << reason;
+                m_resumed.store(true, std::memory_order_release);
+                handle.resume();
+                qDebug() << "DragonCompletion::cancel() direct resume done, handle:" << handle.address();
+            } else {
+                qDebug() << "DragonCompletion::cancel() scheduling resume via QueuedConnection(off-main)"
+                         << "handle:" << handle.address() << "reason:" << reason << "receiver:" << receiver;
+                QMetaObject::invokeMethod(
+                    receiver,
+                    [self, handle]() mutable {
+                        self->m_resumed.store(true, std::memory_order_release);
+                        qDebug() << "DragonCompletion::cancel() lambda executing, resuming handle:" << handle.address();
+                        if (handle) {
+                            handle.resume();
+                        }
+                        qDebug() << "DragonCompletion::cancel() lambda done, handle:" << handle.address();
+                    },
+                    Qt::QueuedConnection);
+            }
         }
         return true;
     }
