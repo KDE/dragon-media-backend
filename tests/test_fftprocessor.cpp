@@ -907,7 +907,16 @@ void TestFftProcessor::testFftResumesAfterModeToggle()
     const auto written1 = writeBlocks(pipe.producer(), audio);
     QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    quiescencePolling(frameCount);
+    // Wait for the processor to actually start emitting frames before measuring.
+    // Under ASAN, thread startup + first FFT can exceed the quiescence stability window.
+    QVERIFY2(QTest::qWaitFor(
+                 [&]() {
+                     return frameCount.load(std::memory_order_relaxed) > 0;
+                 },
+                 30000),
+             "Should have produced at least one frame during initial playback");
+
+    quiescencePolling(frameCount, 30000);
     int framesPhase1 = frameCount.load(std::memory_order_relaxed);
     QVERIFY2(framesPhase1 > 0, "Should have produced frames during initial playback");
 
@@ -923,7 +932,14 @@ void TestFftProcessor::testFftResumesAfterModeToggle()
     processor.setFftMode(DragonFftProcessor::FftMode::BarsOnly);
 
     // Wait for the processor to drain and emit frames from the new data.
-    quiescencePolling(frameCount);
+    QVERIFY2(QTest::qWaitFor(
+                 [&]() {
+                     return frameCount.load(std::memory_order_relaxed) > 0;
+                 },
+                 30000),
+             "Should resume producing frames after re-enable");
+
+    quiescencePolling(frameCount, 30000);
     int framesPhase2 = frameCount.load(std::memory_order_relaxed);
 
     stopSource.request_stop();
