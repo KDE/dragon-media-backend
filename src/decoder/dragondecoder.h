@@ -5,8 +5,8 @@
 
 #pragma once
 
+#include "dragoncompletion.h"
 #include "dragonmultimedia_export.h"
-#include "player/dragoncompletion.h"
 #include "player/dragonevent.h"
 #include <stdfloat>
 

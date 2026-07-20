@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
- * Unit tests for DragonCompletion point-to-point coroutine awaitable.
+ * Unit tests for DragonCompletion signal-backed coroutine awaitable.
  */
 
 #include <QCoreApplication>
@@ -10,7 +10,7 @@
 #include <QThread>
 #include <QtTest>
 
-#include "player/dragoncompletion.h"
+#include "decoder/dragoncompletion.h"
 
 #include <thread>
 
@@ -44,7 +44,9 @@ static QCoro::Task<void> captureAwait(std::shared_ptr<DragonCompletion> c, Compl
     cap->done = true;
 }
 
-// Raw-pointer variant: the coroutine does NOT hold a shared_ptr to the completion.
+// Raw-pointer variant: the coroutine frame does NOT hold a shared_ptr to the
+// completion, so dropping the last external shared_ptr destroys the completion
+// and severs the Qt connection (receiver-lifetime safety).
 static QCoro::Task<void> captureAwaitRaw(DragonCompletion *c, CompletionCapture *cap)
 {
     cap->result = co_await *c;
@@ -142,6 +144,10 @@ void TestCompletion::testSetResultBeforeAwait()
     r.sampleRate = 48000;
     QVERIFY(c->setResult(r));
 
+    // Result is buffered; await should resolve synchronously.
+    QVERIFY(c->isReady());
+    QCOMPARE(c->result().sampleRate, 48000);
+
     auto task = captureAwait(c, &cap);
 
     waitForDone(&cap);
@@ -212,8 +218,8 @@ void TestCompletion::testDestroyBeforeResumeFires()
     // Drop our last external reference before the queued event fires.
     c.reset();
 
-    // Process events the queued lambda should still fire because
-    // shared_from_this() captured a ref that keeps the completion alive.
+    // Process events the awaiter's State holds a shared_ptr that keeps the
+    // completion alive until the resume fires.
     waitForDone(&cap);
     QVERIFY(cap.done);
     QVERIFY(cap.result.success);
@@ -225,19 +231,27 @@ void TestCompletion::testDestroyDuringSuspend()
     CompletionCapture cap;
 
     auto c = std::make_shared<DragonCompletion>();
-    // Start the coroutine with a raw pointer no shared_ptr in the frame.
+    // Raw pointer: the coroutine frame must NOT hold a shared_ptr, otherwise
+    // dropping `c` would not destroy the completion and the connection would
+    // leak (completion -> connection -> lambda -> state -> handle -> frame ->
+    // completion cycle).
     auto task = captureAwaitRaw(c.get(), &cap);
 
     // The coroutine has started eagerly and suspended at co_await *c.
-    // m_handle is now set inside the completion.
     QVERIFY(!cap.done);
 
+    // Drop the last external reference. ~DragonCompletion emits finished() with
+    // a cancelled result, which resumes the suspended coroutine safely (no
+    // use-after-free, no leaked frame). This replaces the old behavior of
+    // m_handle.destroy()-ing the frame, which fought QCoro's ref-counting.
     c.reset();
 
-    // Process events to be sure no queued resume fires.
-    QTest::qWait(50);
+    // Pump the event loop so the direct-connection resume completes.
+    QTest::qWait(10);
 
-    QVERIFY(!cap.done);
+    QVERIFY(cap.done);
+    QVERIFY(!cap.result.success);
+    QVERIFY(cap.result.cancelled);
 }
 
 QTEST_MAIN(TestCompletion)

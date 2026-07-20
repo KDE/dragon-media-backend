@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "player/dragoncompletion.h"
+#include "dragoncompletion.h"
 #include "player/dragonevent.h"
 
 #include <QCoroTask>

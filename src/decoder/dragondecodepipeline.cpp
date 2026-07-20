@@ -241,8 +241,8 @@ void DragonDecodePipeline::processDecodeCompletion()
         int sampleRate = 0;
         int channels = 0;
         qint64 durationMs = -1;
-        if (m_pendingGaplessCompletion && m_pendingGaplessCompletion->await_ready()) {
-            const auto result = m_pendingGaplessCompletion->await_resume();
+        if (m_pendingGaplessCompletion && m_pendingGaplessCompletion->isReady()) {
+            const auto result = m_pendingGaplessCompletion->result();
             sampleRate = result.sampleRate;
             channels = result.channels;
             durationMs = result.durationMs;
@@ -266,7 +266,7 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
 {
     qCDebug(dragonMultimediaDecode) << "initializeSession(" << source.toString() << ") isGapless=" << isGapless;
 
-    auto completion = std::make_shared<DragonCompletion>(this);
+    auto completion = std::make_shared<DragonCompletion>();
 
     qCDebug(dragonMultimediaDecode) << "initializeSession thread joinable=" << m_decodeThread.joinable();
     if (!m_decodeThread.joinable()) {
@@ -435,7 +435,7 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
         return;
     }
 
-    auto completion = std::make_shared<DragonCompletion>(this);
+    auto completion = std::make_shared<DragonCompletion>();
     {
         std::scoped_lock lock(m_decoderMutex);
         m_pendingGaplessCompletion = completion;
