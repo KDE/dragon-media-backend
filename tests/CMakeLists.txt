@@ -32,6 +32,9 @@ set(_dragon_audio_tests
     test_player_prefinish
     test_player_fft
     test_e2e
+    test_e2e_sdl
+    test_e2e_pulseaudio
+    test_e2e_pipewire
     test_network_playback
     test_audiooutput_sdl
     test_audiooutput_pulseaudio
@@ -77,6 +80,33 @@ dragon_add_test(test_player_fft       LIBRARIES ${_player_libs})
 
 # Integration tests
 dragon_add_test(test_e2e              LIBRARIES Qt6::Network PkgConfig::FFmpeg)
+set_tests_properties(test_e2e PROPERTIES DISABLED TRUE)
+
+set(_qt_plugin_path "${PROJECT_BINARY_DIR}/bin")
+if(DEFINED ENV{QT_PLUGIN_PATH} AND NOT "$ENV{QT_PLUGIN_PATH}" STREQUAL "")
+    string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
+endif()
+
+add_test(NAME test_e2e_sdl COMMAND test_e2e)
+set_property(TEST test_e2e_sdl APPEND PROPERTY ENVIRONMENT
+    "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink"
+    "QT_PLUGIN_PATH=${_qt_plugin_path}"
+)
+if(PULSEAUDIO_FOUND)
+    add_test(NAME test_e2e_pulseaudio COMMAND test_e2e)
+    set_property(TEST test_e2e_pulseaudio APPEND PROPERTY ENVIRONMENT
+        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpulseaudiosink"
+        "QT_PLUGIN_PATH=${_qt_plugin_path}"
+    )
+endif()
+if(PIPEWIRE_FOUND)
+    add_test(NAME test_e2e_pipewire COMMAND test_e2e)
+    set_property(TEST test_e2e_pipewire APPEND PROPERTY ENVIRONMENT
+        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpipewireaudiosink"
+        "QT_PLUGIN_PATH=${_qt_plugin_path}"
+    )
+endif()
+
 dragon_add_test(test_network_playback LIBRARIES ${_player_libs})
 
 # SDL gapless tests uses SDL disk driver for PCM capture verification

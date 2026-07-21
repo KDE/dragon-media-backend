@@ -98,7 +98,7 @@ private:
     QTimer *positionTimer = nullptr;
     int64_t currentPosition = 0;
 
-    bool forceReload = false;
+    bool playRequestedReload = false;
 
     int32_t prefinishMark = 0;
     bool aboutToFinishEmitted = false;

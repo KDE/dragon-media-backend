@@ -78,6 +78,8 @@ private Q_SLOTS:
     void testVolumeChangeWhilePlaying();
     void testExternalVolumeChangePropagates();
 
+    void testDrainCallback();
+
 private:
     void fillQueue(DragonPipe<std::float32_t> *pipe, const std::vector<std::float32_t> &data);
     static QString currentSinkBackend();
@@ -817,6 +819,45 @@ bool TestAudioOutput::setPwNodeVolume(uint32_t nodeId, float linearGain)
     const QString pod = u"{ channelVolumes = [ %1, %1 ] }"_s.arg(linearGain);
     pwcli.start(u"pw-cli"_s, QStringList{u"set-param"_s, QString::number(nodeId), u"Props"_s, pod});
     return pwcli.waitForFinished(3000) && pwcli.exitCode() == 0;
+}
+
+void TestAudioOutput::testDrainCallback()
+{
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    DragonPipe<std::float32_t> pipe(65536);
+    output->setAudioPipe(&pipe);
+
+    QSignalSpy drainSpy(output.get(), &DragonAudioSink::drained);
+    QCOMPARE(drainSpy.count(), 0);
+
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    // Feed a small amount of audio enough to fill the backend buffer so
+    // the drain path is meaningful, but small enough to drain quickly.
+    // 8820 stereo floats = 100ms at 44100 Hz / 2 channels
+    fillQueue(&pipe, std::vector<std::float32_t>(8820, 0.5f));
+
+    // Let the audio callback consume the data from the pipe.
+    const bool consumed = QTest::qWaitFor(
+        [&]() {
+            return pipe.consumer().ready() == 0;
+        },
+        3000);
+    QVERIFY2(consumed, "Audio callback should have consumed all pipe data before drain");
+
+    output->notifyDecodeFinished();
+
+    const bool drained = QTest::qWaitFor(
+        [&]() {
+            return drainSpy.count() > 0;
+        },
+        5000);
+    QVERIFY2(drained, "drained() signal should fire after decode finished and pipe empty");
+
+    output->close();
 }
 
 void TestAudioOutput::testVolumeChangeWhilePlaying()

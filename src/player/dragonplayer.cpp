@@ -470,10 +470,10 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
 
     auto aliveGuard = d->aliveGuard;
 
-    bool internalReload = d->forceReload;
-    d->forceReload = false;
+    bool playRequestedReload = d->playRequestedReload;
+    d->playRequestedReload = false;
 
-    if (!internalReload && d->currentSource == source && source.isValid()) {
+    if (!playRequestedReload && d->currentSource == source && source.isValid()) {
         qCDebug(dragonMultimediaPlayer) << "setSource(sameUrl) early return";
         if (d->currentStatus == MediaStatus::LoadingMedia) {
             d->requestedPlaybackState = PlaybackState::StoppedState;
@@ -513,7 +513,7 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->currentSampleRate = 0;
     d->currentChannels = 0;
 
-    if (!isGapless && !internalReload) {
+    if (!isGapless && !playRequestedReload) {
         d->requestedPlaybackState = PlaybackState::StoppedState;
         if (wasPlayingOrPaused) {
             d->setPlaybackState(PlaybackState::StoppedState);
@@ -546,6 +546,11 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
 
         Q_EMIT nextSourceChanged();
         Q_EMIT sourceChanged();
+    } else if (playRequestedReload && d->requestedPlaybackState == PlaybackState::PlayingState) {
+        // Internal reload initiated by play() at EndOfMedia or after a decoder
+        // restart: keep the Playing intent so applyRequestedState starts audio.
+        qCDebug(dragonMultimediaPlayer) << "setSource internal reload preserving Playing intent";
+        d->setStatus(MediaStatus::LoadingMedia);
     }
 
     const bool isLocal = source.isLocalFile();
@@ -716,14 +721,16 @@ void DragonPlayer::play()
 
     if (d->currentStatus == MediaStatus::EndOfMedia) {
         qCDebug(dragonMultimediaPlayer) << "play() status is EndOfMedia, reloading source";
-        d->forceReload = true;
+        d->playRequestedReload = true;
+        d->requestedPlaybackState = PlaybackState::PlayingState;
         setSource(d->currentSource);
         return;
     }
 
     if (!d->decodePipeline.isActive() && !d->currentSource.isEmpty()) {
         qCDebug(dragonMultimediaPlayer) << "play() decoder not active, restarting decode pipeline";
-        d->forceReload = true;
+        d->playRequestedReload = true;
+        d->requestedPlaybackState = PlaybackState::PlayingState;
         setSource(d->currentSource);
         return;
     }
