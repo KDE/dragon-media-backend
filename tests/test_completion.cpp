@@ -7,11 +7,13 @@
 
 #include <QCoreApplication>
 #include <QCoroTask>
-#include <QThread>
 #include <QtTest>
 
 #include "decoder/dragoncompletion.h"
 
+#include <atomic>
+#include <chrono>
+#include <mutex>
 #include <thread>
 
 using namespace DragonMultimedia;
@@ -29,6 +31,7 @@ private Q_SLOTS:
     void testCancelFromOtherThread();
     void testDestroyBeforeResumeFires();
     void testDestroyDuringSuspend();
+    void testCancelUnderLockDeadlock();
 };
 
 struct CompletionCapture {
@@ -252,6 +255,40 @@ void TestCompletion::testDestroyDuringSuspend()
     QVERIFY(cap.done);
     QVERIFY(!cap.result.success);
     QVERIFY(cap.result.cancelled);
+}
+
+void TestCompletion::testCancelUnderLockDeadlock()
+{
+    auto c = std::make_shared<DragonCompletion>();
+    std::timed_mutex mtx;
+    std::atomic slotExecuted{false};
+    std::atomic slotDeadlocked{false};
+
+    // Connect a slot that tries to acquire the same mutex
+    connect(c.get(), &DragonCompletion::finished, c.get(), [&mtx, &slotExecuted, &slotDeadlocked](const InitResult &) {
+        // Try to lock the mutex with a timeout to detect deadlock
+        std::unique_lock lock(mtx, std::chrono::milliseconds(100));
+        if (lock.owns_lock()) {
+            slotExecuted.store(true);
+        } else {
+            slotDeadlocked.store(true);
+        }
+    });
+
+    {
+        std::scoped_lock lock(mtx);
+        c->cancel(QStringLiteral("Test cancellation under lock"));
+    }
+
+    QTest::qWait(50);
+
+    // This test demonstrates the deadlock pattern that exists in DragonCompletion
+    // when cancel()/setResult() are called under a lock. The fix is at the call-site
+    // (extract under lock, call outside), not in DragonCompletion itself.
+    QEXPECT_FAIL("", "Demonstrates deadlock pattern - fixed at call-site in dragondecodepipeline.cpp", Continue);
+    QVERIFY2(slotExecuted.load() && !slotDeadlocked.load(),
+             "Expected: slot executes without deadlock. "
+             "Bug: cancel() emits synchronously under lock, causing deadlock.");
 }
 
 QTEST_MAIN(TestCompletion)

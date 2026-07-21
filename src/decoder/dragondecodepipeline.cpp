@@ -567,12 +567,14 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
 
 void DragonDecodePipeline::cancelPreWarm(const QString &reason)
 {
+    std::shared_ptr<DragonCompletion> pending;
     {
         std::scoped_lock lock(m_decoderMutex);
         m_preWarmedDecoder.reset();
-        if (m_pendingGaplessCompletion) {
-            m_pendingGaplessCompletion->cancel(reason);
-        }
+        pending = m_pendingGaplessCompletion;
+    }
+    if (pending) {
+        pending->cancel(reason);
     }
     if (m_preWarmThread.joinable()) {
         m_preWarmThread.request_stop();
