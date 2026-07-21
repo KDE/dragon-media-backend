@@ -311,10 +311,15 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
     auto result = co_await *completion;
 
     {
-        std::scoped_lock lock(m_decoderMutex);
-        if (m_pendingInitCompletion == completion) {
-            m_pendingInitCompletion.reset();
+        std::shared_ptr<DragonCompletion> keepAlive;
+        {
+            std::scoped_lock lock(m_decoderMutex);
+            keepAlive = m_pendingInitCompletion;
+            if (m_pendingInitCompletion == completion) {
+                m_pendingInitCompletion.reset();
+            }
         }
+        Q_UNUSED(keepAlive)
     }
     co_return result;
 }
