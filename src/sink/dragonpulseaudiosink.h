@@ -62,6 +62,7 @@ public:
 private:
     [[nodiscard]] bool connectToServer();
     void disconnectFromServer();
+    void resetStreamLocked();
     void applyVolume(float linearGain);
     void requestSinkInputInfo();
     void resetDrainState() override;
