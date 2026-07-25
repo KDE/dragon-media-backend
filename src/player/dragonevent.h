@@ -5,10 +5,10 @@
 
 #pragma once
 
+#include "dragonstdfloat_compat.h"
 #include <QString>
 #include <cstdint>
 #include <span>
-#include <stdfloat>
 #include <variant>
 
 namespace DragonMultimedia

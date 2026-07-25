@@ -11,8 +11,8 @@
 
 #include <QMetaObject>
 
+#include "dragonthreadname.h"
 #include <algorithm>
-#include <pthread.h>
 #include <stop_token>
 #include <thread>
 
@@ -69,7 +69,7 @@ void DragonFftPipeline::startThread()
     }
 
     m_fftThread = std::jthread([this](std::stop_token st) {
-        pthread_setname_np(pthread_self(), "dragon-fft");
+        DragonThreadName::set("dragon-fft");
         m_fftProcessor->processLoop(std::move(st));
     });
 

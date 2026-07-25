@@ -16,13 +16,13 @@
 #include <QTimer>
 #include <dragonmultimedia_logging.h>
 
+#include "dragonstdfloat_compat.h"
 #include <algorithm>
 #include <condition_variable>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <ranges>
-#include <stdfloat>
 #include <stop_token>
 #include <thread>
 #include <utility>

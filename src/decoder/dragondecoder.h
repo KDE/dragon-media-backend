@@ -7,8 +7,8 @@
 
 #include "dragoncompletion.h"
 #include "dragonmultimedia_export.h"
+#include "dragonstdfloat_compat.h"
 #include "player/dragonevent.h"
-#include <stdfloat>
 
 #include <QObject>
 #include <QString>

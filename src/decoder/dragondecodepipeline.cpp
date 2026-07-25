@@ -18,12 +18,12 @@
 #include <QMetaObject>
 #include <QObject>
 
+#include "dragonthreadname.h"
 #include <condition_variable>
 #include <future>
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <pthread.h>
 #include <stop_token>
 #include <thread>
 
@@ -79,7 +79,7 @@ void DragonDecodePipeline::startDecodeThread()
 {
     qCDebug(dragonMultimediaDecode) << "startDecodeThread() creating new decode thread";
     m_decodeThread = std::jthread([this](std::stop_token st) {
-        pthread_setname_np(pthread_self(), "dragon-decode");
+        DragonThreadName::set("dragon-decode");
         qCDebug(dragonMultimediaDecode) << "decode thread started";
 
         while (!st.stop_requested()) {
@@ -447,7 +447,7 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
     }
 
     m_preWarmThread = std::jthread([this, next, completion](std::stop_token st) {
-        pthread_setname_np(pthread_self(), "dragon-prewarm");
+        DragonThreadName::set("dragon-prewarm");
         auto decoder = createDecoder(next, true);
         if (st.stop_requested()) {
             if (completion) {

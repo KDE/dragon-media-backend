@@ -8,7 +8,7 @@
 #include "DragonMultimedia/dragonfftframe.h"
 #include "DragonMultimedia/dragonplayer.h"
 #include "dragonmultimedia_export.h"
-#include <stdfloat>
+#include "dragonstdfloat_compat.h"
 
 #include <array>
 #include <atomic>

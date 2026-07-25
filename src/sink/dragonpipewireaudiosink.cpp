@@ -19,10 +19,10 @@ K_PLUGIN_CLASS_WITH_JSON(DragonPipeWireAudioSink, "pipewire_sink.json")
 #include <spa/param/props.h>
 #include <spa/pod/iter.h>
 
+#include "dragonthreadname.h"
 #include <algorithm>
 #include <chrono>
 #include <cstring>
-#include <pthread.h>
 #include <span>
 #include <vector>
 
@@ -409,7 +409,7 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
 
     thread_local bool audioThreadNamed = false;
     if (!audioThreadNamed) {
-        pthread_setname_np(pthread_self(), "dragon-pw-cb");
+        DragonThreadName::set("dragon-pw-cb");
         audioThreadNamed = true;
     }
 

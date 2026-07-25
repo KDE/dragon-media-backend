@@ -5,7 +5,9 @@
 
 #pragma once
 
-#include <stdfloat>
+#include "dragonmultimedia_export.h"
+
+#include "dragonstdfloat_compat.h"
 
 #include <LockFreeSpscQueue.h>
 
@@ -20,12 +22,12 @@
 #include <vector>
 
 template<typename T>
-class DragonPipe
+class DRAGONMULTIMEDIA_EXPORT DragonPipe
 {
 public:
     static constexpr size_t kDefaultCapacity = 65536;
 
-    class Producer
+    class DRAGONMULTIMEDIA_EXPORT Producer
     {
     public:
         Producer() = default;
@@ -47,7 +49,7 @@ public:
         DragonPipe *m_pipe = nullptr;
     };
 
-    class Consumer
+    class DRAGONMULTIMEDIA_EXPORT Consumer
     {
     public:
         Consumer() = default;

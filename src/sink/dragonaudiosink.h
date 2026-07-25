@@ -6,7 +6,7 @@
 #pragma once
 
 #include "dragonmultimedia_export.h"
-#include <stdfloat>
+#include "dragonstdfloat_compat.h"
 
 #include <QObject>
 #include <QString>

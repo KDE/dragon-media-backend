@@ -31,19 +31,54 @@ include(ECMQtDeclareLoggingCategory)
 include(KDEClangFormat)
 include(KDEGitCommitHooks)
 
-if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wpedantic -Werror")
-elseif(MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /W4 /WX")
+if(MSVC)
+    add_compile_options(/std:c++latest)
 endif()
 
 include(FetchContent)
+
+# Allow CI to provide local source clones instead of downloading
+if(EXISTS "${CMAKE_SOURCE_DIR}/kissfft-src" AND NOT DEFINED FETCHCONTENT_SOURCE_DIR_KISSFFT)
+    set(FETCHCONTENT_SOURCE_DIR_KISSFFT "${CMAKE_SOURCE_DIR}/kissfft-src")
+endif()
+if(EXISTS "${CMAKE_SOURCE_DIR}/sdl3-src" AND NOT DEFINED FETCHCONTENT_SOURCE_DIR_SDL3)
+    set(FETCHCONTENT_SOURCE_DIR_SDL3 "${CMAKE_SOURCE_DIR}/sdl3-src")
+endif()
 
 find_package(Qt6 REQUIRED COMPONENTS Core Network Gui)
 find_package(Qt6 COMPONENTS Widgets)
 find_package(KF6KIO REQUIRED)
 find_package(KF6CoreAddons REQUIRED)
-find_package(SDL3 REQUIRED)
+find_package(SDL3 QUIET)
+if(NOT TARGET SDL3::SDL3)
+    message(STATUS "SDL3 not found via find_package, trying FetchContent...")
+    FetchContent_Declare(
+        SDL3
+        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+        GIT_TAG release-3.4.12
+    )
+    set(SDL_SHARED ON CACHE BOOL "" FORCE)
+    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+    set(SDL_TEST OFF CACHE BOOL "" FORCE)
+    # Only build the audio subsystem dragon-multimedia only uses SDL for audio output
+    set(SDL_VIDEO OFF CACHE BOOL "" FORCE)
+    set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
+    set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
+    set(SDL_SENSOR OFF CACHE BOOL "" FORCE)
+    set(SDL_POWER OFF CACHE BOOL "" FORCE)
+    set(SDL_GPU OFF CACHE BOOL "" FORCE)
+    set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
+    set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
+    set(SDL_RENDER OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(SDL3)
+    # Disable PCH on MSVC it fails on virtiofs/network drives with C1083
+    if(TARGET SDL3-shared)
+        set_target_properties(SDL3-shared PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+    endif()
+    if(NOT TARGET SDL3::SDL3 AND TARGET SDL3-shared)
+        add_library(SDL3::SDL3 ALIAS SDL3-shared)
+    endif()
+endif()
 find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(FFmpeg IMPORTED_TARGET REQUIRED

@@ -4,7 +4,7 @@
  */
 
 #include "dragondecoder.h"
-#include <stdfloat>
+#include "dragonstdfloat_compat.h"
 
 #include "dragonmultimedia_decoder_logging.h"
 #include <QScopeGuard>

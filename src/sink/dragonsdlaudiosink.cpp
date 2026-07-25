@@ -18,8 +18,8 @@ K_PLUGIN_CLASS_WITH_JSON(DragonSdlAudioSink, "sdl_sink.json")
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_timer.h>
 
+#include "dragonthreadname.h"
 #include <chrono>
-#include <pthread.h>
 #include <thread>
 
 static void SDLLogOutput(void *userdata, int category, SDL_LogPriority priority, const char *message)
@@ -305,7 +305,7 @@ void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioSt
 
     thread_local bool audioThreadNamed = false;
     if (!audioThreadNamed) {
-        pthread_setname_np(pthread_self(), "dragon-audio");
+        DragonThreadName::set("dragon-audio");
         audioThreadNamed = true;
     }
 

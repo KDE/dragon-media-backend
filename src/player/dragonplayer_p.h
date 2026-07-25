@@ -17,10 +17,10 @@
 #include <QTimer>
 #include <QUrl>
 
+#include "dragonstdfloat_compat.h"
 #include <atomic>
 #include <memory>
 #include <span>
-#include <stdfloat>
 #include <stop_token>
 #include <vector>
 

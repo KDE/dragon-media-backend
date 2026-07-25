@@ -5,10 +5,10 @@
 
 #pragma once
 
+#include "dragonstdfloat_compat.h"
 #include <array>
 #include <chrono>
 #include <cstddef>
-#include <stdfloat>
 
 struct DragonFftBlock {
     static constexpr size_t MAX_SAMPLES = 1024;
