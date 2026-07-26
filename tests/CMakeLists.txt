@@ -5,6 +5,7 @@
 find_package(Qt6 REQUIRED COMPONENTS Core Test)
 
 option(DRAGON_CI_PIPEWIRE "Start a headless PipeWire daemon for audio tests" OFF)
+option(DRAGON_CI_NO_AUDIO "Disable tests that require a real audio device (for headless Windows CI)" OFF)
 
 function(dragon_add_test name)
     cmake_parse_arguments(ARG "" "" "LIBRARIES;ENVIRONMENT" ${ARGN})
@@ -17,7 +18,11 @@ function(dragon_add_test name)
     add_test(NAME ${name} COMMAND ${name})
     set(_qt_plugin_path "${PROJECT_BINARY_DIR}/bin")
     if(DEFINED ENV{QT_PLUGIN_PATH} AND NOT "$ENV{QT_PLUGIN_PATH}" STREQUAL "")
-        string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
+        if(WIN32)
+            string(APPEND _qt_plugin_path ";$ENV{QT_PLUGIN_PATH}")
+        else()
+            string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
+        endif()
     endif()
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
@@ -41,7 +46,7 @@ set(_dragon_audio_tests
     test_audiooutput_pipewire
 )
 
-if(DRAGON_CI_PIPEWIRE)
+if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
     add_test(NAME pipewire_setup
         COMMAND bash ${CMAKE_SOURCE_DIR}/ci/start-pipewire.sh
                 ${CMAKE_SOURCE_DIR}/ci/pipewire-daemon.conf
@@ -84,7 +89,11 @@ set_tests_properties(test_e2e PROPERTIES DISABLED TRUE)
 
 set(_qt_plugin_path "${PROJECT_BINARY_DIR}/bin")
 if(DEFINED ENV{QT_PLUGIN_PATH} AND NOT "$ENV{QT_PLUGIN_PATH}" STREQUAL "")
-    string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
+    if(WIN32)
+        string(APPEND _qt_plugin_path ";$ENV{QT_PLUGIN_PATH}")
+    else()
+        string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
+    endif()
 endif()
 
 add_test(NAME test_e2e_sdl COMMAND test_e2e)
@@ -141,12 +150,21 @@ if(PIPEWIRE_FOUND)
     )
 endif()
 
-if(DRAGON_CI_PIPEWIRE)
+if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
     foreach(_test ${_dragon_audio_tests})
         if(TEST ${_test})
             set_tests_properties(${_test} PROPERTIES
                 FIXTURES_REQUIRED "dragon_pipewire"
             )
+        endif()
+    endforeach()
+endif()
+
+if(DRAGON_CI_NO_AUDIO)
+    set(_no_audio_tests ${_dragon_audio_tests} test_e2e_sdl_gapless test_audiooutput)
+    foreach(_test ${_no_audio_tests})
+        if(TEST ${_test})
+            set_tests_properties(${_test} PROPERTIES DISABLED TRUE)
         endif()
     endforeach()
 endif()
