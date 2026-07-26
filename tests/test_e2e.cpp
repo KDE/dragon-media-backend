@@ -967,7 +967,7 @@ void TestE2E::testGaplessFormatMismatch()
 
 void TestE2E::testGaplessPreWarmError()
 {
-    VERIFY_FIXTURE_EXISTS(u"gs-16b-2c-44100hz.ogg"_s);
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
     DragonDiagnostics diagnostics(&player);
@@ -977,7 +977,7 @@ void TestE2E::testGaplessPreWarmError()
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
     auto sourceSpy = SignalSpyHelper::sourceSpy(&player);
 
-    QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QUrl firstSource = player.source();
 
     helper.setNextSource(u"/nonexistent/invalid_file.mp3"_s);
