@@ -243,7 +243,9 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
     auto readPacket = [](void *opaque, uint8_t *buf, int bufSize) -> int {
         auto *self = static_cast<DragonDecoder *>(opaque);
         const int ret = self->m_networkCallback(std::span(buf, static_cast<size_t>(bufSize)));
-        return ret == 0 ? AVERROR_EOF : ret;
+        if (ret == 0)
+            return AVERROR_EOF;
+        return ret < 0 ? AVERROR(EIO) : ret;
     };
 
     auto seekPacket = [](void *opaque, int64_t offset, int whence) -> int64_t {
@@ -423,12 +425,13 @@ bool DragonDecoder::isRecoverableReadError(int errorCode) const
         return false;
 
     case AVERROR(EAGAIN):
+    case AVERROR(EINTR):
     case AVERROR(ETIMEDOUT):
     case AVERROR(ECONNREFUSED):
         return true;
 
     default:
-        return true;
+        return false;
     }
 }
 
@@ -448,10 +451,18 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
         AVRational msTimeBase = AVRational{1, 1000};
         int64_t streamTimestamp = av_rescale_q(targetMs, msTimeBase, session.audioStream->time_base);
         int seekRet = av_seek_frame(session.fmtCtx.get(), session.audioStreamIndex, streamTimestamp, AVSEEK_FLAG_BACKWARD);
-        if (seekRet >= 0) {
+        if (seekRet < 0) {
+            qCWarning(dragonMultimediaDecoder) << "seek to" << targetMs << "ms failed:" << seekRet << "(" << avErrorString(seekRet)
+                                               << "), continuing from current position";
+        } else {
             avcodec_flush_buffers(session.codecCtx.get());
-            if (swr_init(session.swrCtx.get()) < 0) {
-                qCWarning(dragonMultimediaDecoder) << "swr_init failed after seek";
+            if (const int swrRet = swr_init(session.swrCtx.get()); swrRet < 0) {
+                // A failed resampler reinit leaves swr in a bad state and
+                // every subsequent swr_convert would fail; treat as fatal.
+                qCWarning(dragonMultimediaDecoder) << "swr_init failed after seek:" << swrRet << "(" << avErrorString(swrRet) << ")";
+                Q_EMIT streamError(u"Resampler reinitialization failed after seek"_s);
+                m_hadFatalError.store(true, std::memory_order_relaxed);
+                return false;
             }
         }
     }
