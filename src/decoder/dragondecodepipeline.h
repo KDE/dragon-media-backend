@@ -11,6 +11,7 @@
 #include <QCoroTask>
 #include <QObject>
 #include <QUrl>
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
@@ -55,7 +56,6 @@ public:
     static DragonMultimedia::InitResult makeErrorResult(const QString &message, bool isGapless = false);
     static DragonMultimedia::InitResult makeCancelledResult(const QString &message, bool isGapless = false);
 
-    const std::unique_ptr<DragonDecoder> &activeDecoder() const;
     bool decodeLoopActive() const;
 
     void setCurrentSource(const QUrl &source);
@@ -85,6 +85,9 @@ private:
     void processDecodeCompletion();
 
     SamplesCallback m_samplesCallback;
+    // Guards m_samplesCallback, which is installed from the main thread and
+    // invoked on the decode thread.
+    mutable std::mutex m_samplesCallbackMutex;
 
     DragonPlayer *m_player = nullptr;
     QUrl m_currentSource;
@@ -95,7 +98,8 @@ private:
     mutable std::mutex m_decoderMutex;
     std::condition_variable_any m_decoderAssignedCv;
     std::condition_variable_any m_decodeLoopFinishedCv;
-    bool m_decodeLoopActive = false;
+    // Written on the decode thread, read from the main thread (diagnostics).
+    std::atomic<bool> m_decodeLoopActive{false};
     std::unique_ptr<DragonDecoder> m_activeDecoder;
     std::unique_ptr<DragonDecoder> m_preWarmedDecoder;
 

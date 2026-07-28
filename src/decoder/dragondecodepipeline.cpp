@@ -191,8 +191,13 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
                                   },
 
                                   [&](const SamplesChunk &sc) {
-                                      if (m_samplesCallback && !sc.data.empty()) {
-                                          m_samplesCallback(sc.data, m_sessionStopSource.get_token());
+                                      SamplesCallback callback;
+                                      {
+                                          std::scoped_lock lock(m_samplesCallbackMutex);
+                                          callback = m_samplesCallback;
+                                      }
+                                      if (callback && !sc.data.empty()) {
+                                          callback(sc.data, m_sessionStopSource.get_token());
                                       }
                                   },
 
@@ -286,7 +291,7 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
 
     {
         std::unique_lock lock(m_decoderMutex);
-        qCDebug(dragonMultimediaDecode) << "initializeSession waiting for decodeLoopActive=false (current=" << m_decodeLoopActive << ")";
+        qCDebug(dragonMultimediaDecode) << "initializeSession waiting for decodeLoopActive=false (current=" << m_decodeLoopActive.load() << ")";
         m_decodeLoopFinishedCv.wait(lock, [this]() {
             return !m_decodeLoopActive;
         });
@@ -363,7 +368,7 @@ void DragonDecodePipeline::stopSession()
 
     {
         std::unique_lock lock(m_decoderMutex);
-        qCDebug(dragonMultimediaDecode) << "stopSession() waiting for decodeLoopActive=false (current=" << m_decodeLoopActive << ")";
+        qCDebug(dragonMultimediaDecode) << "stopSession() waiting for decodeLoopActive=false (current=" << m_decodeLoopActive.load() << ")";
         m_decodeLoopFinishedCv.wait(lock, [this]() {
             return !m_decodeLoopActive;
         });
@@ -622,6 +627,7 @@ qint64 DragonDecodePipeline::streamSize() const
 
 void DragonDecodePipeline::setSamplesCallback(SamplesCallback callback)
 {
+    std::scoped_lock lock(m_samplesCallbackMutex);
     m_samplesCallback = std::move(callback);
 }
 
@@ -655,12 +661,7 @@ InitResult DragonDecodePipeline::makeCancelledResult(const QString &message, boo
     return result;
 }
 
-const std::unique_ptr<DragonDecoder> &DragonDecodePipeline::activeDecoder() const
-{
-    return m_activeDecoder;
-}
-
 bool DragonDecodePipeline::decodeLoopActive() const
 {
-    return m_decodeLoopActive;
+    return m_decodeLoopActive.load(std::memory_order_acquire);
 }
