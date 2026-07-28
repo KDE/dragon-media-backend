@@ -66,8 +66,6 @@ private:
     SeekCallback m_seekCallback;
     int64_t m_streamSize{-1};
     QString m_filePath;
-    std::vector<std::float32_t> m_pcmBuffer;
-    std::vector<std::float32_t> m_pendingSamples;
 
     std::atomic<bool> m_seekRequested{false};
     std::atomic<int64_t> m_seekTargetMs{0};

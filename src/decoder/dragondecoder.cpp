@@ -115,6 +115,47 @@ struct DragonDecoder::DecodeSession {
     static constexpr int MAX_READ_ERRORS = 10;
     static constexpr auto READ_ERROR_RESET_INTERVAL = std::chrono::milliseconds(5000);
     std::chrono::steady_clock::time_point lastSuccessfulRead;
+
+    // Free-list of reusable sample buffers.
+    struct SampleBufferPool : std::enable_shared_from_this<SampleBufferPool> {
+        std::vector<std::unique_ptr<std::vector<std::float32_t>>> freeList;
+        static constexpr size_t kMaxFreeBuffers = 8;
+
+        std::shared_ptr<std::vector<std::float32_t>> acquire(size_t minSize)
+        {
+            for (auto it = freeList.begin(); it != freeList.end(); ++it) {
+                if ((*it)->capacity() >= minSize) {
+                    auto raw = std::move(*it);
+                    freeList.erase(it);
+                    return wrap(std::move(raw));
+                }
+            }
+            return wrap(std::make_unique<std::vector<std::float32_t>>(minSize));
+        }
+
+    private:
+        std::shared_ptr<std::vector<std::float32_t>> wrap(std::unique_ptr<std::vector<std::float32_t>> raw)
+        {
+            // The deleter captures a shared_ptr to this pool, extending the
+            // pool's lifetime until the last outstanding buffer is returned.
+            auto poolRef = shared_from_this();
+            auto *rawPtr = raw.release();
+            return {rawPtr, [poolRef = std::move(poolRef)](std::vector<std::float32_t> *p) {
+                        poolRef->recycle(p);
+                    }};
+        }
+
+        void recycle(std::vector<std::float32_t> *p)
+        {
+            std::unique_ptr<std::vector<std::float32_t>> owned(p);
+            if (freeList.size() < kMaxFreeBuffers) {
+                freeList.push_back(std::move(owned));
+            }
+            // else: owned destructs here and the buffer is freed.
+        }
+    };
+
+    std::shared_ptr<SampleBufferPool> m_bufferPool = std::make_shared<SampleBufferPool>();
 };
 
 DragonDecoder::DragonDecoder(ReadCallback readCb, SeekCallback seekCb, int64_t streamSize, const QString &filePath, QObject *parent)
@@ -570,11 +611,10 @@ std::optional<DragonMultimedia::SamplesChunk> DragonDecoder::drainDecoderFrames(
         }
 
         size_t neededSize = static_cast<size_t>(maxOutSamples) * static_cast<size_t>(session.nbChannels);
-        if (m_pcmBuffer.size() < neededSize) {
-            m_pcmBuffer.resize(neededSize);
-        }
 
-        uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(m_pcmBuffer.data())};
+        auto ownedBuffer = session.m_bufferPool->acquire(neededSize);
+
+        uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(ownedBuffer->data())};
         int converted = swr_convert(session.swrCtx.get(), outData, maxOutSamples, const_cast<const uint8_t **>(session.frame->data), session.frame->nb_samples);
         if (converted < 0) {
             qCWarning(dragonMultimediaDecoder) << "swr_convert failed";
@@ -585,12 +625,7 @@ std::optional<DragonMultimedia::SamplesChunk> DragonDecoder::drainDecoderFrames(
         if (totalSamples > 0) {
             ++session.frameCount;
 
-
-            m_pendingSamples.assign(m_pcmBuffer.begin(), m_pcmBuffer.begin() + totalSamples);
-
-            return SamplesChunk{.data = std::span<const std::float32_t>(m_pendingSamples.data(), m_pendingSamples.size()),
-                                .sampleRate = session.sampleRate,
-                                .channels = session.nbChannels};
+            return SamplesChunk::owning(std::move(ownedBuffer), session.sampleRate, session.nbChannels, static_cast<size_t>(totalSamples));
         }
     }
 
@@ -608,20 +643,14 @@ std::optional<DragonMultimedia::SamplesChunk> DragonDecoder::flushResampler(Deco
     int delaySamples = swr_get_delay(session.swrCtx.get(), session.sampleRate);
     if (delaySamples > 0) {
         size_t neededSize = static_cast<size_t>(delaySamples) * static_cast<size_t>(session.nbChannels);
-        if (m_pcmBuffer.size() < neededSize) {
-            m_pcmBuffer.resize(neededSize);
-        }
-        uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(m_pcmBuffer.data())};
+        auto ownedBuffer = session.m_bufferPool->acquire(neededSize);
+        uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(ownedBuffer->data())};
         int converted = swr_convert(session.swrCtx.get(), outData, delaySamples, nullptr, 0);
         if (converted > 0) {
             int totalSamples = converted * session.nbChannels;
             qCDebug(dragonMultimediaDecoder) << "swr flush samplesDecoded" << totalSamples << "samples";
 
-            m_pendingSamples.assign(m_pcmBuffer.begin(), m_pcmBuffer.begin() + totalSamples);
-
-            return DragonMultimedia::SamplesChunk{.data = std::span<const std::float32_t>(m_pendingSamples.data(), m_pendingSamples.size()),
-                                                  .sampleRate = session.sampleRate,
-                                                  .channels = session.nbChannels};
+            return DragonMultimedia::SamplesChunk::owning(std::move(ownedBuffer), session.sampleRate, session.nbChannels, static_cast<size_t>(totalSamples));
         }
     }
     return std::nullopt;

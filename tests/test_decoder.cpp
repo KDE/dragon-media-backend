@@ -180,6 +180,7 @@ private Q_SLOTS:
 
     void testGeneratorEventOrdering();
     void testGeneratorSpanLifetime();
+    void testConcurrentChunksDoNotAlias();
     void testGeneratorErrorYielded();
     void testGeneratorMultipleIterations();
 
@@ -681,7 +682,7 @@ void TestDecoder::testGeneratorEventOrdering()
                                   QVERIFY(!sawEof);
                                   sawEof = true;
                               },
-                              [&](const DecodeError &) {}},
+                              [&](const DecodeError &) { }},
                    event);
     }
 
@@ -695,7 +696,7 @@ void TestDecoder::testGeneratorSpanLifetime()
     QString filePath = m_tempDir.filePath("test_span.wav"_L1);
     QFile file(filePath);
     QVERIFY(file.open(QIODevice::WriteOnly));
-    file.write(createTestWavData(44100, 2, 50));
+    file.write(createTestWavData(44100, 2, 200));
     file.close();
 
     DragonDecoder decoder(nullptr, nullptr, -1, filePath);
@@ -703,20 +704,68 @@ void TestDecoder::testGeneratorSpanLifetime()
 
     auto gen = decoder.decodeLoop({});
     auto it = gen.begin();
-    QVERIFY(it != gen.end());
 
-    QVERIFY(std::holds_alternative<SamplesChunk>(*it));
+    // Walk to the first SamplesChunk; ignore FormatReady etc.
+    while (it != gen.end() && !std::holds_alternative<SamplesChunk>(*it)) {
+        ++it;
+    }
+    QVERIFY(it != gen.end());
 
     auto sc = std::get<SamplesChunk>(*it);
     QVERIFY(!sc.data.empty());
 
-    std::vector<std::float32_t> copiedData(sc.data.begin(), sc.data.end());
-    const auto originalFirst = copiedData.front();
+    // Snapshot the bytes; the span must keep pointing at these same bytes.
+    const std::vector<std::float32_t> snapshot(sc.data.begin(), sc.data.end());
 
-    ++it;
+    // Advance far enough that a decoder reusing a shared scratch buffer
+    // would have overwritten the bytes this span points at.
+    constexpr int kAdvances = 8;
+    for (int i = 0; i < kAdvances && it != gen.end(); ++i) {
+        ++it;
+    }
 
-    QVERIFY2(copiedData.front() == originalFirst, "Data copied from first span should remain valid after advancing iterator to next event");
-    QVERIFY2(copiedData.size() == sc.data.size(), "Copied data size should match original span size");
+    QVERIFY2(std::equal(sc.data.begin(), sc.data.end(), snapshot.begin()), "SamplesChunk::data must remain valid after the generator is advanced");
+}
+
+void TestDecoder::testConcurrentChunksDoNotAlias()
+{
+    QVERIFY(m_tempDir.isValid());
+    QString filePath = m_tempDir.filePath("test_alias.wav"_L1);
+    QFile file(filePath);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.write(createTestWavData(44100, 2, 200));
+    file.close();
+
+    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
+    QVERIFY(decoder.initialize().success);
+
+    auto gen = decoder.decodeLoop({});
+    auto it = gen.begin();
+
+    auto nextChunk = [&]() -> std::optional<SamplesChunk> {
+        while (it != gen.end()) {
+            if (std::holds_alternative<SamplesChunk>(*it)) {
+                auto chunk = std::get<SamplesChunk>(*it);
+                ++it; // advance past the chunk we just consumed
+                if (!chunk.data.empty()) {
+                    return chunk;
+                }
+                continue;
+            }
+            ++it;
+        }
+        return std::nullopt;
+    };
+
+    auto first = nextChunk();
+    QVERIFY(first.has_value());
+
+    auto second = nextChunk();
+    QVERIFY(second.has_value());
+
+    // Both chunks are alive simultaneously; the decoder must not have
+    // handed the same underlying buffer to both.
+    QVERIFY2(first->data.data() != second->data.data(), "Concurrently live SamplesChunks must not share underlying storage");
 }
 
 void TestDecoder::testGeneratorErrorYielded()
@@ -762,7 +811,7 @@ void TestDecoder::testGeneratorMultipleIterations()
                                       firstPassSamples.insert(firstPassSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
-                              [&](const auto &) {}},
+                              [&](const auto &) { }},
                    event);
     }
 
@@ -781,7 +830,7 @@ void TestDecoder::testGeneratorMultipleIterations()
                                       secondPassSamples.insert(secondPassSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
-                              [&](const auto &) {}},
+                              [&](const auto &) { }},
                    event);
     }
 
@@ -932,8 +981,8 @@ void TestDecoder::testPerChunkMetadata()
                                       QCOMPARE(sc.channels, initRes.channels);
                                   }
                               },
-                              [&](const DecodeEof &) {},
-                              [&](const DecodeError &) {}},
+                              [&](const DecodeEof &) { },
+                              [&](const DecodeError &) { }},
                    event);
     }
 
