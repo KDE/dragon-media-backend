@@ -105,5 +105,10 @@ private:
 
     std::shared_ptr<DragonMultimedia::DragonCompletion> m_pendingGaplessCompletion;
 
-    std::unique_ptr<DragonStream> m_stream;
+    // Guards m_stream. Held only for brief snapshots; never held while
+    // blocking on a stream read/seek (those run on the decode thread and use
+    // their own shared_ptr snapshot), so it cannot deadlock against the
+    // decode loop.
+    mutable std::mutex m_streamMutex;
+    std::shared_ptr<DragonStream> m_stream;
 };

@@ -12,7 +12,7 @@
 
 using namespace Qt::StringLiterals;
 
-std::unique_ptr<DragonStream> DragonStreamFactory::createStream(const QUrl &source)
+std::shared_ptr<DragonStream> DragonStreamFactory::createStream(const QUrl &source)
 {
     if (source.isLocalFile()) {
         return nullptr;
@@ -21,8 +21,8 @@ std::unique_ptr<DragonStream> DragonStreamFactory::createStream(const QUrl &sour
     const QString scheme = source.scheme();
 
     if (scheme == u"http"_s || scheme == u"https"_s) {
-        return std::make_unique<DragonRadioStream>();
+        return std::make_shared<DragonRadioStream>();
     }
 
-    return std::make_unique<DragonKioStream>();
+    return std::make_shared<DragonKioStream>();
 }

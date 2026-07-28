@@ -423,9 +423,14 @@ void DragonDecodePipeline::stop()
         m_decodeLoopActive = false;
     }
 
-    if (m_stream) {
-        m_stream->stop();
+    std::shared_ptr<DragonStream> oldStream;
+    {
+        std::scoped_lock lock(m_streamMutex);
+        oldStream = std::move(m_stream);
         m_stream.reset();
+    }
+    if (oldStream) {
+        oldStream->stop();
     }
     qCDebug(dragonMultimediaDecode) << "stop() full teardown complete";
 }
@@ -506,40 +511,51 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
 {
     const bool isLocal = source.isLocalFile();
 
-    if (m_stream) {
-        disconnect(m_stream->bufferProgress(), nullptr, this, nullptr);
-        m_stream->stop();
-        m_stream.reset();
+    std::shared_ptr<DragonStream> oldStream;
+    {
+        std::scoped_lock lock(m_streamMutex);
+        oldStream = std::move(m_stream);
+        m_stream = DragonStreamFactory::createStream(source);
+    }
+    if (oldStream) {
+        disconnect(oldStream->bufferProgress(), nullptr, this, nullptr);
+        oldStream->stop();
     }
 
-    m_stream = DragonStreamFactory::createStream(source);
+    // Snapshot held by the callbacks below. The shared_ptr keeps the stream
+    // alive on the decode thread even if the main/prewarm thread replaces
+    // m_stream mid-decode, eliminating the use-after-free that a raw capture
+    // would have.
+    const std::shared_ptr<DragonStream> stream = [this]() {
+        std::scoped_lock lock(m_streamMutex);
+        return m_stream;
+    }();
 
     DragonDecoder::ReadCallback readCb;
     DragonDecoder::SeekCallback seekCb;
 
-    if (m_stream) {
-        m_stream->setUrl(source);
+    if (stream) {
+        stream->setUrl(source);
 
-        connect(m_stream.get(), &DragonStream::errorOccurred, this, [this](const QString &) {
+        connect(stream.get(), &DragonStream::errorOccurred, this, [this](const QString &) {
             Q_EMIT sessionError(QStringLiteral("Stream error"));
         });
 
-        connect(m_stream.get(), &DragonStream::metadataReady, m_player, &DragonPlayer::currentPlayingForRadiosChanged);
-        connect(m_stream->bufferProgress(), &DragonBufferProgress::progressChanged, this, &DragonDecodePipeline::bufferProgressChanged);
+        connect(stream.get(), &DragonStream::metadataReady, m_player, &DragonPlayer::currentPlayingForRadiosChanged);
+        connect(stream->bufferProgress(), &DragonBufferProgress::progressChanged, this, &DragonDecodePipeline::bufferProgressChanged);
 
-        connect(m_stream.get(), &DragonStream::streamStalled, this, &DragonDecodePipeline::streamStalled, Qt::QueuedConnection);
-        connect(m_stream.get(), &DragonStream::streamBuffering, this, &DragonDecodePipeline::streamBuffering, Qt::QueuedConnection);
-        connect(m_stream.get(), &DragonStream::streamBuffered, this, &DragonDecodePipeline::streamBuffered, Qt::QueuedConnection);
+        connect(stream.get(), &DragonStream::streamStalled, this, &DragonDecodePipeline::streamStalled, Qt::QueuedConnection);
+        connect(stream.get(), &DragonStream::streamBuffering, this, &DragonDecodePipeline::streamBuffering, Qt::QueuedConnection);
+        connect(stream.get(), &DragonStream::streamBuffered, this, &DragonDecodePipeline::streamBuffered, Qt::QueuedConnection);
 
-        m_stream->start();
+        stream->start();
 
-        readCb = [this](const std::span<uint8_t> buf) -> int {
-            return m_stream ? m_stream->read(buf, m_sessionStopSource.get_token()) : -1;
+        readCb = [stream, this](const std::span<uint8_t> buf) -> int {
+            return stream->read(buf, m_sessionStopSource.get_token());
         };
 
-        auto *stream = m_stream.get();
-        seekCb = [this, stream](int64_t offset, DragonDecoder::SeekWhence whence) -> int64_t {
-            auto result = invokeStoppable<int64_t>(stream, m_sessionStopSource.get_token(), [stream, offset, whence]() {
+        seekCb = [stream, this](int64_t offset, DragonDecoder::SeekWhence whence) -> int64_t {
+            auto result = invokeStoppable<int64_t>(stream.get(), m_sessionStopSource.get_token(), [stream, offset, whence]() {
                 if (whence == DragonDecoder::SeekWhence::Set) {
                     return stream->seek(offset);
                 } else if (whence == DragonDecoder::SeekWhence::Cur) {
@@ -560,7 +576,7 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
     }
 
     auto decoder =
-        std::make_unique<DragonDecoder>(std::move(readCb), std::move(seekCb), m_stream ? m_stream->size() : -1, isLocal ? source.toLocalFile() : QString{});
+        std::make_unique<DragonDecoder>(std::move(readCb), std::move(seekCb), stream ? stream->size() : -1, isLocal ? source.toLocalFile() : QString{});
 
     connect(decoder.get(), &DragonDecoder::streamError, this, [this](const QString &msg) {
         qCDebug(dragonMultimediaDecode) << "Decoder mid-stream error:" << msg;
@@ -595,6 +611,7 @@ void DragonDecodePipeline::setCurrentSource(const QUrl &source)
 
 qint64 DragonDecodePipeline::streamSize() const
 {
+    std::scoped_lock lock(m_streamMutex);
     return m_stream ? m_stream->size() : -1;
 }
 

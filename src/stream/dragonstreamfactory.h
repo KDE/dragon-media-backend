@@ -14,5 +14,5 @@
 class DragonStreamFactory
 {
 public:
-    static std::unique_ptr<DragonStream> createStream(const QUrl &source);
+    static std::shared_ptr<DragonStream> createStream(const QUrl &source);
 };
