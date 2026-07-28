@@ -19,6 +19,7 @@
 #include <QObject>
 
 #include "dragonthreadname.h"
+#include <chrono>
 #include <condition_variable>
 #include <future>
 #include <memory>
@@ -32,6 +33,8 @@ using namespace Qt::StringLiterals;
 
 namespace
 {
+
+static constexpr auto INVOKE_STOPPABLE_TIMEOUT = std::chrono::milliseconds(2000);
 
 template<typename R, typename F>
 std::optional<R> invokeStoppable(QObject *context, std::stop_token st, F &&func)
@@ -58,9 +61,11 @@ std::optional<R> invokeStoppable(QObject *context, std::stop_token st, F &&func)
         Qt::QueuedConnection);
 
     std::unique_lock lock(state->mutex);
-    if (!state->cv.wait(lock, st, [state]() {
-            return state->done;
-        })) {
+    const bool completed = state->cv.wait_for(lock, st, INVOKE_STOPPABLE_TIMEOUT, [state]() {
+        return state->done;
+    });
+    if (!completed || !state->done) {
+        // Stop requested or timed out waiting for the target thread.
         return std::nullopt;
     }
     return std::move(*state->result);
