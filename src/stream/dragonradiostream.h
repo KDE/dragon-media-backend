@@ -94,6 +94,12 @@ private:
     std::atomic<bool> m_isBuffering{false};
     static constexpr qint64 LOW_WATER_MARK = 0;
     static constexpr qint64 HIGH_WATER_MARK = 128 * 1024;
+    // Hard cap on buffered bytes. When reached, we stop draining the reply
+    // (its own read buffer throttles the socket) instead of growing memory
+    // without bound.
+    static constexpr qint64 MAX_BUFFER_BYTES = 4 * 1024 * 1024;
+
+    void drainReply();
 
     friend class TestRadioStream;
 };

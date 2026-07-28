@@ -12,6 +12,8 @@
 
 #include "stream/dragonkiostream.h"
 
+#include <QScopeGuard>
+#include <QTimer>
 #include <atomic>
 #include <stop_token>
 #include <thread>
@@ -43,6 +45,10 @@ private Q_SLOTS:
     void testHttpKioSeekDoesNotCorruptStream();
     void testHttpKioRapidSeek();
     void testHttpKioSeekWhileReading();
+
+    void testBackpressureCapsBuffer();
+    void testBackpressureResumesAfterDrain();
+    void testBackpressureNoDataLoss();
 
 private:
     QString m_testFilePath;
@@ -445,6 +451,251 @@ void TestKioStream::testHttpKioSeekWhileReading()
                                 .arg(expected)
                                 .arg(static_cast<char>(buffer[static_cast<size_t>(i)]))));
     }
+}
+
+/*
+ * Throttled HTTP server that sends data in small chunks at a steady rate.
+ * Used for backpressure tests where the consumer must be slower than the
+ * network to exercise the buffer cap.
+ */
+class ThrottledHttpServer : public QObject
+{
+    Q_OBJECT
+public:
+    explicit ThrottledHttpServer(QObject *parent = nullptr)
+        : QObject(parent)
+        , m_server(new QTcpServer(this))
+    {
+        connect(m_server, &QTcpServer::newConnection, this, &ThrottledHttpServer::onNewConnection);
+    }
+
+    bool start(quint16 port = 0)
+    {
+        return m_server->listen(QHostAddress::LocalHost, port);
+    }
+
+    [[nodiscard]] quint16 port() const
+    {
+        return m_server->serverPort();
+    }
+
+    void setPayload(const QByteArray &data, int chunkSize = 8192, int intervalMs = 1)
+    {
+        m_payload = data;
+        m_chunkSize = chunkSize;
+        m_intervalMs = intervalMs;
+    }
+
+    void stop()
+    {
+        m_server->close();
+        for (auto *sock : m_clients) {
+            sock->disconnectFromHost();
+            sock->deleteLater();
+        }
+        m_clients.clear();
+    }
+
+private:
+    void onNewConnection()
+    {
+        while (m_server->hasPendingConnections()) {
+            auto *sock = m_server->nextPendingConnection();
+            m_clients.append(sock);
+            connect(sock, &QTcpSocket::readyRead, this, [this, sock]() {
+                // Consume the HTTP request line
+                sock->readAll();
+                sendHeaders(sock);
+                startDribbling(sock);
+            });
+            connect(sock, &QTcpSocket::disconnected, this, [this, sock]() {
+                m_clients.removeAll(sock);
+                sock->deleteLater();
+            });
+        }
+    }
+
+    void sendHeaders(QTcpSocket *sock)
+    {
+        QByteArray headers;
+        headers.append("HTTP/1.1 200 OK\r\n");
+        headers.append("Content-Type: application/octet-stream\r\n");
+        headers.append("Content-Length: " + QByteArray::number(m_payload.size()) + "\r\n");
+        headers.append("Accept-Ranges: bytes\r\n");
+        headers.append("Connection: close\r\n");
+        headers.append("\r\n");
+        sock->write(headers);
+        sock->flush();
+    }
+
+    void startDribbling(QTcpSocket *sock)
+    {
+        auto *timer = new QTimer(sock);
+        auto offset = std::make_shared<int>(0);
+        connect(timer, &QTimer::timeout, sock, [this, sock, timer, offset]() {
+            if (*offset >= m_payload.size()) {
+                sock->disconnectFromHost();
+                timer->stop();
+                return;
+            }
+            const int len = static_cast<int>(std::min<qsizetype>(m_chunkSize, m_payload.size() - *offset));
+            sock->write(m_payload.mid(*offset, len));
+            sock->flush();
+            *offset += len;
+        });
+        timer->start(m_intervalMs);
+    }
+
+    QTcpServer *m_server;
+    QByteArray m_payload;
+    int m_chunkSize = 8192;
+    int m_intervalMs = 1;
+    QList<QTcpSocket *> m_clients;
+};
+
+void TestKioStream::testBackpressureCapsBuffer()
+{
+    // Send 8 MiB of data (2x the 4 MiB cap) with the reader paused.
+    // The buffer should never significantly exceed MAX_BUFFER_BYTES.
+    const QByteArray payload = QByteArray("0123456789").repeated(838860); // ~8.4 MiB
+
+    ThrottledHttpServer server;
+    server.setPayload(payload, 4096, 0);
+    QVERIFY(server.start());
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(server.port());
+    url.setPath(u"/big.dat"_s);
+
+    DragonKioStream stream;
+    stream.setUrl(url);
+    stream.start();
+
+    // Let data accumulate without reading buffer should be capped.
+    QTest::qWait(3000);
+
+    QVERIFY2(stream.m_bufferDepth.load() <= DragonKioStream::MAX_BUFFER_BYTES + 8192,
+             qPrintable(u"Buffer depth %1 exceeds cap + tolerance"_s.arg(stream.m_bufferDepth.load())));
+    QVERIFY2(stream.m_bufferDepth.load() > 0, "Buffer should have some data after waiting");
+
+    stream.stop();
+    server.stop();
+}
+
+void TestKioStream::testBackpressureResumesAfterDrain()
+{
+    // Send a payload larger than the cap. After the buffer fills and the job
+    // suspends, drain the entire buffer and verify the stream reaches EOF.
+    // This proves the job is resumed after draining otherwise the stream
+    // would stall at the cap forever.
+    const QByteArray payload = QByteArray("0123456789").repeated(838860); // ~8.4 MiB
+
+    ThrottledHttpServer server;
+    server.setPayload(payload, 4096, 0);
+    QVERIFY(server.start());
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(server.port());
+    url.setPath(u"/big.dat"_s);
+
+    DragonKioStream stream;
+    stream.setUrl(url);
+    stream.start();
+
+    // Let buffer fill to cap and suspend the job.
+    QTest::qWait(3000);
+    QVERIFY2(stream.m_bufferDepth.load() > 0, "Buffer should have data");
+    QVERIFY2(stream.m_suspended, "Job should be suspended after hitting the cap");
+
+    // Now read everything the job must be resumed for the stream to complete.
+    std::stop_source ss;
+    std::vector<uint8_t> buf(65536);
+    std::atomic<int> totalRead{0};
+    std::atomic<bool> gotEof{false};
+    QByteArray received;
+    received.reserve(payload.size());
+
+    std::thread reader([&]() {
+        while (!ss.stop_requested()) {
+            int n = stream.read(buf, ss.get_token());
+            if (n < 0)
+                break;
+            if (n == 0) {
+                gotEof = true;
+                break;
+            }
+            received.append(reinterpret_cast<const char *>(buf.data()), n);
+            totalRead += n;
+        }
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(gotEof.load(), 30000);
+    reader.join();
+
+    QVERIFY2(gotEof.load(), "Stream should have reached EOF job was not resumed after drain");
+    QCOMPARE(received.size(), payload.size());
+    QCOMPARE(received, payload);
+
+    stream.stop();
+    server.stop();
+}
+
+void TestKioStream::testBackpressureNoDataLoss()
+{
+    // Send exactly 5 MiB (> 4 MiB cap) and verify all bytes are received.
+    const QByteArray payload = QByteArray("ABCDEFGHIJKLMNOPQRSTUVWXYZ").repeated(201326); // ~5.2 MiB
+
+    ThrottledHttpServer server;
+    server.setPayload(payload, 4096, 0);
+    QVERIFY(server.start());
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(server.port());
+    url.setPath(u"/big.dat"_s);
+
+    DragonKioStream stream;
+    stream.setUrl(url);
+    stream.start();
+
+    // Let the buffer fill and suspend.
+    QTest::qWait(2000);
+
+    // Now read everything and verify integrity.
+    std::stop_source ss;
+    std::vector<uint8_t> buf(65536);
+    std::atomic<int> totalRead{0};
+    std::atomic<bool> gotEof{false};
+    QByteArray received;
+    received.reserve(payload.size());
+
+    std::thread reader([&]() {
+        while (!ss.stop_requested()) {
+            int n = stream.read(buf, ss.get_token());
+            if (n < 0)
+                break;
+            if (n == 0) {
+                gotEof = true;
+                break;
+            }
+            received.append(reinterpret_cast<const char *>(buf.data()), n);
+            totalRead += n;
+        }
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(gotEof.load() || totalRead.load() >= payload.size(), 30000);
+    reader.join();
+
+    QCOMPARE(received.size(), payload.size());
+    QCOMPARE(received, payload);
+
+    stream.stop();
+    server.stop();
 }
 
 QTEST_MAIN(TestKioStream)

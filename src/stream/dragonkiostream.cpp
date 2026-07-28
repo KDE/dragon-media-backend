@@ -52,6 +52,7 @@ void DragonKioStream::start()
     connect(m_job, &KJob::result, this, &DragonKioStream::onResult);
     connect(m_job, &KJob::totalAmountChanged, this, &DragonKioStream::onTotalAmountChanged);
     connect(m_job, &KJob::processedAmountChanged, this, &DragonKioStream::onProcessedAmountChanged);
+    connect(this, &DragonKioStream::backpressureReleased, m_job, &KJob::resume, Qt::QueuedConnection);
 
     m_watchdogTimer->start();
 }
@@ -116,13 +117,39 @@ int DragonKioStream::read(std::span<uint8_t> buf, std::stop_token st)
 
     if (bytesRead > 0) {
         const auto prev = m_bufferDepth.fetch_sub(bytesRead);
-        if (prev > LOW_WATER_MARK && (prev - bytesRead) <= LOW_WATER_MARK) {
+        const auto newDepth = prev - bytesRead;
+        if (prev > LOW_WATER_MARK && newDepth <= LOW_WATER_MARK) {
             m_isBuffering = true;
             Q_EMIT streamBuffering();
+        }
+        if (newDepth < MAX_BUFFER_BYTES) {
+            releaseBackpressure();
         }
     }
 
     return bytesRead;
+}
+
+void DragonKioStream::applyBackpressure()
+{
+    // Runs on the KIO job's thread (from onData). Suspending throttles
+    // further network delivery so the buffer cannot grow without bound when
+    // the consumer (decode thread) is slower than the network.
+    if (!m_suspended && m_job && m_bufferDepth.load() >= MAX_BUFFER_BYTES) {
+        qCDebug(dragonMultimediaNetwork) << "KIO buffer full (" << m_bufferDepth.load() << "bytes), suspending job";
+        m_suspended = true;
+        m_job->suspend();
+    }
+}
+
+void DragonKioStream::releaseBackpressure()
+{
+    // May run on the decode thread; emit a queued signal so the job
+    // resumes on its own thread.
+    if (m_suspended && m_job) {
+        m_suspended = false;
+        Q_EMIT backpressureReleased();
+    }
 }
 
 int64_t DragonKioStream::seek(int64_t offset)
@@ -143,6 +170,7 @@ int64_t DragonKioStream::seek(int64_t offset)
     connect(m_job, &KJob::result, this, &DragonKioStream::onResult);
     connect(m_job, &KJob::totalAmountChanged, this, &DragonKioStream::onTotalAmountChanged);
     connect(m_job, &KJob::processedAmountChanged, this, &DragonKioStream::onProcessedAmountChanged);
+    connect(this, &DragonKioStream::backpressureReleased, m_job, &KJob::resume, Qt::QueuedConnection);
 
     m_watchdogTimer->start();
 
@@ -184,6 +212,8 @@ void DragonKioStream::onData(KIO::Job *job, const QByteArray &data)
     if (m_isBuffering.exchange(false) && newDepth >= HIGH_WATER_MARK) {
         Q_EMIT streamBuffered();
     }
+
+    applyBackpressure();
 }
 
 void DragonKioStream::onResult(KJob *job)

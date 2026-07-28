@@ -16,6 +16,8 @@
 
 #include <QHash>
 #include <QScopeGuard>
+#include <QTcpServer>
+#include <QTimer>
 #include <atomic>
 #include <stop_token>
 #include <thread>
@@ -53,6 +55,10 @@ private Q_SLOTS:
     void testSeekingCapabilities();
 
     void testBufferingSignals();
+
+    void testBackpressureCapsBuffer();
+    void testBackpressureDrainsHeldTailOnEof();
+    void testBackpressureNoDataLoss();
 
 private:
     TestHttpServer *m_server = nullptr;
@@ -571,6 +577,263 @@ void TestRadioStream::testBufferingSignals()
     QTRY_VERIFY_WITH_TIMEOUT(totalRead.load() > 262144, 10000);
 
     QVERIFY2(totalRead.load() > 0, "Should have read some data");
+}
+
+void TestRadioStream::testBackpressureCapsBuffer()
+{
+    // Send a large payload faster than the (paused) reader consumes.
+    // The buffer should be capped at MAX_BUFFER_BYTES.
+    const QByteArray payload = QByteArray("0123456789").repeated(524288); // ~5.2 MiB
+
+    QTcpServer server;
+    QList<QTcpSocket *> clients;
+
+    connect(&server, &QTcpServer::newConnection, &server, [&]() {
+        while (server.hasPendingConnections()) {
+            auto *sock = server.nextPendingConnection();
+            clients.append(sock);
+
+            QByteArray headers;
+            headers.append("HTTP/1.1 200 OK\r\n");
+            headers.append("Content-Type: application/octet-stream\r\n");
+            headers.append("Content-Length: " + QByteArray::number(payload.size()) + "\r\n");
+            headers.append("Connection: close\r\n");
+            headers.append("\r\n");
+            sock->write(headers);
+            sock->flush();
+
+            auto *timer = new QTimer(sock);
+            auto offset = std::make_shared<int>(0);
+            connect(timer, &QTimer::timeout, sock, [&, sock, timer, offset]() {
+                if (*offset >= payload.size()) {
+                    sock->disconnectFromHost();
+                    timer->stop();
+                    return;
+                }
+                const int len = static_cast<int>(std::min<qsizetype>(8192, payload.size() - *offset));
+                sock->write(payload.mid(*offset, len));
+                sock->flush();
+                *offset += len;
+            });
+            timer->start(1);
+        }
+    });
+
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(server.serverPort());
+    url.setPath(u"/stream"_s);
+
+    DragonRadioStream stream;
+    stream.setUrl(url);
+    stream.start();
+
+    // Let data arrive without reading -- buffer should be capped.
+    QTest::qWait(3000);
+
+    QVERIFY2(stream.m_bufferDepth.load() <= DragonRadioStream::MAX_BUFFER_BYTES + 8192,
+             qPrintable(u"Buffer depth %1 exceeds cap + tolerance"_s.arg(stream.m_bufferDepth.load())));
+    QVERIFY2(stream.m_bufferDepth.load() > 0, "Buffer should have some data after waiting");
+
+    stream.stop();
+    server.close();
+    for (auto *c : clients)
+        c->deleteLater();
+}
+
+void TestRadioStream::testBackpressureDrainsHeldTailOnEof()
+{
+    // Send a payload larger than the cap with a dribbling server. When the
+    // reader is paused, the tail is held in the reply buffer by backpressure.
+    // On EOF, the tail must be drained.
+    const QByteArray payload = QByteArray("ABCDEFGHIJ").repeated(524288); // ~5.2 MiB
+
+    QTcpServer server;
+    QList<QTcpSocket *> clients;
+
+    connect(&server, &QTcpServer::newConnection, &server, [&]() {
+        while (server.hasPendingConnections()) {
+            auto *sock = server.nextPendingConnection();
+            clients.append(sock);
+
+            sock->readAll(); // consume request
+
+            QByteArray headers;
+            headers.append("HTTP/1.1 200 OK\r\n");
+            headers.append("Content-Type: application/octet-stream\r\n");
+            headers.append("Content-Length: " + QByteArray::number(payload.size()) + "\r\n");
+            headers.append("Connection: close\r\n");
+            headers.append("\r\n");
+            sock->write(headers);
+            sock->flush();
+
+            auto *timer = new QTimer(sock);
+            auto offset = std::make_shared<int>(0);
+            connect(timer, &QTimer::timeout, sock, [&, sock, timer, offset]() {
+                if (*offset >= payload.size()) {
+                    sock->disconnectFromHost();
+                    timer->stop();
+                    return;
+                }
+                const int len = static_cast<int>(std::min<qsizetype>(8192, payload.size() - *offset));
+                sock->write(payload.mid(*offset, len));
+                sock->flush();
+                *offset += len;
+            });
+            timer->start(1);
+        }
+    });
+
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(server.serverPort());
+    url.setPath(u"/stream"_s);
+
+    DragonRadioStream stream;
+    stream.setUrl(url);
+    stream.start();
+
+    // Let buffer fill to cap.
+    QTest::qWait(2000);
+    QVERIFY2(stream.m_bufferDepth.load() > 0, "Buffer should have data");
+
+    // Now read everything. The tail held by backpressure should be
+    // drained on EOF.
+    std::stop_source ss;
+    std::vector<uint8_t> buf(65536);
+    std::atomic<int> totalRead{0};
+    std::atomic<bool> gotEof{false};
+    QByteArray received;
+    received.reserve(payload.size());
+
+    std::thread reader([&]() {
+        while (!ss.stop_requested()) {
+            int n = stream.read(buf, ss.get_token());
+            if (n < 0)
+                break;
+            if (n == 0) {
+                gotEof = true;
+                break;
+            }
+            received.append(reinterpret_cast<const char *>(buf.data()), n);
+            totalRead += n;
+        }
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(gotEof.load(), 30000);
+    reader.join();
+
+    QVERIFY2(gotEof.load(), "Should have received EOF");
+    QCOMPARE(received.size(), payload.size());
+    QCOMPARE(received, payload);
+
+    stream.stop();
+    server.close();
+    for (auto *c : clients)
+        c->deleteLater();
+}
+
+void TestRadioStream::testBackpressureNoDataLoss()
+{
+    // Send data with a dribbling server, pause the reader to trigger
+    // backpressure, then resume and verify all data is received.
+    const QByteArray payload = QByteArray("0123456789").repeated(524288); // ~5.2 MiB
+
+    QTcpServer server;
+    QList<QTcpSocket *> clients;
+
+    connect(&server, &QTcpServer::newConnection, &server, [&]() {
+        while (server.hasPendingConnections()) {
+            auto *sock = server.nextPendingConnection();
+            clients.append(sock);
+
+            sock->readAll(); // consume request
+
+            QByteArray headers;
+            headers.append("HTTP/1.1 200 OK\r\n");
+            headers.append("Content-Type: application/octet-stream\r\n");
+            headers.append("Content-Length: " + QByteArray::number(payload.size()) + "\r\n");
+            headers.append("Connection: close\r\n");
+            headers.append("\r\n");
+            sock->write(headers);
+            sock->flush();
+
+            auto *timer = new QTimer(sock);
+            auto offset = std::make_shared<int>(0);
+            connect(timer, &QTimer::timeout, sock, [&, sock, timer, offset]() {
+                if (*offset >= payload.size()) {
+                    sock->disconnectFromHost();
+                    timer->stop();
+                    return;
+                }
+                const int len = static_cast<int>(std::min<qsizetype>(4096, payload.size() - *offset));
+                sock->write(payload.mid(*offset, len));
+                sock->flush();
+                *offset += len;
+            });
+            timer->start(1);
+        }
+    });
+
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(server.serverPort());
+    url.setPath(u"/stream"_s);
+
+    DragonRadioStream stream;
+    stream.setUrl(url);
+    stream.start();
+
+    // Let buffer fill and cap.
+    QTest::qWait(2000);
+
+    // Read everything with a brief pause in the middle to exercise
+    // the suspend/resume cycle.
+    std::stop_source ss;
+    std::vector<uint8_t> buf(65536);
+    std::atomic<int> totalRead{0};
+    std::atomic<bool> gotEof{false};
+    QByteArray received;
+    received.reserve(payload.size());
+
+    std::thread reader([&]() {
+        bool pausedOnce = false;
+        while (!ss.stop_requested()) {
+            if (totalRead.load() > 1024 * 1024 && !pausedOnce) {
+                pausedOnce = true;
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+            int n = stream.read(buf, ss.get_token());
+            if (n < 0)
+                break;
+            if (n == 0) {
+                gotEof = true;
+                break;
+            }
+            received.append(reinterpret_cast<const char *>(buf.data()), n);
+            totalRead += n;
+        }
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(gotEof.load() || totalRead.load() >= payload.size(), 30000);
+    reader.join();
+
+    QCOMPARE(received.size(), payload.size());
+    QCOMPARE(received, payload);
+
+    stream.stop();
+    server.close();
+    for (auto *c : clients)
+        c->deleteLater();
 }
 
 #include "test_radiostream.moc"

@@ -75,4 +75,16 @@ private:
     std::atomic<bool> m_isBuffering{false};
     static constexpr qint64 LOW_WATER_MARK = 0;
     static constexpr qint64 HIGH_WATER_MARK = 128 * 1024;
+    // Hard cap on buffered bytes. When reached, the KIO job is suspended to
+    // apply backpressure instead of growing memory without bound.
+    static constexpr qint64 MAX_BUFFER_BYTES = 4 * 1024 * 1024;
+    bool m_suspended = false;
+
+    void applyBackpressure();
+    void releaseBackpressure();
+
+Q_SIGNALS:
+    void backpressureReleased();
+
+    friend class TestKioStream;
 };

@@ -63,6 +63,7 @@ void DragonRadioStream::start()
     request.setRawHeader("Icy-Metadata"_ba, "1"_ba);
     request.setTransferTimeout(std::chrono::seconds(5));
     m_reply = m_nam->get(request);
+    m_reply->setReadBufferSize(MAX_BUFFER_BYTES);
 
     connect(m_reply, &QNetworkReply::encrypted, this, &DragonRadioStream::onReplyEncrypted);
     connect(m_reply, &QNetworkReply::metaDataChanged, this, &DragonRadioStream::onReplyMetaDataChanged);
@@ -132,9 +133,20 @@ int DragonRadioStream::read(std::span<uint8_t> buf, std::stop_token st)
 
     if (bytesRead > 0) {
         const auto prev = m_bufferDepth.fetch_sub(bytesRead);
-        if (prev > LOW_WATER_MARK && (prev - bytesRead) <= LOW_WATER_MARK) {
+        const auto newDepth = prev - bytesRead;
+        if (prev > LOW_WATER_MARK && newDepth <= LOW_WATER_MARK) {
             m_isBuffering = true;
             Q_EMIT streamBuffering();
+        }
+        // If we were holding back due to a full buffer, there is space now.
+        // Hop to the reply's thread to drain whatever accumulated.
+        if (newDepth < MAX_BUFFER_BYTES && m_reply) {
+            QMetaObject::invokeMethod(
+                m_reply,
+                [this]() {
+                    drainReply();
+                },
+                Qt::QueuedConnection);
         }
     }
 
@@ -166,6 +178,7 @@ int64_t DragonRadioStream::seek(int64_t offset)
     request.setRawHeader("Range"_ba, "bytes="_ba + QByteArray::number(offset) + "-"_ba);
     request.setTransferTimeout(std::chrono::seconds(5));
     m_reply = m_nam->get(request);
+    m_reply->setReadBufferSize(MAX_BUFFER_BYTES);
 
     connect(m_reply, &QNetworkReply::encrypted, this, &DragonRadioStream::onReplyEncrypted);
     connect(m_reply, &QNetworkReply::metaDataChanged, this, &DragonRadioStream::onReplyMetaDataChanged);
@@ -257,7 +270,23 @@ void DragonRadioStream::onReplyMetaDataChanged()
 
 void DragonRadioStream::onReplyReadyRead()
 {
+    // Runs on the reply's thread. If the buffer is already full, leave the
+    // data in the reply's internal buffer; setReadBufferSize() throttles the
+    // socket so memory cannot grow without bound. read() re-invokes
+    // drainReply() once the consumer frees space.
+    drainReply();
+}
+
+void DragonRadioStream::drainReply()
+{
     if (!m_reply) {
+        return;
+    }
+
+    // When the reply has finished we must drain its tail regardless of the
+    // cap, otherwise data held back by backpressure would be lost.
+    const bool finished = m_reply->isFinished();
+    if (!finished && m_bufferDepth.load() >= MAX_BUFFER_BYTES) {
         return;
     }
 
@@ -290,6 +319,8 @@ void DragonRadioStream::onReplyFinished()
         });
     } else {
         qCDebug(dragonMultimediaNetwork) << "reply finished successfully, no reconnect needed";
+        // Drain anything the backpressure guard held back before EOF.
+        drainReply();
         m_finished = true;
         m_bufferCv.notify_all();
     }
