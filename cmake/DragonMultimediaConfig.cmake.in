@@ -10,6 +10,7 @@ include(CMakeFindDependencyMacro)
 find_dependency(Qt6 CONFIG COMPONENTS Core Network Gui REQUIRED)
 find_dependency(QCoro6 CONFIG COMPONENTS Core REQUIRED)
 find_dependency(SDL3 CONFIG REQUIRED)
+find_dependency(KF6I18n CONFIG REQUIRED)
 
 # Set up FFmpeg via pkg_check_modules
 include(FindPkgConfig)

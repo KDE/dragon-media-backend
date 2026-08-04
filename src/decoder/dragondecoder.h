@@ -89,5 +89,9 @@ private:
     void flushDecoder(DecodeSession &session);
     std::optional<DragonMultimedia::SamplesChunk> flushResampler(DecodeSession &session);
 
+    // Resamples up to maxOutSamples from the given input (nullptr to drain the
+    // resampler) into a pooled buffer and wraps it in a self-owning chunk.
+    std::optional<DragonMultimedia::SamplesChunk> resampleInto(DecodeSession &session, const uint8_t *const *in, int inSamples, int maxOutSamples);
+
     std::atomic<bool> m_hadFatalError{false};
 };

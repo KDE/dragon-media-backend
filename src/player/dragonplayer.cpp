@@ -12,6 +12,7 @@
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
 #include <QCoroTask>
 #pragma GCC diagnostic pop
+#include <KLocalizedString>
 #include <QMetaObject>
 #include <QTimer>
 #include <dragonmultimedia_logging.h>
@@ -122,6 +123,10 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
             audioOutput->setQueueReady(false);
         }
         setStatus(DragonPlayer::MediaStatus::InvalidMedia);
+        if (currentError != DragonPlayer::Error::NoError && currentErrorString.isEmpty()) {
+            currentErrorString = i18n("Fatal error while decoding media");
+            Q_EMIT q->errorChanged(currentError);
+        }
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
         qCDebug(dragonMultimediaPlayer) << "onDecodeFinished state/status changes complete (fatal)";
         return;
@@ -156,14 +161,15 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
     qCDebug(dragonMultimediaPlayer) << "onDecodeFinished media ended, deferring StoppedState until drain";
 }
 
-void DragonPlayerPrivate::onDecodeError(const QString &)
+void DragonPlayerPrivate::onDecodeError(const QString &message)
 {
     auto err = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
+    currentErrorString = !message.isEmpty() ? message : i18n("Error while decoding media");
     setStatus(DragonPlayer::MediaStatus::InvalidMedia);
     if (currentError != err) {
         currentError = err;
-        Q_EMIT q->errorChanged(currentError);
     }
+    Q_EMIT q->errorChanged(currentError);
 }
 
 void DragonPlayerPrivate::onStreamStalled()
@@ -251,17 +257,37 @@ void DragonPlayerPrivate::setStatus(DragonPlayer::MediaStatus status)
     currentStatus = status;
     qCDebug(dragonMultimediaPlayer) << "setStatus emitting statusChanged";
     Q_EMIT q->statusChanged(status);
+
+    if ((status == DragonPlayer::MediaStatus::NoMedia || status == DragonPlayer::MediaStatus::LoadedMedia) && !currentErrorString.isEmpty()) {
+        currentErrorString.clear();
+        Q_EMIT q->errorChanged(currentError);
+    }
 }
 
-void DragonPlayerPrivate::setError(DragonPlayer::Error error)
+void DragonPlayerPrivate::setError(DragonPlayer::Error error, const QString &message)
 {
+    if (error == DragonPlayer::Error::NoError) {
+        currentErrorString.clear();
+        if (currentError == error) {
+            return;
+        }
+        currentError = error;
+        Q_EMIT q->errorChanged(error);
+        return;
+    }
+
+    currentErrorString = message;
+
     if (currentError == error) {
+        if (!message.isEmpty()) {
+            Q_EMIT q->errorChanged(error);
+        }
         return;
     }
     currentError = error;
     Q_EMIT q->errorChanged(error);
 
-    if (error != DragonPlayer::Error::NoError && currentStatus != DragonPlayer::MediaStatus::InvalidMedia) {
+    if (currentStatus != DragonPlayer::MediaStatus::InvalidMedia) {
         currentStatus = DragonPlayer::MediaStatus::InvalidMedia;
         Q_EMIT q->statusChanged(DragonPlayer::MediaStatus::InvalidMedia);
     }
@@ -291,8 +317,8 @@ void DragonPlayerPrivate::init()
         audioOutput->setFftPipe(nullptr);
     }
 
-    connect(audioOutput.get(), &DragonAudioSink::errorOccurred, this, [this](const QString &) {
-        setError(DragonPlayer::Error::ResourceError);
+    connect(audioOutput.get(), &DragonAudioSink::errorOccurred, this, [this](const QString &message) {
+        setError(DragonPlayer::Error::ResourceError, message);
     });
 
     connect(audioOutput.get(), &DragonAudioSink::volumeChanged, q, &DragonPlayer::volumeChanged);
@@ -411,6 +437,10 @@ DragonPlayer::Error DragonPlayer::error() const
 {
     return d->currentError;
 }
+QString DragonPlayer::errorString() const
+{
+    return d->currentErrorString;
+}
 int64_t DragonPlayer::duration() const
 {
     return d->currentDuration;
@@ -527,8 +557,9 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
                 d->audioOutput->close();
                 d->audioOutput->reset();
             }
-            if (d->currentError != Error::NoError) {
+            if (d->currentError != Error::NoError || !d->currentErrorString.isEmpty()) {
                 d->currentError = Error::NoError;
+                d->currentErrorString.clear();
                 Q_EMIT errorChanged(Error::NoError);
             }
             d->setStatus(MediaStatus::NoMedia);
@@ -537,8 +568,9 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
             co_return;
         }
 
-        if (d->currentError != Error::NoError) {
+        if (d->currentError != Error::NoError || !d->currentErrorString.isEmpty()) {
             d->currentError = Error::NoError;
+            d->currentErrorString.clear();
             Q_EMIT errorChanged(Error::NoError);
         }
 
@@ -579,6 +611,8 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
         }
         d->setStatus(MediaStatus::InvalidMedia);
         d->currentError = d->currentIsLocal ? Error::FormatError : Error::NetworkError;
+        d->currentErrorString =
+            result.errorMessage.isEmpty() ? (d->currentIsLocal ? i18n("Failed to open media source") : i18n("Network error")) : result.errorMessage;
         Q_EMIT errorChanged(d->currentError);
         d->setPlaybackState(PlaybackState::StoppedState);
         co_return;
@@ -587,6 +621,12 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->currentSampleRate = result.sampleRate;
     d->currentChannels = result.channels;
     d->currentDuration = result.durationMs;
+
+    if (d->currentError != Error::NoError || !d->currentErrorString.isEmpty()) {
+        d->currentError = Error::NoError;
+        d->currentErrorString.clear();
+        Q_EMIT errorChanged(Error::NoError);
+    }
 
     if (d->currentDuration >= 0) {
         Q_EMIT durationChanged(d->currentDuration);

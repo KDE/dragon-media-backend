@@ -20,6 +20,7 @@
 #include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
 
+#include <algorithm>
 #include <atomic>
 #include <ranges>
 #include <span>
@@ -104,14 +105,22 @@ public:
 
         m_player->setSource(QUrl::fromLocalFile(path));
 
+        // errorChanged(NoError) is emitted when loading clears stale error
+        // state; only non-NoError emissions indicate a failed load.
+        const auto hasRealError = [&errorSpy]() {
+            return std::ranges::any_of(errorSpy, [](const QList<QVariant> &args) {
+                return args.at(0).value<DragonPlayer::Error>() != DragonPlayer::Error::NoError;
+            });
+        };
+
         const bool reached = QTest::qWaitFor(
             [&]() {
                 return m_player->status() == DragonPlayer::MediaStatus::LoadedMedia || m_player->status() == DragonPlayer::MediaStatus::BufferedMedia
-                    || errorSpy.count() > 0;
+                    || hasRealError();
             },
             timeoutMs);
 
-        return reached && errorSpy.count() == 0 && (statusSpy.count() > 0 || statusBefore == m_player->status());
+        return reached && !hasRealError() && m_player->error() == DragonPlayer::Error::NoError && (statusSpy.count() > 0 || statusBefore == m_player->status());
     }
 
     bool setSourceAndWait(const QUrl &url, int timeoutMs = 10000)
@@ -122,14 +131,20 @@ public:
 
         m_player->setSource(url);
 
+        const auto hasRealError = [&errorSpy]() {
+            return std::ranges::any_of(errorSpy, [](const QList<QVariant> &args) {
+                return args.at(0).value<DragonPlayer::Error>() != DragonPlayer::Error::NoError;
+            });
+        };
+
         const bool reached = QTest::qWaitFor(
             [&]() {
                 return m_player->status() == DragonPlayer::MediaStatus::LoadedMedia || m_player->status() == DragonPlayer::MediaStatus::BufferedMedia
-                    || errorSpy.count() > 0;
+                    || hasRealError();
             },
             timeoutMs);
 
-        return reached && errorSpy.count() == 0 && (statusSpy.count() > 0 || statusBefore == m_player->status());
+        return reached && !hasRealError() && m_player->error() == DragonPlayer::Error::NoError && (statusSpy.count() > 0 || statusBefore == m_player->status());
     }
 
     bool playAndWait(int timeoutMs = 5000)

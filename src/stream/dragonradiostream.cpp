@@ -8,6 +8,7 @@
 #include <dragonbufferprogress.h>
 
 #include "dragonmultimedia_network_logging.h"
+#include <KLocalizedString>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -337,7 +338,7 @@ void DragonRadioStream::onReplyError(QNetworkReply::NetworkError code)
     }
 
     if (!m_abort) {
-        Q_EMIT errorOccurred(QString::fromLatin1("Network error: %1").arg(static_cast<int>(code)));
+        Q_EMIT errorOccurred(i18n("Network error: %1", static_cast<int>(code)));
     }
 }
 

@@ -7,6 +7,7 @@
 
 #include "dragonmultimedia_audio_logging.h"
 
+#include <KLocalizedString>
 #include <KPluginFactory>
 
 K_PLUGIN_CLASS_WITH_JSON(DragonPipeWireAudioSink, "pipewire_sink.json")
@@ -188,7 +189,7 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     PwThreadLoopPtr loop(pw_thread_loop_new("dragon-pw", nullptr));
     if (!loop) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to create thread loop";
-        Q_EMIT errorOccurred(u"PipeWire: failed to create thread loop"_s);
+        Q_EMIT errorOccurred(i18n("PipeWire: failed to create thread loop"));
         return;
     }
 
@@ -215,7 +216,7 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
 
     if (!stream) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to create stream";
-        Q_EMIT errorOccurred(u"PipeWire: failed to create stream"_s);
+        Q_EMIT errorOccurred(i18n("PipeWire: failed to create stream"));
         return;
     }
 
@@ -239,7 +240,7 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     const struct spa_pod *params = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &audioInfo);
     if (!params) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to build audio format pod";
-        Q_EMIT errorOccurred(u"PipeWire: failed to build audio format"_s);
+        Q_EMIT errorOccurred(i18n("PipeWire: failed to build audio format"));
         return;
     }
 
@@ -248,14 +249,14 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     int res = pw_stream_connect(stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, streamFlags, &params, 1);
     if (res != 0) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to connect stream:" << res;
-        Q_EMIT errorOccurred(u"PipeWire: failed to connect stream"_s);
+        Q_EMIT errorOccurred(i18n("PipeWire: failed to connect stream"));
         return;
     }
 
     res = pw_thread_loop_start(loop.get());
     if (res != 0) {
         qCCritical(dragonMultimediaAudio) << "PipeWire: failed to start thread loop:" << res;
-        Q_EMIT errorOccurred(u"PipeWire: failed to start thread loop"_s);
+        Q_EMIT errorOccurred(i18n("PipeWire: failed to start thread loop"));
         return;
     }
 

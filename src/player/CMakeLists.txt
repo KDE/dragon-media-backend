@@ -19,8 +19,12 @@ target_link_libraries(dragon_player_objs PRIVATE
     Qt6::Core
     Qt6::Network
     QCoro6::Core
+    KF6::I18n
 )
 
 set_target_properties(dragon_player_objs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_compile_definitions(dragon_player_objs PRIVATE DragonMultimedia_EXPORTS)
+target_compile_definitions(dragon_player_objs PRIVATE
+    DragonMultimedia_EXPORTS
+    TRANSLATION_DOMAIN="dragonmultimedia"
+)

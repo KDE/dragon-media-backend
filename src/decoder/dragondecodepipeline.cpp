@@ -15,6 +15,7 @@
 #include "dragonmultimedia_decode_logging.h"
 #include "dragonmultimedia_logging.h"
 
+#include <KLocalizedString>
 #include <QMetaObject>
 #include <QObject>
 
@@ -303,7 +304,7 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
     auto decoder = createDecoder(source, isGapless);
     if (!decoder) {
         qCDebug(dragonMultimediaDecode) << "initializeSession decoder creation FAILED";
-        co_return makeErrorResult(QStringLiteral("Failed to create decoder"));
+        co_return makeErrorResult(i18n("Failed to create decoder"));
     }
 
     {
@@ -472,7 +473,7 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
         }
         if (!decoder) {
             if (completion) {
-                completion->setResult(makeErrorResult(QStringLiteral("Failed to create decoder"), true));
+                completion->setResult(makeErrorResult(i18n("Failed to create decoder"), true));
             }
             return;
         }
@@ -547,8 +548,8 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
     if (stream) {
         stream->setUrl(source);
 
-        connect(stream.get(), &DragonStream::errorOccurred, this, [this](const QString &) {
-            Q_EMIT sessionError(QStringLiteral("Stream error"));
+        connect(stream.get(), &DragonStream::errorOccurred, this, [this](const QString &message) {
+            Q_EMIT sessionError(message.isEmpty() ? i18n("Stream error") : message);
         });
 
         connect(stream.get(), &DragonStream::metadataReady, m_player, &DragonPlayer::currentPlayingForRadiosChanged);

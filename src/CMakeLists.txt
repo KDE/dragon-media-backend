@@ -43,6 +43,7 @@ target_link_libraries(DragonMultimedia
         Qt6::Gui
         KF6::KIOCore
         KF6::CoreAddons
+        KF6::I18n
         kissfft::kissfft
         QCoro6::Network
 )

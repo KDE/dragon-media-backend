@@ -22,6 +22,11 @@ struct FormatReady {
     int64_t durationMs = -1;
 };
 
+// A block of decoded PCM samples. `data` views a buffer kept alive by `owner`.
+// Consumers must copy what they need and let the chunk go out of scope rather
+// than retaining it: the owning buffer is recycled into the decoder's buffer
+// pool when the last reference drops, so holding a chunk across threads both
+// stalls buffer reuse and runs the pool's deleter off the decode thread.
 struct SamplesChunk {
     std::span<const std::float32_t> data;
     int sampleRate = 0;
@@ -38,7 +43,11 @@ struct SamplesChunk {
     {
         SamplesChunk chunk;
         chunk.owner = std::move(buffer);
-        chunk.data = chunk.owner && count > 0 ? std::span<const std::float32_t>(chunk.owner->data(), count) : std::span<const std::float32_t>{};
+        if (chunk.owner && count > 0) {
+            chunk.data = std::span<const std::float32_t>(chunk.owner->data(), count);
+        } else {
+            chunk.data = {};
+        }
         chunk.sampleRate = rate;
         chunk.channels = ch;
         return chunk;

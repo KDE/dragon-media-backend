@@ -682,7 +682,7 @@ void TestDecoder::testGeneratorEventOrdering()
                                   QVERIFY(!sawEof);
                                   sawEof = true;
                               },
-                              [&](const DecodeError &) { }},
+                              [&](const DecodeError &) {}},
                    event);
     }
 
@@ -811,7 +811,7 @@ void TestDecoder::testGeneratorMultipleIterations()
                                       firstPassSamples.insert(firstPassSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
-                              [&](const auto &) { }},
+                              [&](const auto &) {}},
                    event);
     }
 
@@ -830,7 +830,7 @@ void TestDecoder::testGeneratorMultipleIterations()
                                       secondPassSamples.insert(secondPassSamples.end(), sc.data.begin(), sc.data.end());
                                   }
                               },
-                              [&](const auto &) { }},
+                              [&](const auto &) {}},
                    event);
     }
 
@@ -981,8 +981,8 @@ void TestDecoder::testPerChunkMetadata()
                                       QCOMPARE(sc.channels, initRes.channels);
                                   }
                               },
-                              [&](const DecodeEof &) { },
-                              [&](const DecodeError &) { }},
+                              [&](const DecodeEof &) {},
+                              [&](const DecodeError &) {}},
                    event);
     }
 

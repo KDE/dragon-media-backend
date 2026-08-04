@@ -88,6 +88,7 @@ public:
     Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY playbackStateChanged)
     Q_PROPERTY(MediaStatus status READ status NOTIFY statusChanged)
     Q_PROPERTY(Error error READ error NOTIFY errorChanged)
+    Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
     Q_PROPERTY(int64_t duration READ duration NOTIFY durationChanged)
     Q_PROPERTY(int64_t position READ position WRITE setPosition NOTIFY positionChanged)
     Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged)
@@ -104,6 +105,9 @@ public:
     [[nodiscard]] PlaybackState playbackState() const;
     [[nodiscard]] MediaStatus status() const;
     [[nodiscard]] Error error() const;
+
+    [[nodiscard]] QString errorString() const;
+
     [[nodiscard]] int64_t duration() const;
     [[nodiscard]] int64_t position() const;
     [[nodiscard]] bool seekable() const;

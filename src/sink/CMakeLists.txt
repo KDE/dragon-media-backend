@@ -44,7 +44,8 @@ if(PULSEAUDIO_FOUND)
             ${CMAKE_CURRENT_SOURCE_DIR}
             ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
     )
-    target_link_libraries(dragonpulseaudiosink PRIVATE DragonMultimedia PkgConfig::PULSEAUDIO KF6::CoreAddons Qt6::Gui)
+    target_link_libraries(dragonpulseaudiosink PRIVATE DragonMultimedia PkgConfig::PULSEAUDIO KF6::CoreAddons Qt6::Gui KF6::I18n)
+    target_compile_definitions(dragonpulseaudiosink PRIVATE TRANSLATION_DOMAIN="dragonmultimedia")
 endif()
 
 if(PIPEWIRE_FOUND)
@@ -56,5 +57,6 @@ if(PIPEWIRE_FOUND)
             ${CMAKE_CURRENT_SOURCE_DIR}
             ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
     )
-    target_link_libraries(dragonpipewireaudiosink PRIVATE DragonMultimedia PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui)
+    target_link_libraries(dragonpipewireaudiosink PRIVATE DragonMultimedia PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui KF6::I18n)
+    target_compile_definitions(dragonpipewireaudiosink PRIVATE TRANSLATION_DOMAIN="dragonmultimedia")
 endif()

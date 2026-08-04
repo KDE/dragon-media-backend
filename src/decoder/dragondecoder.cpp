@@ -7,29 +7,25 @@
 #include "dragonstdfloat_compat.h"
 
 #include "dragonmultimedia_decoder_logging.h"
+#include <KLocalizedString>
 #include <QScopeGuard>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstring>
-#include <generator>
 #include <memory>
-#include <ranges>
 #include <span>
 #include <thread>
 
-#ifdef __cplusplus
 extern "C" {
-#endif
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/error.h>
 #include <libavutil/mem.h>
 #include <libavutil/opt.h>
 #include <libswresample/swresample.h>
-#ifdef __cplusplus
 }
-#endif
 
 using namespace Qt::StringLiterals;
 
@@ -193,27 +189,27 @@ DragonMultimedia::InitResult DragonDecoder::initialize()
     result.success = false;
 
     if (!initializeAvio(*m_session)) {
-        result.errorMessage = u"Failed to initialize AVIO"_s;
+        result.errorMessage = i18n("Failed to initialize media input");
         return result;
     }
     if (!openContainer(*m_session)) {
-        result.errorMessage = u"avformat_open_input failed"_s;
+        result.errorMessage = i18n("Failed to open media container");
         return result;
     }
     if (!findAudioStream(*m_session)) {
-        result.errorMessage = u"No supported audio stream found"_s;
+        result.errorMessage = i18n("No supported audio stream found");
         return result;
     }
     if (!setupCodec(*m_session)) {
-        result.errorMessage = u"Codec setup failed"_s;
+        result.errorMessage = i18n("Audio codec setup failed");
         return result;
     }
     if (!setupResampler(*m_session)) {
-        result.errorMessage = u"Resampler setup failed"_s;
+        result.errorMessage = i18n("Audio resampler setup failed");
         return result;
     }
     if (!allocatePacketAndFrame(*m_session)) {
-        result.errorMessage = u"Failed to allocate packet/frame"_s;
+        result.errorMessage = i18n("Failed to allocate decoder resources");
         return result;
     }
 
@@ -232,7 +228,7 @@ std::generator<DragonMultimedia::DecodeEvent> DragonDecoder::decodeLoop(std::sto
     using namespace DragonMultimedia;
 
     if (!m_session) {
-        co_yield DecodeError{u"Decoder not initialized"_s};
+        co_yield DecodeError{i18n("Decoder not initialized")};
         co_return;
     }
 
@@ -373,15 +369,23 @@ bool DragonDecoder::findAudioStream(DecodeSession &session)
         return false;
     }
 
-    for (auto [i, stream] : std::views::enumerate(std::span{session.fmtCtx->streams, session.fmtCtx->nb_streams})) {
-        if (const AVCodecParameters *par = stream->codecpar; par->codec_type == AVMEDIA_TYPE_AUDIO) {
-            session.codec = avcodec_find_decoder(par->codec_id);
-            if (session.codec) {
-                session.audioStreamIndex = static_cast<int>(i);
-                session.audioStream = stream;
-                break;
-            }
+    const std::span streams{session.fmtCtx->streams, session.fmtCtx->nb_streams};
+    const auto it = std::ranges::find_if(streams, [&session](const AVStream *stream) {
+        const AVCodecParameters *par = stream->codecpar;
+        if (par->codec_type != AVMEDIA_TYPE_AUDIO) {
+            return false;
         }
+        const AVCodec *decoder = avcodec_find_decoder(par->codec_id);
+        if (!decoder) {
+            return false;
+        }
+        session.codec = decoder;
+        return true;
+    });
+
+    if (it != streams.end()) {
+        session.audioStream = *it;
+        session.audioStreamIndex = static_cast<int>(std::ranges::distance(streams.begin(), it));
     }
 
     if (session.audioStreamIndex < 0 || !session.codec) {
@@ -501,7 +505,7 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
                 // A failed resampler reinit leaves swr in a bad state and
                 // every subsequent swr_convert would fail; treat as fatal.
                 qCWarning(dragonMultimediaDecoder) << "swr_init failed after seek:" << swrRet << "(" << avErrorString(swrRet) << ")";
-                Q_EMIT streamError(u"Resampler reinitialization failed after seek"_s);
+                Q_EMIT streamError(i18n("Resampler reinitialization failed after seek"));
                 m_hadFatalError.store(true, std::memory_order_relaxed);
                 return false;
             }
@@ -544,7 +548,7 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
         }
 
         if (session.consecutiveReadErrors >= session.MAX_READ_ERRORS || !isRecoverable) {
-            QString errorMsg = u"Read error after "_s % QString::number(session.consecutiveReadErrors) % u" attempts: "_s % avErrorString(readStatus);
+            QString errorMsg = i18n("Read error after %1 attempts: %2", session.consecutiveReadErrors, avErrorString(readStatus));
 
             qCWarning(dragonMultimediaDecoder) << errorMsg;
 
@@ -604,28 +608,15 @@ std::optional<DragonMultimedia::SamplesChunk> DragonDecoder::drainDecoderFrames(
             continue;
         }
 
-        int delaySamples = swr_get_delay(session.swrCtx.get(), session.sampleRate);
-        int maxOutSamples = delaySamples + inSamples;
+        const int delaySamples = swr_get_delay(session.swrCtx.get(), session.sampleRate);
+        const int maxOutSamples = delaySamples + inSamples;
         if (maxOutSamples <= 0) {
             continue;
         }
 
-        size_t neededSize = static_cast<size_t>(maxOutSamples) * static_cast<size_t>(session.nbChannels);
-
-        auto ownedBuffer = session.m_bufferPool->acquire(neededSize);
-
-        uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(ownedBuffer->data())};
-        int converted = swr_convert(session.swrCtx.get(), outData, maxOutSamples, const_cast<const uint8_t **>(session.frame->data), session.frame->nb_samples);
-        if (converted < 0) {
-            qCWarning(dragonMultimediaDecoder) << "swr_convert failed";
-            continue;
-        }
-
-        int totalSamples = converted * session.nbChannels;
-        if (totalSamples > 0) {
+        if (auto chunk = resampleInto(session, const_cast<const uint8_t *const *>(session.frame->data), inSamples, maxOutSamples)) {
             ++session.frameCount;
-
-            return SamplesChunk::owning(std::move(ownedBuffer), session.sampleRate, session.nbChannels, static_cast<size_t>(totalSamples));
+            return chunk;
         }
     }
 
@@ -640,20 +631,37 @@ void DragonDecoder::flushDecoder(DecodeSession &session)
 
 std::optional<DragonMultimedia::SamplesChunk> DragonDecoder::flushResampler(DecodeSession &session)
 {
-    int delaySamples = swr_get_delay(session.swrCtx.get(), session.sampleRate);
-    if (delaySamples > 0) {
-        size_t neededSize = static_cast<size_t>(delaySamples) * static_cast<size_t>(session.nbChannels);
-        auto ownedBuffer = session.m_bufferPool->acquire(neededSize);
-        uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(ownedBuffer->data())};
-        int converted = swr_convert(session.swrCtx.get(), outData, delaySamples, nullptr, 0);
-        if (converted > 0) {
-            int totalSamples = converted * session.nbChannels;
-            qCDebug(dragonMultimediaDecoder) << "swr flush samplesDecoded" << totalSamples << "samples";
-
-            return DragonMultimedia::SamplesChunk::owning(std::move(ownedBuffer), session.sampleRate, session.nbChannels, static_cast<size_t>(totalSamples));
-        }
+    const int delaySamples = swr_get_delay(session.swrCtx.get(), session.sampleRate);
+    if (delaySamples <= 0) {
+        return std::nullopt;
     }
-    return std::nullopt;
+    auto chunk = resampleInto(session, nullptr, 0, delaySamples);
+    if (chunk) {
+        qCDebug(dragonMultimediaDecoder) << "swr flush samplesDecoded" << chunk->data.size() << "samples";
+    }
+    return chunk;
+}
+
+std::optional<DragonMultimedia::SamplesChunk> DragonDecoder::resampleInto(DecodeSession &session, const uint8_t *const *in, int inSamples, int maxOutSamples)
+{
+    using namespace DragonMultimedia;
+
+    const size_t neededSize = static_cast<size_t>(maxOutSamples) * static_cast<size_t>(session.nbChannels);
+    auto ownedBuffer = session.m_bufferPool->acquire(neededSize);
+
+    uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(ownedBuffer->data())};
+    const int converted = swr_convert(session.swrCtx.get(), outData, maxOutSamples, in, inSamples);
+    if (converted < 0) {
+        qCWarning(dragonMultimediaDecoder) << "swr_convert failed";
+        return std::nullopt;
+    }
+
+    const int totalSamples = converted * session.nbChannels;
+    if (totalSamples <= 0) {
+        return std::nullopt;
+    }
+
+    return SamplesChunk::owning(std::move(ownedBuffer), session.sampleRate, session.nbChannels, static_cast<size_t>(totalSamples));
 }
 
 bool DragonDecoder::hasFatalError() const

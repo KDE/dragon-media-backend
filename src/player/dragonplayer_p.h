@@ -61,7 +61,7 @@ private:
 
     void setPlaybackState(DragonPlayer::PlaybackState state);
     void setStatus(DragonPlayer::MediaStatus status);
-    void setError(DragonPlayer::Error error);
+    void setError(DragonPlayer::Error error, const QString &message = {});
 
     void stopPipeline();
 
@@ -78,6 +78,7 @@ private:
     DragonPlayer::PlaybackState currentPlaybackState = DragonPlayer::PlaybackState::StoppedState;
     DragonPlayer::MediaStatus currentStatus = DragonPlayer::MediaStatus::NoMedia;
     DragonPlayer::Error currentError = DragonPlayer::Error::NoError;
+    QString currentErrorString;
     DragonPlayer::PlaybackState requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
     int64_t currentDuration = 0;
     bool currentMuted = false;

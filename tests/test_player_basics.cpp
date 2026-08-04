@@ -54,6 +54,10 @@ private Q_SLOTS:
     void testSaveUndoPosition();
     void testRestoreUndoPosition();
 
+    void testErrorString();
+    void testErrorStringClearsOnSourceChange();
+    void testErrorStringClearsOnValidSource();
+
     void testStateMachineSequence_data();
     void testStateMachineSequence();
     void testPlayPauseStopSequence();
@@ -667,6 +671,60 @@ void TestPlayerBasics::testInvalidMediaStaysStopped()
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QVERIFY(errorSpy.count() >= 1);
+}
+
+void TestPlayerBasics::testErrorString()
+{
+    DragonPlayer player;
+    QVERIFY(player.errorString().isEmpty());
+    QCOMPARE(player.error(), DragonPlayer::Error::NoError);
+
+    player.setSource(QUrl::fromLocalFile("/nonexistent/file.mp3"_L1));
+    QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError, 5000);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::InvalidMedia);
+    QVERIFY2(!player.errorString().isEmpty(), "errorString() must describe the error once error() is set");
+
+    // Like QMediaPlayer, the error and its description persist across stop()
+    // until a new source is set.
+    player.stop();
+    QCOMPARE(player.error(), DragonPlayer::Error::FormatError);
+    QVERIFY(!player.errorString().isEmpty());
+}
+
+void TestPlayerBasics::testErrorStringClearsOnSourceChange()
+{
+    DragonPlayer player;
+    player.setSource(QUrl::fromLocalFile("/nonexistent/file.mp3"_L1));
+    QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError, 5000);
+    QVERIFY(!player.errorString().isEmpty());
+
+    QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
+
+    player.setSource(QUrl{});
+
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
+    QCOMPARE(player.error(), DragonPlayer::Error::NoError);
+    QVERIFY2(player.errorString().isEmpty(), "errorString() must clear when the source is reset");
+    QVERIFY(errorSpy.count() >= 1);
+    QCOMPARE(errorSpy.last().at(0).value<DragonPlayer::Error>(), DragonPlayer::Error::NoError);
+}
+
+void TestPlayerBasics::testErrorStringClearsOnValidSource()
+{
+    const QString path = TestFixture::fixturePath(u"sample-3s.mp3"_s);
+    if (!QFileInfo::exists(path))
+        QSKIP("sample-3s.mp3 fixture not available");
+
+    DragonPlayer player;
+    player.setSource(QUrl::fromLocalFile("/nonexistent/file.mp3"_L1));
+    QTRY_VERIFY_WITH_TIMEOUT(player.error() != DragonPlayer::Error::NoError, 5000);
+    QVERIFY(!player.errorString().isEmpty());
+
+    PlayerHelper helper(&player);
+    QVERIFY2(helper.setSourceAndWait(u"sample-3s.mp3"_s), "Valid source must load after a failed one");
+
+    QCOMPARE(player.error(), DragonPlayer::Error::NoError);
+    QVERIFY2(player.errorString().isEmpty(), "errorString() must clear once a new source loads successfully");
 }
 
 QTEST_MAIN(TestPlayerBasics)

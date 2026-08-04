@@ -22,10 +22,14 @@ target_link_libraries(dragon_stream_objs PRIVATE
     Qt6::Network
     KF6::KIOCore
     KF6::CoreAddons
+    KF6::I18n
     QCoro6::Core
     QCoro6::Network
 )
 
 set_target_properties(dragon_stream_objs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_compile_definitions(dragon_stream_objs PRIVATE DragonMultimedia_EXPORTS)
+target_compile_definitions(dragon_stream_objs PRIVATE
+    DragonMultimedia_EXPORTS
+    TRANSLATION_DOMAIN="dragonmultimedia"
+)

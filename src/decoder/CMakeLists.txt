@@ -18,8 +18,12 @@ target_link_libraries(dragon_decoder_objs PRIVATE
     PkgConfig::FFmpeg
     Qt6::Core
     QCoro6::Core
+    KF6::I18n
 )
 
 set_target_properties(dragon_decoder_objs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_compile_definitions(dragon_decoder_objs PRIVATE DragonMultimedia_EXPORTS)
+target_compile_definitions(dragon_decoder_objs PRIVATE
+    DragonMultimedia_EXPORTS
+    TRANSLATION_DOMAIN="dragonmultimedia"
+)
