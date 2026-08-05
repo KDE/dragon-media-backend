@@ -33,11 +33,12 @@ struct InitResult {
 // awaiting it on the Qt main thread.
 //
 // DragonDecodePipeline runs decoder initialization on a std::jthread, but
-// DragonPlayer::setSource() is a QCoro coroutine that needs the InitResult
-// (sample rate, channels, duration, success/error) before it can proceed.
-// The pipeline creates a DragonCompletion, hands it to the worker, and
-// `co_await`s it from the main thread. When the worker calls setResult()
-// (or cancel()), the awaiting coroutine resumes with the InitResult.
+// DragonPlayerPrivate::startLoad() is a QCoro coroutine that needs the
+// InitResult (sample rate, channels, duration, success/error) before it
+// can proceed. The pipeline creates a DragonCompletion, hands it to the
+// worker, and `co_await`s it from the main thread. When the worker calls
+// setResult() (or cancel()), the awaiting coroutine resumes with the
+// InitResult.
 //
 // Backed by a Qt signal (finished) so Qt's AutoConnection handles the
 // same-thread vs cross-thread dispatch and connection-lifetime safety.

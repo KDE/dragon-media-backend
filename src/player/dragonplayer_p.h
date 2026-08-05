@@ -18,6 +18,7 @@
 #include <QUrl>
 
 #include "dragonstdfloat_compat.h"
+#include <QCoroTask>
 #include <atomic>
 #include <memory>
 #include <span>
@@ -58,6 +59,8 @@ private:
     void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);
 
     void writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st);
+
+    QCoro::Task<void> startLoad(QUrl source, uint64_t generation);
 
     void setPlaybackState(DragonPlayer::PlaybackState state);
     void setStatus(DragonPlayer::MediaStatus status);
@@ -100,6 +103,8 @@ private:
     int64_t currentPosition = 0;
 
     bool playRequestedReload = false;
+
+    uint64_t loadGeneration = 0;
 
     int32_t prefinishMark = 0;
     bool aboutToFinishEmitted = false;

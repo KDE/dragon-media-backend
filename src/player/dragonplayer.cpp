@@ -494,11 +494,67 @@ void DragonPlayer::setVolume(float gain)
     }
 }
 
-QCoro::Task<void> DragonPlayer::setSource(QUrl source)
+QCoro::Task<void> DragonPlayerPrivate::startLoad(QUrl source, uint64_t generation)
+{
+    auto aliveGuard = this->aliveGuard;
+
+    auto result = co_await decodePipeline.initializeSession(source);
+
+    if (!aliveGuard || !aliveGuard->alive) {
+        co_return;
+    }
+
+    if (generation != loadGeneration) {
+        qCDebug(dragonMultimediaPlayer) << "startLoad superseded (generation" << generation << "!= current" << loadGeneration << "), discarding";
+        co_return;
+    }
+
+    if (!result.success) {
+        if (result.cancelled) {
+            qCDebug(dragonMultimediaPlayer) << "startLoad cancelled, returning without state change";
+            co_return;
+        }
+        setStatus(DragonPlayer::MediaStatus::InvalidMedia);
+        currentError = currentIsLocal ? DragonPlayer::Error::FormatError : DragonPlayer::Error::NetworkError;
+        currentErrorString =
+            result.errorMessage.isEmpty() ? (currentIsLocal ? i18n("Failed to open media source") : i18n("Network error")) : result.errorMessage;
+        Q_EMIT q->errorChanged(currentError);
+        setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+        co_return;
+    }
+
+    currentSampleRate = result.sampleRate;
+    currentChannels = result.channels;
+    currentDuration = result.durationMs;
+
+    if (currentError != DragonPlayer::Error::NoError || !currentErrorString.isEmpty()) {
+        currentError = DragonPlayer::Error::NoError;
+        currentErrorString.clear();
+        Q_EMIT q->errorChanged(DragonPlayer::Error::NoError);
+    }
+
+    if (currentDuration >= 0) {
+        Q_EMIT q->durationChanged(currentDuration);
+    }
+
+    fftPipeline.setSampleRate(result.sampleRate);
+    fftPipeline.setChannelCount(result.channels);
+
+    if (!currentIsLocal && decodePipeline.streamSize() > 0) {
+        currentSeekable = true;
+        Q_EMIT q->seekableChanged(true);
+    }
+
+    setStatus(DragonPlayer::MediaStatus::LoadedMedia);
+
+    applyRequestedState(result.sampleRate, result.channels, requestedPlaybackState);
+
+    co_return;
+}
+
+void DragonPlayer::setSource(const QUrl &source)
 {
     qCDebug(dragonMultimediaPlayer) << "setSource(" << source.toString() << ")";
-
-    auto aliveGuard = d->aliveGuard;
 
     bool playRequestedReload = d->playRequestedReload;
     d->playRequestedReload = false;
@@ -507,12 +563,12 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
         qCDebug(dragonMultimediaPlayer) << "setSource(sameUrl) early return";
         if (d->currentStatus == MediaStatus::LoadingMedia) {
             d->requestedPlaybackState = PlaybackState::StoppedState;
-            co_return; // Let the existing initialization finish
+            return; // Let the existing initialization finish
         }
 
         d->requestedPlaybackState = PlaybackState::StoppedState;
         stop();
-        co_return;
+        return;
     }
 
     if (d->audioOutput) {
@@ -538,7 +594,7 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
     d->currentPosition = 0;
     d->currentDuration = 0;
     d->aboutToFinishEmitted = false;
-    qCDebug(dragonMultimediaPlayer) << "setSource: reset aboutToFinishEmitted for" << source.toString();
+    qCDebug(dragonMultimediaPlayer) << "setSource: reset aboutToFinishEmitted for" << d->currentSource.toString();
     d->nextSource.clear();
     d->currentSampleRate = 0;
     d->currentChannels = 0;
@@ -552,7 +608,7 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
             Q_EMIT statusChanged(MediaStatus::LoadedMedia);
         }
 
-        if (source.isEmpty()) {
+        if (d->currentSource.isEmpty()) {
             if (d->audioOutput) {
                 d->audioOutput->close();
                 d->audioOutput->reset();
@@ -565,7 +621,7 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
             d->setStatus(MediaStatus::NoMedia);
             Q_EMIT nextSourceChanged();
             Q_EMIT sourceChanged();
-            co_return;
+            return;
         }
 
         if (d->currentError != Error::NoError || !d->currentErrorString.isEmpty()) {
@@ -585,66 +641,15 @@ QCoro::Task<void> DragonPlayer::setSource(QUrl source)
         d->setStatus(MediaStatus::LoadingMedia);
     }
 
-    const bool isLocal = source.isLocalFile();
-    const bool isHttp = source.scheme() == QStringLiteral("http") || source.scheme() == QStringLiteral("https");
+    const bool isLocal = d->currentSource.isLocalFile();
+    const bool isHttp = d->currentSource.scheme() == QStringLiteral("http") || d->currentSource.scheme() == QStringLiteral("https");
 
     d->currentIsLocal = isLocal;
     d->currentSeekable = !isHttp;
     Q_EMIT seekableChanged(d->currentSeekable);
 
-    auto result = co_await d->decodePipeline.initializeSession(source);
-
-    if (!aliveGuard || !aliveGuard->alive) {
-        co_return;
-    }
-
-    if (d->currentSource != source) {
-        qCDebug(dragonMultimediaPlayer) << "superseded setSource coroutine (source" << source.toString() << "!= current" << d->currentSource.toString()
-                                        << "), discarding";
-        co_return;
-    }
-
-    if (!result.success) {
-        if (result.cancelled) {
-            qCDebug(dragonMultimediaPlayer) << "setSource coroutine cancelled, returning without state change";
-            co_return;
-        }
-        d->setStatus(MediaStatus::InvalidMedia);
-        d->currentError = d->currentIsLocal ? Error::FormatError : Error::NetworkError;
-        d->currentErrorString =
-            result.errorMessage.isEmpty() ? (d->currentIsLocal ? i18n("Failed to open media source") : i18n("Network error")) : result.errorMessage;
-        Q_EMIT errorChanged(d->currentError);
-        d->setPlaybackState(PlaybackState::StoppedState);
-        co_return;
-    }
-
-    d->currentSampleRate = result.sampleRate;
-    d->currentChannels = result.channels;
-    d->currentDuration = result.durationMs;
-
-    if (d->currentError != Error::NoError || !d->currentErrorString.isEmpty()) {
-        d->currentError = Error::NoError;
-        d->currentErrorString.clear();
-        Q_EMIT errorChanged(Error::NoError);
-    }
-
-    if (d->currentDuration >= 0) {
-        Q_EMIT durationChanged(d->currentDuration);
-    }
-
-    d->fftPipeline.setSampleRate(result.sampleRate);
-    d->fftPipeline.setChannelCount(result.channels);
-
-    if (!d->currentIsLocal && d->decodePipeline.streamSize() > 0) {
-        d->currentSeekable = true;
-        Q_EMIT seekableChanged(true);
-    }
-
-    d->setStatus(MediaStatus::LoadedMedia);
-
-    d->applyRequestedState(result.sampleRate, result.channels, d->requestedPlaybackState);
-
-    co_return;
+    ++d->loadGeneration;
+    d->startLoad(d->currentSource, d->loadGeneration);
 }
 
 void DragonPlayer::setNextSource(const QUrl &nextSource)
