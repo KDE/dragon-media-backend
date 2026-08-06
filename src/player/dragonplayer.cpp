@@ -211,8 +211,7 @@ void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
         return;
     }
 
-    const bool wasPlaying = (currentPlaybackState == DragonPlayer::PlaybackState::PlayingState);
-    const bool willBePlaying = (state == DragonPlayer::PlaybackState::PlayingState);
+    const auto oldState = currentPlaybackState;
 
     if (state == DragonPlayer::PlaybackState::PlayingState) {
         if (positionTimer) {
@@ -226,25 +225,7 @@ void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
 
     currentPlaybackState = state;
 
-    if (wasPlaying || willBePlaying) {
-        Q_EMIT q->playingChanged(willBePlaying);
-    }
-
-    Q_EMIT q->playbackStateChanged(state);
-
-    switch (state) {
-    case DragonPlayer::PlaybackState::PlayingState:
-        Q_EMIT q->playing();
-        break;
-    case DragonPlayer::PlaybackState::PausedState:
-        Q_EMIT q->paused();
-        break;
-    case DragonPlayer::PlaybackState::StoppedState:
-        Q_EMIT q->stopped();
-        break;
-    default:
-        std::unreachable();
-    }
+    Q_EMIT q->stateChanged(state, oldState);
 }
 
 void DragonPlayerPrivate::setStatus(DragonPlayer::MediaStatus status)
@@ -393,8 +374,8 @@ DragonPlayer::DragonPlayer(AudioSink requestedSink, QObject *parent)
     d = std::make_unique<DragonPlayerPrivate>(this, requestedSink);
     d->init();
 
-    connect(this, &DragonPlayer::playbackStateChanged, this, [](PlaybackState state) {
-        qCDebug(dragonMultimediaPlayer) << "playbackState changed to" << state;
+    connect(this, &DragonPlayer::stateChanged, this, [](PlaybackState newState, PlaybackState oldState) {
+        qCDebug(dragonMultimediaPlayer) << "playbackState changed from" << oldState << "to" << newState;
     });
     connect(this, &DragonPlayer::statusChanged, this, [](MediaStatus status) {
         qCDebug(dragonMultimediaPlayer) << "mediaStatus changed to" << status;

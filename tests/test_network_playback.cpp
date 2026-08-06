@@ -77,7 +77,7 @@ void TestNetworkPlayback::testPlayLocalWmaFileOverHttp()
     QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
     QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     QSignalSpy durationSpy(&player, &DragonPlayer::durationChanged);
 
     player.setSource(url);

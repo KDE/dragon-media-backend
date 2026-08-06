@@ -150,7 +150,7 @@ public:
     bool playAndWait(int timeoutMs = 5000)
     {
         const auto stateBefore = m_player->playbackState();
-        QSignalSpy stateSpy(m_player, &DragonPlayer::playbackStateChanged);
+        QSignalSpy stateSpy(m_player, &DragonPlayer::stateChanged);
 
         m_player->play();
 
@@ -287,7 +287,7 @@ public:
     }
     static QSignalSpy stateSpy(DragonPlayer *player)
     {
-        return QSignalSpy(player, &DragonPlayer::playbackStateChanged);
+        return QSignalSpy(player, &DragonPlayer::stateChanged);
     }
 
     static QSignalSpy sourceSpy(DragonPlayer *player)
@@ -326,6 +326,13 @@ public:
     static bool containsState(const QSignalSpy &spy, DragonPlayer::PlaybackState state)
     {
         return contains(spy, state);
+    }
+
+    static bool containsTransition(const QSignalSpy &spy, DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState oldState)
+    {
+        return std::ranges::any_of(spy, [newState, oldState](const QList<QVariant> &args) {
+            return args.at(0).value<DragonPlayer::PlaybackState>() == newState && args.at(1).value<DragonPlayer::PlaybackState>() == oldState;
+        });
     }
 
     static bool containsStatus(const QSignalSpy &spy, DragonPlayer::MediaStatus status)
@@ -389,20 +396,21 @@ public:
     {
         auto conn = QObject::connect(
             m_player,
-            &DragonPlayer::playbackStateChanged,
+            &DragonPlayer::stateChanged,
             m_player,
-            [this](DragonPlayer::PlaybackState state) {
-                switch (state) {
-                case DragonPlayer::PlaybackState::StoppedState:
-                    m_events.append(u"stateChanged(StoppedState)"_s);
-                    break;
-                case DragonPlayer::PlaybackState::PlayingState:
-                    m_events.append(u"stateChanged(PlayingState)"_s);
-                    break;
-                case DragonPlayer::PlaybackState::PausedState:
-                    m_events.append(u"stateChanged(PausedState)"_s);
-                    break;
-                }
+            [this](DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState oldState) {
+                const auto stateName = [](DragonPlayer::PlaybackState s) -> QString {
+                    switch (s) {
+                    case DragonPlayer::PlaybackState::StoppedState:
+                        return u"StoppedState"_s;
+                    case DragonPlayer::PlaybackState::PlayingState:
+                        return u"PlayingState"_s;
+                    case DragonPlayer::PlaybackState::PausedState:
+                        return u"PausedState"_s;
+                    }
+                    return u"Unknown"_s;
+                };
+                m_events.append(u"stateChanged("_s + stateName(newState) + u", "_s + stateName(oldState) + u")"_s);
             },
             Qt::DirectConnection);
         m_connections.append(conn);
@@ -467,19 +475,6 @@ public:
         m_connections.append(conn);
     }
 
-    void trackPlayingChanges()
-    {
-        auto conn = QObject::connect(
-            m_player,
-            &DragonPlayer::playingChanged,
-            m_player,
-            [this](bool playing) {
-                m_events.append(playing ? u"playingChanged(true)"_s : u"playingChanged(false)"_s);
-            },
-            Qt::DirectConnection);
-        m_connections.append(conn);
-    }
-
     void trackDurationChanges()
     {
         auto conn = QObject::connect(
@@ -522,6 +517,22 @@ public:
     bool contains(const QString &event) const
     {
         return m_events.contains(event);
+    }
+
+    bool containsTransition(DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState oldState) const
+    {
+        const auto stateName = [](DragonPlayer::PlaybackState s) -> QString {
+            switch (s) {
+            case DragonPlayer::PlaybackState::StoppedState:
+                return u"StoppedState"_s;
+            case DragonPlayer::PlaybackState::PlayingState:
+                return u"PlayingState"_s;
+            case DragonPlayer::PlaybackState::PausedState:
+                return u"PausedState"_s;
+            }
+            return u"Unknown"_s;
+        };
+        return m_events.contains(u"stateChanged("_s + stateName(newState) + u", "_s + stateName(oldState) + u")"_s);
     }
 
     bool containsPrefix(const QString &prefix) const

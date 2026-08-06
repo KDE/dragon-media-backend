@@ -68,32 +68,44 @@ void TestPlayerSignals::testPlayingChangedSignal()
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
 
-    QSignalSpy playingSpy(&player, &DragonPlayer::playingChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     player.play();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
-    QVERIFY2(playingSpy.count() >= 1, "playingChanged(true) must be emitted on transition to PlayingState");
-    QVERIFY2(playingSpy.at(0).at(0).toBool() == true, "playingChanged must emit true");
+    QVERIFY2(stateSpy.count() >= 1, "stateChanged must be emitted on transition to PlayingState");
+    QVERIFY2(stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>() == DragonPlayer::PlaybackState::PlayingState,
+             "stateChanged newState must be PlayingState");
+    QVERIFY2(stateSpy.at(0).at(1).value<DragonPlayer::PlaybackState>() == DragonPlayer::PlaybackState::StoppedState,
+             "stateChanged oldState must be StoppedState");
 
-    playingSpy.clear();
+    stateSpy.clear();
     player.pause();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PausedState, 5000);
-    QVERIFY2(playingSpy.count() >= 1, "playingChanged(false) must be emitted on transition from PlayingState");
-    QVERIFY2(playingSpy.at(0).at(0).toBool() == false, "playingChanged must emit false");
+    QVERIFY2(stateSpy.count() >= 1, "stateChanged must be emitted on transition from PlayingState");
+    QVERIFY2(stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>() == DragonPlayer::PlaybackState::PausedState,
+             "stateChanged newState must be PausedState");
+    QVERIFY2(stateSpy.at(0).at(1).value<DragonPlayer::PlaybackState>() == DragonPlayer::PlaybackState::PlayingState,
+             "stateChanged oldState must be PlayingState");
 
-    playingSpy.clear();
+    stateSpy.clear();
     player.play();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
-    QVERIFY2(playingSpy.count() >= 1, "playingChanged(true) must be emitted on transition to PlayingState");
+    QVERIFY2(stateSpy.count() >= 1, "stateChanged must be emitted on transition to PlayingState");
+    QVERIFY2(stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>() == DragonPlayer::PlaybackState::PlayingState,
+             "stateChanged newState must be PlayingState");
+    QVERIFY2(stateSpy.at(0).at(1).value<DragonPlayer::PlaybackState>() == DragonPlayer::PlaybackState::PausedState,
+             "stateChanged oldState must be PausedState");
 
-    playingSpy.clear();
+    stateSpy.clear();
     player.stop();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, 5000);
-    QVERIFY2(playingSpy.count() >= 1, "playingChanged(false) must be emitted on transition from PlayingState");
+    QVERIFY2(stateSpy.count() >= 1, "stateChanged must be emitted on transition from PlayingState");
+    QVERIFY2(stateSpy.at(0).at(1).value<DragonPlayer::PlaybackState>() == DragonPlayer::PlaybackState::PlayingState,
+             "stateChanged oldState must be PlayingState");
 
-    playingSpy.clear();
+    stateSpy.clear();
     player.stop();
     QTest::qWait(100);
-    QCOMPARE(playingSpy.count(), 0);
+    QCOMPARE(stateSpy.count(), 0);
 }
 
 void TestPlayerSignals::testMediaStatusChangedDedupOnRedundantStop()
@@ -132,16 +144,13 @@ void TestPlayerSignals::testSignalOrderOnPlay()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
 
     SignalOrderTracker tracker(&player);
-    tracker.trackPlayingChanges();
     tracker.trackStateChanges();
 
     player.play();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
 
-    QVERIFY2(tracker.contains(u"playingChanged(true)"_s), "play() must emit playingChanged(true)");
-    QVERIFY2(tracker.contains(u"stateChanged(PlayingState)"_s), "play() must emit playbackStateChanged(PlayingState)");
-    QVERIFY2(tracker.verifyOrder(u"playingChanged(true)"_s, u"stateChanged(PlayingState)"_s),
-             "playingChanged(true) must precede playbackStateChanged(PlayingState)");
+    QVERIFY2(tracker.containsTransition(DragonPlayer::PlaybackState::PlayingState, DragonPlayer::PlaybackState::StoppedState),
+             "play() must emit stateChanged(PlayingState, StoppedState)");
 }
 
 void TestPlayerSignals::testSignalOrderOnPause()
@@ -155,16 +164,13 @@ void TestPlayerSignals::testSignalOrderOnPause()
     QVERIFY(helper.playAndWait());
 
     SignalOrderTracker tracker(&player);
-    tracker.trackPlayingChanges();
     tracker.trackStateChanges();
 
     player.pause();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PausedState, 5000);
 
-    QVERIFY2(tracker.contains(u"playingChanged(false)"_s), "pause() must emit playingChanged(false)");
-    QVERIFY2(tracker.contains(u"stateChanged(PausedState)"_s), "pause() must emit playbackStateChanged(PausedState)");
-    QVERIFY2(tracker.verifyOrder(u"playingChanged(false)"_s, u"stateChanged(PausedState)"_s),
-             "playingChanged(false) must precede playbackStateChanged(PausedState)");
+    QVERIFY2(tracker.containsTransition(DragonPlayer::PlaybackState::PausedState, DragonPlayer::PlaybackState::PlayingState),
+             "pause() must emit stateChanged(PausedState, PlayingState)");
 }
 
 void TestPlayerSignals::testSignalOrderOnEndOfMedia()
@@ -185,13 +191,14 @@ void TestPlayerSignals::testSignalOrderOnEndOfMedia()
     QTRY_VERIFY_WITH_TIMEOUT(helper.waitForEndOfMedia(15000), 15000);
 
     QVERIFY2(tracker.containsPrefix(u"positionChanged("_s), "EndOfMedia must emit positionChanged(duration)");
-    QVERIFY2(tracker.contains(u"stateChanged(StoppedState)"_s), "EndOfMedia must emit playbackStateChanged(StoppedState)");
+    QVERIFY2(tracker.containsTransition(DragonPlayer::PlaybackState::StoppedState, DragonPlayer::PlaybackState::PlayingState),
+             "EndOfMedia must emit stateChanged(StoppedState, PlayingState)");
     QVERIFY2(tracker.contains(u"statusChanged(EndOfMedia)"_s), "EndOfMedia must emit mediaStatusChanged(EndOfMedia)");
 
     QVERIFY2(tracker.verifyOrderPrefix(u"positionChanged("_s, u"statusChanged(EndOfMedia)"_s),
              "positionChanged(duration) must precede mediaStatusChanged(EndOfMedia)");
-    QVERIFY2(tracker.verifyOrder(u"statusChanged(EndOfMedia)"_s, u"stateChanged(StoppedState)"_s),
-             "mediaStatusChanged(EndOfMedia) must precede playbackStateChanged(StoppedState)");
+    QVERIFY2(tracker.verifyOrderPrefix(u"statusChanged(EndOfMedia)"_s, u"stateChanged(StoppedState, PlayingState)"_s),
+             "mediaStatusChanged(EndOfMedia) must precede stateChanged(StoppedState, PlayingState)");
 }
 
 void TestPlayerSignals::testDurationChangedAfterLoadedMedia()
@@ -235,7 +242,7 @@ void TestPlayerSignals::testSourceChangedFirstInSetSource()
     QVERIFY2(statusIdx >= 0, "statusChanged(LoadingMedia) must be emitted");
     QVERIFY2(statusIdx < sourceIdx, "statusChanged(LoadingMedia) must precede sourceChanged (QM order)");
 
-    QVERIFY2(!tracker.contains(u"stateChanged(StoppedState)"_s), "setSource from StoppedState must NOT force-emit playbackStateChanged(StoppedState)");
+    QVERIFY2(!tracker.containsPrefix(u"stateChanged(StoppedState"_s), "setSource from StoppedState must NOT force-emit stateChanged(StoppedState)");
 }
 
 void TestPlayerSignals::testSetSourceSameUrlStopsFirst()
@@ -248,7 +255,7 @@ void TestPlayerSignals::testSetSourceSameUrlStopsFirst()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
     QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
 
@@ -269,7 +276,7 @@ void TestPlayerSignals::testPauseFromStoppedIsNoOp()
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     player.pause();
@@ -290,7 +297,7 @@ void TestPlayerSignals::testNextWhilePlayingWithoutExplicitStop()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
@@ -335,7 +342,7 @@ void TestPlayerSignals::testMultipleStopIdempotent()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     player.stop();
@@ -403,7 +410,7 @@ void TestPlayerSignals::testSetSourceInterruptedByStop()
     skipIfMissing(u"sample-3s.mp3"_s);
     DragonPlayer player;
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 

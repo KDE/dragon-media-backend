@@ -84,7 +84,7 @@ public:
     Q_PROPERTY(qreal volume READ volume WRITE setVolume NOTIFY volumeChanged)
     Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
     Q_PROPERTY(QUrl nextSource READ nextSource WRITE setNextSource NOTIFY nextSourceChanged)
-    Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY playbackStateChanged)
+    Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY stateChanged)
     Q_PROPERTY(MediaStatus status READ status NOTIFY statusChanged)
     Q_PROPERTY(Error error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
@@ -123,7 +123,7 @@ Q_SIGNALS:
     void sourceChanged();
     void nextSourceChanged();
     void trackChanged();
-    void playbackStateChanged(PlaybackState state);
+    void stateChanged(PlaybackState newState, PlaybackState oldState);
     void statusChanged(MediaStatus status);
     void errorChanged(Error error);
     void durationChanged(qint64 durationMs);
@@ -135,12 +135,6 @@ Q_SIGNALS:
     void prefinishMarkChanged(int32_t msec);
 
     void aboutToFinish();
-
-    void playingChanged(bool playing);
-
-    void playing();
-    void paused();
-    void stopped();
 
     void fftFrameReady(const DragonFftFrame &frame);
 

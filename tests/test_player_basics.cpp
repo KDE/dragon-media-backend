@@ -207,7 +207,7 @@ void TestPlayerBasics::testPause()
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     player.pause();
     QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
@@ -296,7 +296,7 @@ void TestPlayerBasics::testSourceChangedSignal()
 void TestPlayerBasics::testNoPlayingStateOnInvalidSource()
 {
     DragonPlayer player;
-    QSignalSpy spy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy spy(&player, &DragonPlayer::stateChanged);
 
     player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() != DragonPlayer::MediaStatus::LoadingMedia, 5000);
@@ -431,22 +431,18 @@ void TestPlayerBasics::testStateMachineSequence()
 void TestPlayerBasics::testPlayPauseStopSequence()
 {
     DragonPlayer player;
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
-    QSignalSpy pausedSpy(&player, &DragonPlayer::paused);
-    QSignalSpy stoppedSpy(&player, &DragonPlayer::stopped);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 
     player.pause();
     QCOMPARE(stateSpy.count(), 0);
-    QCOMPARE(pausedSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     stateSpy.clear();
     player.stop();
     QCOMPARE(stateSpy.count(), 0);
-    QCOMPARE(stoppedSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 
@@ -459,7 +455,6 @@ void TestPlayerBasics::testPlayPauseStopSequence()
     stateSpy.clear();
     player.pause();
     QCOMPARE(stateSpy.count(), 0);
-    QCOMPARE(pausedSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
@@ -661,7 +656,7 @@ void TestPlayerBasics::testSetPositionEmitsDefaultWithoutMedia()
 void TestPlayerBasics::testInvalidMediaStaysStopped()
 {
     DragonPlayer player;
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
 
     player.setSource(QUrl::fromLocalFile("/nonexistent/file.mp3"_L1));

@@ -298,7 +298,9 @@ void MainWindow::connectPlayer()
             m_volumeSlider->setValue(vol);
     });
 
-    m_playerConnections << connect(m_player, &DragonPlayer::playbackStateChanged, this, &MainWindow::updatePlaybackState);
+    m_playerConnections << connect(m_player, &DragonPlayer::stateChanged, this, [this](DragonPlayer::PlaybackState, DragonPlayer::PlaybackState) {
+        updatePlaybackState();
+    });
     m_playerConnections << connect(m_player, &DragonPlayer::statusChanged, this, &MainWindow::updateStatus);
     m_playerConnections << connect(m_player, &DragonPlayer::errorChanged, this, [this](DragonPlayer::Error error) {
         if (error != DragonPlayer::Error::NoError)

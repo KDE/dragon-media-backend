@@ -235,7 +235,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
     player.setPrefinishMark(2500);
     QSignalSpy aboutToFinishSpy(&player, &DragonPlayer::aboutToFinish);
     QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
-    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
