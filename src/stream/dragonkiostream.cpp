@@ -152,7 +152,7 @@ void DragonKioStream::releaseBackpressure()
     }
 }
 
-int64_t DragonKioStream::seek(int64_t offset)
+qint64 DragonKioStream::seek(qint64 offset)
 {
     stop();
 

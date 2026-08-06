@@ -40,8 +40,8 @@ private Q_SLOTS:
     void playLandSong();
     void playPlaylistItem(int index);
     void updatePlaybackState();
-    void updatePosition(int64_t positionMs);
-    void updateDuration(int64_t durationMs);
+    void updatePosition(qint64 positionMs);
+    void updateDuration(qint64 durationMs);
     void setPositionFromSlider();
     void setVolumeFromSlider(int value);
     void updateStatus();
@@ -56,7 +56,7 @@ private:
 
     bool eventFilter(QObject *obj, QEvent *event) override;
 
-    [[nodiscard]] static QString formatTime(int64_t ms);
+    [[nodiscard]] static QString formatTime(qint64 ms);
 
     DragonPlayer *m_player = nullptr;
     DragonPlaylist *m_playlist = nullptr;
@@ -93,7 +93,7 @@ private:
     QLabel *m_underrunLabel = nullptr;
 
     bool m_seeking = false;
-    int64_t m_durationMs = 0;
+    qint64 m_durationMs = 0;
     DragonIcyMetadata m_lastIcyMetadata;
 
     QComboBox *m_sinkComboBox = nullptr;

@@ -24,7 +24,7 @@ struct InitResult {
     bool cancelled = false;
     int sampleRate = 0;
     int channels = 0;
-    int64_t durationMs = -1;
+    qint64 durationMs = -1;
     bool isGapless = false;
     QString errorMessage;
 };

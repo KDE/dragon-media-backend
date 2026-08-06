@@ -154,7 +154,7 @@ int DragonRadioStream::read(std::span<uint8_t> buf, std::stop_token st)
     return bytesRead;
 }
 
-int64_t DragonRadioStream::seek(int64_t offset)
+qint64 DragonRadioStream::seek(qint64 offset)
 {
     if (!m_acceptsRanges.load()) {
         return -1;

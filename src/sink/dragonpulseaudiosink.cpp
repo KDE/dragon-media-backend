@@ -561,7 +561,7 @@ void DragonPulseAudioSink::clearStream()
     }
 }
 
-int64_t DragonPulseAudioSink::deviceQueuedSamples() const
+qint64 DragonPulseAudioSink::deviceQueuedSamples() const
 {
     if (!m_pa->mainloop || !m_pa->stream || !m_open.load(std::memory_order_acquire)) {
         return 0;
@@ -574,12 +574,12 @@ int64_t DragonPulseAudioSink::deviceQueuedSamples() const
         return 0;
     }
 
-    const int64_t bytesQueued = ti->write_index - ti->read_index;
+    const qint64 bytesQueued = ti->write_index - ti->read_index;
     if (bytesQueued < 0) {
         return 0;
     }
 
-    return bytesQueued / static_cast<int64_t>(sizeof(float));
+    return bytesQueued / static_cast<qint64>(sizeof(float));
 }
 
 int DragonPulseAudioSink::audioBufferFrames() const
@@ -600,12 +600,12 @@ int DragonPulseAudioSink::audioBufferFrames() const
         return -1;
     }
 
-    const int64_t bytesQueued = ti->write_index - ti->read_index;
+    const qint64 bytesQueued = ti->write_index - ti->read_index;
     if (bytesQueued < 0) {
         return 0;
     }
 
-    return static_cast<int>(bytesQueued / static_cast<int64_t>(channels * sizeof(float)));
+    return static_cast<int>(bytesQueued / static_cast<qint64>(channels * sizeof(float)));
 }
 
 int DragonPulseAudioSink::audioBufferUs() const
@@ -615,7 +615,7 @@ int DragonPulseAudioSink::audioBufferUs() const
         return -1;
     }
 
-    return static_cast<int>((static_cast<int64_t>(frames) * 1000000) / currentSampleRate());
+    return static_cast<int>((static_cast<qint64>(frames) * 1000000) / currentSampleRate());
 }
 
 bool DragonPulseAudioSink::isDeviceOpen() const

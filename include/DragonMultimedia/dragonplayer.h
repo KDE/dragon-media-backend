@@ -81,24 +81,24 @@ public:
     DragonPlayer &operator=(DragonPlayer &&) = delete;
 
     Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY mutedChanged)
-    Q_PROPERTY(float volume READ volume WRITE setVolume NOTIFY volumeChanged)
+    Q_PROPERTY(qreal volume READ volume WRITE setVolume NOTIFY volumeChanged)
     Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
     Q_PROPERTY(QUrl nextSource READ nextSource WRITE setNextSource NOTIFY nextSourceChanged)
     Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY playbackStateChanged)
     Q_PROPERTY(MediaStatus status READ status NOTIFY statusChanged)
     Q_PROPERTY(Error error READ error NOTIFY errorChanged)
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
-    Q_PROPERTY(int64_t duration READ duration NOTIFY durationChanged)
-    Q_PROPERTY(int64_t position READ position WRITE setPosition NOTIFY positionChanged)
+    Q_PROPERTY(qint64 duration READ duration NOTIFY durationChanged)
+    Q_PROPERTY(qint64 position READ position WRITE setPosition NOTIFY positionChanged)
     Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged)
     Q_PROPERTY(FftMode fftMode READ fftMode WRITE setFftMode NOTIFY fftModeChanged)
     Q_PROPERTY(int fftRate READ fftRate WRITE setFftRate NOTIFY fftRateChanged)
-    Q_PROPERTY(double bufferProgress READ bufferProgress NOTIFY bufferProgressChanged)
+    Q_PROPERTY(qreal bufferProgress READ bufferProgress NOTIFY bufferProgressChanged)
     Q_PROPERTY(int32_t prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
     Q_PROPERTY(AudioSink selectedAudioSink READ selectedAudioSink CONSTANT)
 
     [[nodiscard]] bool muted() const;
-    [[nodiscard]] float volume() const;
+    [[nodiscard]] qreal volume() const;
     [[nodiscard]] QUrl source() const;
     [[nodiscard]] QUrl nextSource() const;
     [[nodiscard]] PlaybackState playbackState() const;
@@ -107,13 +107,13 @@ public:
 
     [[nodiscard]] QString errorString() const;
 
-    [[nodiscard]] int64_t duration() const;
-    [[nodiscard]] int64_t position() const;
+    [[nodiscard]] qint64 duration() const;
+    [[nodiscard]] qint64 position() const;
     [[nodiscard]] bool seekable() const;
 
     [[nodiscard]] FftMode fftMode() const;
     [[nodiscard]] int fftRate() const;
-    [[nodiscard]] double bufferProgress() const;
+    [[nodiscard]] qreal bufferProgress() const;
     [[nodiscard]] int32_t prefinishMark() const;
     [[nodiscard]] AudioSink selectedAudioSink() const;
 
@@ -126,12 +126,12 @@ Q_SIGNALS:
     void playbackStateChanged(PlaybackState state);
     void statusChanged(MediaStatus status);
     void errorChanged(Error error);
-    void durationChanged(int64_t durationMs);
-    void positionChanged(int64_t positionMs);
+    void durationChanged(qint64 durationMs);
+    void positionChanged(qint64 positionMs);
     void seekableChanged(bool seekable);
     void fftModeChanged(FftMode mode);
     void fftRateChanged(int rate);
-    void bufferProgressChanged(double progress);
+    void bufferProgressChanged(qreal progress);
     void prefinishMarkChanged(int32_t msec);
 
     void aboutToFinish();
@@ -148,20 +148,20 @@ Q_SIGNALS:
 
 public Q_SLOTS:
     void setMuted(bool muted);
-    void setVolume(float linearGain);
+    void setVolume(qreal linearGain);
 
     void setSource(const QUrl &source);
     void setNextSource(const QUrl &nextSource);
-    void setPosition(int64_t positionMs);
+    void setPosition(qint64 positionMs);
     void setFftMode(FftMode mode);
     void setFftRate(int rate);
     void setPrefinishMark(int32_t msec);
     void play();
     void pause();
     void stop();
-    void seek(int64_t positionMs);
+    void seek(qint64 positionMs);
 
-    void saveUndoPosition(int64_t positionMs);
+    void saveUndoPosition(qint64 positionMs);
     void restoreUndoPosition();
 
     friend class DragonDiagnostics;

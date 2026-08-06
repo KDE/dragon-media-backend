@@ -75,7 +75,7 @@ bool DragonAudioSink::isQueueReady() const
     return m_queueReady.load(std::memory_order_acquire);
 }
 
-void DragonAudioSink::setPositionOffset(int64_t offsetMs, PositionResetMode mode)
+void DragonAudioSink::setPositionOffset(qint64 offsetMs, PositionResetMode mode)
 {
     m_positionOffsetMs.store(offsetMs, std::memory_order_relaxed);
 
@@ -145,7 +145,7 @@ void DragonAudioSink::setStreamName(const QString &name)
     Q_UNUSED(name);
 }
 
-int64_t DragonAudioSink::positionMs() const
+qint64 DragonAudioSink::positionMs() const
 {
     int channels = m_channels.load(std::memory_order_relaxed);
     int sampleRate = m_sampleRate.load(std::memory_order_relaxed);
@@ -153,14 +153,14 @@ int64_t DragonAudioSink::positionMs() const
         return m_positionOffsetMs.load(std::memory_order_relaxed);
     }
 
-    int64_t written = m_totalSamplesWritten.load(std::memory_order_relaxed);
+    qint64 written = m_totalSamplesWritten.load(std::memory_order_relaxed);
 
-    const int64_t queued = deviceQueuedSamples();
+    const qint64 queued = deviceQueuedSamples();
     if (queued > 0) {
-        written = std::max(int64_t{0}, written - queued);
+        written = std::max(qint64{0}, written - queued);
     }
 
-    const int64_t frameCount = written / channels;
+    const qint64 frameCount = written / channels;
     return (frameCount * 1000 / sampleRate) + m_positionOffsetMs.load(std::memory_order_relaxed);
 }
 
@@ -169,7 +169,7 @@ bool DragonAudioSink::hasFormat(int sampleRate, int channels) const
     return m_sampleRate.load(std::memory_order_relaxed) == sampleRate && m_channels.load(std::memory_order_relaxed) == channels;
 }
 
-int64_t DragonAudioSink::totalSamplesWritten() const
+qint64 DragonAudioSink::totalSamplesWritten() const
 {
     return m_totalSamplesWritten.load(std::memory_order_relaxed);
 }
@@ -257,7 +257,7 @@ std::span<const std::float32_t> DragonAudioSink::processAudioCallback(size_t max
         });
     }
 
-    m_totalSamplesWritten.fetch_add(static_cast<int64_t>(totalRead), std::memory_order_relaxed);
+    m_totalSamplesWritten.fetch_add(static_cast<qint64>(totalRead), std::memory_order_relaxed);
 
     return consumedSpan;
 }

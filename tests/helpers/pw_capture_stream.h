@@ -91,10 +91,10 @@ public:
         return std::move(m_pcm);
     }
 
-    int64_t totalFrames() const
+    qint64 totalFrames() const
     {
         std::lock_guard lock(m_mutex);
-        return static_cast<int64_t>(m_pcm.size()) / m_channels;
+        return static_cast<qint64>(m_pcm.size()) / m_channels;
     }
 
     int channels() const

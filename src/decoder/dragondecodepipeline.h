@@ -46,7 +46,7 @@ public:
     bool isActive() const;
     bool hasFatalError() const;
 
-    void requestSeek(int64_t posMs);
+    void requestSeek(qint64 posMs);
 
     using SamplesCallback = std::function<void(std::span<const std::float32_t> samples, const std::stop_token &st)>;
 
@@ -69,7 +69,7 @@ Q_SIGNALS:
 
     void gaplessTransition(const QUrl &newSource, int sampleRate, int channels, qint64 durationMs);
 
-    void bufferProgressChanged(double progress);
+    void bufferProgressChanged(qreal progress);
 
     void streamStalled();
     void streamBuffering();

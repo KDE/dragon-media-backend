@@ -44,7 +44,7 @@ public:
 
     int read(std::span<uint8_t> buf, std::stop_token st) override;
 
-    int64_t seek(int64_t offset) override;
+    qint64 seek(qint64 offset) override;
 
     [[nodiscard]] qint64 size() const override;
     [[nodiscard]] qint64 position() const override;

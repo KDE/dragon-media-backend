@@ -941,7 +941,7 @@ void TestDecoder::testSampleCountValidation()
     QCOMPARE(result.format->sampleRate, sampleRate);
     QCOMPARE(result.format->channels, channels);
 
-    const int64_t expectedSamples = static_cast<int64_t>(sampleRate) * channels * durationMs / 1000;
+    const qint64 expectedSamples = static_cast<qint64>(sampleRate) * channels * durationMs / 1000;
     const size_t tolerance = static_cast<size_t>(expectedSamples / 10);
 
     QVERIFY2(result.samples.size() >= expectedSamples - tolerance,

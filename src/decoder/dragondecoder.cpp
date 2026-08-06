@@ -154,7 +154,7 @@ struct DragonDecoder::DecodeSession {
     std::shared_ptr<SampleBufferPool> m_bufferPool = std::make_shared<SampleBufferPool>();
 };
 
-DragonDecoder::DragonDecoder(ReadCallback readCb, SeekCallback seekCb, int64_t streamSize, const QString &filePath, QObject *parent)
+DragonDecoder::DragonDecoder(ReadCallback readCb, SeekCallback seekCb, qint64 streamSize, const QString &filePath, QObject *parent)
     : QObject(parent)
     , m_networkCallback(std::move(readCb))
     , m_seekCallback(std::move(seekCb))
@@ -310,7 +310,7 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
             }
         }
 
-        const int64_t ret = self->m_seekCallback(offset, sw);
+        const qint64 ret = self->m_seekCallback(offset, sw);
         return ret < 0 ? AVERROR(ENOSYS) : ret;
     };
 
@@ -492,9 +492,9 @@ QString DragonDecoder::avErrorString(int errorCode) const
 bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
 {
     if (m_seekRequested.exchange(false, std::memory_order_acq_rel)) {
-        int64_t targetMs = m_seekTargetMs.load(std::memory_order_relaxed);
+        qint64 targetMs = m_seekTargetMs.load(std::memory_order_relaxed);
         AVRational msTimeBase = AVRational{1, 1000};
-        int64_t streamTimestamp = av_rescale_q(targetMs, msTimeBase, session.audioStream->time_base);
+        qint64 streamTimestamp = av_rescale_q(targetMs, msTimeBase, session.audioStream->time_base);
         int seekRet = av_seek_frame(session.fmtCtx.get(), session.audioStreamIndex, streamTimestamp, AVSEEK_FLAG_BACKWARD);
         if (seekRet < 0) {
             qCWarning(dragonMultimediaDecoder) << "seek to" << targetMs << "ms failed:" << seekRet << "(" << avErrorString(seekRet)
@@ -669,8 +669,8 @@ bool DragonDecoder::hasFatalError() const
     return m_hadFatalError.load(std::memory_order_relaxed);
 }
 
-void DragonDecoder::requestSeek(int64_t positionMs)
+void DragonDecoder::requestSeek(qint64 positionMs)
 {
-    m_seekTargetMs.store(std::max(int64_t{0}, positionMs), std::memory_order_relaxed);
+    m_seekTargetMs.store(std::max(qint64{0}, positionMs), std::memory_order_relaxed);
     m_seekRequested.store(true, std::memory_order_release);
 }

@@ -146,10 +146,10 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
     // yet (the ~200ms PA device buffer + pipe backlog).  Defer
     // EndOfMedia/StoppedState until the backend signals drained().
     if (prefinishMark > 0 && !aboutToFinishEmitted && audioOutput && currentDuration > 0) {
-        const int64_t pipeBacklog = static_cast<int64_t>(audioPipe.consumer().ready());
-        const int64_t eventualSamples = audioOutput->totalSamplesWritten() + pipeBacklog;
-        const int64_t eventualPositionMs = (eventualSamples / currentChannels) * 1000 / currentSampleRate;
-        const int64_t remaining = currentDuration - eventualPositionMs;
+        const qint64 pipeBacklog = static_cast<qint64>(audioPipe.consumer().ready());
+        const qint64 eventualSamples = audioOutput->totalSamplesWritten() + pipeBacklog;
+        const qint64 eventualPositionMs = (eventualSamples / currentChannels) * 1000 / currentSampleRate;
+        const qint64 remaining = currentDuration - eventualPositionMs;
         if (remaining <= prefinishMark) {
             aboutToFinishEmitted = true;
             qCDebug(dragonMultimediaPlayer) << "aboutToFinish emitted from onDecodeFinished"
@@ -331,14 +331,14 @@ void DragonPlayerPrivate::init()
     positionTimer = new QTimer(this);
     positionTimer->setInterval(100);
     connect(positionTimer, &QTimer::timeout, this, [this]() {
-        const int64_t pos = audioOutput && audioOutput->isDeviceOpen() ? audioOutput->positionMs() : currentPosition;
+        const qint64 pos = audioOutput && audioOutput->isDeviceOpen() ? audioOutput->positionMs() : currentPosition;
         Q_EMIT q->positionChanged(pos);
 
         if (prefinishMark > 0) {
             qCDebug(dragonMultimediaPlayer) << "timer: prefinishMark=" << prefinishMark << "currentDuration=" << currentDuration
                                             << "emitted=" << aboutToFinishEmitted << "pos=" << pos;
             if (currentDuration > 0 && !aboutToFinishEmitted) {
-                const int64_t remaining = currentDuration - pos;
+                const qint64 remaining = currentDuration - pos;
                 qCDebug(dragonMultimediaPlayer) << "timer: remaining=" << remaining;
                 if (remaining <= prefinishMark && remaining > 0) {
                     aboutToFinishEmitted = true;
@@ -367,7 +367,7 @@ void DragonPlayerPrivate::init()
         &decodePipeline,
         &DragonDecodePipeline::bufferProgressChanged,
         this,
-        [this](double progress) {
+        [this](qreal progress) {
             if (!qFuzzyCompare(currentBufferProgress, progress)) {
                 currentBufferProgress = progress;
                 Q_EMIT q->bufferProgressChanged(progress);
@@ -413,9 +413,9 @@ bool DragonPlayer::muted() const
 {
     return d->currentMuted;
 }
-float DragonPlayer::volume() const
+qreal DragonPlayer::volume() const
 {
-    return d->audioOutput ? d->audioOutput->volume() : 1.0f;
+    return d->audioOutput ? d->audioOutput->volume() : 1.0;
 }
 QUrl DragonPlayer::source() const
 {
@@ -441,11 +441,11 @@ QString DragonPlayer::errorString() const
 {
     return d->currentErrorString;
 }
-int64_t DragonPlayer::duration() const
+qint64 DragonPlayer::duration() const
 {
     return d->currentDuration;
 }
-int64_t DragonPlayer::position() const
+qint64 DragonPlayer::position() const
 {
     if (d->audioOutput && d->audioOutput->isDeviceOpen()) {
         return d->audioOutput->positionMs();
@@ -464,7 +464,7 @@ int DragonPlayer::fftRate() const
 {
     return d->currentFftRate;
 }
-double DragonPlayer::bufferProgress() const
+qreal DragonPlayer::bufferProgress() const
 {
     return d->currentBufferProgress;
 }
@@ -486,11 +486,11 @@ void DragonPlayer::setMuted(bool muted)
     Q_EMIT d->q->mutedChanged(muted);
 }
 
-void DragonPlayer::setVolume(float gain)
+void DragonPlayer::setVolume(qreal gain)
 {
     qCDebug(dragonMultimediaPlayer) << "setVolume(" << gain << ")";
     if (d->audioOutput) {
-        d->audioOutput->setVolume(gain);
+        d->audioOutput->setVolume(static_cast<float>(gain));
     }
 }
 
@@ -661,10 +661,10 @@ void DragonPlayer::setNextSource(const QUrl &nextSource)
     d->decodePipeline.setNextSource(nextSource);
 }
 
-void DragonPlayer::setPosition(int64_t posMs)
+void DragonPlayer::setPosition(qint64 posMs)
 {
     qCDebug(dragonMultimediaPlayer) << "setPosition(" << posMs << ")";
-    posMs = std::clamp(posMs, int64_t{0}, std::max(d->currentDuration, int64_t{0}));
+    posMs = std::clamp(posMs, qint64{0}, std::max(d->currentDuration, qint64{0}));
     d->currentPosition = posMs;
 
     d->decodePipeline.requestSeek(posMs);
@@ -676,7 +676,7 @@ void DragonPlayer::setPosition(int64_t posMs)
     Q_EMIT positionChanged(posMs);
 
     if (d->prefinishMark > 0 && d->currentDuration > 0) {
-        const int64_t remaining = d->currentDuration - posMs;
+        const qint64 remaining = d->currentDuration - posMs;
         if (remaining > d->prefinishMark) {
             d->aboutToFinishEmitted = false;
         }
@@ -703,7 +703,7 @@ void DragonPlayer::setPrefinishMark(int32_t msec)
     Q_EMIT prefinishMarkChanged(msec);
 
     if (d->prefinishMark > 0 && d->currentDuration > 0) {
-        const int64_t remaining = d->currentDuration - position();
+        const qint64 remaining = d->currentDuration - position();
         if (remaining > d->prefinishMark) {
             d->aboutToFinishEmitted = false;
         }
@@ -838,13 +838,13 @@ void DragonPlayer::stop()
     }
 }
 
-void DragonPlayer::seek(int64_t posMs)
+void DragonPlayer::seek(qint64 posMs)
 {
     qCDebug(dragonMultimediaPlayer) << "seek(" << posMs << ")";
     setPosition(posMs);
 }
 
-void DragonPlayer::saveUndoPosition(int64_t posMs)
+void DragonPlayer::saveUndoPosition(qint64 posMs)
 {
     qCDebug(dragonMultimediaPlayer) << "saveUndoPosition(" << posMs << ")";
     d->undoPosition = posMs;

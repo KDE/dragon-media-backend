@@ -40,7 +40,7 @@ public:
     void resume() override;
     void setGain(float linearGain) override;
     void clearStream() override;
-    [[nodiscard]] int64_t deviceQueuedSamples() const override;
+    [[nodiscard]] qint64 deviceQueuedSamples() const override;
 
     [[nodiscard]] int audioBufferFrames() const override;
     [[nodiscard]] int audioBufferUs() const override;

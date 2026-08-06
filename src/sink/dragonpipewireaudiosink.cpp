@@ -348,7 +348,7 @@ void DragonPipeWireAudioSink::setChannelVolumes(float linearGain)
     pw_stream_set_control(m_pw->stream.get(), SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
 }
 
-int64_t DragonPipeWireAudioSink::deviceQueuedSamples() const
+qint64 DragonPipeWireAudioSink::deviceQueuedSamples() const
 {
     if (!m_pw->stream) {
         return 0;
@@ -359,7 +359,7 @@ int64_t DragonPipeWireAudioSink::deviceQueuedSamples() const
         return 0;
     }
 
-    return static_cast<int64_t>(time.queued) / sizeof(float);
+    return static_cast<qint64>(time.queued) / sizeof(float);
 }
 
 int DragonPipeWireAudioSink::audioBufferFrames() const
@@ -382,7 +382,7 @@ int DragonPipeWireAudioSink::audioBufferUs() const
     if (frames < 0 || currentSampleRate() == 0) {
         return -1;
     }
-    return static_cast<int>((static_cast<int64_t>(frames) * 1000000) / currentSampleRate());
+    return static_cast<int>((static_cast<qint64>(frames) * 1000000) / currentSampleRate());
 }
 
 bool DragonPipeWireAudioSink::isDeviceOpen() const
@@ -462,7 +462,7 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
     const int channels = self->currentChannels();
 
     struct pw_time pwt{};
-    int64_t latencyUs = 0;
+    qint64 latencyUs = 0;
     if (pw_stream_get_time_n(stream, &pwt, sizeof(pwt)) == 0 && pwt.rate.denom > 0) {
         latencyUs = (pwt.delay * 1'000'000LL * pwt.rate.num) / pwt.rate.denom;
     }

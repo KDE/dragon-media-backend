@@ -19,7 +19,7 @@ namespace DragonMultimedia
 struct FormatReady {
     int sampleRate = 0;
     int channels = 0;
-    int64_t durationMs = -1;
+    qint64 durationMs = -1;
 };
 
 // A block of decoded PCM samples. `data` views a buffer kept alive by `owner`.

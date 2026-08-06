@@ -30,7 +30,7 @@ public:
 
     virtual int read(std::span<uint8_t> buf, std::stop_token st) = 0;
 
-    virtual int64_t seek(int64_t offset)
+    virtual qint64 seek(qint64 offset)
     {
         Q_UNUSED(offset);
         return -1;

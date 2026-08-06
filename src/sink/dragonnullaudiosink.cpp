@@ -38,7 +38,7 @@ void DragonNullAudioSink::setGain(float)
 {
 }
 
-int64_t DragonNullAudioSink::deviceQueuedSamples() const
+qint64 DragonNullAudioSink::deviceQueuedSamples() const
 {
     return 0;
 }

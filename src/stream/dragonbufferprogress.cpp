@@ -54,7 +54,7 @@ void DragonBufferProgress::setDecoderReady(bool ready)
     }
 }
 
-double DragonBufferProgress::progress() const
+qreal DragonBufferProgress::progress() const
 {
     if (m_decoderReady)
         return 1.0;
@@ -64,7 +64,7 @@ double DragonBufferProgress::progress() const
         return 0.30;
 
     constexpr qint64 READY_THRESHOLD = 65536;
-    double downloadRatio = std::min(1.0, static_cast<double>(m_bytesReceived) / READY_THRESHOLD);
+    qreal downloadRatio = std::min(1.0, static_cast<qreal>(m_bytesReceived) / READY_THRESHOLD);
     return 0.50 + (downloadRatio * 0.45);
 }
 
@@ -80,7 +80,7 @@ bool DragonBufferProgress::isTlsHandshakeComplete() const
 
 void DragonBufferProgress::emitProgressIfChanged()
 {
-    double current = progress();
+    qreal current = progress();
     if (current > m_lastEmittedProgress) {
         m_lastEmittedProgress = current;
         Q_EMIT progressChanged(current);

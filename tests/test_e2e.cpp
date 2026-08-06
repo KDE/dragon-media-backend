@@ -29,7 +29,7 @@ using namespace Qt::StringLiterals;
 struct DecodeResult {
     int sampleRate = 0;
     int channels = 0;
-    int64_t duration = 0;
+    qint64 duration = 0;
     std::vector<std::float32_t> allSamples;
     bool hadError = false;
     QString errorMessage;
@@ -1076,7 +1076,7 @@ void TestE2E::testSampleCountForKnownDuration()
     QVERIFY2(result.sampleRate > 0, "Sample rate should be positive");
     QVERIFY2(result.channels > 0, "Channels should be positive");
 
-    const int64_t expectedSamples = result.duration * result.sampleRate * result.channels / 1000;
+    const qint64 expectedSamples = result.duration * result.sampleRate * result.channels / 1000;
     const size_t tolerance = static_cast<size_t>(expectedSamples / 10);
 
     QVERIFY2(result.allSamples.size() >= expectedSamples - tolerance,

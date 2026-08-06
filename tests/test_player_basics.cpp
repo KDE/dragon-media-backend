@@ -85,7 +85,7 @@ void TestPlayerBasics::testInitialState()
     DragonPlayer player;
 
     QVERIFY(!player.muted());
-    QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
+    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
     QVERIFY(!player.source().isValid());
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
@@ -110,19 +110,19 @@ void TestPlayerBasics::testMutedProperty()
 void TestPlayerBasics::testVolumeProperty()
 {
     DragonPlayer player;
-    QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
+    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
 
-    player.setVolume(0.5f);
-    QVERIFY(qAbs(player.volume() - 0.5f) < 0.01f);
+    player.setVolume(0.5);
+    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
 
-    player.setVolume(0.0f);
-    QVERIFY(qAbs(player.volume()) < 0.01f);
+    player.setVolume(0.0);
+    QVERIFY(qAbs(player.volume()) < 0.01);
 
-    player.setVolume(1.0f);
-    QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
+    player.setVolume(1.0);
+    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
 
-    player.setVolume(2.0f);
-    QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
+    player.setVolume(2.0);
+    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
 }
 
 void TestPlayerBasics::testSourceProperty()
@@ -244,12 +244,12 @@ void TestPlayerBasics::testSetVolume()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::volumeChanged);
 
-    player.setVolume(0.5f);
-    QVERIFY(qAbs(player.volume() - 0.5f) < 0.01f);
+    player.setVolume(0.5);
+    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
     QVERIFY(spy.count() > 0);
 
     spy.clear();
-    player.setVolume(0.5f);
+    player.setVolume(0.5);
     QCOMPARE(spy.count(), 0);
 }
 
@@ -277,7 +277,7 @@ void TestPlayerBasics::testVolumeChangedSignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::volumeChanged);
 
-    player.setVolume(0.8f);
+    player.setVolume(0.8);
     QTRY_VERIFY(spy.count() > 0);
 }
 
@@ -369,7 +369,7 @@ void TestPlayerBasics::testSaveUndoPosition()
     QVERIFY(helper.playAndWait());
 
     QTest::qWait(500);
-    const int64_t posBeforeSave = player.position();
+    const qint64 posBeforeSave = player.position();
     QVERIFY2(posBeforeSave > 0, "Position should have advanced during playback");
 
     player.saveUndoPosition(posBeforeSave);
@@ -467,42 +467,42 @@ void TestPlayerBasics::testVolumeBoundaryValues()
 {
     DragonPlayer player;
 
-    player.setVolume(0.0f);
-    QVERIFY(qAbs(player.volume()) < 0.01f);
+    player.setVolume(0.0);
+    QVERIFY(qAbs(player.volume()) < 0.01);
 
-    player.setVolume(1.0f);
-    QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
+    player.setVolume(1.0);
+    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
 
-    player.setVolume(10.0f);
-    QVERIFY(qAbs(player.volume() - 1.0f) < 0.01f);
+    player.setVolume(10.0);
+    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
 
-    player.setVolume(-1.0f);
-    QVERIFY(qAbs(player.volume()) < 0.01f);
+    player.setVolume(-1.0);
+    QVERIFY(qAbs(player.volume()) < 0.01);
 }
 
 void TestPlayerBasics::testMuteAndVolumeInteraction()
 {
     DragonPlayer player;
 
-    player.setVolume(0.5f);
-    QVERIFY(qAbs(player.volume() - 0.5f) < 0.01f);
+    player.setVolume(0.5);
+    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
 
     player.setMuted(true);
     QVERIFY(player.muted());
-    QVERIFY(qAbs(player.volume() - 0.5f) < 0.01f);
+    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
 
     player.setMuted(false);
     QVERIFY(!player.muted());
-    QVERIFY(qAbs(player.volume() - 0.5f) < 0.01f);
+    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
 
-    player.setVolume(0.0f);
+    player.setVolume(0.0);
     player.setMuted(true);
     QVERIFY(player.muted());
-    QVERIFY(qAbs(player.volume()) < 0.01f);
+    QVERIFY(qAbs(player.volume()) < 0.01);
 
     player.setMuted(false);
     QVERIFY(!player.muted());
-    QVERIFY(qAbs(player.volume()) < 0.01f);
+    QVERIFY(qAbs(player.volume()) < 0.01);
 }
 
 void TestPlayerBasics::testPositionTracking()
@@ -519,15 +519,15 @@ void TestPlayerBasics::testPositionTracking()
     QVERIFY(helper.playAndWait());
 
     QTest::qWait(500);
-    const int64_t posAfter500ms = player.position();
+    const qint64 posAfter500ms = player.position();
     QVERIFY2(posAfter500ms > 0, "Position must advance during playback");
 
     QTest::qWait(500);
-    const int64_t posAfter1000ms = player.position();
+    const qint64 posAfter1000ms = player.position();
     QVERIFY2(posAfter1000ms > posAfter500ms, "Position must continue advancing during playback");
 
     player.stop();
-    const int64_t posAfterStop = player.position();
+    const qint64 posAfterStop = player.position();
     QTest::qWait(300);
     QCOMPARE(player.position(), posAfterStop);
 }

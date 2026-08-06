@@ -204,7 +204,7 @@ void DragonSdlAudioSink::setGain(float linearGain)
     }
 }
 
-int64_t DragonSdlAudioSink::deviceQueuedSamples() const
+qint64 DragonSdlAudioSink::deviceQueuedSamples() const
 {
     auto *session = m_session.load(std::memory_order_acquire);
     if (!session || !session->stream) {
@@ -294,7 +294,7 @@ int DragonSdlAudioSink::audioBufferUs() const
         return -1;
     }
 
-    return static_cast<int>((static_cast<int64_t>(frames) * 1000000) / currentSampleRate());
+    return static_cast<int>((static_cast<qint64>(frames) * 1000000) / currentSampleRate());
 }
 
 void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int)
@@ -342,7 +342,7 @@ void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioSt
     float latencySeconds = static_cast<float>(totalLatencyFrames) / static_cast<float>(sampleRate);
 
     auto now = std::chrono::steady_clock::now().time_since_epoch();
-    auto pts = std::chrono::duration_cast<std::chrono::microseconds>(now) + std::chrono::microseconds(static_cast<int64_t>(latencySeconds * 1000000.0f));
+    auto pts = std::chrono::duration_cast<std::chrono::microseconds>(now) + std::chrono::microseconds(static_cast<qint64>(latencySeconds * 1000000.0f));
 
     auto pcm = self->processAudioCallback(floatsNeeded, pts);
 

@@ -33,7 +33,7 @@ static constexpr int kDurationFrames = 132300; // ~3 seconds at 44100Hz
 
 struct MarkerHit {
     bool found = false;
-    int64_t frameIndex = -1;
+    qint64 frameIndex = -1;
     float amplitude = 0.0f;
 };
 
@@ -196,9 +196,9 @@ void TestSdlGapless::runGaplessStateCheck(const BoundaryFixture &fixtureA, const
 
     QVERIFY2(trackSpy.count() >= 1, "At least one trackChanged signal expected");
 
-    const int64_t durationAMs = (static_cast<int64_t>(fixtureA.totalFrames) * 1000) / fixtureA.sampleRate;
-    const int64_t durationBMs = (static_cast<int64_t>(fixtureB.totalFrames) * 1000) / fixtureB.sampleRate;
-    const int64_t totalExpectedMs = durationAMs + durationBMs;
+    const qint64 durationAMs = (static_cast<qint64>(fixtureA.totalFrames) * 1000) / fixtureA.sampleRate;
+    const qint64 durationBMs = (static_cast<qint64>(fixtureB.totalFrames) * 1000) / fixtureB.sampleRate;
+    const qint64 totalExpectedMs = durationAMs + durationBMs;
 
     qDebug() << "Gapless scenario:"
              << "trackA=" << durationAMs << "ms"
@@ -249,7 +249,7 @@ void TestSdlGapless::testGaplessSameFormat()
     QVERIFY2(endMarkerHit.frameIndex < startMarkerHit.frameIndex,
              qPrintable(u"End marker (frame %1) must precede start marker (frame %2)"_s.arg(endMarkerHit.frameIndex).arg(startMarkerHit.frameIndex)));
 
-    const int64_t gapFrames = startMarkerHit.frameIndex - (endMarkerHit.frameIndex + static_cast<int>(kEndSignature.size()));
+    const qint64 gapFrames = startMarkerHit.frameIndex - (endMarkerHit.frameIndex + static_cast<int>(kEndSignature.size()));
 
     qDebug() << "Marker analysis:"
              << "endMarkerFrame=" << endMarkerHit.frameIndex << "endMarkerAmplitude=" << endMarkerHit.amplitude
@@ -258,18 +258,18 @@ void TestSdlGapless::testGaplessSameFormat()
     const int maxGapFrames = kSampleRate / 100;
     QVERIFY2(gapFrames <= maxGapFrames,
              qPrintable(u"Gap between tracks should be <= %1 frames (%2 ms), got %3 frames (%4 ms)"_s.arg(maxGapFrames)
-                            .arg(static_cast<int64_t>(maxGapFrames) * 1000 / kSampleRate)
+                            .arg(static_cast<qint64>(maxGapFrames) * 1000 / kSampleRate)
                             .arg(gapFrames)
-                            .arg(static_cast<int64_t>(gapFrames) * 1000 / kSampleRate)));
+                            .arg(static_cast<qint64>(gapFrames) * 1000 / kSampleRate)));
 
-    const int64_t expectedEndMarkerFrame = fixtureA.totalFrames - static_cast<int>(kEndSignature.size());
+    const qint64 expectedEndMarkerFrame = fixtureA.totalFrames - static_cast<int>(kEndSignature.size());
     qDebug() << "Position check:"
              << "endMarkerFrame=" << endMarkerHit.frameIndex << "expectedEndMarkerFrame=" << expectedEndMarkerFrame
              << "delta=" << (endMarkerHit.frameIndex - expectedEndMarkerFrame);
 
     QVERIFY2(startMarkerHit.frameIndex > endMarkerHit.frameIndex, "Start marker must appear after end marker in captured PCM");
 
-    const int64_t trackASpan = endMarkerHit.frameIndex + static_cast<int>(kEndSignature.size());
+    const qint64 trackASpan = endMarkerHit.frameIndex + static_cast<int>(kEndSignature.size());
     QVERIFY2(trackASpan > 0, qPrintable(u"Track A should have produced audio before end marker (got %1 frames)"_s.arg(trackASpan)));
 
     QFile::remove(fixtureA.filePath);

@@ -12,7 +12,7 @@
 class DRAGONMULTIMEDIA_EXPORT DragonBufferProgress : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(double progress READ progress NOTIFY progressChanged)
+    Q_PROPERTY(qreal progress READ progress NOTIFY progressChanged)
 
 public:
     explicit DragonBufferProgress(QObject *parent = nullptr);
@@ -24,19 +24,19 @@ public:
     void setBytesReceived(qint64 bytes);
     void setDecoderReady(bool ready);
 
-    [[nodiscard]] double progress() const;
+    [[nodiscard]] qreal progress() const;
     [[nodiscard]] bool headersReceived() const;
     [[nodiscard]] bool isTlsHandshakeComplete() const;
 
 Q_SIGNALS:
-    void progressChanged(double progress);
+    void progressChanged(qreal progress);
 
 private:
     bool m_tlsHandshakeComplete = false;
     bool m_headersReceived = false;
     qint64 m_bytesReceived = 0;
     bool m_decoderReady = false;
-    double m_lastEmittedProgress = -1.0;
+    qreal m_lastEmittedProgress = -1.0;
 
     void emitProgressIfChanged();
 };

@@ -83,7 +83,7 @@ private:
     DragonPlayer::Error currentError = DragonPlayer::Error::NoError;
     QString currentErrorString;
     DragonPlayer::PlaybackState requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
-    int64_t currentDuration = 0;
+    qint64 currentDuration = 0;
     bool currentMuted = false;
     bool currentSeekable = false;
     bool currentIsLocal = false;
@@ -91,16 +91,16 @@ private:
     int currentChannels = 0;
     DragonPlayer::FftMode currentFftMode = DragonPlayer::FftMode::Off;
     int currentFftRate = 60;
-    double currentBufferProgress = 1.0;
+    qreal currentBufferProgress = 1.0;
     DragonPlayer::AudioSink requestedAudioSink = DragonPlayer::AudioSink::Auto;
     DragonPlayer::AudioSink selectedAudioSink = DragonPlayer::AudioSink::Auto;
 
     std::shared_ptr<AliveGuard> aliveGuard;
 
-    int64_t undoPosition = 0;
+    qint64 undoPosition = 0;
 
     QTimer *positionTimer = nullptr;
-    int64_t currentPosition = 0;
+    qint64 currentPosition = 0;
 
     bool playRequestedReload = false;
 

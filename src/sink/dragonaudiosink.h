@@ -47,7 +47,7 @@ public:
     virtual void pause() = 0;
     virtual void resume() = 0;
     virtual void setGain(float linearGain) = 0;
-    [[nodiscard]] virtual int64_t deviceQueuedSamples() const = 0;
+    [[nodiscard]] virtual qint64 deviceQueuedSamples() const = 0;
 
     [[nodiscard]] virtual bool isDeviceOpen() const = 0;
     [[nodiscard]] virtual bool isPaused() const = 0;
@@ -79,7 +79,7 @@ public:
         NormalTrackChange
     };
 
-    void setPositionOffset(int64_t offsetMs, PositionResetMode mode = PositionResetMode::NormalTrackChange);
+    void setPositionOffset(qint64 offsetMs, PositionResetMode mode = PositionResetMode::NormalTrackChange);
 
     [[nodiscard]] float volume() const;
     void setVolume(float volume);
@@ -88,10 +88,10 @@ public:
 
     virtual void setStreamName(const QString &name);
     [[nodiscard]] bool hasFormat(int sampleRate, int channels) const;
-    [[nodiscard]] int64_t totalSamplesWritten() const;
+    [[nodiscard]] qint64 totalSamplesWritten() const;
     void resetPositionTracking();
 
-    [[nodiscard]] int64_t positionMs() const;
+    [[nodiscard]] qint64 positionMs() const;
 
     virtual void clearStream() = 0;
 
@@ -133,7 +133,7 @@ private:
     std::atomic<DragonPipe<std::float32_t> *> m_audioPipe{nullptr};
     std::atomic<DragonPipe<DragonFftBlock> *> m_fftPipe{nullptr};
 
-    std::atomic<int64_t> m_positionOffsetMs{0};
+    std::atomic<qint64> m_positionOffsetMs{0};
 
     float m_volume = 1.0f;
     bool m_muted = false;
@@ -143,7 +143,7 @@ private:
 
     std::vector<std::float32_t> m_callbackBuffer;
 
-    std::atomic<int64_t> m_totalSamplesWritten{0};
+    std::atomic<qint64> m_totalSamplesWritten{0};
     std::atomic<bool> m_flushPending{false};
     std::atomic<bool> m_positionResetPending{false};
     std::atomic<bool> m_queueReady{true};

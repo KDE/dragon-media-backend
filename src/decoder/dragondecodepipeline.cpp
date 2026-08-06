@@ -510,7 +510,7 @@ bool DragonDecodePipeline::hasFatalError() const
     return m_activeDecoder && m_activeDecoder->hasFatalError();
 }
 
-void DragonDecodePipeline::requestSeek(int64_t posMs)
+void DragonDecodePipeline::requestSeek(qint64 posMs)
 {
     std::scoped_lock lock(m_decoderMutex);
     if (m_activeDecoder) {
@@ -565,8 +565,8 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
             return stream->read(buf, m_sessionStopSource.get_token());
         };
 
-        seekCb = [stream, this](int64_t offset, DragonDecoder::SeekWhence whence) -> int64_t {
-            auto result = invokeStoppable<int64_t>(stream.get(), m_sessionStopSource.get_token(), [stream, offset, whence]() {
+        seekCb = [stream, this](qint64 offset, DragonDecoder::SeekWhence whence) -> qint64 {
+            auto result = invokeStoppable<qint64>(stream.get(), m_sessionStopSource.get_token(), [stream, offset, whence]() {
                 if (whence == DragonDecoder::SeekWhence::Set) {
                     return stream->seek(offset);
                 } else if (whence == DragonDecoder::SeekWhence::Cur) {
@@ -577,7 +577,7 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
                         return stream->seek(sz + offset);
                     }
                 }
-                return static_cast<int64_t>(-1);
+                return static_cast<qint64>(-1);
             });
 
             return result.value_or(-1);

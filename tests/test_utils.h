@@ -458,7 +458,7 @@ public:
             m_player,
             &DragonPlayer::positionChanged,
             m_player,
-            [this](int64_t pos) {
+            [this](qint64 pos) {
                 if (pos == 0) {
                     m_events.append(u"positionChanged(0)"_s);
                 }
@@ -486,7 +486,7 @@ public:
             m_player,
             &DragonPlayer::durationChanged,
             m_player,
-            [this](int64_t duration) {
+            [this](qint64 duration) {
                 m_events.append(u"durationChanged("_s + QString::number(duration) + u")"_s);
             },
             Qt::DirectConnection);
@@ -512,7 +512,7 @@ public:
             m_player,
             &DragonPlayer::positionChanged,
             m_player,
-            [this](int64_t pos) {
+            [this](qint64 pos) {
                 m_events.append(u"positionChanged("_s + QString::number(pos) + u")"_s);
             },
             Qt::DirectConnection);
@@ -603,5 +603,5 @@ private:
 
 #define VERIFY_AUDIO_INACTIVE(diagnostics) QVERIFY2(!(diagnostics).isAudioActive(), u"Audio should be inactive"_s.toUtf8().constData())
 #define VERIFY_POSITION_NEAR(actual, expected, tolerance)                                                                                                      \
-    QVERIFY2(std::llabs(static_cast<int64_t>(actual) - static_cast<int64_t>(expected)) < static_cast<int64_t>(tolerance),                                      \
+    QVERIFY2(std::llabs(static_cast<qint64>(actual) - static_cast<qint64>(expected)) < static_cast<qint64>(tolerance),                                         \
              qPrintable(u"Position mismatch: expected ~%1ms, got %2ms (tolerance %3ms)"_s.arg(expected).arg(actual).arg(tolerance)))

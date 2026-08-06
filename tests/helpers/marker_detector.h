@@ -16,7 +16,7 @@
 
 struct MarkerHit {
     bool found = false;
-    int64_t frameIndex = -1;
+    qint64 frameIndex = -1;
     float amplitude = 0.0f;
 };
 
@@ -24,9 +24,9 @@ inline MarkerHit findSignature(const std::vector<float> &pcm, int channels, cons
 {
     MarkerHit hit;
     const int sigLen = static_cast<int>(signature.size());
-    const int64_t maxFrame = static_cast<int64_t>(pcm.size()) / channels;
+    const qint64 maxFrame = static_cast<qint64>(pcm.size()) / channels;
 
-    for (int64_t frm = 0; frm + sigLen <= maxFrame; ++frm) {
+    for (qint64 frm = 0; frm + sigLen <= maxFrame; ++frm) {
         bool match = true;
         for (int k = 0; k < sigLen; ++k) {
             if (std::abs(pcm[(frm + k) * channels] - signature[k]) > threshold) {
@@ -54,7 +54,7 @@ inline MarkerHit findStartMarker(const std::vector<float> &pcm, int channels)
     return findSignature(pcm, channels, FixtureGenerator::kStartSignature, 0.01f);
 }
 
-inline int64_t gapFrames(const MarkerHit &aEnd, const MarkerHit &bStart)
+inline qint64 gapFrames(const MarkerHit &aEnd, const MarkerHit &bStart)
 {
     if (!aEnd.found || !bStart.found) {
         return -1;

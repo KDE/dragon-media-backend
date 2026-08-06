@@ -304,7 +304,7 @@ void TestPlayerPlayback::testPlayFromPausedStateResumes()
     QVERIFY(helper.playAndWait());
 
     QTest::qWait(300);
-    int64_t posBefore = player.position();
+    qint64 posBefore = player.position();
 
     QVERIFY(helper.pauseAndWait());
     QTest::qWait(200);

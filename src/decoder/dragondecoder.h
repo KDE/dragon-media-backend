@@ -35,13 +35,9 @@ public:
         End
     };
 
-    using SeekCallback = std::function<int64_t(int64_t offset, SeekWhence whence)>;
+    using SeekCallback = std::function<qint64(qint64 offset, SeekWhence whence)>;
 
-    explicit DragonDecoder(ReadCallback readCb,
-                           SeekCallback seekCb = nullptr,
-                           int64_t streamSize = -1,
-                           const QString &filePath = {},
-                           QObject *parent = nullptr);
+    explicit DragonDecoder(ReadCallback readCb, SeekCallback seekCb = nullptr, qint64 streamSize = -1, const QString &filePath = {}, QObject *parent = nullptr);
     ~DragonDecoder() override;
 
     DragonDecoder(const DragonDecoder &) = delete;
@@ -53,7 +49,7 @@ public:
 
     std::generator<DragonMultimedia::DecodeEvent> decodeLoop(std::stop_token st);
 
-    void requestSeek(int64_t positionMs);
+    void requestSeek(qint64 positionMs);
 
     bool hasFatalError() const;
 
@@ -64,11 +60,11 @@ Q_SIGNALS:
 private:
     ReadCallback m_networkCallback;
     SeekCallback m_seekCallback;
-    int64_t m_streamSize{-1};
+    qint64 m_streamSize{-1};
     QString m_filePath;
 
     std::atomic<bool> m_seekRequested{false};
-    std::atomic<int64_t> m_seekTargetMs{0};
+    std::atomic<qint64> m_seekTargetMs{0};
 
     struct DecodeSession;
     std::unique_ptr<DecodeSession> m_session;

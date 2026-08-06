@@ -167,7 +167,7 @@ void TestNetworkPlayback::testRadioToLocalFileTransition()
         }(),
         10000);
 
-    double progressBeforeSwitch = player.bufferProgress();
+    qreal progressBeforeSwitch = player.bufferProgress();
     qDebug() << "Buffer progress before switch:" << progressBeforeSwitch;
     QVERIFY2(progressBeforeSwitch > 0.0 || player.status() == DragonPlayer::MediaStatus::LoadedMedia,
              "Buffer progress should be positive or media should be loaded for network stream");
@@ -186,7 +186,7 @@ void TestNetworkPlayback::testRadioToLocalFileTransition()
     QTRY_VERIFY_WITH_TIMEOUT(sourceSpy.count() > 0, 5000);
     QVERIFY(player.source() == localUrl);
 
-    double progressAfterSwitch = player.bufferProgress();
+    qreal progressAfterSwitch = player.bufferProgress();
     qDebug() << "Buffer progress immediately after switch:" << progressAfterSwitch;
 
     QTest::qWait(100);

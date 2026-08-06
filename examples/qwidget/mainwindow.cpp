@@ -283,7 +283,7 @@ void MainWindow::connectPlayer()
         m_seeking = true;
     });
     m_playerConnections << connect(m_seekSlider, &QSlider::sliderMoved, this, [this](int position) {
-        m_player->seek(static_cast<int64_t>(position));
+        m_player->seek(static_cast<qint64>(position));
     });
     m_playerConnections << connect(m_seekSlider, &QSlider::sliderReleased, this, [this]() {
         m_seeking = false;
@@ -323,9 +323,9 @@ void MainWindow::changeAudioSink(int index)
 
     QList<QUrl> currentTracks = m_playlist->tracks();
     int currentIndex = m_playlist->currentIndex();
-    int64_t currentPosition = m_player->position();
+    qint64 currentPosition = m_player->position();
     bool isPlaying = m_player->playbackState() == DragonPlayer::PlaybackState::PlayingState;
-    float currentVolume = m_player->volume();
+    qreal currentVolume = m_player->volume();
     bool gaplessEnabled = m_playlist->gaplessEnabled();
     auto fftMode = m_player->fftMode();
     auto fftRate = m_player->fftRate();
@@ -467,7 +467,7 @@ void MainWindow::updatePlaybackState()
     }
 }
 
-void MainWindow::updatePosition(int64_t positionMs)
+void MainWindow::updatePosition(qint64 positionMs)
 {
     if (!m_seeking)
         m_seekSlider->setValue(static_cast<int>(positionMs));
@@ -475,7 +475,7 @@ void MainWindow::updatePosition(int64_t positionMs)
     m_timeLabel->setText("%1 / %2"_L1.arg(formatTime(positionMs)).arg(formatTime(m_durationMs)));
 }
 
-void MainWindow::updateDuration(int64_t durationMs)
+void MainWindow::updateDuration(qint64 durationMs)
 {
     m_durationMs = durationMs;
     m_seekSlider->setMaximum(static_cast<int>(durationMs));
@@ -485,7 +485,7 @@ void MainWindow::updateDuration(int64_t durationMs)
 void MainWindow::setPositionFromSlider()
 {
     m_seeking = false;
-    m_player->seek(static_cast<int64_t>(m_seekSlider->value()));
+    m_player->seek(static_cast<qint64>(m_seekSlider->value()));
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
@@ -498,7 +498,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
         const int min = m_seekSlider->minimum();
         const int max = m_seekSlider->maximum();
         const int targetValue = min + static_cast<int>(ratio * (max - min));
-        m_player->seek(static_cast<int64_t>(targetValue));
+        m_player->seek(static_cast<qint64>(targetValue));
         return false;
     }
     return QMainWindow::eventFilter(obj, event);
@@ -506,7 +506,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 
 void MainWindow::setVolumeFromSlider(int value)
 {
-    m_player->setVolume(static_cast<float>(value) / 100.0f);
+    m_player->setVolume(value / 100.0);
 }
 
 void MainWindow::updateStatus()
@@ -558,16 +558,16 @@ void MainWindow::updatePlaylistCurrentIndex(int index)
     m_prevButton->setEnabled(index > 0);
 }
 
-QString MainWindow::formatTime(int64_t ms)
+QString MainWindow::formatTime(qint64 ms)
 {
     if (ms < 0)
         return "00:00"_L1;
 
-    const int64_t totalSeconds = ms / 1000;
-    const int64_t minutes = totalSeconds / 60;
-    const int64_t seconds = totalSeconds % 60;
-    const int64_t hours = minutes / 60;
-    const int64_t mins = minutes % 60;
+    const qint64 totalSeconds = ms / 1000;
+    const qint64 minutes = totalSeconds / 60;
+    const qint64 seconds = totalSeconds % 60;
+    const qint64 hours = minutes / 60;
+    const qint64 mins = minutes % 60;
 
     if (hours > 0)
         return u"%1:%2:%3"_s.arg(hours).arg(mins, 2, 10, QLatin1Char('0')).arg(seconds, 2, 10, QLatin1Char('0'));

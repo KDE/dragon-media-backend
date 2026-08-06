@@ -20,7 +20,7 @@ public:
     void pause() override;
     void resume() override;
     void setGain(float linearGain) override;
-    [[nodiscard]] int64_t deviceQueuedSamples() const override;
+    [[nodiscard]] qint64 deviceQueuedSamples() const override;
     [[nodiscard]] bool isDeviceOpen() const override;
     [[nodiscard]] bool isPaused() const override;
     void clearStream() override;
