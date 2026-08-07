@@ -9,6 +9,9 @@
 #include <QPaintEvent>
 #include <QPainter>
 
+#include <algorithm>
+#include <span>
+
 DragonVisualizer::DragonVisualizer(QWidget *parent)
     : QWidget(parent)
 {
@@ -16,27 +19,20 @@ DragonVisualizer::DragonVisualizer(QWidget *parent)
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setAttribute(Qt::WA_OpaquePaintEvent);
 
-    m_barData.reserve(24);
-    m_peakData.reserve(24);
-    m_displayData.reserve(24);
+    m_barData.fill(MinDb);
+    m_peakData.fill(MinDb);
+    m_displayData.fill(MinDb);
 }
 
 DragonVisualizer::~DragonVisualizer() = default;
 
-void DragonVisualizer::updateBarData(const std::vector<float> &barData)
+void DragonVisualizer::updateBarData(std::span<const float> barData)
 {
-    const size_t numBars = barData.size();
-
-    if (m_barData.size() != numBars) {
-        m_barData.resize(numBars);
-        m_peakData.resize(numBars, MinDb);
-        m_displayData.resize(numBars, MinDb);
-    }
-
-    m_barData = barData;
+    const size_t numBars = std::min(barData.size(), m_barData.size());
 
     for (size_t i = 0; i < numBars; ++i) {
         const float newValue = barData[i];
+        m_barData[i] = newValue;
 
         if (newValue > m_peakData[i]) {
             m_peakData[i] = newValue;
@@ -57,8 +53,7 @@ void DragonVisualizer::updateBarData(const std::vector<float> &barData)
 
 void DragonVisualizer::updateDisplayData()
 {
-    const size_t numBars = m_barData.size();
-    for (size_t i = 0; i < numBars; ++i) {
+    for (size_t i = 0; i < m_barData.size(); ++i) {
         const float targetValue = m_barData[i];
         m_displayData[i] += (targetValue - m_displayData[i]) * SmoothingFactor;
     }
@@ -84,9 +79,6 @@ void DragonVisualizer::paintEvent(QPaintEvent *event)
     painter.fillRect(rect, QColor(20, 20, 30));
 
     const size_t numBars = m_displayData.size();
-    if (numBars == 0) {
-        return;
-    }
 
     constexpr int BarSpacing = 2;
     const int totalSpacing = static_cast<int>((numBars + 1) * BarSpacing);

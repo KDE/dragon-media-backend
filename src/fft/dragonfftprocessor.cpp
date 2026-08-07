@@ -91,9 +91,9 @@ void DragonFftProcessor::reset()
     }
 }
 
-void DragonFftProcessor::transformReal(std::span<const std::float32_t, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output)
+void DragonFftProcessor::transformReal(std::span<const float, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output)
 {
-    m_fft->transform_real(reinterpret_cast<const float *>(input.data()), output.data());
+    m_fft->transform_real(input.data(), output.data());
 }
 
 void DragonFftProcessor::setFrameCallback(FrameCallback cb)
@@ -154,7 +154,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 
         while (m_historyTotalSamples >= (m_lastFrameAtSample + step) && !st.stop_requested()) {
             readWindowEndingAt(m_lastFrameAtSample + step - 1, m_inputWindow);
-            applyHannWindow(std::span<std::float32_t>(m_inputWindow));
+            applyHannWindow(std::span<float>(m_inputWindow));
 
             std::array<std::complex<float>, FFT_SIZE / 2> fftOut;
             transformReal(m_inputWindow, fftOut);
@@ -184,20 +184,19 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 
 bool DragonFftProcessor::drainPipeToHistory(std::stop_token st)
 {
-    (void)st;
     bool gotAny = false;
     const int ch = m_channelCount;
 
-    while (auto available = m_consumer.ready()) {
-        m_consumer.readSomeWith(available, [&](std::span<const DragonFftBlock> b1, std::span<const DragonFftBlock> b2) {
+    while (m_consumer.ready() && !st.stop_requested()) {
+        m_consumer.readSomeWith(m_consumer.ready(), [&](std::span<const DragonFftBlock> b1, std::span<const DragonFftBlock> b2) {
             auto processBlock = [&](const DragonFftBlock &blk) {
                 m_newestBlockPts = blk.pts;
 
                 for (size_t i = 0; i + ch <= blk.count; i += ch) {
-                    std::float32_t sum = 0;
+                    float sum = 0;
                     for (int c = 0; c < ch; ++c)
                         sum += blk.samples[i + c];
-                    sum /= static_cast<std::float32_t>(ch);
+                    sum /= static_cast<float>(ch);
 
                     m_sampleHistory[m_historyWritePos] = sum;
                     m_historyWritePos = (m_historyWritePos + 1) % m_sampleHistory.size();
@@ -214,7 +213,7 @@ bool DragonFftProcessor::drainPipeToHistory(std::stop_token st)
     return gotAny;
 }
 
-void DragonFftProcessor::readWindowEndingAt(const size_t endPos, std::span<std::float32_t, FFT_SIZE> out)
+void DragonFftProcessor::readWindowEndingAt(const size_t endPos, std::span<float, FFT_SIZE> out)
 {
     // endPos is the monotonic sample index of the last sample in the window.
     // The window spans [endPos - FFT_SIZE + 1, endPos].
@@ -287,13 +286,11 @@ void DragonFftProcessor::fillDetailedBins(DragonFftFrame &frame, std::span<const
     const float melMin = hzToMel(MIN_FREQ);
     const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
 
-    std::array<std::float32_t, NUM_LOG_BINS> logBins{};
-    for (auto [i, bin] : std::views::enumerate(logBins)) {
-        const float t0 = static_cast<float>(i) / static_cast<float>(NUM_LOG_BINS);
-        const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_LOG_BINS);
+    for (auto [i, bin] : std::views::enumerate(frame.frequenciesDb)) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(frame.frequenciesDb.size());
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(frame.frequenciesDb.size());
         bin = computeMelBin(fftOut, binToFreq, melMin, melMax, t0, t1);
     }
-    frame.frequenciesDb.assign_range(logBins);
 }
 
 void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float decayRate)
@@ -301,19 +298,16 @@ void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std:
     const float melMin = hzToMel(MIN_FREQ);
     const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
 
-    std::array<std::float32_t, NUM_BAR_BINS> barBins{};
-    for (auto [i, bin] : std::views::enumerate(barBins)) {
-        const float t0 = static_cast<float>(i) / static_cast<float>(NUM_BAR_BINS);
-        const float t1 = static_cast<float>(i + 1) / static_cast<float>(NUM_BAR_BINS);
+    for (auto [i, bin] : std::views::enumerate(frame.barData)) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(frame.barData.size());
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(frame.barData.size());
         bin = computeMelBin(fftOut, binToFreq, melMin, melMax, t0, t1);
     }
 
-    for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, barBins)) {
+    for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, frame.barData)) {
         prev = std::max(curr, prev - decayRate);
         curr = prev;
     }
-
-    frame.barData.assign_range(barBins);
 }
 
 void DragonFftProcessor::emitFrame(const DragonFftFrame &frame)
@@ -328,7 +322,7 @@ void DragonFftProcessor::emitFrame(const DragonFftFrame &frame)
     }
 }
 
-void DragonFftProcessor::applyHannWindow(std::span<std::float32_t> data)
+void DragonFftProcessor::applyHannWindow(std::span<float> data)
 {
     const auto size = static_cast<float>(data.size());
     for (auto [i, val] : std::views::enumerate(data)) {

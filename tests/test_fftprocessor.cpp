@@ -16,6 +16,7 @@ using namespace Qt::StringLiterals;
 #include <DragonMultimedia/dragonfftframe.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <mutex>
@@ -23,6 +24,23 @@ using namespace Qt::StringLiterals;
 #include <stop_token>
 #include <thread>
 #include <vector>
+
+namespace
+{
+bool isFrequenciesEmpty(const DragonFftFrame &frame)
+{
+    return std::all_of(frame.frequenciesDb.begin(), frame.frequenciesDb.end(), [](float v) {
+        return v == 0.0f;
+    });
+}
+
+bool isBarEmpty(const DragonFftFrame &frame)
+{
+    return std::all_of(frame.barData.begin(), frame.barData.end(), [](float v) {
+        return v == 0.0f;
+    });
+}
+}
 
 class TestFftProcessor : public QObject
 {
@@ -81,7 +99,7 @@ void TestFftProcessor::testHannWindow()
 {
     QFETCH(int, windowSize);
 
-    std::vector<std::float32_t> data(static_cast<size_t>(windowSize), 1.0f);
+    std::vector<float> data(static_cast<size_t>(windowSize), 1.0f);
     DragonFftProcessor::applyHannWindow(data);
 
     QVERIFY(data.front() == 0.0f);
@@ -105,8 +123,8 @@ void TestFftProcessor::testConstruction()
 {
     DragonFftProcessor processor;
     auto frame = processor.takeLatestFrame();
-    QVERIFY(frame.frequenciesDb.empty());
-    QVERIFY(frame.barData.empty());
+    QVERIFY(isFrequenciesEmpty(frame));
+    QVERIFY(isBarEmpty(frame));
 }
 
 void TestFftProcessor::testSetQueue()
@@ -116,7 +134,7 @@ void TestFftProcessor::testSetQueue()
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
     processor.setChannelCount(1);
-    QVERIFY(processor.takeLatestFrame().frequenciesDb.empty());
+    QVERIFY(isFrequenciesEmpty(processor.takeLatestFrame()));
 }
 
 void TestFftProcessor::testSetSampleRate()
@@ -124,10 +142,10 @@ void TestFftProcessor::testSetSampleRate()
     DragonFftProcessor processor;
 
     processor.setSampleRate(48000);
-    QVERIFY(processor.takeLatestFrame().frequenciesDb.empty());
+    QVERIFY(isFrequenciesEmpty(processor.takeLatestFrame()));
 
     processor.setSampleRate(44100);
-    QVERIFY(processor.takeLatestFrame().frequenciesDb.empty());
+    QVERIFY(isFrequenciesEmpty(processor.takeLatestFrame()));
 }
 
 void TestFftProcessor::testReset()
@@ -160,12 +178,12 @@ void TestFftProcessor::testReset()
     processorThread.join();
 
     auto frameBefore = processor.takeLatestFrame();
-    QVERIFY2(!frameBefore.frequenciesDb.empty(), "Should have frequency data before reset");
+    QVERIFY2(!isFrequenciesEmpty(frameBefore), "Should have frequency data before reset");
 
     processor.reset();
     auto frameAfter = processor.takeLatestFrame();
-    QVERIFY2(frameAfter.frequenciesDb.empty(), "Frequency data should be empty after reset");
-    QVERIFY2(frameAfter.barData.empty(), "Bar data should be empty after reset");
+    QVERIFY2(isFrequenciesEmpty(frameAfter), "Frequency data should be empty after reset");
+    QVERIFY2(isBarEmpty(frameAfter), "Bar data should be empty after reset");
 }
 
 void TestFftProcessor::testTakeLatestFrameEmpty()
@@ -174,8 +192,8 @@ void TestFftProcessor::testTakeLatestFrameEmpty()
     processor.setSampleRate(44100);
 
     auto frame = processor.takeLatestFrame();
-    QVERIFY(frame.frequenciesDb.empty());
-    QVERIFY(frame.barData.empty());
+    QVERIFY(isFrequenciesEmpty(frame));
+    QVERIFY(isBarEmpty(frame));
 }
 
 std::vector<std::float32_t> TestFftProcessor::createSineWave(float frequency, int sampleRate, int numSamples)
@@ -227,8 +245,8 @@ void TestFftProcessor::testProcessLoopSineWave()
     processorThread.join();
 
     auto frame = processor.takeLatestFrame();
-    QVERIFY2(!frame.frequenciesDb.empty(), "FFT frame should have frequency data");
-    QVERIFY2(!frame.barData.empty(), "FFT frame should have bar data");
+    QVERIFY2(!isFrequenciesEmpty(frame), "FFT frame should have frequency data");
+    QVERIFY2(!isBarEmpty(frame), "FFT frame should have bar data");
     QVERIFY2(frameCount.load() > 0, "Frame callback should have been invoked");
 
     float peakMag = -80.0f;
@@ -285,7 +303,7 @@ void TestFftProcessor::testProcessLoopSilence()
 
     auto frame = processor.takeLatestFrame();
 
-    QVERIFY2(!frame.frequenciesDb.empty(), "Silence should still produce a frame with frequency data");
+    QVERIFY2(!isFrequenciesEmpty(frame), "Silence should still produce a frame with frequency data");
 
     float maxMag = -200.0f;
     for (float mag : frame.frequenciesDb) {
@@ -337,9 +355,9 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     QVERIFY2(frames.size() >= 2, qPrintable(QString("Expected at least 2 frames from 3x FFT_SIZE data, got %1"_L1).arg(frames.size())));
 
     for (const auto &frame : frames) {
-        QVERIFY2(!frame.frequenciesDb.empty(), "Each frame should have frequency data");
+        QVERIFY2(!isFrequenciesEmpty(frame), "Each frame should have frequency data");
         QVERIFY(frame.frequenciesDb.size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS));
-        QVERIFY2(!frame.barData.empty(), "Each frame should have bar data");
+        QVERIFY2(!isBarEmpty(frame), "Each frame should have bar data");
         QVERIFY(frame.barData.size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS));
     }
 }
@@ -401,7 +419,7 @@ void TestFftProcessor::testPeakHoldDecay()
 
     processor.setFrameCallback([&](const DragonFftFrame &frame) {
         std::scoped_lock lock(mutex);
-        if (!frame.barData.empty()) {
+        if (!isBarEmpty(frame)) {
             float maxVal = *std::max_element(frame.barData.begin(), frame.barData.end());
             peakValues.push_back(maxVal);
         }
@@ -615,7 +633,7 @@ void TestFftProcessor::testSampleRateChange()
     processorThread.join();
 
     auto frame = processor.takeLatestFrame();
-    QVERIFY2(!frame.frequenciesDb.empty(), "Frame should be produced after sample rate change");
+    QVERIFY2(!isFrequenciesEmpty(frame), "Frame should be produced after sample rate change");
 }
 
 void TestFftProcessor::testFftModeOff()
@@ -683,10 +701,10 @@ void TestFftProcessor::testFftModeBarsOnly()
     processorThread.join();
 
     auto frame = processor.takeLatestFrame();
-    QVERIFY2(!frame.barData.empty(), "BarsOnly mode should produce barData");
+    QVERIFY2(!isBarEmpty(frame), "BarsOnly mode should produce barData");
     QVERIFY2(frame.barData.size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS),
              qPrintable(QString("barData should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_BAR_BINS).arg(frame.barData.size())));
-    QVERIFY2(frame.frequenciesDb.empty(), "BarsOnly mode should not produce frequenciesDb");
+    QVERIFY2(isFrequenciesEmpty(frame), "BarsOnly mode should not produce frequenciesDb");
     QVERIFY2(frameCount.load() > 0, "Callback should have been invoked");
 }
 
@@ -721,10 +739,10 @@ void TestFftProcessor::testFftModeDetailedOnly()
     processorThread.join();
 
     auto frame = processor.takeLatestFrame();
-    QVERIFY2(!frame.frequenciesDb.empty(), "DetailedOnly mode should produce frequenciesDb");
+    QVERIFY2(!isFrequenciesEmpty(frame), "DetailedOnly mode should produce frequenciesDb");
     QVERIFY2(frame.frequenciesDb.size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS),
              qPrintable(QString("frequenciesDb should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_LOG_BINS).arg(frame.frequenciesDb.size())));
-    QVERIFY2(frame.barData.empty(), "DetailedOnly mode should not produce barData");
+    QVERIFY2(isBarEmpty(frame), "DetailedOnly mode should not produce barData");
     QVERIFY2(frameCount.load() > 0, "Callback should have been invoked");
 }
 
@@ -782,8 +800,8 @@ void TestFftProcessor::testFftModeSwitch()
     processorThread.join();
 
     auto frame = processor.takeLatestFrame();
-    QVERIFY2(!frame.barData.empty(), "Latest frame should have barData after switching to BarsOnly");
-    QVERIFY2(frame.frequenciesDb.empty(), "Latest frame should not have frequenciesDb in BarsOnly mode");
+    QVERIFY2(!isBarEmpty(frame), "Latest frame should have barData after switching to BarsOnly");
+    QVERIFY2(isFrequenciesEmpty(frame), "Latest frame should not have frequenciesDb in BarsOnly mode");
 }
 
 void TestFftProcessor::testFrameCountForThreeSecondsStereo()
@@ -1031,7 +1049,7 @@ void TestFftProcessor::testFftFrequencyLocalization()
     processorThread.join();
 
     auto frame = processor.takeLatestFrame();
-    QVERIFY2(!frame.frequenciesDb.empty(), "Should have frequency data");
+    QVERIFY2(!isFrequenciesEmpty(frame), "Should have frequency data");
     QVERIFY2(frame.frequenciesDb.size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS),
              qPrintable(u"Expected %1 bins, got %2"_s.arg(DragonFftProcessor::NUM_LOG_BINS).arg(frame.frequenciesDb.size())));
 
@@ -1099,7 +1117,7 @@ void TestFftProcessor::testFftMultiTonePeaks()
     processorThread.join();
 
     auto frame = processor.takeLatestFrame();
-    QVERIFY2(!frame.frequenciesDb.empty(), "Should have frequency data");
+    QVERIFY2(!isFrequenciesEmpty(frame), "Should have frequency data");
 
     const float melMin = 2595.0f * std::log10(1.0f + DragonFftProcessor::MIN_FREQ / 700.0f);
     const float melMax = 2595.0f * std::log10(1.0f + std::min(DragonFftProcessor::MAX_FREQ, static_cast<float>(sampleRate) / 2.0f) / 700.0f);

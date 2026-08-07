@@ -8,7 +8,7 @@
 #include <QImage>
 #include <QWidget>
 #include <mutex>
-#include <vector>
+#include <span>
 
 class DragonSpectrogram : public QWidget
 {
@@ -24,7 +24,7 @@ public:
 
 public Q_SLOTS:
 
-    void updateFrequencies(const std::vector<float> &frequenciesDb);
+    void updateFrequencies(std::span<const float> frequenciesDb);
 
 protected:
     void paintEvent(QPaintEvent *event) override;

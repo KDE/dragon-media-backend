@@ -6,7 +6,8 @@
 #pragma once
 
 #include <QWidget>
-#include <vector>
+#include <array>
+#include <span>
 
 class DragonVisualizer : public QWidget
 {
@@ -20,16 +21,16 @@ public:
 
 public Q_SLOTS:
 
-    void updateBarData(const std::vector<float> &barData);
+    void updateBarData(std::span<const float> barData);
 
 protected:
     void paintEvent(QPaintEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
 
 private:
-    std::vector<float> m_barData;
-    std::vector<float> m_peakData;
-    std::vector<float> m_displayData;
+    std::array<float, 24> m_barData{};
+    std::array<float, 24> m_peakData{};
+    std::array<float, 24> m_displayData{};
 
     static constexpr float PeakDecayRate = 2.0f;
     static constexpr float SmoothingFactor = 0.4f;

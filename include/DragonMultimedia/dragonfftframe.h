@@ -5,15 +5,18 @@
 
 #pragma once
 
+#include <array>
 #include <chrono>
-#include <vector>
 
 #include <QMetaType>
 
 struct DragonFftFrame {
-    std::vector<float> frequenciesDb;
+    static constexpr size_t NUM_FREQUENCIES = 512;
+    static constexpr size_t NUM_BARS = 24;
 
-    std::vector<float> barData;
+    std::array<float, NUM_FREQUENCIES> frequenciesDb{};
+
+    std::array<float, NUM_BARS> barData{};
 
     std::chrono::microseconds timestamp{};
 };

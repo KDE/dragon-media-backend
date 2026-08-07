@@ -19,6 +19,8 @@
 #include <QSignalSpy>
 #include <QUrl>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 class TestPlayerFft : public QObject
@@ -177,9 +179,13 @@ void TestPlayerFft::testFftModeBothEmitsDetailedAndBarFrames()
     for (int i = 0; i < fftSpy.size(); ++i) {
         QVERIFY(fftSpy.at(i).at(0).isValid());
         auto frame = fftSpy.at(i).at(0).value<DragonFftFrame>();
-        if (!frame.frequenciesDb.empty())
+        if (std::any_of(frame.frequenciesDb.begin(), frame.frequenciesDb.end(), [](float v) {
+                return v != 0.0f;
+            }))
             sawDetailed = true;
-        if (!frame.barData.empty())
+        if (std::any_of(frame.barData.begin(), frame.barData.end(), [](float v) {
+                return v != 0.0f;
+            }))
             sawBars = true;
     }
 

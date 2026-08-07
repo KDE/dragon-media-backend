@@ -70,7 +70,7 @@ QRgb DragonSpectrogram::dbToColor(float db)
     return ViridisLUT[idx];
 }
 
-void DragonSpectrogram::updateFrequencies(const std::vector<float> &frequenciesDb)
+void DragonSpectrogram::updateFrequencies(std::span<const float> frequenciesDb)
 {
     std::scoped_lock lock(m_dataMutex);
 
