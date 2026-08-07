@@ -18,6 +18,8 @@ qt_add_library(DragonMultimedia SHARED
     $<TARGET_OBJECTS:dragon_sink_objs>
     ${DragonMultimedia_SOURCES}
     ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonplayer.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonaudiooutput.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonspectrumanalyzer.h
     ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonfftframe.h
     ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonicymetadata.h
     ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragondiagnostics.h

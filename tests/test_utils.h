@@ -19,6 +19,7 @@
 #include "decoder/dragondecoder.h"
 #include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
+#include <DragonMultimedia/dragonspectrumanalyzer.h>
 
 #include <algorithm>
 #include <atomic>
@@ -344,12 +345,12 @@ public:
 class FftFrameCounter
 {
 public:
-    explicit FftFrameCounter(DragonPlayer *player)
+    explicit FftFrameCounter(DragonSpectrumAnalyzer *analyzer)
     {
         QObject::connect(
-            player,
-            &DragonPlayer::fftFrameReady,
-            player,
+            analyzer,
+            &DragonSpectrumAnalyzer::frameReady,
+            analyzer,
             [this]() {
                 m_count.fetch_add(1);
             },

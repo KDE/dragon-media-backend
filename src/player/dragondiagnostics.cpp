@@ -34,7 +34,7 @@ int DragonDiagnostics::audioBufferUs() const
     if (!priv || !priv->audioOutput) {
         return -1;
     }
-    return priv->audioOutput->audioBufferUs();
+    return priv->audioOutput->sink()->audioBufferUs();
 }
 
 int DragonDiagnostics::audioBufferFrames() const
@@ -43,7 +43,7 @@ int DragonDiagnostics::audioBufferFrames() const
     if (!priv || !priv->audioOutput) {
         return -1;
     }
-    return priv->audioOutput->audioBufferFrames();
+    return priv->audioOutput->sink()->audioBufferFrames();
 }
 
 std::size_t DragonDiagnostics::decodeQueueSize() const
@@ -88,8 +88,8 @@ bool DragonDiagnostics::isAudioActive() const
     if (!priv) {
         return false;
     }
-    bool hasOutput = (priv->audioOutput != nullptr);
-    bool isOpen = hasOutput ? priv->audioOutput->isDeviceOpen() : false;
+    bool hasOutput = (priv->audioOutput && priv->audioOutput->sink());
+    bool isOpen = hasOutput ? priv->audioOutput->sink()->isDeviceOpen() : false;
     return hasOutput && isOpen && priv->currentPlaybackState != DragonPlayer::PlaybackState::StoppedState;
 }
 
@@ -99,5 +99,5 @@ int DragonDiagnostics::audioUnderrunCount() const
     if (!priv || !priv->audioOutput) {
         return 0;
     }
-    return priv->audioOutput->underrunCount();
+    return priv->audioOutput->sink()->underrunCount();
 }

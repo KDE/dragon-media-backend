@@ -8,9 +8,11 @@
 #include "dragonspectrogram.h"
 #include "dragonvisualizer.h"
 
+#include <DragonMultimedia/dragonaudiooutput.h>
 #include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonfftframe.h>
 #include <DragonMultimedia/dragonplayer.h>
+#include <DragonMultimedia/dragonspectrumanalyzer.h>
 
 #include <QApplication>
 #include <QCheckBox>
@@ -49,6 +51,7 @@ MainWindow::MainWindow(QWidget *parent)
     m_playlist = new DragonPlaylist(m_player, this);
     m_visualizer = new DragonVisualizer(this);
     m_spectrogram = new DragonSpectrogram(this);
+    m_spectrumAnalyzer = new DragonSpectrumAnalyzer(m_player, this);
     setupUi();
     connectPlayer();
 }
@@ -161,11 +164,11 @@ void MainWindow::setupUi()
     rightLayout->addWidget(sinkLabel);
 
     m_sinkComboBox = new QComboBox(this);
-    m_sinkComboBox->addItem(i18n("Auto"), static_cast<int>(DragonPlayer::AudioSink::Auto));
-    m_sinkComboBox->addItem(i18n("PipeWire"), static_cast<int>(DragonPlayer::AudioSink::PipeWire));
-    m_sinkComboBox->addItem(i18n("PulseAudio"), static_cast<int>(DragonPlayer::AudioSink::PulseAudio));
-    m_sinkComboBox->addItem(i18n("SDL"), static_cast<int>(DragonPlayer::AudioSink::SDL));
-    int defaultIdx = m_sinkComboBox->findData(static_cast<int>(DragonPlayer::AudioSink::Auto));
+    m_sinkComboBox->addItem(i18n("Auto"), static_cast<int>(DragonAudioOutput::Backend::Auto));
+    m_sinkComboBox->addItem(i18n("PipeWire"), static_cast<int>(DragonAudioOutput::Backend::PipeWire));
+    m_sinkComboBox->addItem(i18n("PulseAudio"), static_cast<int>(DragonAudioOutput::Backend::PulseAudio));
+    m_sinkComboBox->addItem(i18n("SDL"), static_cast<int>(DragonAudioOutput::Backend::SDL));
+    int defaultIdx = m_sinkComboBox->findData(static_cast<int>(DragonAudioOutput::Backend::Auto));
     if (defaultIdx >= 0)
         m_sinkComboBox->setCurrentIndex(defaultIdx);
 
@@ -292,8 +295,8 @@ void MainWindow::connectPlayer()
     m_playerConnections << connect(m_player, &DragonPlayer::durationChanged, this, &MainWindow::updateDuration);
 
     m_playerConnections << connect(m_volumeSlider, &QSlider::valueChanged, this, &MainWindow::setVolumeFromSlider);
-    m_playerConnections << connect(m_player, &DragonPlayer::volumeChanged, this, [this]() {
-        const int vol = static_cast<int>(m_player->volume() * 100.0f);
+    m_playerConnections << connect(m_player->audioOutput(), &DragonAudioOutput::volumeChanged, this, [this]() {
+        const int vol = static_cast<int>(m_player->audioOutput()->volume() * 100.0f);
         if (m_volumeSlider->value() != vol)
             m_volumeSlider->setValue(vol);
     });
@@ -311,9 +314,10 @@ void MainWindow::connectPlayer()
         m_statusLabel->setText(i18n("Playing (seamless transition)"));
     });
 
-    m_playerConnections << connect(m_player, &DragonPlayer::fftFrameReady, this, &MainWindow::updateFftFrame);
+    m_spectrumAnalyzer = new DragonSpectrumAnalyzer(m_player, this);
+    m_playerConnections << connect(m_spectrumAnalyzer, &DragonSpectrumAnalyzer::frameReady, this, &MainWindow::updateFftFrame);
     m_playerConnections << connect(m_fftCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
-        m_player->setFftMode(checked ? DragonPlayer::FftMode::Both : DragonPlayer::FftMode::Off);
+        m_spectrumAnalyzer->setMode(checked ? DragonSpectrumAnalyzer::Mode::Both : DragonSpectrumAnalyzer::Mode::Off);
     });
 
     m_playerConnections << connect(m_player, &DragonPlayer::currentPlayingForRadiosChanged, this, &MainWindow::updateIcyMetadata);
@@ -321,21 +325,23 @@ void MainWindow::connectPlayer()
 
 void MainWindow::changeAudioSink(int index)
 {
-    auto sink = static_cast<DragonPlayer::AudioSink>(m_sinkComboBox->itemData(index).toInt());
+    auto sink = static_cast<DragonAudioOutput::Backend>(m_sinkComboBox->itemData(index).toInt());
 
     QList<QUrl> currentTracks = m_playlist->tracks();
     int currentIndex = m_playlist->currentIndex();
     qint64 currentPosition = m_player->position();
     bool isPlaying = m_player->playbackState() == DragonPlayer::PlaybackState::PlayingState;
-    qreal currentVolume = m_player->volume();
+    qreal currentVolume = m_player->audioOutput()->volume();
     bool gaplessEnabled = m_playlist->gaplessEnabled();
-    auto fftMode = m_player->fftMode();
-    auto fftRate = m_player->fftRate();
+    auto fftMode = m_spectrumAnalyzer->mode();
+    auto fftRate = m_spectrumAnalyzer->frameRate();
 
     delete m_playlist;
     m_playlist = nullptr;
     delete m_diagnostics;
     m_diagnostics = nullptr;
+    delete m_spectrumAnalyzer;
+    m_spectrumAnalyzer = nullptr;
     delete m_player;
     m_player = nullptr;
 
@@ -343,11 +349,12 @@ void MainWindow::changeAudioSink(int index)
     m_playlist = new DragonPlaylist(m_player, this);
     m_diagnostics = new DragonDiagnostics(m_player);
     m_diagnostics->setParent(this);
+    m_spectrumAnalyzer = new DragonSpectrumAnalyzer(m_player, this);
 
     m_playlist->setGaplessEnabled(gaplessEnabled);
-    m_player->setVolume(currentVolume);
-    m_player->setFftMode(fftMode);
-    m_player->setFftRate(fftRate);
+    m_player->audioOutput()->setVolume(currentVolume);
+    m_spectrumAnalyzer->setMode(fftMode);
+    m_spectrumAnalyzer->setFrameRate(fftRate);
 
     connectPlayer();
 
@@ -508,7 +515,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
 
 void MainWindow::setVolumeFromSlider(int value)
 {
-    m_player->setVolume(value / 100.0);
+    m_player->audioOutput()->setVolume(value / 100.0);
 }
 
 void MainWindow::updateStatus()

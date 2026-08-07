@@ -15,22 +15,22 @@
 
 using namespace Qt::StringLiterals;
 
-static void assignSelectedSink(DragonPlayer::AudioSink *selectedSinkOut, const QString &pluginId)
+static void assignSelectedSink(DragonAudioOutput::Backend *selectedSinkOut, const QString &pluginId)
 {
     if (!selectedSinkOut)
         return;
     if (pluginId == u"dragonpipewireaudiosink"_s) {
-        *selectedSinkOut = DragonPlayer::AudioSink::PipeWire;
+        *selectedSinkOut = DragonAudioOutput::Backend::PipeWire;
     } else if (pluginId == u"dragonpulseaudiosink"_s) {
-        *selectedSinkOut = DragonPlayer::AudioSink::PulseAudio;
+        *selectedSinkOut = DragonAudioOutput::Backend::PulseAudio;
     } else if (pluginId == u"dragonsdlaudiosink"_s) {
-        *selectedSinkOut = DragonPlayer::AudioSink::SDL;
+        *selectedSinkOut = DragonAudioOutput::Backend::SDL;
     } else {
-        *selectedSinkOut = DragonPlayer::AudioSink::Auto;
+        *selectedSinkOut = DragonAudioOutput::Backend::Auto;
     }
 }
 
-static std::unique_ptr<DragonAudioSink> tryLoad(const KPluginMetaData &md, DragonPlayer::AudioSink *selectedSinkOut)
+static std::unique_ptr<DragonAudioSink> tryLoad(const KPluginMetaData &md, DragonAudioOutput::Backend *selectedSinkOut)
 {
     auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(md);
     if (!result) {
@@ -47,7 +47,7 @@ static std::unique_ptr<DragonAudioSink> tryLoad(const KPluginMetaData &md, Drago
     return sink;
 }
 
-static std::unique_ptr<DragonAudioSink> tryLoadById(const QList<KPluginMetaData> &plugins, const QString &pluginId, DragonPlayer::AudioSink *selectedSinkOut)
+static std::unique_ptr<DragonAudioSink> tryLoadById(const QList<KPluginMetaData> &plugins, const QString &pluginId, DragonAudioOutput::Backend *selectedSinkOut)
 {
     auto it = std::ranges::find_if(plugins, [&](const KPluginMetaData &md) {
         return md.pluginId() == pluginId;
@@ -59,7 +59,7 @@ static std::unique_ptr<DragonAudioSink> tryLoadById(const QList<KPluginMetaData>
     return nullptr;
 }
 
-std::unique_ptr<DragonAudioSink> createAudioSink(DragonPlayer::AudioSink requestedSink, DragonPlayer::AudioSink *selectedSinkOut)
+std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requestedSink, DragonAudioOutput::Backend *selectedSinkOut)
 {
     auto plugins = KPluginMetaData::findPlugins(u"DragonMultimedia/AudioSink"_s);
 
@@ -73,16 +73,16 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonPlayer::AudioSink request
 
     QString requestedPluginId;
     switch (requestedSink) {
-    case DragonPlayer::AudioSink::PipeWire:
+    case DragonAudioOutput::Backend::PipeWire:
         requestedPluginId = u"dragonpipewireaudiosink"_s;
         break;
-    case DragonPlayer::AudioSink::PulseAudio:
+    case DragonAudioOutput::Backend::PulseAudio:
         requestedPluginId = u"dragonpulseaudiosink"_s;
         break;
-    case DragonPlayer::AudioSink::SDL:
+    case DragonAudioOutput::Backend::SDL:
         requestedPluginId = u"dragonsdlaudiosink"_s;
         break;
-    case DragonPlayer::AudioSink::Auto:
+    case DragonAudioOutput::Backend::Auto:
     default:
         break;
     }

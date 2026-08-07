@@ -6,7 +6,7 @@
 #pragma once
 
 #include <DragonMultimedia/dragonfftframe.h>
-#include <DragonMultimedia/dragonplayer.h>
+#include <DragonMultimedia/dragonspectrumanalyzer.h>
 
 #include <cstddef>
 #include <functional>
@@ -33,9 +33,9 @@ public:
 
     void setSampleRate(int sampleRate);
     void setChannelCount(int channels);
-    void setMode(DragonPlayer::FftMode mode);
+    void setMode(DragonSpectrumAnalyzer::Mode mode);
     void setFftRate(int rate);
-    [[nodiscard]] DragonPlayer::FftMode mode() const;
+    [[nodiscard]] DragonSpectrumAnalyzer::Mode mode() const;
 
     void stop();
 
@@ -59,7 +59,7 @@ private:
 
     DragonPipe<DragonFftBlock> *const m_fftPipe;
 
-    DragonPlayer::FftMode m_currentMode = DragonPlayer::FftMode::Off;
+    DragonSpectrumAnalyzer::Mode m_currentMode = DragonSpectrumAnalyzer::Mode::Off;
     int m_fftRate = 60;
     bool m_infrastructureCreated = false;
 

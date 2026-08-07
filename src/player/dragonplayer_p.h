@@ -8,6 +8,7 @@
 #include "decoder/dragondecodepipeline.h"
 #include "fft/dragonfftpipeline.h"
 #include "sink/dragonaudiosink.h"
+#include <DragonMultimedia/dragonaudiooutput.h>
 #include <DragonMultimedia/dragonplayer.h>
 
 #include "dragonpipe.h"
@@ -26,6 +27,7 @@
 #include <vector>
 
 class DragonDiagnostics;
+class DragonAudioOutput;
 
 struct AliveGuard {
     std::atomic<bool> alive{true};
@@ -35,15 +37,20 @@ class DragonPlayerPrivate : public QObject
 {
     Q_OBJECT
 public:
-    explicit DragonPlayerPrivate(DragonPlayer *player, DragonPlayer::AudioSink requestedSink = DragonPlayer::AudioSink::Auto);
+    explicit DragonPlayerPrivate(DragonPlayer *player, DragonAudioOutput::Backend requestedBackend = DragonAudioOutput::Backend::Auto);
 
 private:
     friend class DragonDiagnostics;
     friend class DragonPlayer;
+    friend class DragonSpectrumAnalyzer;
 
     void init();
 
+    DragonAudioSink *audioSink() const;
+
     DragonPlayer *q = nullptr;
+
+    DragonAudioOutput *audioOutput = nullptr;
 
 private Q_SLOTS:
     void onDecodeFinished(const QUrl &source, bool hadFatalError);
@@ -74,8 +81,6 @@ private:
     DragonPipe<DragonFftBlock> fftPipe{256};
     DragonFftPipeline fftPipeline{&fftPipe};
 
-    std::unique_ptr<DragonAudioSink> audioOutput;
-
     QUrl currentSource;
     QUrl nextSource;
     DragonPlayer::PlaybackState currentPlaybackState = DragonPlayer::PlaybackState::StoppedState;
@@ -84,16 +89,12 @@ private:
     QString currentErrorString;
     DragonPlayer::PlaybackState requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
     qint64 currentDuration = 0;
-    bool currentMuted = false;
     bool currentSeekable = false;
     bool currentIsLocal = false;
     int currentSampleRate = 0;
     int currentChannels = 0;
-    DragonPlayer::FftMode currentFftMode = DragonPlayer::FftMode::Off;
-    int currentFftRate = 60;
     qreal currentBufferProgress = 1.0;
-    DragonPlayer::AudioSink requestedAudioSink = DragonPlayer::AudioSink::Auto;
-    DragonPlayer::AudioSink selectedAudioSink = DragonPlayer::AudioSink::Auto;
+    DragonAudioOutput::Backend requestedBackend = DragonAudioOutput::Backend::Auto;
 
     std::shared_ptr<AliveGuard> aliveGuard;
 

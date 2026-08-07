@@ -6,6 +6,7 @@
 #include "dragonplayer_p.h"
 
 #include "sink/dragonaudiosinkfactory.h"
+#include <DragonMultimedia/dragonaudiooutput.h>
 #include <DragonMultimedia/dragonplayer.h>
 
 #pragma GCC diagnostic push
@@ -28,11 +29,11 @@
 #include <thread>
 #include <utility>
 
-DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player, DragonPlayer::AudioSink requestedSink)
+DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player, DragonAudioOutput::Backend requestedBackend)
     : QObject(player)
     , q(player)
     , decodePipeline(player)
-    , requestedAudioSink(requestedSink)
+    , requestedBackend(requestedBackend)
     , aliveGuard(std::make_shared<AliveGuard>())
 {
 }
@@ -41,21 +42,21 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, Drag
 {
     switch (intent) {
     case DragonPlayer::PlaybackState::PlayingState:
-        if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
-            audioOutput->open(sampleRate, channels);
+        if (!audioOutput->sink()->isDeviceOpen() || !audioOutput->sink()->hasFormat(sampleRate, channels)) {
+            audioOutput->sink()->open(sampleRate, channels);
         } else {
-            audioOutput->resume();
+            audioOutput->sink()->resume();
         }
-        audioOutput->setQueueReady(true);
+        audioOutput->sink()->setQueueReady(true);
         setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
         break;
 
     case DragonPlayer::PlaybackState::PausedState:
-        if (!audioOutput->isDeviceOpen() || !audioOutput->hasFormat(sampleRate, channels)) {
-            audioOutput->open(sampleRate, channels);
+        if (!audioOutput->sink()->isDeviceOpen() || !audioOutput->sink()->hasFormat(sampleRate, channels)) {
+            audioOutput->sink()->open(sampleRate, channels);
         }
-        audioOutput->pause();
-        audioOutput->setQueueReady(true);
+        audioOutput->sink()->pause();
+        audioOutput->sink()->setQueueReady(true);
         setPlaybackState(DragonPlayer::PlaybackState::PausedState);
         break;
 
@@ -92,7 +93,7 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
 
     decodePipeline.setCurrentSource(currentSource);
 
-    audioOutput->setPositionOffset(0, DragonAudioSink::PositionResetMode::GaplessTransition);
+    audioOutput->sink()->setPositionOffset(0, DragonAudioSink::PositionResetMode::GaplessTransition);
     Q_EMIT q->positionChanged(0);
 
     Q_EMIT q->trackChanged();
@@ -119,8 +120,8 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
 
     if (hadFatalError) {
         if (audioOutput) {
-            audioOutput->close();
-            audioOutput->setQueueReady(false);
+            audioOutput->sink()->close();
+            audioOutput->sink()->setQueueReady(false);
         }
         setStatus(DragonPlayer::MediaStatus::InvalidMedia);
         if (currentError != DragonPlayer::Error::NoError && currentErrorString.isEmpty()) {
@@ -147,7 +148,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
     // EndOfMedia/StoppedState until the backend signals drained().
     if (prefinishMark > 0 && !aboutToFinishEmitted && audioOutput && currentDuration > 0) {
         const qint64 pipeBacklog = static_cast<qint64>(audioPipe.consumer().ready());
-        const qint64 eventualSamples = audioOutput->totalSamplesWritten() + pipeBacklog;
+        const qint64 eventualSamples = audioOutput->sink()->totalSamplesWritten() + pipeBacklog;
         const qint64 eventualPositionMs = (eventualSamples / currentChannels) * 1000 / currentSampleRate;
         const qint64 remaining = currentDuration - eventualPositionMs;
         if (remaining <= prefinishMark) {
@@ -157,7 +158,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
             Q_EMIT q->aboutToFinish();
         }
     }
-    audioOutput->notifyDecodeFinished();
+    audioOutput->sink()->notifyDecodeFinished();
     qCDebug(dragonMultimediaPlayer) << "onDecodeFinished media ended, deferring StoppedState until drain";
 }
 
@@ -193,7 +194,7 @@ void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, con
         return;
     }
 
-    while (audioOutput && !audioOutput->isQueueReady() && !st.stop_requested()) {
+    while (audioOutput && !audioOutput->sink()->isQueueReady() && !st.stop_requested()) {
         std::this_thread::sleep_for(std::chrono::microseconds(500));
     }
     if (st.stop_requested()) {
@@ -282,29 +283,36 @@ void DragonPlayerPrivate::stopPipeline()
 
     fftPipeline.stop();
 
-    if (audioOutput) {
-        audioOutput->close();
-        audioOutput->reset();
+    if (audioOutput && audioOutput->sink()) {
+        audioOutput->sink()->close();
+        audioOutput->sink()->reset();
     }
 
     qCDebug(dragonMultimediaPlayer) << "stopPipeline() teardown complete";
 }
 
+DragonAudioSink *DragonPlayerPrivate::audioSink() const
+{
+    return audioOutput ? audioOutput->sink() : nullptr;
+}
+
 void DragonPlayerPrivate::init()
 {
-    audioOutput = createAudioSink(requestedAudioSink, &selectedAudioSink);
-    if (audioOutput) {
-        audioOutput->setAudioPipe(&audioPipe);
-        audioOutput->setFftPipe(nullptr);
+    audioOutput = new DragonAudioOutput(requestedBackend, q);
+    if (audioOutput->sink()) {
+        audioOutput->sink()->setAudioPipe(&audioPipe);
+        audioOutput->sink()->setFftPipe(nullptr);
     }
 
-    connect(audioOutput.get(), &DragonAudioSink::errorOccurred, this, [this](const QString &message) {
+    connect(audioOutput->sink(), &DragonAudioSink::errorOccurred, this, [this](const QString &message) {
         setError(DragonPlayer::Error::ResourceError, message);
     });
 
-    connect(audioOutput.get(), &DragonAudioSink::volumeChanged, q, &DragonPlayer::volumeChanged);
+    connect(audioOutput, &DragonAudioOutput::volumeChanged, q, [this]() {
+        // volumeChanged is now forwarded from DragonAudioOutput
+    });
 
-    connect(audioOutput.get(), &DragonAudioSink::drained, this, [this]() {
+    connect(audioOutput->sink(), &DragonAudioSink::drained, this, [this]() {
         setStatus(DragonPlayer::MediaStatus::EndOfMedia);
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
     });
@@ -312,7 +320,7 @@ void DragonPlayerPrivate::init()
     positionTimer = new QTimer(this);
     positionTimer->setInterval(100);
     connect(positionTimer, &QTimer::timeout, this, [this]() {
-        const qint64 pos = audioOutput && audioOutput->isDeviceOpen() ? audioOutput->positionMs() : currentPosition;
+        const qint64 pos = audioOutput && audioOutput->sink() && audioOutput->sink()->isDeviceOpen() ? audioOutput->sink()->positionMs() : currentPosition;
         Q_EMIT q->positionChanged(pos);
 
         if (prefinishMark > 0) {
@@ -355,23 +363,30 @@ void DragonPlayerPrivate::init()
             }
         },
         Qt::QueuedConnection);
-
-    fftPipeline.setFrameCallback([this](DragonFftFrame frame) {
-        QMetaObject::invokeMethod(
-            q,
-            [this, f = std::move(frame)]() mutable {
-                Q_EMIT q->fftFrameReady(f);
-            },
-            Qt::QueuedConnection);
-    });
 }
 
-DragonPlayer::DragonPlayer(AudioSink requestedSink, QObject *parent)
+DragonPlayer::DragonPlayer(QObject *parent)
     : QObject(parent)
 {
     qRegisterMetaType<DragonFftFrame>();
 
-    d = std::make_unique<DragonPlayerPrivate>(this, requestedSink);
+    d = std::make_unique<DragonPlayerPrivate>(this, DragonAudioOutput::Backend::Auto);
+    d->init();
+
+    connect(this, &DragonPlayer::stateChanged, this, [](PlaybackState newState, PlaybackState oldState) {
+        qCDebug(dragonMultimediaPlayer) << "playbackState changed from" << oldState << "to" << newState;
+    });
+    connect(this, &DragonPlayer::statusChanged, this, [](MediaStatus status) {
+        qCDebug(dragonMultimediaPlayer) << "mediaStatus changed to" << status;
+    });
+}
+
+DragonPlayer::DragonPlayer(DragonAudioOutput::Backend requestedBackend, QObject *parent)
+    : QObject(parent)
+{
+    qRegisterMetaType<DragonFftFrame>();
+
+    d = std::make_unique<DragonPlayerPrivate>(this, requestedBackend);
     d->init();
 
     connect(this, &DragonPlayer::stateChanged, this, [](PlaybackState newState, PlaybackState oldState) {
@@ -390,14 +405,11 @@ DragonPlayer::~DragonPlayer()
     d->stopPipeline();
 }
 
-bool DragonPlayer::muted() const
+DragonAudioOutput *DragonPlayer::audioOutput() const
 {
-    return d->currentMuted;
+    return d->audioOutput;
 }
-qreal DragonPlayer::volume() const
-{
-    return d->audioOutput ? d->audioOutput->volume() : 1.0;
-}
+
 QUrl DragonPlayer::source() const
 {
     return d->currentSource;
@@ -428,8 +440,8 @@ qint64 DragonPlayer::duration() const
 }
 qint64 DragonPlayer::position() const
 {
-    if (d->audioOutput && d->audioOutput->isDeviceOpen()) {
-        return d->audioOutput->positionMs();
+    if (d->audioOutput && d->audioOutput->sink()->isDeviceOpen()) {
+        return d->audioOutput->sink()->positionMs();
     }
     return d->currentPosition;
 }
@@ -437,42 +449,9 @@ bool DragonPlayer::seekable() const
 {
     return d->currentSeekable;
 }
-DragonPlayer::FftMode DragonPlayer::fftMode() const
-{
-    return d->currentFftMode;
-}
-int DragonPlayer::fftRate() const
-{
-    return d->currentFftRate;
-}
 qreal DragonPlayer::bufferProgress() const
 {
     return d->currentBufferProgress;
-}
-DragonPlayer::AudioSink DragonPlayer::selectedAudioSink() const
-{
-    return d->selectedAudioSink;
-}
-
-void DragonPlayer::setMuted(bool muted)
-{
-    qCDebug(dragonMultimediaPlayer) << "setMuted(" << muted << ")";
-    if (d->currentMuted == muted) {
-        return;
-    }
-    d->currentMuted = muted;
-    if (d->audioOutput) {
-        d->audioOutput->setMuted(muted);
-    }
-    Q_EMIT d->q->mutedChanged(muted);
-}
-
-void DragonPlayer::setVolume(qreal gain)
-{
-    qCDebug(dragonMultimediaPlayer) << "setVolume(" << gain << ")";
-    if (d->audioOutput) {
-        d->audioOutput->setVolume(static_cast<float>(gain));
-    }
 }
 
 QCoro::Task<void> DragonPlayerPrivate::startLoad(QUrl source, uint64_t generation)
@@ -553,14 +532,13 @@ void DragonPlayer::setSource(const QUrl &source)
     }
 
     if (d->audioOutput) {
-        d->audioOutput->setQueueReady(false);
-        d->audioOutput->resetDrainState();
-        d->audioOutput->setPositionOffset(0, DragonAudioSink::PositionResetMode::NormalTrackChange);
+        d->audioOutput->sink()->setQueueReady(false);
+        d->audioOutput->sink()->resetDrainState();
+        d->audioOutput->sink()->setPositionOffset(0, DragonAudioSink::PositionResetMode::NormalTrackChange);
     }
 
     d->decodePipeline.stopSession();
 
-    d->audioOutput->setFftPipe(d->currentFftMode != FftMode::Off ? &d->fftPipe : nullptr);
     d->fftPipeline.restart();
 
     const bool isGapless = d->inGaplessSetSource;
@@ -591,8 +569,8 @@ void DragonPlayer::setSource(const QUrl &source)
 
         if (d->currentSource.isEmpty()) {
             if (d->audioOutput) {
-                d->audioOutput->close();
-                d->audioOutput->reset();
+                d->audioOutput->sink()->close();
+                d->audioOutput->sink()->reset();
             }
             if (d->currentError != Error::NoError || !d->currentErrorString.isEmpty()) {
                 d->currentError = Error::NoError;
@@ -651,8 +629,8 @@ void DragonPlayer::setPosition(qint64 posMs)
     d->decodePipeline.requestSeek(posMs);
 
     if (d->audioOutput) {
-        d->audioOutput->setPositionOffset(posMs, DragonAudioSink::PositionResetMode::Seek);
-        d->audioOutput->clearStream();
+        d->audioOutput->sink()->setPositionOffset(posMs, DragonAudioSink::PositionResetMode::Seek);
+        d->audioOutput->sink()->clearStream();
     }
     Q_EMIT positionChanged(posMs);
 
@@ -691,34 +669,6 @@ void DragonPlayer::setPrefinishMark(int32_t msec)
     }
 }
 
-void DragonPlayer::setFftMode(FftMode mode)
-{
-    qCDebug(dragonMultimediaPlayer) << "setFftMode(" << mode << ")";
-    if (d->currentFftMode == mode) {
-        return;
-    }
-
-    d->currentFftMode = mode;
-    d->audioOutput->setFftPipe(mode != FftMode::Off ? &d->fftPipe : nullptr);
-    d->fftPipeline.setMode(mode);
-
-    Q_EMIT fftModeChanged(mode);
-}
-
-void DragonPlayer::setFftRate(int rate)
-{
-    qCDebug(dragonMultimediaPlayer) << "setFftRate(" << rate << ")";
-    if (rate <= 0) {
-        rate = 1;
-    }
-    if (d->currentFftRate == rate) {
-        return;
-    }
-    d->currentFftRate = rate;
-    d->fftPipeline.setFftRate(rate);
-    Q_EMIT fftRateChanged(rate);
-}
-
 void DragonPlayer::play()
 {
     qCDebug(dragonMultimediaPlayer) << "play()";
@@ -734,7 +684,7 @@ void DragonPlayer::play()
 
     if (d->currentPlaybackState == PlaybackState::PausedState) {
         if (d->audioOutput) {
-            d->audioOutput->resume();
+            d->audioOutput->sink()->resume();
         }
         d->setPlaybackState(PlaybackState::PlayingState);
         return;
@@ -763,11 +713,11 @@ void DragonPlayer::play()
 
     qCDebug(dragonMultimediaPlayer) << "play() status is " << d->currentStatus << ", starting audio synchronously";
 
-    if (d->audioOutput && !d->audioOutput->isDeviceOpen() && d->currentSampleRate > 0) {
-        d->audioOutput->open(d->currentSampleRate, d->currentChannels);
+    if (d->audioOutput && !d->audioOutput->sink()->isDeviceOpen() && d->currentSampleRate > 0) {
+        d->audioOutput->sink()->open(d->currentSampleRate, d->currentChannels);
     }
     if (d->audioOutput) {
-        d->audioOutput->setQueueReady(true);
+        d->audioOutput->sink()->setQueueReady(true);
     }
     d->setPlaybackState(PlaybackState::PlayingState);
 }
@@ -792,7 +742,7 @@ void DragonPlayer::pause()
     }
 
     if (d->audioOutput) {
-        d->audioOutput->pause();
+        d->audioOutput->sink()->pause();
     }
     d->setPlaybackState(PlaybackState::PausedState);
 }
@@ -806,9 +756,9 @@ void DragonPlayer::stop()
     d->decodePipeline.stopSession();
 
     if (d->audioOutput) {
-        d->audioOutput->close();
-        d->audioOutput->reset();
-        d->audioOutput->resetDrainState();
+        d->audioOutput->sink()->close();
+        d->audioOutput->sink()->reset();
+        d->audioOutput->sink()->resetDrainState();
     }
     d->fftPipeline.stop();
 

@@ -15,6 +15,7 @@
 #include "player/dragonevent.h"
 #include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
+#include <DragonMultimedia/dragonspectrumanalyzer.h>
 
 #include <algorithm>
 #include <cmath>
@@ -643,9 +644,10 @@ void TestE2E::testFftFramesDuringGaplessTransition()
     DragonPlayer player;
     DragonDiagnostics diagnostics(&player);
     PlayerHelper helper(&player);
-    FftFrameCounter counter(&player);
+    DragonSpectrumAnalyzer analyzer(&player);
+    FftFrameCounter counter(&analyzer);
 
-    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+    analyzer.setMode(DragonSpectrumAnalyzer::Mode::BarsOnly);
 
     QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
     helper.setNextSource(u"gs-16b-2c-44100hz.m4a"_s);
@@ -769,9 +771,10 @@ void TestE2E::testNonGaplessEofWithFftOn()
     DragonPlayer player;
     DragonDiagnostics diagnostics(&player);
     PlayerHelper helper(&player);
-    FftFrameCounter counter(&player);
+    DragonSpectrumAnalyzer analyzer(&player);
+    FftFrameCounter counter(&analyzer);
 
-    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+    analyzer.setMode(DragonSpectrumAnalyzer::Mode::BarsOnly);
     QVERIFY(helper.setSourceAndWait(shortTracks[0]));
     QVERIFY(helper.playAndWait());
 

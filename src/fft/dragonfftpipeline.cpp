@@ -112,10 +112,10 @@ void DragonFftPipeline::setChannelCount(int channels)
     }
 }
 
-void DragonFftPipeline::setMode(DragonPlayer::FftMode mode)
+void DragonFftPipeline::setMode(DragonSpectrumAnalyzer::Mode mode)
 {
-    const bool wasOn = (m_currentMode != DragonPlayer::FftMode::Off);
-    const bool nowOn = (mode != DragonPlayer::FftMode::Off);
+    const bool wasOn = (m_currentMode != DragonSpectrumAnalyzer::Mode::Off);
+    const bool nowOn = (mode != DragonSpectrumAnalyzer::Mode::Off);
     m_currentMode = mode;
 
     if (!wasOn && nowOn) {
@@ -150,7 +150,7 @@ void DragonFftPipeline::setFftRate(int rate)
     }
 }
 
-DragonPlayer::FftMode DragonFftPipeline::mode() const
+DragonSpectrumAnalyzer::Mode DragonFftPipeline::mode() const
 {
     return m_currentMode;
 }
@@ -162,7 +162,7 @@ void DragonFftPipeline::stop()
 
 void DragonFftPipeline::restart()
 {
-    if (m_currentMode == DragonPlayer::FftMode::Off) {
+    if (m_currentMode == DragonSpectrumAnalyzer::Mode::Off) {
         teardown();
         return;
     }

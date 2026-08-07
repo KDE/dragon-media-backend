@@ -84,8 +84,8 @@ void TestPlayerBasics::testInitialState()
 {
     DragonPlayer player;
 
-    QVERIFY(!player.muted());
-    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
+    QVERIFY(!player.audioOutput()->muted());
+    QVERIFY(qAbs(player.audioOutput()->volume() - 1.0) < 0.01);
     QVERIFY(!player.source().isValid());
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
@@ -98,31 +98,31 @@ void TestPlayerBasics::testInitialState()
 void TestPlayerBasics::testMutedProperty()
 {
     DragonPlayer player;
-    QVERIFY(!player.muted());
+    QVERIFY(!player.audioOutput()->muted());
 
-    player.setMuted(true);
-    QVERIFY(player.muted());
+    player.audioOutput()->setMuted(true);
+    QVERIFY(player.audioOutput()->muted());
 
-    player.setMuted(false);
-    QVERIFY(!player.muted());
+    player.audioOutput()->setMuted(false);
+    QVERIFY(!player.audioOutput()->muted());
 }
 
 void TestPlayerBasics::testVolumeProperty()
 {
     DragonPlayer player;
-    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
+    QVERIFY(qAbs(player.audioOutput()->volume() - 1.0) < 0.01);
 
-    player.setVolume(0.5);
-    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
+    player.audioOutput()->setVolume(0.5);
+    QVERIFY(qAbs(player.audioOutput()->volume() - 0.5) < 0.01);
 
-    player.setVolume(0.0);
-    QVERIFY(qAbs(player.volume()) < 0.01);
+    player.audioOutput()->setVolume(0.0);
+    QVERIFY(qAbs(player.audioOutput()->volume()) < 0.01);
 
-    player.setVolume(1.0);
-    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
+    player.audioOutput()->setVolume(1.0);
+    QVERIFY(qAbs(player.audioOutput()->volume() - 1.0) < 0.01);
 
-    player.setVolume(2.0);
-    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
+    player.audioOutput()->setVolume(2.0);
+    QVERIFY(qAbs(player.audioOutput()->volume() - 1.0) < 0.01);
 }
 
 void TestPlayerBasics::testSourceProperty()
@@ -223,61 +223,61 @@ void TestPlayerBasics::testStop()
 void TestPlayerBasics::testSetMuted()
 {
     DragonPlayer player;
-    QSignalSpy spy(&player, &DragonPlayer::mutedChanged);
+    QSignalSpy spy(player.audioOutput(), &DragonAudioOutput::mutedChanged);
 
-    player.setMuted(true);
-    QVERIFY(player.muted());
+    player.audioOutput()->setMuted(true);
+    QVERIFY(player.audioOutput()->muted());
     QVERIFY(spy.count() > 0);
 
     spy.clear();
-    player.setMuted(false);
-    QVERIFY(!player.muted());
+    player.audioOutput()->setMuted(false);
+    QVERIFY(!player.audioOutput()->muted());
     QVERIFY(spy.count() > 0);
 
     spy.clear();
-    player.setMuted(false);
+    player.audioOutput()->setMuted(false);
     QCOMPARE(spy.count(), 0);
 }
 
 void TestPlayerBasics::testSetVolume()
 {
     DragonPlayer player;
-    QSignalSpy spy(&player, &DragonPlayer::volumeChanged);
+    QSignalSpy spy(player.audioOutput(), &DragonAudioOutput::volumeChanged);
 
-    player.setVolume(0.5);
-    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
+    player.audioOutput()->setVolume(0.5);
+    QVERIFY(qAbs(player.audioOutput()->volume() - 0.5) < 0.01);
     QVERIFY(spy.count() > 0);
 
     spy.clear();
-    player.setVolume(0.5);
+    player.audioOutput()->setVolume(0.5);
     QCOMPARE(spy.count(), 0);
 }
 
 void TestPlayerBasics::testMutedChangedSignal()
 {
     DragonPlayer player;
-    QSignalSpy spy(&player, &DragonPlayer::mutedChanged);
+    QSignalSpy spy(player.audioOutput(), &DragonAudioOutput::mutedChanged);
 
-    player.setMuted(true);
+    player.audioOutput()->setMuted(true);
     QTRY_COMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).at(0).toBool(), true);
 
     spy.clear();
-    player.setMuted(false);
+    player.audioOutput()->setMuted(false);
     QTRY_COMPARE(spy.count(), 1);
     QCOMPARE(spy.at(0).at(0).toBool(), false);
 
     spy.clear();
-    player.setMuted(false);
+    player.audioOutput()->setMuted(false);
     QCOMPARE(spy.count(), 0);
 }
 
 void TestPlayerBasics::testVolumeChangedSignal()
 {
     DragonPlayer player;
-    QSignalSpy spy(&player, &DragonPlayer::volumeChanged);
+    QSignalSpy spy(player.audioOutput(), &DragonAudioOutput::volumeChanged);
 
-    player.setVolume(0.8);
+    player.audioOutput()->setVolume(0.8);
     QTRY_VERIFY(spy.count() > 0);
 }
 
@@ -332,9 +332,10 @@ void TestPlayerBasics::testErrorChangedSignal()
 void TestPlayerBasics::testFftFrameReadySignal()
 {
     DragonPlayer player;
-    QSignalSpy spy(&player, &DragonPlayer::fftFrameReady);
+    DragonSpectrumAnalyzer analyzer(&player);
+    QSignalSpy spy(&analyzer, &DragonSpectrumAnalyzer::frameReady);
 
-    player.setFftMode(DragonPlayer::FftMode::BarsOnly);
+    analyzer.setMode(DragonSpectrumAnalyzer::Mode::BarsOnly);
     player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() != DragonPlayer::MediaStatus::LoadingMedia, 5000);
     player.play();
@@ -348,9 +349,10 @@ void TestPlayerBasics::testFftFrameReadySignal()
         QSKIP("sample-3s.mp3 fixture not available");
 
     DragonPlayer playingPlayer;
+    DragonSpectrumAnalyzer playingAnalyzer(&playingPlayer);
     PlayerHelper playingHelper(&playingPlayer);
-    QSignalSpy playingSpy(&playingPlayer, &DragonPlayer::fftFrameReady);
-    playingPlayer.setFftMode(DragonPlayer::FftMode::BarsOnly);
+    QSignalSpy playingSpy(&playingAnalyzer, &DragonSpectrumAnalyzer::frameReady);
+    playingAnalyzer.setMode(DragonSpectrumAnalyzer::Mode::BarsOnly);
     QVERIFY(playingHelper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(playingHelper.playAndWait());
     QTRY_VERIFY_WITH_TIMEOUT(playingSpy.count() > 0, 5000);
@@ -462,42 +464,42 @@ void TestPlayerBasics::testVolumeBoundaryValues()
 {
     DragonPlayer player;
 
-    player.setVolume(0.0);
-    QVERIFY(qAbs(player.volume()) < 0.01);
+    player.audioOutput()->setVolume(0.0);
+    QVERIFY(qAbs(player.audioOutput()->volume()) < 0.01);
 
-    player.setVolume(1.0);
-    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
+    player.audioOutput()->setVolume(1.0);
+    QVERIFY(qAbs(player.audioOutput()->volume() - 1.0) < 0.01);
 
-    player.setVolume(10.0);
-    QVERIFY(qAbs(player.volume() - 1.0) < 0.01);
+    player.audioOutput()->setVolume(10.0);
+    QVERIFY(qAbs(player.audioOutput()->volume() - 1.0) < 0.01);
 
-    player.setVolume(-1.0);
-    QVERIFY(qAbs(player.volume()) < 0.01);
+    player.audioOutput()->setVolume(-1.0);
+    QVERIFY(qAbs(player.audioOutput()->volume()) < 0.01);
 }
 
 void TestPlayerBasics::testMuteAndVolumeInteraction()
 {
     DragonPlayer player;
 
-    player.setVolume(0.5);
-    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
+    player.audioOutput()->setVolume(0.5);
+    QVERIFY(qAbs(player.audioOutput()->volume() - 0.5) < 0.01);
 
-    player.setMuted(true);
-    QVERIFY(player.muted());
-    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
+    player.audioOutput()->setMuted(true);
+    QVERIFY(player.audioOutput()->muted());
+    QVERIFY(qAbs(player.audioOutput()->volume() - 0.5) < 0.01);
 
-    player.setMuted(false);
-    QVERIFY(!player.muted());
-    QVERIFY(qAbs(player.volume() - 0.5) < 0.01);
+    player.audioOutput()->setMuted(false);
+    QVERIFY(!player.audioOutput()->muted());
+    QVERIFY(qAbs(player.audioOutput()->volume() - 0.5) < 0.01);
 
-    player.setVolume(0.0);
-    player.setMuted(true);
-    QVERIFY(player.muted());
-    QVERIFY(qAbs(player.volume()) < 0.01);
+    player.audioOutput()->setVolume(0.0);
+    player.audioOutput()->setMuted(true);
+    QVERIFY(player.audioOutput()->muted());
+    QVERIFY(qAbs(player.audioOutput()->volume()) < 0.01);
 
-    player.setMuted(false);
-    QVERIFY(!player.muted());
-    QVERIFY(qAbs(player.volume()) < 0.01);
+    player.audioOutput()->setMuted(false);
+    QVERIFY(!player.audioOutput()->muted());
+    QVERIFY(qAbs(player.audioOutput()->volume()) < 0.01);
 }
 
 void TestPlayerBasics::testPositionTracking()

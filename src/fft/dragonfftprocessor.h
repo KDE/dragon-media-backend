@@ -6,7 +6,7 @@
 #pragma once
 
 #include "DragonMultimedia/dragonfftframe.h"
-#include "DragonMultimedia/dragonplayer.h"
+#include "DragonMultimedia/dragonspectrumanalyzer.h"
 #include "dragonmultimedia_export.h"
 #include "dragonstdfloat_compat.h"
 
@@ -49,7 +49,7 @@ public:
     void setChannelCount(int channels);
 
     void setSampleRate(int sampleRate);
-    using FftMode = DragonPlayer::FftMode;
+    using FftMode = DragonSpectrumAnalyzer::Mode;
 
     void setFftMode(FftMode mode);
     void setFftRate(int rate);

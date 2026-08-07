@@ -22,6 +22,7 @@ class QListWidget;
 class QLCDNumber;
 class QComboBox;
 class DragonDiagnostics;
+class DragonSpectrumAnalyzer;
 
 class MainWindow : public QMainWindow
 {
@@ -99,4 +100,5 @@ private:
     QComboBox *m_sinkComboBox = nullptr;
     QList<QMetaObject::Connection> m_playerConnections;
     DragonDiagnostics *m_diagnostics = nullptr;
+    DragonSpectrumAnalyzer *m_spectrumAnalyzer = nullptr;
 };
