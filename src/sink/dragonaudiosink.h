@@ -83,7 +83,7 @@ public:
     [[nodiscard]] float volume() const;
     void setVolume(float volume);
     [[nodiscard]] bool muted() const;
-    void setMuted(bool muted);
+    virtual void setMuted(bool muted);
 
     virtual void setStreamName(const QString &name);
     [[nodiscard]] bool hasFormat(int sampleRate, int channels) const;
@@ -105,6 +105,7 @@ public:
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();
+    void mutedChanged(bool muted);
     void drained();
 
 protected Q_SLOTS:

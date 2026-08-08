@@ -334,6 +334,19 @@ void DragonPipeWireAudioSink::setGain(float linearGain)
     }
 }
 
+void DragonPipeWireAudioSink::setMuted(bool muted)
+{
+    m_cachedMuted.store(muted, std::memory_order_relaxed);
+
+    if (m_pw->stream && m_open.load(std::memory_order_acquire)) {
+        float muteVal = muted ? 1.0f : 0.0f;
+        PwThreadLoopLock lock(m_pw->loop.get());
+        pw_stream_set_control(m_pw->stream.get(), SPA_PROP_mute, 1, &muteVal, 0);
+    }
+
+    DragonAudioSink::setMuted(muted);
+}
+
 void DragonPipeWireAudioSink::clearStream()
 {
     if (m_pw->stream) {
@@ -535,6 +548,20 @@ void DragonPipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const s
                 self->onExternalVolumeChanged(avgGain);
             },
             Qt::QueuedConnection);
+    } else if (id == SPA_PROP_mute) {
+        const bool muted = control->values[0] >= 0.5f;
+        if (muted == self->m_cachedMuted.load(std::memory_order_relaxed)) {
+            return;
+        }
+        self->m_cachedMuted.store(muted, std::memory_order_relaxed);
+
+        qCDebug(dragonMultimediaAudio) << "PipeWire external mute change via control_info, muted:" << muted;
+        QMetaObject::invokeMethod(
+            self,
+            [self, muted]() {
+                self->setMuted(muted);
+            },
+            Qt::QueuedConnection);
     }
 }
 
@@ -561,7 +588,17 @@ void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const 
                         self->onExternalVolumeChanged(value);
                     },
                     Qt::QueuedConnection);
-                return;
+            } else if (prop->key == SPA_PROP_mute) {
+                bool value = false;
+                if (spa_pod_get_bool(&prop->value, &value) == 0) {
+                    qCDebug(dragonMultimediaAudio) << "PipeWire param_changed SPA_PROP_mute:" << value;
+                    QMetaObject::invokeMethod(
+                        self,
+                        [self, value]() {
+                            self->setMuted(value);
+                        },
+                        Qt::QueuedConnection);
+                }
             }
         }
     }

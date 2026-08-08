@@ -132,7 +132,7 @@ void DragonAudioSink::setMuted(bool muted)
     }
     m_muted = muted;
     setGain(calculateGain(m_volume, m_muted));
-    Q_EMIT volumeChanged();
+    Q_EMIT mutedChanged(m_muted);
 }
 
 void DragonAudioSink::onExternalVolumeChanged(float linearGain)

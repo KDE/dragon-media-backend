@@ -33,6 +33,7 @@ public:
     void pause() override;
     void resume() override;
     void setGain(float linearGain) override;
+    void setMuted(bool muted) override;
     void clearStream() override;
     [[nodiscard]] qint64 deviceQueuedSamples() const override;
 
@@ -67,4 +68,5 @@ private:
     std::vector<float> m_volumesScratch;
 
     std::atomic<float> m_cachedGain{1.0f};
+    std::atomic<bool> m_cachedMuted{false};
 };

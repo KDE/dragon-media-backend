@@ -77,6 +77,7 @@ private Q_SLOTS:
 
     void testVolumeChangeWhilePlaying();
     void testExternalVolumeChangePropagates();
+    void testExternalMuteChangePropagates();
 
     void testDrainCallback();
 
@@ -85,8 +86,10 @@ private:
     static QString currentSinkBackend();
     static bool findSinkInputByApplicationName(const QString &appName, uint32_t &sinkInputIndexOut);
     static bool setSinkInputVolume(uint32_t sinkInputIndex, int percent);
+    static bool setSinkInputMute(uint32_t sinkInputIndex, bool mute);
     static bool findPwNodeByApplicationName(const QString &appName, uint32_t &nodeIdOut);
     static bool setPwNodeVolume(uint32_t nodeId, float linearGain);
+    static bool setPwNodeMute(uint32_t nodeId, bool mute);
 };
 
 void TestAudioOutput::testConstruction()
@@ -174,7 +177,7 @@ void TestAudioOutput::testVolumeChangedSignal()
     output->setVolume(0.7f);
     QVERIFY2(spy.count() == countBefore, "Setting same volume should not emit signal");
 
-    QSignalSpy muteSpy(output.get(), &DragonAudioSink::volumeChanged);
+    QSignalSpy muteSpy(output.get(), &DragonAudioSink::mutedChanged);
     output->setMuted(true);
     QVERIFY(muteSpy.count() > 0);
 }
@@ -821,6 +824,21 @@ bool TestAudioOutput::setPwNodeVolume(uint32_t nodeId, float linearGain)
     return pwcli.waitForFinished(3000) && pwcli.exitCode() == 0;
 }
 
+bool TestAudioOutput::setSinkInputMute(uint32_t sinkInputIndex, bool mute)
+{
+    QProcess pactl;
+    pactl.start(u"pactl"_s, QStringList{u"set-sink-input-mute"_s, QString::number(sinkInputIndex), mute ? u"1"_s : u"0"_s});
+    return pactl.waitForFinished(3000) && pactl.exitCode() == 0;
+}
+
+bool TestAudioOutput::setPwNodeMute(uint32_t nodeId, bool mute)
+{
+    QProcess pwcli;
+    const QString pod = mute ? u"{ mute = true }"_s : u"{ mute = false }"_s;
+    pwcli.start(u"pw-cli"_s, QStringList{u"set-param"_s, QString::number(nodeId), u"Props"_s, pod});
+    return pwcli.waitForFinished(3000) && pwcli.exitCode() == 0;
+}
+
 void TestAudioOutput::testDrainCallback()
 {
     auto output = createAudioSink();
@@ -882,14 +900,30 @@ void TestAudioOutput::testVolumeChangeWhilePlaying()
     QVERIFY(spy.count() >= 1);
 
     spy.clear();
-    output->setMuted(true);
-    QVERIFY(output->muted());
-    QVERIFY(spy.count() >= 1);
+    bool signalReceived = false;
+    QObject::connect(output.get(), &DragonAudioSink::mutedChanged, [&signalReceived](bool) {
+        signalReceived = true;
+    });
+    QSignalSpy muteSpy(output.get(), &DragonAudioSink::mutedChanged);
 
-    spy.clear();
+    // The PipeWire/PulseAudio server may report an initial mute state during
+    // stream setup. Reset to a known unmuted state before testing the mute
+    // signal, and wait for any pending callbacks to settle.
     output->setMuted(false);
-    QVERIFY(!output->muted());
-    QVERIFY(spy.count() >= 1);
+    QTest::qWait(200);
+    signalReceived = false;
+    muteSpy.clear();
+
+    output->setMuted(true);
+    QTRY_VERIFY(output->muted());
+    QTRY_VERIFY(signalReceived);
+    QVERIFY(muteSpy.count() >= 1);
+
+    signalReceived = false;
+    muteSpy.clear();
+    output->setMuted(false);
+    QTRY_VERIFY(!output->muted());
+    QVERIFY(muteSpy.count() >= 1);
 
     output->close();
 }
@@ -957,6 +991,113 @@ void TestAudioOutput::testExternalVolumeChangePropagates()
             },
             5000);
         QVERIFY2(propagated, "External volume change should propagate to DragonAudioSink::volumeChanged()");
+    }
+
+    output->close();
+}
+
+void TestAudioOutput::testExternalMuteChangePropagates()
+{
+    const QString backend = currentSinkBackend();
+    if (backend != u"dragonpipewireaudiosink"_s && backend != u"dragonpulseaudiosink"_s) {
+        QSKIP("External mute propagation only applies to PipeWire and PulseAudio backends");
+    }
+
+    const QString uniqueTag = u"DragonMuteTest_%1"_s.arg(QCoreApplication::applicationPid());
+    const QString priorDisplayName = QGuiApplication::applicationDisplayName();
+    QGuiApplication::setApplicationDisplayName(uniqueTag);
+    auto nameGuard = qScopeGuard([&priorDisplayName]() {
+        QGuiApplication::setApplicationDisplayName(priorDisplayName);
+    });
+
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    DragonPipe<float> pipe(65536);
+    output->setAudioPipe(&pipe);
+
+    output->setStreamName(uniqueTag);
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    fillQueue(&pipe, std::vector<float>(16384, 0.5f));
+    QTest::qWait(300);
+
+    // Ensure starting unmuted, settling any initial server state.
+    output->setMuted(false);
+    QTest::qWait(200);
+    QVERIFY(!output->muted());
+
+    QSignalSpy spy(output.get(), &DragonAudioSink::mutedChanged);
+
+    bool changed = false;
+    if (backend == u"dragonpulseaudiosink"_s) {
+        uint32_t sinkInputIndex = 0;
+        if (!findSinkInputByApplicationName(uniqueTag, sinkInputIndex)) {
+            output->close();
+            QSKIP("Could not locate PulseAudio sink-input for test stream");
+        }
+        if (!setSinkInputMute(sinkInputIndex, true)) {
+            output->close();
+            QSKIP("pactl set-sink-input-mute failed");
+        }
+        changed = true;
+    } else {
+        uint32_t nodeId = 0;
+        if (!findPwNodeByApplicationName(uniqueTag, nodeId)) {
+            output->close();
+            QSKIP("Could not locate PipeWire node for test stream");
+        }
+        if (!setPwNodeMute(nodeId, true)) {
+            output->close();
+            QSKIP("pw-cli set-param (mute) failed");
+        }
+        changed = true;
+    }
+
+    if (changed) {
+        const bool propagated = QTest::qWaitFor(
+            [&]() {
+                return spy.count() > 0 && output->muted();
+            },
+            5000);
+        QVERIFY2(propagated, "External mute change should propagate to DragonAudioSink::mutedChanged()");
+    }
+
+    spy.clear();
+
+    changed = false;
+    if (backend == u"dragonpulseaudiosink"_s) {
+        uint32_t sinkInputIndex = 0;
+        if (!findSinkInputByApplicationName(uniqueTag, sinkInputIndex)) {
+            output->close();
+            QSKIP("Could not locate PulseAudio sink-input for test stream");
+        }
+        if (!setSinkInputMute(sinkInputIndex, false)) {
+            output->close();
+            QSKIP("pactl set-sink-input-mute failed");
+        }
+        changed = true;
+    } else {
+        uint32_t nodeId = 0;
+        if (!findPwNodeByApplicationName(uniqueTag, nodeId)) {
+            output->close();
+            QSKIP("Could not locate PipeWire node for test stream");
+        }
+        if (!setPwNodeMute(nodeId, false)) {
+            output->close();
+            QSKIP("pw-cli set-param (unmute) failed");
+        }
+        changed = true;
+    }
+
+    if (changed) {
+        const bool propagated = QTest::qWaitFor(
+            [&]() {
+                return spy.count() > 0 && !output->muted();
+            },
+            5000);
+        QVERIFY2(propagated, "External unmute change should propagate to DragonAudioSink::mutedChanged()");
     }
 
     output->close();

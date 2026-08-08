@@ -550,6 +550,21 @@ void DragonPulseAudioSink::applyVolume(float linearGain)
     }
 }
 
+void DragonPulseAudioSink::setMuted(bool muted)
+{
+    m_cachedMuted.store(muted, std::memory_order_relaxed);
+
+    if (m_pa->context && m_pa->mainloop && m_open.load(std::memory_order_acquire)) {
+        ScopedMainloopLock lock(m_pa->mainloop.get());
+        pa_operation *op = pa_context_set_sink_input_mute(m_pa->context.get(), m_pa->sinkInputIndex, muted ? 1 : 0, nullptr, nullptr);
+        if (op) {
+            pa_operation_unref(op);
+        }
+    }
+
+    DragonAudioSink::setMuted(muted);
+}
+
 void DragonPulseAudioSink::clearStream()
 {
     if (m_pa->mainloop && m_pa->stream) {
@@ -684,26 +699,36 @@ void DragonPulseAudioSink::sinkInputInfoCallback(pa_context *c, const pa_sink_in
         return;
     }
 
-    if (!info->has_volume) {
-        return;
+    if (info->has_volume) {
+        const pa_volume_t avg = pa_cvolume_avg(&info->volume);
+        const float linearGain = static_cast<float>(pa_sw_volume_to_linear(avg));
+
+        float cached = self->m_cachedGain.load(std::memory_order_relaxed);
+        if (qAbs(linearGain - cached) >= 0.001f) {
+            self->m_cachedGain.store(linearGain, std::memory_order_relaxed);
+
+            qCDebug(dragonMultimediaAudio) << "PulseAudio external volume change, linearGain:" << linearGain;
+            QMetaObject::invokeMethod(
+                self,
+                [self, linearGain]() {
+                    self->onExternalVolumeChanged(linearGain);
+                },
+                Qt::QueuedConnection);
+        }
     }
 
-    const pa_volume_t avg = pa_cvolume_avg(&info->volume);
-    const float linearGain = static_cast<float>(pa_sw_volume_to_linear(avg));
+    const bool muted = info->mute != 0;
+    if (muted != self->m_cachedMuted.load(std::memory_order_relaxed)) {
+        self->m_cachedMuted.store(muted, std::memory_order_relaxed);
 
-    float cached = self->m_cachedGain.load(std::memory_order_relaxed);
-    if (qAbs(linearGain - cached) < 0.001f) {
-        return;
+        qCDebug(dragonMultimediaAudio) << "PulseAudio external mute change, muted:" << muted;
+        QMetaObject::invokeMethod(
+            self,
+            [self, muted]() {
+                self->setMuted(muted);
+            },
+            Qt::QueuedConnection);
     }
-    self->m_cachedGain.store(linearGain, std::memory_order_relaxed);
-
-    qCDebug(dragonMultimediaAudio) << "PulseAudio external volume change, linearGain:" << linearGain;
-    QMetaObject::invokeMethod(
-        self,
-        [self, linearGain]() {
-            self->onExternalVolumeChanged(linearGain);
-        },
-        Qt::QueuedConnection);
 }
 
 void DragonPulseAudioSink::requestSinkInputInfo()

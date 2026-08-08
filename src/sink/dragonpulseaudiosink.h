@@ -39,6 +39,7 @@ public:
     void pause() override;
     void resume() override;
     void setGain(float linearGain) override;
+    void setMuted(bool muted) override;
     void clearStream() override;
     [[nodiscard]] qint64 deviceQueuedSamples() const override;
 
@@ -80,6 +81,7 @@ private:
     std::atomic<int> m_activeCallbacks{0};
 
     std::atomic<float> m_cachedGain{1.0f};
+    std::atomic<bool> m_cachedMuted{false};
     std::string m_streamName;
     int m_lastSampleRate = 0;
     int m_lastChannels = 0;
