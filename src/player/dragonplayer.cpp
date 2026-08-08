@@ -18,7 +18,6 @@
 #include <QTimer>
 #include <dragonmultimedia_logging.h>
 
-#include "dragonstdfloat_compat.h"
 #include <algorithm>
 #include <condition_variable>
 #include <cstdint>
@@ -188,7 +187,7 @@ void DragonPlayerPrivate::onStreamBuffered()
     setStatus(DragonPlayer::MediaStatus::BufferedMedia);
 }
 
-void DragonPlayerPrivate::writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st)
+void DragonPlayerPrivate::writeToQueues(std::span<const float> pcm, const std::stop_token &st)
 {
     if (pcm.empty()) {
         return;

@@ -194,7 +194,7 @@ private:
 
 struct DecodeResult {
     std::optional<FormatReady> format;
-    std::vector<std::float32_t> samples;
+    std::vector<float> samples;
     bool sawEof = false;
     std::optional<DecodeError> error;
     bool hadFatalError = false;
@@ -715,7 +715,7 @@ void TestDecoder::testGeneratorSpanLifetime()
     QVERIFY(!sc.data.empty());
 
     // Snapshot the bytes; the span must keep pointing at these same bytes.
-    const std::vector<std::float32_t> snapshot(sc.data.begin(), sc.data.end());
+    const std::vector<float> snapshot(sc.data.begin(), sc.data.end());
 
     // Advance far enough that a decoder reusing a shared scratch buffer
     // would have overwritten the bytes this span points at.
@@ -800,7 +800,7 @@ void TestDecoder::testGeneratorMultipleIterations()
     QCOMPARE(res.sampleRate, 44100);
     QCOMPARE(res.channels, 2);
 
-    std::vector<std::float32_t> firstPassSamples;
+    std::vector<float> firstPassSamples;
 
     for (auto event : decoder.decodeLoop({})) {
         std::visit(overloaded{[&](const FormatReady &) {
@@ -817,7 +817,7 @@ void TestDecoder::testGeneratorMultipleIterations()
 
     QVERIFY2(firstPassSamples.size() > 0, "First pass should produce samples");
 
-    std::vector<std::float32_t> secondPassSamples;
+    std::vector<float> secondPassSamples;
     DragonDecoder decoder2(nullptr, nullptr, -1, filePath);
     QVERIFY2(decoder2.initialize().success, "Second decoder instance should initialize successfully");
 
@@ -884,7 +884,7 @@ void TestDecoder::testDecodedSineWaveContent()
 
     constexpr size_t N = 4096;
     if (result.samples.size() >= N * static_cast<size_t>(channels)) {
-        std::vector<std::float32_t> mono;
+        std::vector<float> mono;
         mono.reserve(N);
         for (size_t i = 0; i < N; ++i) {
             float sum = 0.0f;

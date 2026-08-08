@@ -82,8 +82,8 @@ private Q_SLOTS:
     void testFftMultiTonePeaks();
 
 private:
-    std::vector<std::float32_t> createSineWave(float frequency, int sampleRate, int numSamples);
-    std::vector<std::float32_t> createSilence(int numSamples);
+    std::vector<float> createSineWave(float frequency, int sampleRate, int numSamples);
+    std::vector<float> createSilence(int numSamples);
 };
 
 void TestFftProcessor::testHannWindow_data()
@@ -196,9 +196,9 @@ void TestFftProcessor::testTakeLatestFrameEmpty()
     QVERIFY(isBarEmpty(frame));
 }
 
-std::vector<std::float32_t> TestFftProcessor::createSineWave(float frequency, int sampleRate, int numSamples)
+std::vector<float> TestFftProcessor::createSineWave(float frequency, int sampleRate, int numSamples)
 {
-    std::vector<std::float32_t> wave(static_cast<size_t>(numSamples));
+    std::vector<float> wave(static_cast<size_t>(numSamples));
     const float amplitude = 0.5f;
     for (int i = 0; i < numSamples; ++i) {
         wave[static_cast<size_t>(i)] =
@@ -207,9 +207,9 @@ std::vector<std::float32_t> TestFftProcessor::createSineWave(float frequency, in
     return wave;
 }
 
-std::vector<std::float32_t> TestFftProcessor::createSilence(int numSamples)
+std::vector<float> TestFftProcessor::createSilence(int numSamples)
 {
-    return std::vector<std::float32_t>(static_cast<size_t>(numSamples), 0.0f);
+    return std::vector<float>(static_cast<size_t>(numSamples), 0.0f);
 }
 
 void TestFftProcessor::testProcessLoopSineWave()
@@ -413,7 +413,7 @@ void TestFftProcessor::testPeakHoldDecay()
     processor.setSampleRate(sampleRate);
     processor.setFftMode(DragonFftProcessor::FftMode::Both);
 
-    std::vector<std::float32_t> peakValues;
+    std::vector<float> peakValues;
     std::mutex mutex;
     std::atomic<int> frameCount{0};
 
@@ -1085,7 +1085,7 @@ void TestFftProcessor::testFftMultiTonePeaks()
     constexpr float freq2 = 5000.0f;
 
     constexpr int numSamples = static_cast<int>(DragonFftProcessor::FFT_SIZE);
-    std::vector<std::float32_t> wave(static_cast<size_t>(numSamples));
+    std::vector<float> wave(static_cast<size_t>(numSamples));
     for (int i = 0; i < numSamples; ++i) {
         const float t = static_cast<float>(i) / static_cast<float>(sampleRate);
         wave[static_cast<size_t>(i)] =

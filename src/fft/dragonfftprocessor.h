@@ -8,7 +8,6 @@
 #include "DragonMultimedia/dragonfftframe.h"
 #include "DragonMultimedia/dragonspectrumanalyzer.h"
 #include "dragonmultimedia_export.h"
-#include "dragonstdfloat_compat.h"
 
 #include <array>
 #include <atomic>

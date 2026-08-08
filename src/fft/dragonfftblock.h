@@ -5,14 +5,15 @@
 
 #pragma once
 
-#include "dragonstdfloat_compat.h"
 #include <array>
 #include <chrono>
 #include <cstddef>
 
+static_assert(sizeof(float) == 4, "we assume 32-bit float");
+
 struct DragonFftBlock {
     static constexpr size_t MAX_SAMPLES = 1024;
-    std::array<std::float32_t, MAX_SAMPLES> samples;
+    std::array<float, MAX_SAMPLES> samples;
     size_t count = 0;
     std::chrono::microseconds pts;
 };

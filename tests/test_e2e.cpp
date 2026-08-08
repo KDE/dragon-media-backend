@@ -31,7 +31,7 @@ struct DecodeResult {
     int sampleRate = 0;
     int channels = 0;
     qint64 duration = 0;
-    std::vector<std::float32_t> allSamples;
+    std::vector<float> allSamples;
     bool hadError = false;
     QString errorMessage;
     bool sawUnexpectedFormatReady = false;
@@ -411,8 +411,8 @@ void TestE2E::testDecodeAndVerifySamples()
     QVERIFY2(result.allSamples.size() > 1000, qPrintable(u"Expected many samples for %1, got %2"_s.arg(filename).arg(result.allSamples.size())));
 
     if (checkSampleRange) {
-        std::float32_t minSample = 1.0f;
-        std::float32_t maxSampleVal = -1.0f;
+        float minSample = 1.0f;
+        float maxSampleVal = -1.0f;
         for (const auto &s : result.allSamples) {
             minSample = std::min(minSample, s);
             maxSampleVal = std::max(maxSampleVal, s);

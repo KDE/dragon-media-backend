@@ -55,7 +55,7 @@ DragonAudioSink::DragonAudioSink(QObject *parent)
 
 DragonAudioSink::~DragonAudioSink() = default;
 
-void DragonAudioSink::setAudioPipe(DragonPipe<std::float32_t> *pipe)
+void DragonAudioSink::setAudioPipe(DragonPipe<float> *pipe)
 {
     m_audioPipe.store(pipe, std::memory_order_release);
 }
@@ -190,7 +190,7 @@ void DragonAudioSink::resetDrainState()
     m_decodeFinished.store(false, std::memory_order_release);
 }
 
-std::span<const std::float32_t> DragonAudioSink::processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts)
+std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts)
 {
     if (m_positionResetPending.exchange(false, std::memory_order_acq_rel)) {
         m_totalSamplesWritten.store(0, std::memory_order_relaxed);
@@ -215,7 +215,7 @@ std::span<const std::float32_t> DragonAudioSink::processAudioCallback(size_t max
     }
     size_t totalRead = 0;
 
-    ap->consumer().readSomeWith(maxSamples, [&](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
+    ap->consumer().readSomeWith(maxSamples, [&](std::span<const float> b1, std::span<const float> b2) {
         totalRead = b1.size() + b2.size();
         if (totalRead == 0) {
             return;
@@ -262,7 +262,7 @@ std::span<const std::float32_t> DragonAudioSink::processAudioCallback(size_t max
     return consumedSpan;
 }
 
-DragonPipe<std::float32_t> *DragonAudioSink::audioPipe() const
+DragonPipe<float> *DragonAudioSink::audioPipe() const
 {
     return m_audioPipe.load(std::memory_order_acquire);
 }

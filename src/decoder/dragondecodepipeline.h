@@ -48,7 +48,7 @@ public:
 
     void requestSeek(qint64 posMs);
 
-    using SamplesCallback = std::function<void(std::span<const std::float32_t> samples, const std::stop_token &st)>;
+    using SamplesCallback = std::function<void(std::span<const float> samples, const std::stop_token &st)>;
 
     void setSamplesCallback(SamplesCallback callback);
 

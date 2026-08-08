@@ -17,7 +17,6 @@
 #include <QTimer>
 #include <QUrl>
 
-#include "dragonstdfloat_compat.h"
 #include <QCoroTask>
 #include <atomic>
 #include <memory>
@@ -65,7 +64,7 @@ private Q_SLOTS:
 private:
     void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);
 
-    void writeToQueues(std::span<const std::float32_t> pcm, const std::stop_token &st);
+    void writeToQueues(std::span<const float> pcm, const std::stop_token &st);
 
     QCoro::Task<void> startLoad(QUrl source, uint64_t generation);
 
@@ -77,7 +76,7 @@ private:
 
     DragonDecodePipeline decodePipeline;
 
-    DragonPipe<std::float32_t> audioPipe;
+    DragonPipe<float> audioPipe;
 
     QUrl currentSource;
     QUrl nextSource;

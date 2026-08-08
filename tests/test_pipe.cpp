@@ -26,22 +26,22 @@ private Q_SLOTS:
 
     void testDefaultCapacity()
     {
-        DragonPipe<std::float32_t> pipe;
+        DragonPipe<float> pipe;
         QCOMPARE_EQ(pipe.producer().available(), size_t{65536});
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{0});
     }
 
     void testCustomCapacity()
     {
-        DragonPipe<std::float32_t> pipe(256);
+        DragonPipe<float> pipe(256);
         QCOMPARE_EQ(pipe.producer().available(), size_t{256});
     }
 
     void testWriteReadSome()
     {
-        DragonPipe<std::float32_t> pipe(1024);
+        DragonPipe<float> pipe(1024);
 
-        std::array<std::float32_t, 8> input;
+        std::array<float, 8> input;
         std::ranges::generate(input, [n = 1.0f]() mutable {
             return n++;
         });
@@ -50,7 +50,7 @@ private Q_SLOTS:
         QCOMPARE_EQ(n, size_t{8});
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{8});
 
-        size_t read = pipe.consumer().readSomeWith(8, [&](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
+        size_t read = pipe.consumer().readSomeWith(8, [&](std::span<const float> b1, std::span<const float> b2) {
             size_t total = b1.size() + b2.size();
             QCOMPARE_EQ(total, size_t{8});
             for (size_t i = 0; i < total; ++i) {
@@ -65,9 +65,9 @@ private Q_SLOTS:
 
     void testNonBlockingWriteSmallData()
     {
-        DragonPipe<std::float32_t> pipe(16);
+        DragonPipe<float> pipe(16);
 
-        std::array<std::float32_t, 8> data;
+        std::array<float, 8> data;
         std::ranges::generate(data, [n = 1.0f]() mutable {
             return n++;
         });
@@ -80,22 +80,22 @@ private Q_SLOTS:
 
     void testBlockingWriteBackpressure()
     {
-        DragonPipe<std::float32_t> pipe(16);
+        DragonPipe<float> pipe(16);
 
-        std::array<std::float32_t, 64> data;
+        std::array<float, 64> data;
         std::ranges::generate(data, [n = 1.0f]() mutable {
             return n++;
         });
 
         std::stop_source ss;
 
-        std::vector<std::float32_t> consumedData;
+        std::vector<float> consumedData;
         consumedData.reserve(64);
 
         std::jthread consumer([&](std::stop_token st) {
             while (consumedData.size() < 64 && !st.stop_requested()) {
                 if (pipe.consumer().ready() >= 4) {
-                    pipe.consumer().readSomeWith(4, [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+                    pipe.consumer().readSomeWith(4, [&](std::span<float> b1, std::span<float> b2) {
                         for (size_t i = 0; i < b1.size(); ++i)
                             consumedData.push_back(b1[i]);
                         for (size_t i = 0; i < b2.size(); ++i)
@@ -114,15 +114,15 @@ private Q_SLOTS:
 
         QCOMPARE_EQ(consumedData.size(), size_t{64});
         for (size_t i = 0; i < 64; ++i) {
-            QCOMPARE_EQ(consumedData[i], static_cast<std::float32_t>(i + 1));
+            QCOMPARE_EQ(consumedData[i], static_cast<float>(i + 1));
         }
     }
 
     void testBlockingWriteStopRequested()
     {
-        DragonPipe<std::float32_t> pipe(8);
+        DragonPipe<float> pipe(8);
 
-        std::vector<std::float32_t> big(1000, 1.0f);
+        std::vector<float> big(1000, 1.0f);
 
         std::stop_source ss;
 
@@ -139,13 +139,13 @@ private Q_SLOTS:
 
     void testWaitForWakesOnData()
     {
-        DragonPipe<std::float32_t> pipe(256);
+        DragonPipe<float> pipe(256);
 
         std::stop_source ss;
 
         std::jthread producer([&] {
             std::this_thread::sleep_for(5ms);
-            std::array<std::float32_t, 4> d{1, 2, 3, 4};
+            std::array<float, 4> d{1, 2, 3, 4};
             writeAll(pipe.producer(), d);
         });
 
@@ -158,7 +158,7 @@ private Q_SLOTS:
 
     void testWaitForTimeout()
     {
-        DragonPipe<std::float32_t> pipe(64);
+        DragonPipe<float> pipe(64);
 
         std::stop_source ss;
 
@@ -168,7 +168,7 @@ private Q_SLOTS:
 
     void testWaitForStopRequested()
     {
-        DragonPipe<std::float32_t> pipe(64);
+        DragonPipe<float> pipe(64);
 
         std::stop_source ss;
 
@@ -186,9 +186,9 @@ private Q_SLOTS:
 
     void testDrain()
     {
-        DragonPipe<std::float32_t> pipe(128);
+        DragonPipe<float> pipe(128);
 
-        std::array<std::float32_t, 16> data;
+        std::array<float, 16> data;
         std::ranges::generate(data, [n = 1.0f]() mutable {
             return n++;
         });
@@ -201,7 +201,7 @@ private Q_SLOTS:
 
     void testProducerNotify()
     {
-        DragonPipe<std::float32_t> pipe(128);
+        DragonPipe<float> pipe(128);
 
         std::stop_source ss;
         std::atomic<bool> enteredWait{false};
@@ -225,31 +225,31 @@ private Q_SLOTS:
 
     void testAvailable()
     {
-        DragonPipe<std::float32_t> pipe(16);
+        DragonPipe<float> pipe(16);
         QCOMPARE_EQ(pipe.producer().available(), size_t{16});
 
-        std::array<std::float32_t, 4> d;
+        std::array<float, 4> d;
         writeAll(pipe.producer(), d);
         QCOMPARE_EQ(pipe.producer().available(), size_t{12});
     }
 
     void testWrapAround()
     {
-        DragonPipe<std::float32_t> pipe(64);
+        DragonPipe<float> pipe(64);
 
-        std::array<std::float32_t, 70> writeBuf;
+        std::array<float, 70> writeBuf;
         std::ranges::generate(writeBuf, [n = 1.0f]() mutable {
             return n++;
         });
 
-        std::array<std::float32_t, 70> readBuf{};
+        std::array<float, 70> readBuf{};
 
         std::stop_source ss;
         std::jthread consumer([&](std::stop_token st) {
             size_t totalRead = 0;
             while (totalRead < 70 && !st.stop_requested()) {
                 if (pipe.consumer().ready() >= 10) {
-                    size_t n = pipe.consumer().readSomeWith(10, [&](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
+                    size_t n = pipe.consumer().readSomeWith(10, [&](std::span<const float> b1, std::span<const float> b2) {
                         size_t offset = totalRead;
                         auto it = std::copy(b1.begin(), b1.end(), readBuf.begin() + static_cast<long>(offset));
                         std::copy(b2.begin(), b2.end(), it);
@@ -267,15 +267,15 @@ private Q_SLOTS:
         consumer.join();
 
         for (size_t i = 0; i < 70; ++i) {
-            QCOMPARE_EQ(readBuf[i], static_cast<std::float32_t>(i + 1));
+            QCOMPARE_EQ(readBuf[i], static_cast<float>(i + 1));
         }
     }
 
     void testWriteSomeWith()
     {
-        DragonPipe<std::float32_t> pipe(64);
+        DragonPipe<float> pipe(64);
 
-        size_t n = pipe.producer().writeSomeWith(8, [](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+        size_t n = pipe.producer().writeSomeWith(8, [](std::span<float> b1, std::span<float> b2) {
             for (size_t i = 0; i < b1.size(); ++i)
                 b1[i] = static_cast<float>(i + 1);
             for (size_t i = 0; i < b2.size(); ++i)
@@ -284,8 +284,8 @@ private Q_SLOTS:
         QCOMPARE_EQ(n, size_t{8});
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{8});
 
-        std::vector<std::float32_t> readData;
-        pipe.consumer().readSomeWith(8, [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+        std::vector<float> readData;
+        pipe.consumer().readSomeWith(8, [&](std::span<float> b1, std::span<float> b2) {
             for (auto v : b1)
                 readData.push_back(v);
             for (auto v : b2)
@@ -293,13 +293,13 @@ private Q_SLOTS:
         });
         QCOMPARE_EQ(readData.size(), size_t{8});
         for (size_t i = 0; i < readData.size(); ++i) {
-            QCOMPARE_EQ(readData[i], static_cast<std::float32_t>(i + 1));
+            QCOMPARE_EQ(readData[i], static_cast<float>(i + 1));
         }
     }
 
     void testMultiThreadedCycle()
     {
-        DragonPipe<std::float32_t> pipe(256);
+        DragonPipe<float> pipe(256);
 
         constexpr int kRounds = 5;
         constexpr int kBatchSize = 16;
@@ -311,7 +311,7 @@ private Q_SLOTS:
 
         std::jthread producer([&](std::stop_token st) {
             for (int round = 0; round < kRounds; ++round) {
-                std::array<std::float32_t, kBatchSize> data;
+                std::array<float, kBatchSize> data;
                 std::ranges::generate(data, [n = static_cast<float>(round * kBatchSize + 1)]() mutable {
                     return n++;
                 });
@@ -328,7 +328,7 @@ private Q_SLOTS:
                         break;
                     continue;
                 }
-                size_t read = pipe.consumer().readSomeWith(kBatchSize, [&](std::span<const std::float32_t> b1, std::span<const std::float32_t> b2) {
+                size_t read = pipe.consumer().readSomeWith(kBatchSize, [&](std::span<const float> b1, std::span<const float> b2) {
                     if (b1.size() + b2.size() != size_t{kBatchSize})
                         mismatchDetected.store(true);
                     float expected = static_cast<float>(round * kBatchSize + 1);

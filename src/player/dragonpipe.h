@@ -7,8 +7,6 @@
 
 #include "dragonmultimedia_export.h"
 
-#include "dragonstdfloat_compat.h"
-
 #include <LockFreeSpscQueue.h>
 
 #include <algorithm>

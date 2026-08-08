@@ -6,7 +6,6 @@
 #pragma once
 
 #include "dragonmultimedia_export.h"
-#include "dragonstdfloat_compat.h"
 
 #include <QObject>
 #include <QString>
@@ -67,7 +66,7 @@ public:
     }
 
     // --- Shared logic (in base class, not virtual) ---
-    void setAudioPipe(DragonPipe<std::float32_t> *pipe);
+    void setAudioPipe(DragonPipe<float> *pipe);
     void setFftPipe(DragonPipe<DragonFftBlock> *pipe);
 
     void setQueueReady(bool ready);
@@ -112,7 +111,7 @@ protected Q_SLOTS:
     void onExternalVolumeChanged(float linearGain);
 
 protected:
-    std::span<const std::float32_t> processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts);
+    std::span<const float> processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts);
 
     int currentSampleRate() const
     {
@@ -127,10 +126,10 @@ protected:
     void preAllocateCallbackBuffer(size_t maxSamples);
 
 private:
-    DragonPipe<std::float32_t> *audioPipe() const;
+    DragonPipe<float> *audioPipe() const;
     DragonPipe<DragonFftBlock> *fftPipe() const;
 
-    std::atomic<DragonPipe<std::float32_t> *> m_audioPipe{nullptr};
+    std::atomic<DragonPipe<float> *> m_audioPipe{nullptr};
     std::atomic<DragonPipe<DragonFftBlock> *> m_fftPipe{nullptr};
 
     std::atomic<qint64> m_positionOffsetMs{0};
@@ -141,7 +140,7 @@ private:
     std::atomic<int> m_sampleRate{0};
     std::atomic<int> m_channels{0};
 
-    std::vector<std::float32_t> m_callbackBuffer;
+    std::vector<float> m_callbackBuffer;
 
     std::atomic<qint64> m_totalSamplesWritten{0};
     std::atomic<bool> m_flushPending{false};

@@ -33,13 +33,13 @@ using namespace DragonMultimedia;
 
 namespace
 {
-std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, qint64 durationMs, std::vector<std::vector<std::float32_t>> sampleBatches)
+std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, qint64 durationMs, std::vector<std::vector<float>> sampleBatches)
 {
     co_yield FormatReady{sampleRate, channels, durationMs};
 
     for (const auto &batch : sampleBatches) {
         if (!batch.empty()) {
-            co_yield SamplesChunk{.data = std::span<const std::float32_t>(batch.data(), batch.size()), .sampleRate = sampleRate, .channels = channels};
+            co_yield SamplesChunk{.data = std::span<const float>(batch.data(), batch.size()), .sampleRate = sampleRate, .channels = channels};
         }
     }
 
@@ -153,7 +153,7 @@ void TestGeneratorInfrastructure::testFormatReadyFirst()
 
 void TestGeneratorInfrastructure::testSamplesChunkOrdering()
 {
-    std::vector<std::vector<std::float32_t>> batches = {{0.1f, 0.2f, 0.3f, 0.4f}, {0.5f, 0.6f, 0.7f, 0.8f}, {0.9f, 1.0f, 1.1f, 1.2f}};
+    std::vector<std::vector<float>> batches = {{0.1f, 0.2f, 0.3f, 0.4f}, {0.5f, 0.6f, 0.7f, 0.8f}, {0.9f, 1.0f, 1.1f, 1.2f}};
 
     auto gen = createTestGenerator(48000, 2, 5000, batches);
 
@@ -196,7 +196,7 @@ void TestGeneratorInfrastructure::testSamplesChunkOrdering()
 
 void TestGeneratorInfrastructure::testDecodeEofLast()
 {
-    std::vector<std::vector<std::float32_t>> batches = {{1.0f, 2.0f}};
+    std::vector<std::vector<float>> batches = {{1.0f, 2.0f}};
 
     auto gen = createTestGenerator(44100, 1, 1000, batches);
 
@@ -230,9 +230,9 @@ void TestGeneratorInfrastructure::testErrorOnlyYieldsError()
 
 void TestGeneratorInfrastructure::testSpanDataCopyableBeforeAdvance()
 {
-    std::vector<std::float32_t> batch1 = {1.0f, 2.0f};
-    std::vector<std::float32_t> batch2 = {3.0f, 4.0f};
-    std::vector<std::vector<std::float32_t>> batches = {batch1, batch2};
+    std::vector<float> batch1 = {1.0f, 2.0f};
+    std::vector<float> batch2 = {3.0f, 4.0f};
+    std::vector<std::vector<float>> batches = {batch1, batch2};
 
     auto gen = createTestGenerator(44100, 2, 1000, batches);
 
@@ -243,7 +243,7 @@ void TestGeneratorInfrastructure::testSpanDataCopyableBeforeAdvance()
     QVERIFY(std::holds_alternative<SamplesChunk>(*it));
 
     auto sc1 = std::get<SamplesChunk>(*it);
-    std::vector<std::float32_t> copiedData(sc1.data.begin(), sc1.data.end());
+    std::vector<float> copiedData(sc1.data.begin(), sc1.data.end());
     QCOMPARE(copiedData.size(), 2);
     QCOMPARE(copiedData[0], 1.0f);
 
@@ -260,7 +260,7 @@ void TestGeneratorInfrastructure::testSpanDataCopyableBeforeAdvance()
 
 void TestGeneratorInfrastructure::testEmptySampleBatches()
 {
-    std::vector<std::vector<std::float32_t>> batches = {{}, {1.0f, 2.0f}, {}};
+    std::vector<std::vector<float>> batches = {{}, {1.0f, 2.0f}, {}};
 
     auto gen = createTestGenerator(44100, 2, 1000, batches);
 
@@ -346,9 +346,9 @@ void TestGeneratorInfrastructure::testMultipleGeneratorsIndependent()
 
 void TestGeneratorInfrastructure::testGeneratorPauseAndResume()
 {
-    std::vector<std::vector<std::float32_t>> batches;
+    std::vector<std::vector<float>> batches;
     for (int i = 0; i < 5; ++i) {
-        batches.push_back({static_cast<std::float32_t>(i)});
+        batches.push_back({static_cast<float>(i)});
     }
 
     auto gen = createTestGenerator(44100, 2, 10000, batches);
@@ -479,7 +479,7 @@ void TestGeneratorInfrastructure::testProductionDecoderGeneratorSampleContent()
     QVERIFY2(initResult.success, qPrintable(initResult.errorMessage));
 
     std::stop_source stopSource;
-    std::vector<std::float32_t> allSamples;
+    std::vector<float> allSamples;
 
     for (auto event : decoder.decodeLoop(stopSource.get_token())) {
         if (auto *chunk = std::get_if<SamplesChunk>(&event)) {

@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include "dragonstdfloat_compat.h"
 #include <QString>
 #include <cstdint>
 #include <memory>
@@ -28,23 +27,23 @@ struct FormatReady {
 // pool when the last reference drops, so holding a chunk across threads both
 // stalls buffer reuse and runs the pool's deleter off the decode thread.
 struct SamplesChunk {
-    std::span<const std::float32_t> data;
+    std::span<const float> data;
     int sampleRate = 0;
     int channels = 0;
-    std::shared_ptr<const std::vector<std::float32_t>> owner;
+    std::shared_ptr<const std::vector<float>> owner;
 
-    [[nodiscard]] static SamplesChunk owning(std::shared_ptr<const std::vector<std::float32_t>> buffer, int rate, int ch)
+    [[nodiscard]] static SamplesChunk owning(std::shared_ptr<const std::vector<float>> buffer, int rate, int ch)
     {
         const size_t count = buffer ? buffer->size() : 0;
         return owning(std::move(buffer), rate, ch, count);
     }
 
-    [[nodiscard]] static SamplesChunk owning(std::shared_ptr<const std::vector<std::float32_t>> buffer, int rate, int ch, size_t count)
+    [[nodiscard]] static SamplesChunk owning(std::shared_ptr<const std::vector<float>> buffer, int rate, int ch, size_t count)
     {
         SamplesChunk chunk;
         chunk.owner = std::move(buffer);
         if (chunk.owner && count > 0) {
-            chunk.data = std::span<const std::float32_t>(chunk.owner->data(), count);
+            chunk.data = std::span<const float>(chunk.owner->data(), count);
         } else {
             chunk.data = {};
         }

@@ -87,6 +87,6 @@ size_t DragonPipe<T>::Consumer::ready() const
     return m_pipe->m_queue.get_num_items_ready();
 }
 
-template class DRAGONMULTIMEDIA_EXPORT DragonPipe<std::float32_t>;
+template class DRAGONMULTIMEDIA_EXPORT DragonPipe<float>;
 #include "fft/dragonfftblock.h"
 template class DRAGONMULTIMEDIA_EXPORT DragonPipe<DragonFftBlock>;

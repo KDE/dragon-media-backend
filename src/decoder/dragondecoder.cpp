@@ -4,7 +4,6 @@
  */
 
 #include "dragondecoder.h"
-#include "dragonstdfloat_compat.h"
 
 #include "dragonmultimedia_decoder_logging.h"
 #include <KLocalizedString>
@@ -114,10 +113,10 @@ struct DragonDecoder::DecodeSession {
 
     // Free-list of reusable sample buffers.
     struct SampleBufferPool : std::enable_shared_from_this<SampleBufferPool> {
-        std::vector<std::unique_ptr<std::vector<std::float32_t>>> freeList;
+        std::vector<std::unique_ptr<std::vector<float>>> freeList;
         static constexpr size_t kMaxFreeBuffers = 8;
 
-        std::shared_ptr<std::vector<std::float32_t>> acquire(size_t minSize)
+        std::shared_ptr<std::vector<float>> acquire(size_t minSize)
         {
             for (auto it = freeList.begin(); it != freeList.end(); ++it) {
                 if ((*it)->capacity() >= minSize) {
@@ -126,24 +125,24 @@ struct DragonDecoder::DecodeSession {
                     return wrap(std::move(raw));
                 }
             }
-            return wrap(std::make_unique<std::vector<std::float32_t>>(minSize));
+            return wrap(std::make_unique<std::vector<float>>(minSize));
         }
 
     private:
-        std::shared_ptr<std::vector<std::float32_t>> wrap(std::unique_ptr<std::vector<std::float32_t>> raw)
+        std::shared_ptr<std::vector<float>> wrap(std::unique_ptr<std::vector<float>> raw)
         {
             // The deleter captures a shared_ptr to this pool, extending the
             // pool's lifetime until the last outstanding buffer is returned.
             auto poolRef = shared_from_this();
             auto *rawPtr = raw.release();
-            return {rawPtr, [poolRef = std::move(poolRef)](std::vector<std::float32_t> *p) {
+            return {rawPtr, [poolRef = std::move(poolRef)](std::vector<float> *p) {
                         poolRef->recycle(p);
                     }};
         }
 
-        void recycle(std::vector<std::float32_t> *p)
+        void recycle(std::vector<float> *p)
         {
-            std::unique_ptr<std::vector<std::float32_t>> owned(p);
+            std::unique_ptr<std::vector<float>> owned(p);
             if (freeList.size() < kMaxFreeBuffers) {
                 freeList.push_back(std::move(owned));
             }

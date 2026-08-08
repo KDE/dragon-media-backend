@@ -32,16 +32,16 @@ T quiescencePolling(std::atomic<T> &counter, int maxWaitMs = 5000, int pollInter
     return prevValue;
 }
 
-inline size_t writeAll(DragonPipe<std::float32_t>::Producer producer, std::span<const std::float32_t> data)
+inline size_t writeAll(DragonPipe<float>::Producer producer, std::span<const float> data)
 {
-    return producer.writeSomeWith(data.size(), [&](std::span<std::float32_t> b1, std::span<std::float32_t> b2) {
+    return producer.writeSomeWith(data.size(), [&](std::span<float> b1, std::span<float> b2) {
         auto in_iter = std::ranges::copy_n(data.begin(), b1.size(), b1.begin()).in;
         std::ranges::copy_n(in_iter, b2.size(), b2.begin());
     });
 }
 
 #include "fft/dragonfftblock.h"
-inline size_t writeBlocks(DragonPipe<DragonFftBlock>::Producer producer, std::span<const std::float32_t> data)
+inline size_t writeBlocks(DragonPipe<DragonFftBlock>::Producer producer, std::span<const float> data)
 {
     size_t blocksNeeded = (data.size() + DragonFftBlock::MAX_SAMPLES - 1) / DragonFftBlock::MAX_SAMPLES;
     size_t written = producer.writeSomeWith(blocksNeeded, [&](std::span<DragonFftBlock> b1, std::span<DragonFftBlock> b2) {
