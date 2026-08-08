@@ -281,8 +281,6 @@ void DragonPlayerPrivate::stopPipeline()
 
     decodePipeline.stop();
 
-    fftPipeline.stop();
-
     if (audioOutput && audioOutput->sink()) {
         audioOutput->sink()->close();
         audioOutput->sink()->reset();
@@ -306,10 +304,6 @@ void DragonPlayerPrivate::init()
 
     connect(audioOutput->sink(), &DragonAudioSink::errorOccurred, this, [this](const QString &message) {
         setError(DragonPlayer::Error::ResourceError, message);
-    });
-
-    connect(audioOutput, &DragonAudioOutput::volumeChanged, q, [this]() {
-        // volumeChanged is now forwarded from DragonAudioOutput
     });
 
     connect(audioOutput->sink(), &DragonAudioSink::drained, this, [this]() {
@@ -497,9 +491,6 @@ QCoro::Task<void> DragonPlayerPrivate::startLoad(QUrl source, uint64_t generatio
         Q_EMIT q->durationChanged(currentDuration);
     }
 
-    fftPipeline.setSampleRate(result.sampleRate);
-    fftPipeline.setChannelCount(result.channels);
-
     if (!currentIsLocal && decodePipeline.streamSize() > 0) {
         currentSeekable = true;
         Q_EMIT q->seekableChanged(true);
@@ -538,8 +529,6 @@ void DragonPlayer::setSource(const QUrl &source)
     }
 
     d->decodePipeline.stopSession();
-
-    d->fftPipeline.restart();
 
     const bool isGapless = d->inGaplessSetSource;
     d->inGaplessSetSource = false;
@@ -760,7 +749,6 @@ void DragonPlayer::stop()
         d->audioOutput->sink()->reset();
         d->audioOutput->sink()->resetDrainState();
     }
-    d->fftPipeline.stop();
 
     d->setPlaybackState(PlaybackState::StoppedState);
 

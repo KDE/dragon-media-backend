@@ -3,11 +3,15 @@
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  */
 
+#include "player/dragonpipe.h"
 #include "player/dragonplayer_p.h"
 #include <DragonMultimedia/dragonplayer.h>
 #include <DragonMultimedia/dragonspectrumanalyzer.h>
 
+#include "fft/dragonfftpipeline.h"
+
 #include <QMetaObject>
+#include <QPointer>
 
 class DragonSpectrumAnalyzerPrivate
 {
@@ -17,44 +21,82 @@ public:
     {
     }
 
-    DragonPlayer *player;
+    QPointer<DragonPlayer> player;
+    DragonPipe<DragonFftBlock> fftPipe{256};
+    DragonFftPipeline fftPipeline{&fftPipe};
     DragonSpectrumAnalyzer::Mode currentMode = DragonSpectrumAnalyzer::Mode::Off;
     int currentRate = 60;
+
+    void syncFormat()
+    {
+        auto *priv = player ? player->d.get() : nullptr;
+        if (priv) {
+            fftPipeline.setSampleRate(priv->currentSampleRate);
+            fftPipeline.setChannelCount(priv->currentChannels);
+        }
+    }
+
+    void attachTap()
+    {
+        auto *priv = player ? player->d.get() : nullptr;
+        if (priv && priv->audioSink()) {
+            priv->audioSink()->setFftPipe(&fftPipe);
+        }
+    }
+
+    void detachTap()
+    {
+        auto *priv = player ? player->d.get() : nullptr;
+        if (priv && priv->audioSink()) {
+            priv->audioSink()->setFftPipe(nullptr);
+        }
+    }
 };
 
 DragonSpectrumAnalyzer::DragonSpectrumAnalyzer(DragonPlayer *player, QObject *parent)
     : QObject(parent)
     , d(std::make_unique<DragonSpectrumAnalyzerPrivate>(player))
 {
-    auto *priv = player->d.get();
-    if (priv) {
-        priv->fftPipeline.setFrameCallback([this](DragonFftFrame frame) {
-            QMetaObject::invokeMethod(
-                this,
-                [this, f = std::move(frame)]() mutable {
-                    Q_EMIT frameReady(f);
-                },
-                Qt::QueuedConnection);
-        });
-    }
+    d->fftPipeline.setFrameCallback([this](DragonFftFrame frame) {
+        QMetaObject::invokeMethod(
+            this,
+            [this, f = std::move(frame)]() mutable {
+                Q_EMIT frameReady(f);
+            },
+            Qt::QueuedConnection);
+    });
+
+    connect(player, &DragonPlayer::trackChanged, this, [this]() {
+        if (d->currentMode != DragonSpectrumAnalyzer::Mode::Off) {
+            d->syncFormat();
+            d->fftPipeline.restart();
+        }
+    });
+
+    connect(player, &DragonPlayer::stateChanged, this, [this](DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState) {
+        if (newState == DragonPlayer::PlaybackState::StoppedState && d->currentMode != DragonSpectrumAnalyzer::Mode::Off) {
+            d->fftPipeline.stop();
+            Q_EMIT activeChanged(false);
+        } else if (newState == DragonPlayer::PlaybackState::PlayingState && d->currentMode != DragonSpectrumAnalyzer::Mode::Off) {
+            d->syncFormat();
+            d->attachTap();
+            d->fftPipeline.restart();
+            Q_EMIT activeChanged(true);
+        }
+    });
 }
 
 DragonSpectrumAnalyzer::~DragonSpectrumAnalyzer()
 {
-    if (d->player) {
-        auto *priv = d->player->d.get();
-        if (priv) {
-            priv->fftPipeline.stop();
-            if (priv->audioOutput) {
-                priv->audioSink()->setFftPipe(nullptr);
-            }
-        }
+    if (d->currentMode != DragonSpectrumAnalyzer::Mode::Off) {
+        d->fftPipeline.stop();
+        d->detachTap();
     }
 }
 
 DragonPlayer *DragonSpectrumAnalyzer::player() const
 {
-    return d->player;
+    return d->player.data();
 }
 
 DragonSpectrumAnalyzer::Mode DragonSpectrumAnalyzer::mode() const
@@ -78,12 +120,21 @@ void DragonSpectrumAnalyzer::setMode(Mode mode)
         return;
     }
 
+    const bool wasOff = d->currentMode == DragonSpectrumAnalyzer::Mode::Off;
     d->currentMode = mode;
 
-    auto *priv = d->player ? d->player->d.get() : nullptr;
-    if (priv) {
-        priv->audioSink()->setFftPipe(mode != Mode::Off ? &priv->fftPipe : nullptr);
-        priv->fftPipeline.setMode(mode);
+    if (mode != DragonSpectrumAnalyzer::Mode::Off) {
+        if (wasOff) {
+            d->syncFormat();
+            d->attachTap();
+        }
+        d->fftPipeline.setMode(mode);
+        if (wasOff && d->player && d->player->playbackState() == DragonPlayer::PlaybackState::PlayingState) {
+            d->fftPipeline.restart();
+        }
+    } else {
+        d->fftPipeline.stop();
+        d->detachTap();
     }
 
     Q_EMIT modeChanged(mode);
@@ -99,11 +150,12 @@ void DragonSpectrumAnalyzer::setFrameRate(int framesPerSecond)
         return;
     }
     d->currentRate = framesPerSecond;
-
-    auto *priv = d->player ? d->player->d.get() : nullptr;
-    if (priv) {
-        priv->fftPipeline.setFftRate(framesPerSecond);
-    }
+    d->fftPipeline.setFftRate(framesPerSecond);
 
     Q_EMIT frameRateChanged(framesPerSecond);
+}
+
+std::size_t DragonSpectrumAnalyzer::fftPipeReady() const
+{
+    return d->fftPipe.consumer().ready();
 }

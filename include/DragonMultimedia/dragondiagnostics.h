@@ -13,6 +13,7 @@
 #include <memory>
 
 class DragonPlayer;
+class DragonSpectrumAnalyzer;
 
 class DragonDiagnosticsPrivate;
 
@@ -21,6 +22,8 @@ class DRAGONMULTIMEDIA_EXPORT DragonDiagnostics : public QObject
 public:
     explicit DragonDiagnostics(DragonPlayer *player);
     ~DragonDiagnostics() override;
+
+    void setSpectrumAnalyzer(DragonSpectrumAnalyzer *analyzer);
 
     [[nodiscard]] int audioBufferUs() const;
 

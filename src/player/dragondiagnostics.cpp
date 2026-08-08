@@ -6,7 +6,9 @@
 #include "dragonplayer_p.h"
 #include "sink/dragonaudiosink.h"
 #include <DragonMultimedia/dragondiagnostics.h>
+#include <DragonMultimedia/dragonspectrumanalyzer.h>
 
+#include <QPointer>
 #include <memory>
 
 class DragonDiagnosticsPrivate
@@ -18,6 +20,7 @@ public:
     }
 
     DragonPlayer *m_player;
+    QPointer<DragonSpectrumAnalyzer> m_analyzer;
 };
 
 DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
@@ -27,6 +30,11 @@ DragonDiagnostics::DragonDiagnostics(DragonPlayer *player)
 }
 
 DragonDiagnostics::~DragonDiagnostics() = default;
+
+void DragonDiagnostics::setSpectrumAnalyzer(DragonSpectrumAnalyzer *analyzer)
+{
+    d->m_analyzer = analyzer;
+}
 
 int DragonDiagnostics::audioBufferUs() const
 {
@@ -57,11 +65,10 @@ std::size_t DragonDiagnostics::decodeQueueSize() const
 
 std::size_t DragonDiagnostics::fftQueueSize() const
 {
-    DragonPlayerPrivate *priv = d->m_player->d.get();
-    if (!priv) {
+    if (!d->m_analyzer) {
         return 0;
     }
-    return priv->fftPipe.consumer().ready();
+    return d->m_analyzer->fftPipeReady();
 }
 
 bool DragonDiagnostics::decodeLoopActive() const

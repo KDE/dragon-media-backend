@@ -127,6 +127,7 @@ public Q_SLOTS:
     friend class DragonDiagnostics;
     friend class DragonPlayerPrivate;
     friend class DragonSpectrumAnalyzer;
+    friend class DragonSpectrumAnalyzerPrivate;
 
 private:
     std::unique_ptr<DragonPlayerPrivate> d;

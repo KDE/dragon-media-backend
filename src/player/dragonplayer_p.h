@@ -6,7 +6,6 @@
 #pragma once
 
 #include "decoder/dragondecodepipeline.h"
-#include "fft/dragonfftpipeline.h"
 #include "sink/dragonaudiosink.h"
 #include <DragonMultimedia/dragonaudiooutput.h>
 #include <DragonMultimedia/dragonplayer.h>
@@ -43,6 +42,7 @@ private:
     friend class DragonDiagnostics;
     friend class DragonPlayer;
     friend class DragonSpectrumAnalyzer;
+    friend class DragonSpectrumAnalyzerPrivate;
 
     void init();
 
@@ -78,8 +78,6 @@ private:
     DragonDecodePipeline decodePipeline;
 
     DragonPipe<std::float32_t> audioPipe;
-    DragonPipe<DragonFftBlock> fftPipe{256};
-    DragonFftPipeline fftPipeline{&fftPipe};
 
     QUrl currentSource;
     QUrl nextSource;

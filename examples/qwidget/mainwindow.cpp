@@ -225,6 +225,7 @@ void MainWindow::setupUi()
 
     m_diagnostics = new DragonDiagnostics(m_player);
     m_diagnostics->setParent(this);
+    m_diagnostics->setSpectrumAnalyzer(m_spectrumAnalyzer);
     auto *diagTimer = new QTimer(this);
     connect(diagTimer, &QTimer::timeout, this, [this]() {
         if (!m_diagnostics)
@@ -314,7 +315,6 @@ void MainWindow::connectPlayer()
         m_statusLabel->setText(i18n("Playing (seamless transition)"));
     });
 
-    m_spectrumAnalyzer = new DragonSpectrumAnalyzer(m_player, this);
     m_playerConnections << connect(m_spectrumAnalyzer, &DragonSpectrumAnalyzer::frameReady, this, &MainWindow::updateFftFrame);
     m_playerConnections << connect(m_fftCheckBox, &QCheckBox::toggled, this, [this](bool checked) {
         m_spectrumAnalyzer->setMode(checked ? DragonSpectrumAnalyzer::Mode::Both : DragonSpectrumAnalyzer::Mode::Off);
@@ -350,6 +350,7 @@ void MainWindow::changeAudioSink(int index)
     m_diagnostics = new DragonDiagnostics(m_player);
     m_diagnostics->setParent(this);
     m_spectrumAnalyzer = new DragonSpectrumAnalyzer(m_player, this);
+    m_diagnostics->setSpectrumAnalyzer(m_spectrumAnalyzer);
 
     m_playlist->setGaplessEnabled(gaplessEnabled);
     m_player->audioOutput()->setVolume(currentVolume);

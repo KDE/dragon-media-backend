@@ -10,6 +10,7 @@
 
 #include <QObject>
 
+#include <cstddef>
 #include <memory>
 
 class DragonPlayer;
@@ -55,5 +56,9 @@ Q_SIGNALS:
     void frameReady(const DragonFftFrame &frame);
 
 private:
+    friend class DragonDiagnostics;
+
+    [[nodiscard]] std::size_t fftPipeReady() const;
+
     std::unique_ptr<DragonSpectrumAnalyzerPrivate> d;
 };
