@@ -95,8 +95,6 @@ private:
 
     std::shared_ptr<AliveGuard> aliveGuard;
 
-    qint64 undoPosition = 0;
-
     QTimer *positionTimer = nullptr;
     qint64 currentPosition = 0;
 

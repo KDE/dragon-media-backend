@@ -22,7 +22,6 @@ qt_add_library(DragonMultimedia SHARED
     ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonspectrumanalyzer.h
     ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonfftframe.h
     ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonicymetadata.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragondiagnostics.h
 )
 
 target_include_directories(DragonMultimedia

@@ -761,17 +761,3 @@ void DragonPlayer::seek(qint64 posMs)
     qCDebug(dragonMultimediaPlayer) << "seek(" << posMs << ")";
     setPosition(posMs);
 }
-
-void DragonPlayer::saveUndoPosition(qint64 posMs)
-{
-    qCDebug(dragonMultimediaPlayer) << "saveUndoPosition(" << posMs << ")";
-    d->undoPosition = posMs;
-}
-
-void DragonPlayer::restoreUndoPosition()
-{
-    qCDebug(dragonMultimediaPlayer) << "restoreUndoPosition()";
-    if (d->undoPosition > 0) {
-        setPosition(d->undoPosition);
-    }
-}

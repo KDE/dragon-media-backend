@@ -8,8 +8,8 @@
 #include "dragonspectrogram.h"
 #include "dragonvisualizer.h"
 
+#include "player/dragondiagnostics.h"
 #include <DragonMultimedia/dragonaudiooutput.h>
-#include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonfftframe.h>
 #include <DragonMultimedia/dragonplayer.h>
 #include <DragonMultimedia/dragonspectrumanalyzer.h>

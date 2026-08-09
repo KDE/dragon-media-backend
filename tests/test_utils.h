@@ -17,7 +17,7 @@
 #include <QtTest>
 
 #include "decoder/dragondecoder.h"
-#include <DragonMultimedia/dragondiagnostics.h>
+#include "player/dragondiagnostics.h"
 #include <DragonMultimedia/dragonplayer.h>
 #include <DragonMultimedia/dragonspectrumanalyzer.h>
 

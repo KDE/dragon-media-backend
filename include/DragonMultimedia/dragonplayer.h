@@ -121,9 +121,6 @@ public Q_SLOTS:
     void stop();
     void seek(qint64 positionMs);
 
-    void saveUndoPosition(qint64 positionMs);
-    void restoreUndoPosition();
-
     friend class DragonDiagnostics;
     friend class DragonPlayerPrivate;
     friend class DragonSpectrumAnalyzer;

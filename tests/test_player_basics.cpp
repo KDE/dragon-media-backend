@@ -51,9 +51,6 @@ private Q_SLOTS:
     void testErrorChangedSignal();
     void testFftFrameReadySignal();
 
-    void testSaveUndoPosition();
-    void testRestoreUndoPosition();
-
     void testErrorString();
     void testErrorStringClearsOnSourceChange();
     void testErrorStringClearsOnValidSource();
@@ -357,43 +354,6 @@ void TestPlayerBasics::testFftFrameReadySignal()
     QVERIFY(playingHelper.playAndWait());
     QTRY_VERIFY_WITH_TIMEOUT(playingSpy.count() > 0, 5000);
     playingPlayer.stop();
-}
-
-void TestPlayerBasics::testSaveUndoPosition()
-{
-    const QString path = TestFixture::fixturePath(u"sample-3s.mp3"_s);
-    if (!QFileInfo::exists(path))
-        QSKIP("sample-3s.mp3 fixture not available");
-
-    DragonPlayer player;
-    PlayerHelper helper(&player);
-    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
-    QVERIFY(helper.playAndWait());
-
-    QTest::qWait(500);
-    const qint64 posBeforeSave = player.position();
-    QVERIFY2(posBeforeSave > 0, "Position should have advanced during playback");
-
-    player.saveUndoPosition(posBeforeSave);
-    player.seek(0);
-    QTRY_VERIFY_WITH_TIMEOUT(player.position() < posBeforeSave, 3000);
-
-    player.restoreUndoPosition();
-    QTRY_VERIFY_WITH_TIMEOUT(player.position() >= posBeforeSave - 200, 3000);
-
-    player.stop();
-}
-
-void TestPlayerBasics::testRestoreUndoPosition()
-{
-    DragonPlayer player;
-
-    player.saveUndoPosition(10000);
-    player.restoreUndoPosition();
-    QVERIFY2(player.position() == 0, "Position should remain 0 after restoreUndoPosition with no media undo position cannot be applied without loaded media");
-
-    player.restoreUndoPosition();
-    QVERIFY2(player.position() == 0, "Position should remain 0 after second restoreUndoPosition with no media undo stack should be empty");
 }
 
 void TestPlayerBasics::testStateMachineSequence_data()

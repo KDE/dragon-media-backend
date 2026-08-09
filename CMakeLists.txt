@@ -256,10 +256,6 @@ generate_export_header(DragonMultimedia
     EXPORT_FILE_NAME dragonmultimedia_export.h
 )
 
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/dragonmultimedia_export.h
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DragonMultimedia
-)
-
 install(TARGETS DragonMultimedia
     EXPORT DragonMultimedia-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -267,7 +263,18 @@ install(TARGETS DragonMultimedia
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-install(DIRECTORY include/DragonMultimedia DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+set(DragonMultimedia_PUBLIC_HEADERS
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonplayer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonaudiooutput.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonfftframe.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonicymetadata.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonspectrumanalyzer.h
+    ${CMAKE_CURRENT_BINARY_DIR}/dragonmultimedia_export.h
+)
+
+install(FILES ${DragonMultimedia_PUBLIC_HEADERS}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DragonMultimedia
+)
 
 install(FILES dragonmultimedia.categories DESTINATION ${KDE_INSTALL_DATAROOTDIR}/qlogging-categories6)
 

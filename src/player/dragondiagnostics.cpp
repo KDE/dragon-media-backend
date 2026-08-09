@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  */
 
+#include "dragondiagnostics.h"
 #include "dragonplayer_p.h"
 #include "sink/dragonaudiosink.h"
-#include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonspectrumanalyzer.h>
 
 #include <QPointer>

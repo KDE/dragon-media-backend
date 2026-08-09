@@ -18,7 +18,7 @@
 #include "helpers/fixture_generator.h"
 #include "test_utils.h"
 
-#include <DragonMultimedia/dragondiagnostics.h>
+#include "player/dragondiagnostics.h"
 #include <DragonMultimedia/dragonplayer.h>
 
 #include <cmath>

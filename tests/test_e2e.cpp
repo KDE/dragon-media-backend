@@ -12,8 +12,8 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
+#include "player/dragondiagnostics.h"
 #include "player/dragonevent.h"
-#include <DragonMultimedia/dragondiagnostics.h>
 #include <DragonMultimedia/dragonplayer.h>
 #include <DragonMultimedia/dragonspectrumanalyzer.h>
 
@@ -81,7 +81,7 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
                                                             result.hadError = true;
                                                             result.errorMessage = err.message;
                                                         },
-                                                        [](DecodeEof &) {}},
+                                                        [](DecodeEof &) { }},
                            event);
             }
             decodeComplete.store(true);
