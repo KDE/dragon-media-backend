@@ -24,7 +24,7 @@ DragonKioStream::DragonKioStream(QObject *parent)
 
 DragonKioStream::~DragonKioStream()
 {
-    stop();
+    DragonKioStream::stop();
 }
 
 void DragonKioStream::setUrl(const QUrl &url)

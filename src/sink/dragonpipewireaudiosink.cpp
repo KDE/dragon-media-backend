@@ -576,7 +576,7 @@ void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const 
 
     if (id == SPA_PARAM_Props) {
         const struct spa_pod_prop *prop = nullptr;
-        SPA_POD_OBJECT_FOREACH((const struct spa_pod_object *)param, prop)
+        SPA_POD_OBJECT_FOREACH(reinterpret_cast<const struct spa_pod_object *>(param), prop)
         {
             if (prop->key == SPA_PROP_volume) {
                 const float *val = reinterpret_cast<const float *>(SPA_POD_BODY(&prop->value));

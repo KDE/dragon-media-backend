@@ -68,7 +68,7 @@ DragonSdlAudioSink::DragonSdlAudioSink(QObject *parent, const QVariantList &args
 
 DragonSdlAudioSink::~DragonSdlAudioSink()
 {
-    close();
+    DragonSdlAudioSink::close();
     SDL_Quit();
 }
 
