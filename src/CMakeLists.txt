@@ -24,6 +24,8 @@ qt_add_library(DragonMultimedia SHARED
     ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonicymetadata.h
 )
 
+add_library(DragonMultimedia::DragonMultimedia ALIAS DragonMultimedia)
+
 target_include_directories(DragonMultimedia
     PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
