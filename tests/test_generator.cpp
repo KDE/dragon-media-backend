@@ -39,7 +39,7 @@ std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, qi
 
     for (const auto &batch : sampleBatches) {
         if (!batch.empty()) {
-            co_yield SamplesChunk{.data = std::span<const float>(batch.data(), batch.size()), .sampleRate = sampleRate, .channels = channels};
+            co_yield SamplesChunk{.data = std::span<const float>(batch.data(), batch.size()), .sampleRate = sampleRate, .channels = channels, .owner = {}};
         }
     }
 

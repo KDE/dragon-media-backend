@@ -126,6 +126,27 @@ if(FLAC_FOUND)
     )
 endif()
 
+# PipeWire gapless tests requires PipeWire + WirePlumber with dragon-test-sink (monitor ports)
+if(PIPEWIRE_FOUND AND FLAC_FOUND)
+    dragon_add_test(test_e2e_pipewire_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC PkgConfig::PIPEWIRE)
+    if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
+        set_tests_properties(test_e2e_pipewire_gapless PROPERTIES
+            FIXTURES_REQUIRED "dragon_pipewire"
+        )
+    endif()
+endif()
+
+# PulseAudio gapless tests Pulse client output routed to dragon-test-sink,
+# captured via PipeWire monitor ports (requires PulseAudio on PipeWire)
+if(PIPEWIRE_FOUND AND PULSEAUDIO_FOUND AND FLAC_FOUND)
+    dragon_add_test(test_e2e_pulseaudio_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC PkgConfig::PIPEWIRE)
+    if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
+        set_tests_properties(test_e2e_pulseaudio_gapless PROPERTIES
+            FIXTURES_REQUIRED "dragon_pipewire"
+        )
+    endif()
+endif()
+
 # Audio output tests (one executable, run once per backend via env var)
 dragon_add_test(test_audiooutput LIBRARIES SDL3::SDL3 spsc_queue Qt6::Gui)
 set_tests_properties(test_audiooutput PROPERTIES DISABLED TRUE)
@@ -161,7 +182,7 @@ if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
 endif()
 
 if(DRAGON_CI_NO_AUDIO)
-    set(_no_audio_tests ${_dragon_audio_tests} test_e2e_sdl_gapless test_audiooutput)
+    set(_no_audio_tests ${_dragon_audio_tests} test_e2e_sdl_gapless test_e2e_pipewire_gapless test_e2e_pulseaudio_gapless test_audiooutput)
     foreach(_test ${_no_audio_tests})
         if(TEST ${_test})
             set_tests_properties(${_test} PROPERTIES DISABLED TRUE)

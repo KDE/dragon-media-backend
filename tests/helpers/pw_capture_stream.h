@@ -2,8 +2,11 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
- * Capture stream that connects to a null-audio-sink's monitor port
- * and accumulates rendered PCM data for offline analysis.
+ * Capture stream that connects to a sink's monitor ports and accumulates
+ * rendered PCM data for offline analysis.
+ *
+ * Uses PW_KEY_STREAM_CAPTURE_SINK + PW_KEY_TARGET_OBJECT for auto-linking,
+ * which requires a session manager (WirePlumber) to be running.
  * Runs its own pw_main_loop on a background thread.
  */
 
@@ -15,6 +18,7 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <string>
 #include <thread>
 #include <vector>
 
@@ -49,7 +53,7 @@ public:
             runCaptureLoop(st);
         });
 
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; i < 200; ++i) {
             if (m_connected.load(std::memory_order_acquire)) {
                 return true;
             }
@@ -120,18 +124,26 @@ private:
 
         pw_core *core = pw_context_connect(context, nullptr, 0);
         if (!core) {
+            qWarning() << "PwCaptureStream: failed to connect to PipeWire";
             pw_context_destroy(context);
             pw_main_loop_destroy(loop);
             m_error.store(true);
             return;
         }
 
-        pw_properties *props = pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Capture", PW_KEY_STREAM_CAPTURE_SINK, "true", nullptr);
+        pw_properties *props = pw_properties_new(PW_KEY_MEDIA_TYPE,
+                                                 "Audio",
+                                                 PW_KEY_MEDIA_CATEGORY,
+                                                 "Capture",
+                                                 PW_KEY_STREAM_CAPTURE_SINK,
+                                                 "true",
+                                                 PW_KEY_TARGET_OBJECT,
+                                                 m_targetNode.c_str(),
+                                                 nullptr);
 
-        pw_properties_set(props, PW_KEY_TARGET_OBJECT, m_targetNode.c_str());
-
-        m_stream = pw_stream_new(core, "dragon-capture", props);
+        m_stream = pw_stream_new(core, "dragon-gapless-capture", props);
         if (!m_stream) {
+            qWarning() << "PwCaptureStream: failed to create stream";
             pw_core_disconnect(core);
             pw_context_destroy(context);
             pw_main_loop_destroy(loop);
@@ -145,8 +157,8 @@ private:
             static_cast<PwCaptureStream *>(ud)->onProcess();
         };
 
-        spa_hook listener{};
-        pw_stream_add_listener(m_stream, &listener, &streamEvents, this);
+        spa_hook streamListener{};
+        pw_stream_add_listener(m_stream, &streamListener, &streamEvents, this);
 
         uint8_t podBuffer[1024];
         struct spa_pod_builder b = SPA_POD_BUILDER_INIT(podBuffer, sizeof(podBuffer));
@@ -158,29 +170,29 @@ private:
 
         const struct spa_pod *params = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &audioInfo);
         if (!params) {
+            qWarning() << "PwCaptureStream: failed to build format pod";
             m_error.store(true);
             return;
         }
 
-        int res = pw_stream_connect(m_stream,
-                                    PW_DIRECTION_INPUT,
-                                    PW_ID_ANY,
-                                    static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS),
-                                    &params,
-                                    1);
+        constexpr auto streamFlags = static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS);
+
+        int res = pw_stream_connect(m_stream, PW_DIRECTION_INPUT, PW_ID_ANY, streamFlags, &params, 1);
         if (res != 0) {
+            qWarning() << "PwCaptureStream: failed to connect stream:" << res;
             m_error.store(true);
             return;
         }
 
+        qDebug() << "PwCaptureStream: connected to" << QString::fromStdString(m_targetNode);
         m_connected.store(true, std::memory_order_release);
 
-        pw_loop *loop_impl = pw_main_loop_get_loop(loop);
+        pw_loop *loopImpl = pw_main_loop_get_loop(loop);
         while (!st.stop_requested()) {
-            pw_loop_iterate(loop_impl, 50);
+            pw_loop_iterate(loopImpl, 50);
         }
 
-        spa_hook_remove(&listener);
+        spa_hook_remove(&streamListener);
         pw_stream_destroy(m_stream);
         m_stream = nullptr;
         pw_core_disconnect(core);
