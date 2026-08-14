@@ -43,7 +43,7 @@ struct MarkerHit {
 findSignature(const std::vector<float> &pcm, int channels, const std::array<float, 4> &signature, bool searchFromEnd, float threshold = 0.5f)
 {
     MarkerHit hit;
-    constexpr int sigLen = signature.size();
+    const int sigLen = static_cast<int>(signature.size());
     const int totalFrames = static_cast<int>(pcm.size()) / channels;
 
     if (totalFrames < sigLen) {
