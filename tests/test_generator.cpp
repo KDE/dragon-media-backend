@@ -33,7 +33,7 @@ using namespace DragonMultimedia;
 
 namespace
 {
-std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, qint64 durationMs, const std::vector<std::vector<float>> &sampleBatches)
+std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, qint64 durationMs, std::vector<std::vector<float>> sampleBatches)
 {
     co_yield FormatReady{sampleRate, channels, durationMs};
 
