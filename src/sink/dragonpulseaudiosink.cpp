@@ -5,7 +5,7 @@
 
 #include "dragonpulseaudiosink.h"
 
-#include "dragonmultimedia_audio_logging.h"
+#include "dragonmediabackend_audio_logging.h"
 
 #include <KLocalizedString>
 #include <KPluginFactory>
@@ -101,7 +101,7 @@ DragonPulseAudioSink::DragonPulseAudioSink(QObject *parent, const QVariantList &
     , m_pa(std::make_unique<PaState>())
 {
     Q_UNUSED(args);
-    qCDebug(dragonMultimediaAudio) << "PulseAudio audio sink created";
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio audio sink created";
 }
 
 DragonPulseAudioSink::~DragonPulseAudioSink()
@@ -111,23 +111,23 @@ DragonPulseAudioSink::~DragonPulseAudioSink()
 
 bool DragonPulseAudioSink::probe()
 {
-    qCDebug(dragonMultimediaAudio) << "PulseAudio probe() checking daemon connectivity";
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() checking daemon connectivity";
 
     MainloopPtr ml(pa_threaded_mainloop_new());
     if (!ml) {
-        qCDebug(dragonMultimediaAudio) << "PulseAudio probe() pa_threaded_mainloop_new failed";
+        qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() pa_threaded_mainloop_new failed";
         return false;
     }
 
     pa_mainloop_api *api = pa_threaded_mainloop_get_api(ml.get());
     ContextPtr ctx(pa_context_new(api, "dragon-probe"));
     if (!ctx) {
-        qCDebug(dragonMultimediaAudio) << "PulseAudio probe() pa_context_new failed";
+        qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() pa_context_new failed";
         return false;
     }
 
     if (pa_threaded_mainloop_start(ml.get()) < 0) {
-        qCDebug(dragonMultimediaAudio) << "PulseAudio probe() pa_threaded_mainloop_start failed";
+        qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() pa_threaded_mainloop_start failed";
         return false;
     }
 
@@ -142,7 +142,7 @@ bool DragonPulseAudioSink::probe()
         pa_context_set_state_callback(ctx.get(), probeContextStateCallback, ml.get());
 
         if (pa_context_connect(ctx.get(), nullptr, PA_CONTEXT_NOAUTOSPAWN, nullptr) < 0) {
-            qCDebug(dragonMultimediaAudio) << "PulseAudio probe() pa_context_connect failed";
+            qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() pa_context_connect failed";
             return false;
         }
 
@@ -154,16 +154,16 @@ bool DragonPulseAudioSink::probe()
             state = pa_context_get_state(ctx.get());
             auto elapsed = std::chrono::steady_clock::now() - startTime;
             if (elapsed > kProbeTimeout) {
-                qCDebug(dragonMultimediaAudio) << "PulseAudio probe() timed out waiting for context";
+                qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() timed out waiting for context";
                 break;
             }
         }
 
         bool alive = PA_CONTEXT_IS_GOOD(state) && (state == PA_CONTEXT_READY);
         if (alive) {
-            qCDebug(dragonMultimediaAudio) << "PulseAudio probe() daemon reachable";
+            qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() daemon reachable";
         } else {
-            qCDebug(dragonMultimediaAudio) << "PulseAudio probe() daemon unreachable";
+            qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() daemon unreachable";
         }
         return alive;
     }
@@ -225,7 +225,7 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
         size_t bytes = pcm.size() * sizeof(float);
         int ret = pa_stream_write(s, pcm.data(), bytes, nullptr, 0, PA_SEEK_RELATIVE);
         if (ret < 0) {
-            qCCritical(dragonMultimediaAudio) << "PulseAudio pa_stream_write failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio pa_stream_write failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
         }
     } else {
         if (self->m_decodeFinished.load(std::memory_order_acquire) && !self->m_drainRequested.exchange(true, std::memory_order_acq_rel)) {
@@ -233,7 +233,7 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
             if (op) {
                 pa_operation_unref(op);
             } else {
-                qCWarning(dragonMultimediaAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
+                qCWarning(dragonMediaBackendAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
             }
         } else if (!self->m_decodeFinished.load(std::memory_order_acquire)) {
             thread_local std::vector<float> silence;
@@ -247,7 +247,7 @@ bool DragonPulseAudioSink::connectToServer()
 {
     MainloopPtr ml(pa_threaded_mainloop_new());
     if (!ml) {
-        qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_threaded_mainloop_new failed";
+        qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_threaded_mainloop_new failed";
         Q_EMIT errorOccurred(i18n("PulseAudio: failed to create mainloop"));
         return false;
     }
@@ -255,7 +255,7 @@ bool DragonPulseAudioSink::connectToServer()
     pa_threaded_mainloop_set_name(ml.get(), "dragon-pa");
 
     if (pa_threaded_mainloop_start(ml.get()) < 0) {
-        qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_threaded_mainloop_start failed";
+        qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_threaded_mainloop_start failed";
         Q_EMIT errorOccurred(i18n("PulseAudio: failed to start mainloop"));
         return false;
     }
@@ -270,7 +270,7 @@ bool DragonPulseAudioSink::connectToServer()
 
     pa_mainloop_api *api = pa_threaded_mainloop_get_api(m_pa->mainloop.get());
     if (!api) {
-        qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_threaded_mainloop_get_api returned null";
+        qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_threaded_mainloop_get_api returned null";
         Q_EMIT errorOccurred(i18n("PulseAudio: failed to get mainloop API"));
         return false;
     }
@@ -283,13 +283,13 @@ bool DragonPulseAudioSink::connectToServer()
     });
     if (rawProplist) {
         const QString appName = QGuiApplication::applicationDisplayName();
-        pa_proplist_sets(rawProplist, PA_PROP_APPLICATION_NAME, appName.isEmpty() ? "DragonMultimedia" : appName.toUtf8().constData());
+        pa_proplist_sets(rawProplist, PA_PROP_APPLICATION_NAME, appName.isEmpty() ? "DragonMediaBackend" : appName.toUtf8().constData());
         pa_proplist_sets(rawProplist, PA_PROP_MEDIA_ROLE, "music");
     }
 
-    ContextPtr ctx(pa_context_new_with_proplist(api, m_streamName.empty() ? "DragonMultimedia" : m_streamName.c_str(), rawProplist));
+    ContextPtr ctx(pa_context_new_with_proplist(api, m_streamName.empty() ? "DragonMediaBackend" : m_streamName.c_str(), rawProplist));
     if (!ctx) {
-        qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_context_new_with_proplist failed";
+        qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_context_new_with_proplist failed";
         Q_EMIT errorOccurred(i18n("PulseAudio: failed to create context"));
         return false;
     }
@@ -300,7 +300,7 @@ bool DragonPulseAudioSink::connectToServer()
         pa_context_set_state_callback(ctx.get(), DragonPulseAudioSink::contextStateCallback, this);
 
         if (pa_context_connect(ctx.get(), nullptr, PA_CONTEXT_NOFLAGS, nullptr) < 0) {
-            qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_context_connect failed";
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_context_connect failed";
             Q_EMIT errorOccurred(i18n("PulseAudio: failed to connect context"));
             return false;
         }
@@ -312,7 +312,7 @@ bool DragonPulseAudioSink::connectToServer()
         }
 
         if (!PA_CONTEXT_IS_GOOD(state) || state != PA_CONTEXT_READY) {
-            qCCritical(dragonMultimediaAudio) << "PulseAudio: context did not become ready:" << state;
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio: context did not become ready:" << state;
             Q_EMIT errorOccurred(i18n("PulseAudio: context not ready"));
             return false;
         }
@@ -322,7 +322,7 @@ bool DragonPulseAudioSink::connectToServer()
         if (subOp) {
             pa_operation_unref(subOp);
         } else {
-            qCWarning(dragonMultimediaAudio) << "PulseAudio: pa_context_subscribe failed";
+            qCWarning(dragonMediaBackendAudio) << "PulseAudio: pa_context_subscribe failed";
         }
     }
 
@@ -330,7 +330,7 @@ bool DragonPulseAudioSink::connectToServer()
     m_pa->contextReady = true;
     cleanupGuard.dismiss();
 
-    qCDebug(dragonMultimediaAudio) << "PulseAudio connected";
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio connected";
     return true;
 }
 
@@ -365,10 +365,10 @@ void DragonPulseAudioSink::disconnectFromServer()
 
 void DragonPulseAudioSink::open(int sampleRate, int channels)
 {
-    qCDebug(dragonMultimediaAudio) << "PulseAudio open" << sampleRate << channels;
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio open" << sampleRate << channels;
 
     if (m_open.load(std::memory_order_acquire)) {
-        qCDebug(dragonMultimediaAudio) << "open() called while already open closing old session";
+        qCDebug(dragonMediaBackendAudio) << "open() called while already open closing old session";
         close();
     }
 
@@ -395,15 +395,15 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
         pa_channel_map channelMap;
         if (!pa_channel_map_init_auto(&channelMap, channels, PA_CHANNEL_MAP_DEFAULT)) {
             pendingError = i18n("PulseAudio: failed to init channel map");
-            qCCritical(dragonMultimediaAudio) << "PulseAudio: failed to init channel map for" << channels << "channels";
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio: failed to init channel map for" << channels << "channels";
             return false;
         }
 
-        const char *streamName = m_streamName.empty() ? "DragonMultimedia" : m_streamName.c_str();
+        const char *streamName = m_streamName.empty() ? "DragonMediaBackend" : m_streamName.c_str();
         m_pa->stream.reset(pa_stream_new(m_pa->context.get(), streamName, &ss, &channelMap));
         if (!m_pa->stream) {
             pendingError = i18n("PulseAudio: failed to create stream");
-            qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_stream_new failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_stream_new failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
             return false;
         }
 
@@ -431,7 +431,7 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
 
         if (ret < 0) {
             pendingError = i18n("PulseAudio: failed to connect stream");
-            qCCritical(dragonMultimediaAudio) << "PulseAudio: pa_stream_connect_playback failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_stream_connect_playback failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
             return false;
         }
 
@@ -443,7 +443,7 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
 
         if (!PA_STREAM_IS_GOOD(streamState) || streamState != PA_STREAM_READY) {
             pendingError = i18n("PulseAudio: stream not ready");
-            qCCritical(dragonMultimediaAudio) << "PulseAudio: stream did not become ready";
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio: stream did not become ready";
             return false;
         }
 
@@ -471,12 +471,12 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
     m_paused.store(false, std::memory_order_release);
     m_open.store(true, std::memory_order_release);
 
-    qCDebug(dragonMultimediaAudio) << "PulseAudio stream opened, sink_input_index:" << m_pa->sinkInputIndex;
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio stream opened, sink_input_index:" << m_pa->sinkInputIndex;
 }
 
 void DragonPulseAudioSink::close()
 {
-    qCDebug(dragonMultimediaAudio) << "PulseAudio close()";
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio close()";
 
     m_open.store(false, std::memory_order_release);
     m_paused.store(false, std::memory_order_release);
@@ -492,7 +492,7 @@ void DragonPulseAudioSink::close()
 
     disconnectFromServer();
 
-    qCDebug(dragonMultimediaAudio) << "PulseAudio close() complete";
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio close() complete";
 }
 
 void DragonPulseAudioSink::pause()
@@ -653,7 +653,7 @@ void DragonPulseAudioSink::drainCallback(pa_stream *s, int success, void *userda
     Q_UNUSED(s);
     auto *self = static_cast<DragonPulseAudioSink *>(userdata);
     if (!success) {
-        qCWarning(dragonMultimediaAudio) << "PulseAudio stream drain failed";
+        qCWarning(dragonMediaBackendAudio) << "PulseAudio stream drain failed";
     }
     Q_EMIT self->drained();
 }
@@ -662,7 +662,7 @@ void DragonPulseAudioSink::underflowCallback(pa_stream *s, void *userdata)
 {
     Q_UNUSED(s);
     Q_UNUSED(userdata);
-    qCDebug(dragonMultimediaAudio) << "PulseAudio underflow detected";
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio underflow detected";
 }
 
 void DragonPulseAudioSink::subscribeCallback(pa_context *c, pa_subscription_event_type_t type, uint32_t idx, void *userdata)
@@ -687,7 +687,7 @@ void DragonPulseAudioSink::subscribeCallback(pa_context *c, pa_subscription_even
         return;
     }
 
-    qCDebug(dragonMultimediaAudio) << "PulseAudio sink_input" << idx << "changed, fetching info";
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio sink_input" << idx << "changed, fetching info";
     self->requestSinkInputInfo();
 }
 
@@ -707,7 +707,7 @@ void DragonPulseAudioSink::sinkInputInfoCallback(pa_context *c, const pa_sink_in
         if (qAbs(linearGain - cached) >= 0.001f) {
             self->m_cachedGain.store(linearGain, std::memory_order_relaxed);
 
-            qCDebug(dragonMultimediaAudio) << "PulseAudio external volume change, linearGain:" << linearGain;
+            qCDebug(dragonMediaBackendAudio) << "PulseAudio external volume change, linearGain:" << linearGain;
             QMetaObject::invokeMethod(
                 self,
                 [self, linearGain]() {
@@ -721,7 +721,7 @@ void DragonPulseAudioSink::sinkInputInfoCallback(pa_context *c, const pa_sink_in
     if (muted != self->m_cachedMuted.load(std::memory_order_relaxed)) {
         self->m_cachedMuted.store(muted, std::memory_order_relaxed);
 
-        qCDebug(dragonMultimediaAudio) << "PulseAudio external mute change, muted:" << muted;
+        qCDebug(dragonMediaBackendAudio) << "PulseAudio external mute change, muted:" << muted;
         QMetaObject::invokeMethod(
             self,
             [self, muted]() {

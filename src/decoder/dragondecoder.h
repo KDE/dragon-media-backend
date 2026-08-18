@@ -6,7 +6,7 @@
 #pragma once
 
 #include "dragoncompletion.h"
-#include "dragonmultimedia_export.h"
+#include "dragonmediabackend_export.h"
 #include "player/dragonevent.h"
 
 #include <QObject>
@@ -21,7 +21,7 @@
 #include <stop_token>
 #include <vector>
 
-class DRAGONMULTIMEDIA_EXPORT DragonDecoder : public QObject
+class DRAGONMEDIABACKEND_EXPORT DragonDecoder : public QObject
 {
     Q_OBJECT
 
@@ -44,9 +44,9 @@ public:
     DragonDecoder(DragonDecoder &&) = delete;
     DragonDecoder &operator=(DragonDecoder &&) = delete;
 
-    DragonMultimedia::InitResult initialize();
+    DragonMediaBackend::InitResult initialize();
 
-    std::generator<DragonMultimedia::DecodeEvent> decodeLoop(std::stop_token st);
+    std::generator<DragonMediaBackend::DecodeEvent> decodeLoop(std::stop_token st);
 
     void requestSeek(qint64 positionMs);
 
@@ -80,13 +80,13 @@ private:
 
     QString avErrorString(int errorCode) const;
 
-    std::optional<DragonMultimedia::SamplesChunk> drainDecoderFrames(DecodeSession &session);
+    std::optional<DragonMediaBackend::SamplesChunk> drainDecoderFrames(DecodeSession &session);
     void flushDecoder(DecodeSession &session);
-    std::optional<DragonMultimedia::SamplesChunk> flushResampler(DecodeSession &session);
+    std::optional<DragonMediaBackend::SamplesChunk> flushResampler(DecodeSession &session);
 
     // Resamples up to maxOutSamples from the given input (nullptr to drain the
     // resampler) into a pooled buffer and wraps it in a self-owning chunk.
-    std::optional<DragonMultimedia::SamplesChunk> resampleInto(DecodeSession &session, const uint8_t *const *in, int inSamples, int maxOutSamples);
+    std::optional<DragonMediaBackend::SamplesChunk> resampleInto(DecodeSession &session, const uint8_t *const *in, int inSamples, int maxOutSamples);
 
     std::atomic<bool> m_hadFatalError{false};
 };

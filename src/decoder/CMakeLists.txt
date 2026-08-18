@@ -24,6 +24,6 @@ target_link_libraries(dragon_decoder_objs PRIVATE
 set_target_properties(dragon_decoder_objs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 target_compile_definitions(dragon_decoder_objs PRIVATE
-    DragonMultimedia_EXPORTS
-    TRANSLATION_DOMAIN="dragonmultimedia"
+    DragonMediaBackend_EXPORTS
+    TRANSLATION_DOMAIN="dragonmediabackend"
 )

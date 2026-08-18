@@ -10,23 +10,23 @@ add_subdirectory(sink)
 
 include(GenerateExportHeader)
 
-qt_add_library(DragonMultimedia SHARED
+qt_add_library(DragonMediaBackend SHARED
     $<TARGET_OBJECTS:dragon_player_objs>
     $<TARGET_OBJECTS:dragon_decoder_objs>
     $<TARGET_OBJECTS:dragon_stream_objs>
     $<TARGET_OBJECTS:dragon_fft_objs>
     $<TARGET_OBJECTS:dragon_sink_objs>
-    ${DragonMultimedia_SOURCES}
-    ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonplayer.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonaudiooutput.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonspectrumanalyzer.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonfftframe.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMultimedia/dragonicymetadata.h
+    ${DragonMediaBackend_SOURCES}
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
 )
 
-add_library(DragonMultimedia::DragonMultimedia ALIAS DragonMultimedia)
+add_library(DragonMediaBackend::DragonMediaBackend ALIAS DragonMediaBackend)
 
-target_include_directories(DragonMultimedia
+target_include_directories(DragonMediaBackend
     PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
@@ -36,7 +36,7 @@ target_include_directories(DragonMultimedia
         ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
 )
 
-target_link_libraries(DragonMultimedia
+target_link_libraries(DragonMediaBackend
     PUBLIC
         Qt6::Core
         Qt6::Network

@@ -6,7 +6,7 @@
 #pragma once
 
 #include "dragonfftframe.h"
-#include "dragonmultimedia_export.h"
+#include "dragonmediabackend_export.h"
 
 #include <QObject>
 
@@ -16,7 +16,7 @@
 class DragonPlayer;
 class DragonSpectrumAnalyzerPrivate;
 
-class DRAGONMULTIMEDIA_EXPORT DragonSpectrumAnalyzer : public QObject
+class DRAGONMEDIABACKEND_EXPORT DragonSpectrumAnalyzer : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)

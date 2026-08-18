@@ -26,7 +26,7 @@
 #include <vector>
 
 using namespace Qt::StringLiterals;
-using namespace DragonMultimedia;
+using namespace DragonMediaBackend;
 
 extern "C" {
 #include <libavcodec/avcodec.h>

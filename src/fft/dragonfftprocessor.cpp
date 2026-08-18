@@ -7,7 +7,7 @@
 
 #include <kissfft.hh>
 
-#include "dragonmultimedia_fft_logging.h"
+#include "dragonmediabackend_fft_logging.h"
 
 #include "player/dragonpipe.h"
 #include <algorithm>

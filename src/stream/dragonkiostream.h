@@ -23,7 +23,7 @@
 class DragonBufferProgress;
 class QTimer;
 
-class DRAGONMULTIMEDIA_EXPORT DragonKioStream : public DragonStream
+class DRAGONMEDIABACKEND_EXPORT DragonKioStream : public DragonStream
 {
     Q_OBJECT
 

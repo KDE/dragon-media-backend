@@ -8,7 +8,7 @@
 #include "dragonstream.h"
 
 #include "dragonbufferprogress.h"
-#include <DragonMultimedia/dragonicymetadata.h>
+#include <DragonMediaBackend/dragonicymetadata.h>
 
 #include <QNetworkReply>
 #include <QPointer>
@@ -25,7 +25,7 @@
 
 class QNetworkAccessManager;
 
-class DRAGONMULTIMEDIA_EXPORT DragonRadioStream : public DragonStream
+class DRAGONMEDIABACKEND_EXPORT DragonRadioStream : public DragonStream
 {
     Q_OBJECT
 

@@ -16,7 +16,7 @@
 #include <mutex>
 #include <thread>
 
-using namespace DragonMultimedia;
+using namespace DragonMediaBackend;
 
 class TestCompletion : public QObject
 {

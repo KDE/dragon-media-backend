@@ -11,6 +11,6 @@
 static struct InstallTimestampedHandler {
     InstallTimestampedHandler()
     {
-        DragonMultimedia_install_timestamped_handler();
+        DragonMediaBackend_install_timestamped_handler();
     }
 } installTimestampedHandlerInstance;

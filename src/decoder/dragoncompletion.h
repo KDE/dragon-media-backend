@@ -14,9 +14,9 @@
 #include <QObject>
 #include <QString>
 
-#include "dragonmultimedia_export.h"
+#include "dragonmediabackend_export.h"
 
-namespace DragonMultimedia
+namespace DragonMediaBackend
 {
 
 struct InitResult {
@@ -44,7 +44,7 @@ struct InitResult {
 // same-thread vs cross-thread dispatch and connection-lifetime safety.
 // The result can be set before, during, or after the await; if it arrives
 // before the await, it is buffered and the await resolves synchronously.
-class DRAGONMULTIMEDIA_EXPORT DragonCompletion : public QObject
+class DRAGONMEDIABACKEND_EXPORT DragonCompletion : public QObject
 {
     Q_OBJECT
 public:
@@ -131,4 +131,4 @@ private:
 
 }
 
-Q_DECLARE_METATYPE(DragonMultimedia::InitResult)
+Q_DECLARE_METATYPE(DragonMediaBackend::InitResult)

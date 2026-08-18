@@ -12,7 +12,7 @@
 #include <variant>
 #include <vector>
 
-namespace DragonMultimedia
+namespace DragonMediaBackend
 {
 
 struct FormatReady {

@@ -23,40 +23,40 @@ target_link_libraries(dragon_sink_objs PRIVATE
 
 set_target_properties(dragon_sink_objs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_compile_definitions(dragon_sink_objs PRIVATE DragonMultimedia_EXPORTS)
+target_compile_definitions(dragon_sink_objs PRIVATE DragonMediaBackend_EXPORTS)
 
 kcoreaddons_add_plugin(dragonsdlaudiosink
         SOURCES dragonsdlaudiosink.cpp ${dragonsdlaudiosink_SOURCES}
-        INSTALL_NAMESPACE "DragonMultimedia/AudioSink"
+        INSTALL_NAMESPACE "DragonMediaBackend/AudioSink"
 )
 target_include_directories(dragonsdlaudiosink PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
         ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
 )
-target_link_libraries(dragonsdlaudiosink PRIVATE DragonMultimedia SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
+target_link_libraries(dragonsdlaudiosink PRIVATE DragonMediaBackend SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
 
 if(PULSEAUDIO_FOUND)
     kcoreaddons_add_plugin(dragonpulseaudiosink
             SOURCES dragonpulseaudiosink.cpp ${dragonpulseaudiosink_SOURCES}
-            INSTALL_NAMESPACE "DragonMultimedia/AudioSink"
+            INSTALL_NAMESPACE "DragonMediaBackend/AudioSink"
     )
     target_include_directories(dragonpulseaudiosink PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
             ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
     )
-    target_link_libraries(dragonpulseaudiosink PRIVATE DragonMultimedia PkgConfig::PULSEAUDIO KF6::CoreAddons Qt6::Gui KF6::I18n)
-    target_compile_definitions(dragonpulseaudiosink PRIVATE TRANSLATION_DOMAIN="dragonmultimedia")
+    target_link_libraries(dragonpulseaudiosink PRIVATE DragonMediaBackend PkgConfig::PULSEAUDIO KF6::CoreAddons Qt6::Gui KF6::I18n)
+    target_compile_definitions(dragonpulseaudiosink PRIVATE TRANSLATION_DOMAIN="dragonmediabackend")
 endif()
 
 if(PIPEWIRE_FOUND)
     kcoreaddons_add_plugin(dragonpipewireaudiosink
             SOURCES dragonpipewireaudiosink.cpp ${dragonpipewireaudiosink_SOURCES}
-            INSTALL_NAMESPACE "DragonMultimedia/AudioSink"
+            INSTALL_NAMESPACE "DragonMediaBackend/AudioSink"
     )
     target_include_directories(dragonpipewireaudiosink PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
             ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
     )
-    target_link_libraries(dragonpipewireaudiosink PRIVATE DragonMultimedia PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui KF6::I18n)
-    target_compile_definitions(dragonpipewireaudiosink PRIVATE TRANSLATION_DOMAIN="dragonmultimedia")
+    target_link_libraries(dragonpipewireaudiosink PRIVATE DragonMediaBackend PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui KF6::I18n)
+    target_compile_definitions(dragonpipewireaudiosink PRIVATE TRANSLATION_DOMAIN="dragonmediabackend")
 endif()

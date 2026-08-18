@@ -5,7 +5,7 @@
 
 #include "dragonpipe.h"
 
-#include "dragonmultimedia_export.h"
+#include "dragonmediabackend_export.h"
 
 #include <algorithm>
 #include <cassert>
@@ -87,6 +87,6 @@ size_t DragonPipe<T>::Consumer::ready() const
     return m_pipe->m_queue.get_num_items_ready();
 }
 
-template class DRAGONMULTIMEDIA_EXPORT DragonPipe<float>;
+template class DRAGONMEDIABACKEND_EXPORT DragonPipe<float>;
 #include "fft/dragonfftblock.h"
-template class DRAGONMULTIMEDIA_EXPORT DragonPipe<DragonFftBlock>;
+template class DRAGONMEDIABACKEND_EXPORT DragonPipe<DragonFftBlock>;

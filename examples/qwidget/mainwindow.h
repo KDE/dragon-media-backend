@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include <DragonMultimedia/dragonfftframe.h>
-#include <DragonMultimedia/dragonicymetadata.h>
+#include <DragonMediaBackend/dragonfftframe.h>
+#include <DragonMediaBackend/dragonicymetadata.h>
 #include <QMainWindow>
 
 class DragonPlayer;

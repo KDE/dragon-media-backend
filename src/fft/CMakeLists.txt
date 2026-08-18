@@ -27,4 +27,4 @@ target_include_directories(dragon_fft_objs PRIVATE
 
 set_target_properties(dragon_fft_objs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_compile_definitions(dragon_fft_objs PRIVATE DragonMultimedia_EXPORTS)
+target_compile_definitions(dragon_fft_objs PRIVATE DragonMediaBackend_EXPORTS)

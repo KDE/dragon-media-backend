@@ -18,8 +18,8 @@
 
 #include "decoder/dragondecoder.h"
 #include "player/dragondiagnostics.h"
-#include <DragonMultimedia/dragonplayer.h>
-#include <DragonMultimedia/dragonspectrumanalyzer.h>
+#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonMediaBackend/dragonspectrumanalyzer.h>
 
 #include <algorithm>
 #include <atomic>

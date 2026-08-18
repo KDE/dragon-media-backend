@@ -4,12 +4,12 @@
  */
 
 #include "dragonnullaudiosink.h"
-#include "dragonmultimedia_factory_logging.h"
+#include "dragonmediabackend_factory_logging.h"
 
 DragonNullAudioSink::DragonNullAudioSink(QObject *parent)
     : DragonAudioSink(parent)
 {
-    qCWarning(dragonMultimediaFactory) << "Null audio sink created audio output will be silent";
+    qCWarning(dragonMediaBackendFactory) << "Null audio sink created audio output will be silent";
 }
 
 bool DragonNullAudioSink::probe()

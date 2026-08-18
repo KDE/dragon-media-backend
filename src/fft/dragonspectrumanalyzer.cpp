@@ -5,8 +5,8 @@
 
 #include "player/dragonpipe.h"
 #include "player/dragonplayer_p.h"
-#include <DragonMultimedia/dragonplayer.h>
-#include <DragonMultimedia/dragonspectrumanalyzer.h>
+#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonMediaBackend/dragonspectrumanalyzer.h>
 
 #include "fft/dragonfftpipeline.h"
 

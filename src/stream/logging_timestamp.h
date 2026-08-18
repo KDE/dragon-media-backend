@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
  * Shared timestamped logging utilities for tests and examples.
- * This does NOT affect logging when DragonMultimedia is used as a library.
+ * This does NOT affect logging when DragonMediaBackend is used as a library.
  */
 
 #pragma once
@@ -14,7 +14,7 @@
 
 #include <cstdio>
 
-inline void DragonMultimedia_install_timestamped_handler()
+inline void DragonMediaBackend_install_timestamped_handler()
 {
     static bool installed = false;
     if (installed)

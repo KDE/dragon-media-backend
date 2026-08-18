@@ -13,7 +13,7 @@
 #include "test_utils.h"
 
 #include "player/dragonevent.h"
-#include <DragonMultimedia/dragonplayer.h>
+#include <DragonMediaBackend/dragonplayer.h>
 
 #include <algorithm>
 #include <cmath>
@@ -46,7 +46,7 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
     DragonDecoder decoder(nullptr, nullptr, -1, filePath);
     QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
 
-    DragonMultimedia::InitResult initRes = decoder.initialize();
+    DragonMediaBackend::InitResult initRes = decoder.initialize();
     if (initRes.success) {
         result.sampleRate = initRes.sampleRate;
         result.channels = initRes.channels;
@@ -64,20 +64,20 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
     std::jthread decodeThread(
         [&](std::stop_token st) {
             for (auto event : decoder.decodeLoop(st)) {
-                using namespace DragonMultimedia;
-                std::visit(DragonMultimedia::overloaded{[&sawFormatReady](FormatReady &) {
-                                                            sawFormatReady.store(true);
-                                                        },
-                                                        [&result](SamplesChunk &sc) {
-                                                            result.sampleRate = sc.sampleRate;
-                                                            result.channels = sc.channels;
-                                                            result.allSamples.insert(result.allSamples.end(), sc.data.begin(), sc.data.end());
-                                                        },
-                                                        [&result](DecodeError &err) {
-                                                            result.hadError = true;
-                                                            result.errorMessage = err.message;
-                                                        },
-                                                        [](DecodeEof &) { }},
+                using namespace DragonMediaBackend;
+                std::visit(DragonMediaBackend::overloaded{[&sawFormatReady](FormatReady &) {
+                                                              sawFormatReady.store(true);
+                                                          },
+                                                          [&result](SamplesChunk &sc) {
+                                                              result.sampleRate = sc.sampleRate;
+                                                              result.channels = sc.channels;
+                                                              result.allSamples.insert(result.allSamples.end(), sc.data.begin(), sc.data.end());
+                                                          },
+                                                          [&result](DecodeError &err) {
+                                                              result.hadError = true;
+                                                              result.errorMessage = err.message;
+                                                          },
+                                                          [](DecodeEof &) { }},
                            event);
             }
             decodeComplete.store(true);
@@ -334,7 +334,7 @@ void TestDecoderFixtures::testDecoderNonExistentFile()
     QVERIFY2(!QFileInfo::exists(filePath), "Test file should not exist");
 
     DragonDecoder decoder(nullptr, nullptr, -1, filePath);
-    DragonMultimedia::InitResult res = decoder.initialize();
+    DragonMediaBackend::InitResult res = decoder.initialize();
 
     QVERIFY(!res.success);
     QVERIFY(!res.errorMessage.isEmpty());
@@ -352,7 +352,7 @@ void TestDecoderFixtures::testDecoderInvalidFile()
     file.close();
 
     DragonDecoder decoder(nullptr, nullptr, -1, invalidPath);
-    DragonMultimedia::InitResult res = decoder.initialize();
+    DragonMediaBackend::InitResult res = decoder.initialize();
 
     QVERIFY(!res.success);
     QVERIFY(!res.errorMessage.isEmpty());
@@ -375,20 +375,20 @@ void TestDecoderFixtures::testDecoderSignalEventCounts()
     std::jthread t(
         [&](std::stop_token st) {
             for (auto event : decoder.decodeLoop(st)) {
-                using namespace DragonMultimedia;
-                std::visit(DragonMultimedia::overloaded{[&](const FormatReady &) {
-                                                            QFAIL("FormatReady should not be yielded");
-                                                        },
-                                                        [&samplesChunkCount, &samplesCount](SamplesChunk &sc) {
-                                                            samplesChunkCount.fetch_add(1);
-                                                            samplesCount.fetch_add(static_cast<int>(sc.data.size()));
-                                                        },
-                                                        [](DecodeError &) {
-                                                            QFAIL("DecodeError should not occur when decoding valid file");
-                                                        },
-                                                        [&eofCount](DecodeEof &) {
-                                                            eofCount.fetch_add(1);
-                                                        }},
+                using namespace DragonMediaBackend;
+                std::visit(DragonMediaBackend::overloaded{[&](const FormatReady &) {
+                                                              QFAIL("FormatReady should not be yielded");
+                                                          },
+                                                          [&samplesChunkCount, &samplesCount](SamplesChunk &sc) {
+                                                              samplesChunkCount.fetch_add(1);
+                                                              samplesCount.fetch_add(static_cast<int>(sc.data.size()));
+                                                          },
+                                                          [](DecodeError &) {
+                                                              QFAIL("DecodeError should not occur when decoding valid file");
+                                                          },
+                                                          [&eofCount](DecodeEof &) {
+                                                              eofCount.fetch_add(1);
+                                                          }},
                            event);
             }
         },

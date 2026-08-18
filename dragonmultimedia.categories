@@ -1,5 +1,0 @@
-org.kde.dragonmultimedia.player DragonMultimedia (player core) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonMultimediaPlayer]
-org.kde.dragonmultimedia.decoder DragonMultimedia (ffmpeg decoder) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonMultimediaDecoder]
-org.kde.dragonmultimedia.audio DragonMultimedia (SDL audio output) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonMultimediaAudio]
-org.kde.dragonmultimedia.fft DragonMultimedia (FFT processor) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonMultimediaFft]
-org.kde.dragonmultimedia.network DragonMultimedia (radio stream) DEFAULT_SEVERITY [Info] IDENTIFIER [dragonMultimediaNetwork]

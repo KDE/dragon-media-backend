@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "dragonmultimedia_export.h"
+#include "dragonmediabackend_export.h"
 
 #include <QObject>
 
@@ -15,7 +15,7 @@ class DragonPlayer;
 class DragonAudioSink;
 class DragonAudioOutputPrivate;
 
-class DRAGONMULTIMEDIA_EXPORT DragonAudioOutput : public QObject
+class DRAGONMEDIABACKEND_EXPORT DragonAudioOutput : public QObject
 {
     Q_OBJECT
     Q_PROPERTY(qreal volume READ volume WRITE setVolume NOTIFY volumeChanged)

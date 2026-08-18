@@ -6,10 +6,10 @@
 #pragma once
 
 #include "dragonfftframe.h"
-#include "dragonmultimedia_export.h"
+#include "dragonmediabackend_export.h"
 
-#include <DragonMultimedia/dragonaudiooutput.h>
-#include <DragonMultimedia/dragonicymetadata.h>
+#include <DragonMediaBackend/dragonaudiooutput.h>
+#include <DragonMediaBackend/dragonicymetadata.h>
 
 #include <QObject>
 #include <QString>
@@ -21,7 +21,7 @@
 class DragonAudioOutput;
 class DragonPlayerPrivate;
 
-class DRAGONMULTIMEDIA_EXPORT DragonPlayer : public QObject
+class DRAGONMEDIABACKEND_EXPORT DragonPlayer : public QObject
 {
     Q_OBJECT
 

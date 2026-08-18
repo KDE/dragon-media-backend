@@ -8,7 +8,7 @@
 #include <QCoreApplication>
 #include <QDebug>
 
-namespace DragonMultimedia
+namespace DragonMediaBackend
 {
 
 DragonCompletion::DragonCompletion()

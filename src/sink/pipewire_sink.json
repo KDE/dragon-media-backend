@@ -1,13 +1,13 @@
 {
     "KPlugin": {
         "Name": "PipeWire Audio Sink",
-        "Description": "PipeWire audio output for Dragon Multimedia",
+        "Description": "PipeWire audio output for Dragon Media Backend",
         "Icon": "audio-card",
         "Authors": [{ "Name": "Ian Monroe" }],
         "Category": "Audio",
         "Version": "1.0",
         "EnabledByDefault": true,
-        "ServiceTypes": ["DragonMultimedia/AudioSink"]
+        "ServiceTypes": ["DragonMediaBackend/AudioSink"]
     },
     "Priority": 100
 }

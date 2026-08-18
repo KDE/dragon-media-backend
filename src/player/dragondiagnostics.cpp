@@ -6,7 +6,7 @@
 #include "dragondiagnostics.h"
 #include "dragonplayer_p.h"
 #include "sink/dragonaudiosink.h"
-#include <DragonMultimedia/dragonspectrumanalyzer.h>
+#include <DragonMediaBackend/dragonspectrumanalyzer.h>
 
 #include <QPointer>
 #include <memory>

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
  * Tests for the std::generator<DecodeEvent> coroutine infrastructure using
- * the production DragonMultimedia event types, plus integration tests that
+ * the production DragonMediaBackend event types, plus integration tests that
  * exercise the real DragonDecoder::decodeLoop() generator.
  */
 
@@ -29,7 +29,7 @@
 #include <vector>
 
 using namespace Qt::StringLiterals;
-using namespace DragonMultimedia;
+using namespace DragonMediaBackend;
 
 namespace
 {

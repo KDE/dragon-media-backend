@@ -12,7 +12,7 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include <DragonMultimedia/dragonplayer.h>
+#include <DragonMediaBackend/dragonplayer.h>
 
 #include <QSignalSpy>
 #include <QUrl>

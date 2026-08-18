@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-#include "dragonmultimedia_factory_logging.h"
+#include "dragonmediabackend_factory_logging.h"
 
 using namespace Qt::StringLiterals;
 
@@ -34,15 +34,15 @@ static std::unique_ptr<DragonAudioSink> tryLoad(const KPluginMetaData &md, Drago
 {
     auto result = KPluginFactory::instantiatePlugin<DragonAudioSink>(md);
     if (!result) {
-        qCWarning(dragonMultimediaFactory) << "Failed to load audio sink plugin:" << md.pluginId() << "-" << result.errorString;
+        qCWarning(dragonMediaBackendFactory) << "Failed to load audio sink plugin:" << md.pluginId() << "-" << result.errorString;
         return nullptr;
     }
     auto sink = std::unique_ptr<DragonAudioSink>(result.plugin);
     if (!sink->probe()) {
-        qCWarning(dragonMultimediaFactory) << "Audio sink plugin" << md.pluginId() << "failed runtime probe, falling through";
+        qCWarning(dragonMediaBackendFactory) << "Audio sink plugin" << md.pluginId() << "failed runtime probe, falling through";
         return nullptr;
     }
-    qCDebug(dragonMultimediaFactory) << "Audio sink plugin" << md.pluginId() << "passed probe, selected";
+    qCDebug(dragonMediaBackendFactory) << "Audio sink plugin" << md.pluginId() << "passed probe, selected";
     assignSelectedSink(selectedSinkOut, md.pluginId());
     return sink;
 }
@@ -55,20 +55,20 @@ static std::unique_ptr<DragonAudioSink> tryLoadById(const QList<KPluginMetaData>
     if (it != plugins.end()) {
         return tryLoad(*it, selectedSinkOut);
     }
-    qCWarning(dragonMultimediaFactory) << "Requested audio sink plugin not found:" << pluginId;
+    qCWarning(dragonMediaBackendFactory) << "Requested audio sink plugin not found:" << pluginId;
     return nullptr;
 }
 
 std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requestedSink, DragonAudioOutput::Backend *selectedSinkOut)
 {
-    auto plugins = KPluginMetaData::findPlugins(u"DragonMultimedia/AudioSink"_s);
+    auto plugins = KPluginMetaData::findPlugins(u"DragonMediaBackend/AudioSink"_s);
 
     std::ranges::sort(plugins, [](const KPluginMetaData &a, const KPluginMetaData &b) {
         return a.value(u"Priority"_s, 0) > b.value(u"Priority"_s, 0);
     });
 
     for (const auto &md : plugins) {
-        qCDebug(dragonMultimediaFactory) << "Found audio sink plugin:" << md.pluginId() << "with priority:" << md.value(u"Priority"_s, 0);
+        qCDebug(dragonMediaBackendFactory) << "Found audio sink plugin:" << md.pluginId() << "with priority:" << md.value(u"Priority"_s, 0);
     }
 
     QString requestedPluginId;

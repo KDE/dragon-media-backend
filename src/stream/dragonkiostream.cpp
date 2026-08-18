@@ -6,7 +6,7 @@
 #include "dragonkiostream.h"
 
 #include "dragonbufferprogress.h"
-#include "dragonmultimedia_network_logging.h"
+#include "dragonmediabackend_network_logging.h"
 
 #include <KIO/TransferJob>
 #include <QTimer>
@@ -34,7 +34,7 @@ void DragonKioStream::setUrl(const QUrl &url)
 
 void DragonKioStream::start()
 {
-    qCDebug(dragonMultimediaNetwork) << "DragonKioStream start" << m_url.toString();
+    qCDebug(dragonMediaBackendNetwork) << "DragonKioStream start" << m_url.toString();
 
     m_abort = false;
     m_error = false;
@@ -136,7 +136,7 @@ void DragonKioStream::applyBackpressure()
     // further network delivery so the buffer cannot grow without bound when
     // the consumer (decode thread) is slower than the network.
     if (!m_suspended && m_job && m_bufferDepth.load() >= MAX_BUFFER_BYTES) {
-        qCDebug(dragonMultimediaNetwork) << "KIO buffer full (" << m_bufferDepth.load() << "bytes), suspending job";
+        qCDebug(dragonMediaBackendNetwork) << "KIO buffer full (" << m_bufferDepth.load() << "bytes), suspending job";
         m_suspended = true;
         m_job->suspend();
     }
@@ -227,11 +227,11 @@ void DragonKioStream::onResult(KJob *job)
     }
 
     if (job->error()) {
-        qCWarning(dragonMultimediaNetwork) << "KIO error:" << job->errorString();
+        qCWarning(dragonMediaBackendNetwork) << "KIO error:" << job->errorString();
         m_error = true;
         Q_EMIT errorOccurred(job->errorString());
     } else {
-        qCDebug(dragonMultimediaNetwork) << "KIO job finished successfully";
+        qCDebug(dragonMediaBackendNetwork) << "KIO job finished successfully";
         m_finished = true;
     }
     m_bufferCv.notify_all();
@@ -263,7 +263,7 @@ void DragonKioStream::onWatchdogTimeout()
         return;
     }
 
-    qCDebug(dragonMultimediaNetwork) << "KIO watchdog timeout reconnecting";
+    qCDebug(dragonMediaBackendNetwork) << "KIO watchdog timeout reconnecting";
     Q_EMIT streamStalled();
 
     if (m_job) {

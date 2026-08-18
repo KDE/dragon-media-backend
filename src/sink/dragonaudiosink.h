@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "dragonmultimedia_export.h"
+#include "dragonmediabackend_export.h"
 
 #include <QObject>
 #include <QString>
@@ -21,7 +21,7 @@ template<typename T>
 class DragonPipe;
 struct DragonFftBlock;
 
-class DRAGONMULTIMEDIA_EXPORT DragonAudioSink : public QObject
+class DRAGONMEDIABACKEND_EXPORT DragonAudioSink : public QObject
 {
     Q_OBJECT
 

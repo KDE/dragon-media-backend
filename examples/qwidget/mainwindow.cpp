@@ -9,10 +9,10 @@
 #include "dragonvisualizer.h"
 
 #include "player/dragondiagnostics.h"
-#include <DragonMultimedia/dragonaudiooutput.h>
-#include <DragonMultimedia/dragonfftframe.h>
-#include <DragonMultimedia/dragonplayer.h>
-#include <DragonMultimedia/dragonspectrumanalyzer.h>
+#include <DragonMediaBackend/dragonaudiooutput.h>
+#include <DragonMediaBackend/dragonfftframe.h>
+#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonMediaBackend/dragonspectrumanalyzer.h>
 
 #include <QApplication>
 #include <QCheckBox>

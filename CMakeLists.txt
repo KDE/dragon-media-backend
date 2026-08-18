@@ -3,7 +3,7 @@
 
 cmake_minimum_required(VERSION 3.25)
 
-project(DragonMultimedia
+project(DragonMediaBackend
     VERSION 0.1.0
     DESCRIPTION "KDE audio library using SDL3, ffmpeg, kissfft, and C++23"
     LANGUAGES CXX
@@ -61,7 +61,7 @@ if(NOT TARGET SDL3::SDL3)
     set(SDL_SHARED ON CACHE BOOL "" FORCE)
     set(SDL_STATIC OFF CACHE BOOL "" FORCE)
     set(SDL_TEST OFF CACHE BOOL "" FORCE)
-    # Only build the audio subsystem dragon-multimedia only uses SDL for audio output
+    # Only build the audio subsystem dragon-media-backend only uses SDL for audio output
     set(SDL_VIDEO OFF CACHE BOOL "" FORCE)
     set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
     set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
@@ -175,69 +175,69 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOMOC_RELY_ON_EXPORTS ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
-    HEADER "dragonmultimedia_logging.h"
-    IDENTIFIER "dragonMultimediaPlayer"
-    CATEGORY_NAME "org.kde.dragonmultimedia.player"
+ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
+    HEADER "dragonmediabackend_logging.h"
+    IDENTIFIER "dragonMediaBackendPlayer"
+    CATEGORY_NAME "org.kde.dragonmediabackend.player"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
-    HEADER "dragonmultimedia_decoder_logging.h"
-    IDENTIFIER "dragonMultimediaDecoder"
-    CATEGORY_NAME "org.kde.dragonmultimedia.decoder"
+ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
+    HEADER "dragonmediabackend_decoder_logging.h"
+    IDENTIFIER "dragonMediaBackendDecoder"
+    CATEGORY_NAME "org.kde.dragonmediabackend.decoder"
     DEFAULT_SEVERITY Info
 )
 
 ecm_qt_declare_logging_category(dragonsdlaudiosink_SOURCES
-    HEADER "dragonmultimedia_audio_logging.h"
-    IDENTIFIER "dragonMultimediaAudio"
-    CATEGORY_NAME "org.kde.dragonmultimedia.audio"
+    HEADER "dragonmediabackend_audio_logging.h"
+    IDENTIFIER "dragonMediaBackendAudio"
+    CATEGORY_NAME "org.kde.dragonmediabackend.audio"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
-    HEADER "dragonmultimedia_fft_logging.h"
-    IDENTIFIER "dragonMultimediaFft"
-    CATEGORY_NAME "org.kde.dragonmultimedia.fft"
+ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
+    HEADER "dragonmediabackend_fft_logging.h"
+    IDENTIFIER "dragonMediaBackendFft"
+    CATEGORY_NAME "org.kde.dragonmediabackend.fft"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
-    HEADER "dragonmultimedia_network_logging.h"
-    IDENTIFIER "dragonMultimediaNetwork"
-    CATEGORY_NAME "org.kde.dragonmultimedia.network"
+ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
+    HEADER "dragonmediabackend_network_logging.h"
+    IDENTIFIER "dragonMediaBackendNetwork"
+    CATEGORY_NAME "org.kde.dragonmediabackend.network"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
-    HEADER "dragonmultimedia_decode_logging.h"
-    IDENTIFIER "dragonMultimediaDecode"
-    CATEGORY_NAME "org.kde.dragonmultimedia.decode"
+ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
+    HEADER "dragonmediabackend_decode_logging.h"
+    IDENTIFIER "dragonMediaBackendDecode"
+    CATEGORY_NAME "org.kde.dragonmediabackend.decode"
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(DragonMultimedia_SOURCES
-    HEADER "dragonmultimedia_factory_logging.h"
-    IDENTIFIER "dragonMultimediaFactory"
-    CATEGORY_NAME "org.kde.dragonmultimedia.factory"
+ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
+    HEADER "dragonmediabackend_factory_logging.h"
+    IDENTIFIER "dragonMediaBackendFactory"
+    CATEGORY_NAME "org.kde.dragonmediabackend.factory"
     DEFAULT_SEVERITY Info
 )
 
 if(PULSEAUDIO_FOUND)
     ecm_qt_declare_logging_category(dragonpulseaudiosink_SOURCES
-        HEADER "dragonmultimedia_audio_logging.h"
-        IDENTIFIER "dragonMultimediaAudio"
-        CATEGORY_NAME "org.kde.dragonmultimedia.audio"
+        HEADER "dragonmediabackend_audio_logging.h"
+        IDENTIFIER "dragonMediaBackendAudio"
+        CATEGORY_NAME "org.kde.dragonmediabackend.audio"
         DEFAULT_SEVERITY Info
     )
 endif()
 
 if(PIPEWIRE_FOUND)
     ecm_qt_declare_logging_category(dragonpipewireaudiosink_SOURCES
-        HEADER "dragonmultimedia_audio_logging.h"
-        IDENTIFIER "dragonMultimediaAudio"
-        CATEGORY_NAME "org.kde.dragonmultimedia.audio"
+        HEADER "dragonmediabackend_audio_logging.h"
+        IDENTIFIER "dragonMediaBackendAudio"
+        CATEGORY_NAME "org.kde.dragonmediabackend.audio"
         DEFAULT_SEVERITY Info
     )
 endif()
@@ -250,58 +250,58 @@ add_subdirectory(src)
 
 include(GenerateExportHeader)
 
-generate_export_header(DragonMultimedia
-    BASE_NAME DragonMultimedia
-    EXPORT_MACRO_NAME DRAGONMULTIMEDIA_EXPORT
-    EXPORT_FILE_NAME dragonmultimedia_export.h
+generate_export_header(DragonMediaBackend
+    BASE_NAME DragonMediaBackend
+    EXPORT_MACRO_NAME DRAGONMEDIABACKEND_EXPORT
+    EXPORT_FILE_NAME dragonmediabackend_export.h
 )
 
-install(TARGETS DragonMultimedia
-    EXPORT DragonMultimedia-targets
+install(TARGETS DragonMediaBackend
+    EXPORT DragonMediaBackend-targets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-set(DragonMultimedia_PUBLIC_HEADERS
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonplayer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonaudiooutput.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonfftframe.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonicymetadata.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMultimedia/dragonspectrumanalyzer.h
-    ${CMAKE_CURRENT_BINARY_DIR}/dragonmultimedia_export.h
+set(DragonMediaBackend_PUBLIC_HEADERS
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h
+    ${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_export.h
 )
 
-install(FILES ${DragonMultimedia_PUBLIC_HEADERS}
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DragonMultimedia
+install(FILES ${DragonMediaBackend_PUBLIC_HEADERS}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DragonMediaBackend
 )
 
-install(FILES dragonmultimedia.categories DESTINATION ${KDE_INSTALL_DATAROOTDIR}/qlogging-categories6)
+install(FILES dragonmediabackend.categories DESTINATION ${KDE_INSTALL_DATAROOTDIR}/qlogging-categories6)
 
 include(CMakePackageConfigHelpers)
 
-install(EXPORT DragonMultimedia-targets
-    FILE DragonMultimedia-targets.cmake
-    NAMESPACE DragonMultimedia::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMultimedia
+install(EXPORT DragonMediaBackend-targets
+    FILE DragonMediaBackend-targets.cmake
+    NAMESPACE DragonMediaBackend::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMediaBackend
 )
 
 configure_package_config_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/DragonMultimediaConfig.cmake.in
-    ${CMAKE_CURRENT_BINARY_DIR}/DragonMultimediaConfig.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMultimedia
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/DragonMediaBackendConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMediaBackend
 )
 
 write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/DragonMultimediaConfig-version.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfig-version.cmake
     VERSION ${PROJECT_VERSION}
     COMPATIBILITY SameMajorVersion
 )
 
 install(FILES
-    ${CMAKE_CURRENT_BINARY_DIR}/DragonMultimediaConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/DragonMultimediaConfig-version.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMultimedia
+    ${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfig-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMediaBackend
 )
 
 file(GLOB ALL_ROOT_FILES

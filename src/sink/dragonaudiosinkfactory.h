@@ -5,11 +5,11 @@
 
 #pragma once
 
-#include "dragonmultimedia_export.h"
-#include <DragonMultimedia/dragonaudiooutput.h>
+#include "dragonmediabackend_export.h"
+#include <DragonMediaBackend/dragonaudiooutput.h>
 #include <memory>
 
 class DragonAudioSink;
 
-DRAGONMULTIMEDIA_EXPORT std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requestedSink = DragonAudioOutput::Backend::Auto,
-                                                                         DragonAudioOutput::Backend *selectedSinkOut = nullptr);
+DRAGONMEDIABACKEND_EXPORT std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requestedSink = DragonAudioOutput::Backend::Auto,
+                                                                           DragonAudioOutput::Backend *selectedSinkOut = nullptr);

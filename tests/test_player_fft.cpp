@@ -13,9 +13,9 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include <DragonMultimedia/dragonfftframe.h>
-#include <DragonMultimedia/dragonplayer.h>
-#include <DragonMultimedia/dragonspectrumanalyzer.h>
+#include <DragonMediaBackend/dragonfftframe.h>
+#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonMediaBackend/dragonspectrumanalyzer.h>
 
 #include <QSignalSpy>
 #include <QUrl>

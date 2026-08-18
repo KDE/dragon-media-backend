@@ -5,9 +5,9 @@
 
 #pragma once
 
-#include "DragonMultimedia/dragonfftframe.h"
-#include "DragonMultimedia/dragonspectrumanalyzer.h"
-#include "dragonmultimedia_export.h"
+#include "DragonMediaBackend/dragonfftframe.h"
+#include "DragonMediaBackend/dragonspectrumanalyzer.h"
+#include "dragonmediabackend_export.h"
 
 #include <array>
 #include <atomic>
@@ -24,7 +24,7 @@
 template<typename T>
 class kissfft;
 
-class DRAGONMULTIMEDIA_EXPORT DragonFftProcessor
+class DRAGONMEDIABACKEND_EXPORT DragonFftProcessor
 {
 public:
     static constexpr size_t FFT_SIZE = 4096;
