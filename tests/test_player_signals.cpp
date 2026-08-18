@@ -289,7 +289,7 @@ void TestPlayerSignals::testPauseFromStoppedIsNoOp()
 
 void TestPlayerSignals::testNextWhilePlayingWithoutExplicitStop()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s});
+    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
 
     DragonPlayer player;
     PlayerHelper helper(&player);
@@ -300,7 +300,7 @@ void TestPlayerSignals::testNextWhilePlayingWithoutExplicitStop()
     QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
     QTRY_VERIFY_WITH_TIMEOUT(stateSpy.count() >= 1, 5000);
 
     QVERIFY2(SignalSpyHelper::containsState(stateSpy, DragonPlayer::PlaybackState::StoppedState), "setSource(newUrl) while playing must emit StoppedState");
@@ -382,7 +382,7 @@ void TestPlayerSignals::testErrorChangedBeforeInvalidMedia()
 
 void TestPlayerSignals::testRapidSetSourceOnlyLastProcessed()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s});
+    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
 
     DragonPlayer player;
 
@@ -390,7 +390,7 @@ void TestPlayerSignals::testRapidSetSourceOnlyLastProcessed()
     QSignalSpy durationSpy(&player, &DragonPlayer::durationChanged);
 
     const QUrl sourceA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
-    const QUrl sourceB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s));
+    const QUrl sourceB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
 
     player.setSource(sourceA);
     player.setSource(sourceB);

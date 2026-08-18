@@ -2,12 +2,6 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
- * Phase 2: Updated tests for std::generator<DecodeEvent> interface.
- *
- * These tests verify the DragonDecoder's coroutine-based decode loop,
- * which yields DecodeEvent variants in order:
- *   FormatReady -> SamplesChunk* -> DecodeEof
- * Errors during initialization are yielded as DecodeError.
  */
 
 #include <QtCore>

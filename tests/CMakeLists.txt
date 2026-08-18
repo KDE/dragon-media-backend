@@ -68,6 +68,7 @@ dragon_add_test(test_generator LIBRARIES Qt6::Core)
 dragon_add_test(test_completion LIBRARIES Qt6::Core)
 dragon_add_test(test_fftprocessor LIBRARIES kissfft::kissfft spsc_queue)
 dragon_add_test(test_decoder LIBRARIES Qt6::Network PkgConfig::FFmpeg)
+dragon_add_test(test_decoder_fixtures LIBRARIES Qt6::Network PkgConfig::FFmpeg)
 dragon_add_test(test_pipe LIBRARIES DragonMultimedia spsc_queue)
 
 # Stream tests

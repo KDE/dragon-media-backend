@@ -77,7 +77,7 @@ void TestPlayerFft::testLazyFftInitialization()
 
 void TestPlayerFft::testFftModeToggleCreatesInfrastructure()
 {
-    skipIfMissing(u"gs-16b-2c-44100hz.ogg"_s);
+    skipIfMissing(u"gs-3s-2c-44100hz.ogg"_s);
 
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
@@ -93,7 +93,7 @@ void TestPlayerFft::testFftModeToggleCreatesInfrastructure()
         },
         Qt::QueuedConnection);
 
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
     player.play();
     QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
 
@@ -122,7 +122,7 @@ void TestPlayerFft::testFftModeToggleCreatesInfrastructure()
 
 void TestPlayerFft::testFftInfrastructurePersistsAcrossTrackChanges()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s});
+    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
 
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
@@ -136,7 +136,7 @@ void TestPlayerFft::testFftInfrastructurePersistsAcrossTrackChanges()
     QTRY_VERIFY_WITH_TIMEOUT(fftSpy.size() > 0, 3000);
 
     fftSpy.clear();
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
     player.play();
     QTRY_VERIFY_WITH_TIMEOUT(fftSpy.size() > 0, 5000);
 
@@ -145,7 +145,7 @@ void TestPlayerFft::testFftInfrastructurePersistsAcrossTrackChanges()
 
 void TestPlayerFft::testFftOffSkipsInfrastructureOnTrackChange()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s});
+    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
 
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
@@ -156,7 +156,7 @@ void TestPlayerFft::testFftOffSkipsInfrastructureOnTrackChange()
     QVERIFY(helper.playAndWait());
     QTest::qWait(500);
 
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
     player.play();
     QTest::qWait(500);
 

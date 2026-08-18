@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
  * Playback state-transition tests for DragonPlayer.
- * 
+ *
  */
 
 #include <QtCore>
@@ -137,7 +137,7 @@ void TestPlayerPlayback::testSetSourceDoesNotEmitPlayingState()
 void TestPlayerPlayback::testSetSourceWhilePlayingEmitsStoppedState()
 {
     skipIfMissing(u"sample-3s.mp3"_s);
-    skipIfMissing(u"gs-16b-2c-44100hz.ogg"_s);
+    skipIfMissing(u"gs-3s-2c-44100hz.ogg"_s);
 
     DragonPlayer player;
     PlayerHelper helper(&player);
@@ -148,7 +148,7 @@ void TestPlayerPlayback::testSetSourceWhilePlayingEmitsStoppedState()
     QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
     QTRY_VERIFY_WITH_TIMEOUT(stateSpy.count() >= 1, 5000);
 
     auto firstState = stateSpy.at(0).at(0).value<DragonPlayer::PlaybackState>();
@@ -570,7 +570,7 @@ void TestPlayerPlayback::testSetSourceThenPlayFirstTrack()
 
 void TestPlayerPlayback::testPlayNextTrackAfterStop()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s});
+    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
 
     DragonPlayer player;
     DragonDiagnostics diag(&player);
@@ -581,7 +581,7 @@ void TestPlayerPlayback::testPlayNextTrackAfterStop()
     QVERIFY(diag.isAudioActive());
 
     player.stop();
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
     player.play();
 
     QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
@@ -592,7 +592,7 @@ void TestPlayerPlayback::testPlayNextTrackAfterStop()
 
 void TestPlayerPlayback::testPlayRapidNextNext()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s, u"sample-3s.aac"_s});
+    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s, u"sample-3s.aac"_s});
 
     DragonPlayer player;
     DragonDiagnostics diag(&player);
@@ -603,7 +603,7 @@ void TestPlayerPlayback::testPlayRapidNextNext()
     QVERIFY2(diag.isAudioActive(), "Audio should be active during first track (mp3)");
 
     player.stop();
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
     player.play();
     QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
     QVERIFY2(diag.isAudioActive(), "Audio should be active during second track (ogg)");

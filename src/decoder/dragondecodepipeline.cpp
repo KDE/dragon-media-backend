@@ -136,8 +136,7 @@ bool DragonDecodePipeline::waitForDecoderAssignment(std::stop_token st)
         return m_activeDecoder != nullptr;
     });
 
-    qCDebug(dragonMultimediaDecode) << "decode thread woke up activeDecoder=" << (m_activeDecoder != nullptr)
-                                    << " outerStopRequested=" << st.stop_requested();
+    qCDebug(dragonMultimediaDecode) << "decode thread woke up activeDecoder=" << (m_activeDecoder != nullptr) << " outerStopRequested=" << st.stop_requested();
 
     if (st.stop_requested()) {
         qCDebug(dragonMultimediaDecode) << "decode thread outer loop stop requested, breaking";

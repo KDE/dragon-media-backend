@@ -90,7 +90,7 @@ void TestPlayerSetSource::testSetSourceSignalOrderFromFreshPlayer()
 
 void TestPlayerSetSource::testSetSourceSignalOrderFromPlaying()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-16b-2c-44100hz.ogg"_s});
+    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
 
     DragonPlayer player;
     PlayerHelper helper(&player);
@@ -103,7 +103,7 @@ void TestPlayerSetSource::testSetSourceSignalOrderFromPlaying()
     tracker.trackStateChanges();
     tracker.trackStatusChanges();
 
-    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
     QVERIFY2(tracker.containsTransition(DragonPlayer::PlaybackState::StoppedState, DragonPlayer::PlaybackState::PlayingState),

@@ -226,7 +226,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnSeekBack()
 void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
 {
     skipIfMissing(u"sample-3s.mp3"_s);
-    skipIfMissing(u"gs-16b-2c-44100hz.ogg"_s);
+    skipIfMissing(u"gs-3s-2c-44100hz.ogg"_s);
 
     DragonPlayer player;
     DragonDiagnostics diagnostics(&player);
@@ -239,7 +239,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
-    player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-16b-2c-44100hz.ogg"_s)));
+    player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
     QVERIFY(helper.playAndWait());
     VERIFY_AUDIO_ACTIVE(diagnostics);
 

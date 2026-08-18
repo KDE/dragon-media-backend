@@ -76,12 +76,22 @@ public:
     }
     static QStringList stereoFixtures()
     {
-        return {u"gs-16b-2c-44100hz.ogg"_s, u"gs-16b-2c-44100hz.m4a"_s};
+        return {u"gs-3s-2c-44100hz.ogg"_s, u"gs-3s-2c-44100hz.m4a"_s};
     }
 
     static QStringList shortFixtures()
     {
         return {u"sample-3s.mp3"_s, u"sample-3s.aac"_s};
+    }
+
+    static QStringList shortStereoFixtures()
+    {
+        return {u"gs-3s-2c-44100hz.ogg"_s, u"gs-3s-2c-44100hz.m4a"_s};
+    }
+
+    static QStringList shortMonoFixtures()
+    {
+        return {u"gs-3s-1c-44100hz.flac"_s, u"gs-3s-1c-44100hz.wma"_s};
     }
 };
 
