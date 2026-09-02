@@ -126,6 +126,12 @@ protected:
 
     void preAllocateCallbackBuffer(size_t maxSamples);
 
+    [[nodiscard]] static QString defaultStreamName();
+    [[nodiscard]] static QString applicationIconName();
+    [[nodiscard]] QString resolvedStreamName() const;
+
+    QString m_streamName;
+
 private:
     DragonPipe<float> *audioPipe() const;
     DragonPipe<DragonFftBlock> *fftPipe() const;

@@ -90,6 +90,8 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     currentSampleRate = sampleRate;
     currentChannels = channels;
 
+    audioOutput->sink()->setStreamName(QString());
+
     decodePipeline.setCurrentSource(currentSource);
 
     audioOutput->sink()->setPositionOffset(0, DragonAudioSink::PositionResetMode::GaplessTransition);
@@ -525,6 +527,9 @@ void DragonPlayer::setSource(const QUrl &source)
         d->audioOutput->sink()->setQueueReady(false);
         d->audioOutput->sink()->resetDrainState();
         d->audioOutput->sink()->setPositionOffset(0, DragonAudioSink::PositionResetMode::NormalTrackChange);
+        if (d->currentSource != source) {
+            d->audioOutput->sink()->setStreamName(QString());
+        }
     }
 
     d->decodePipeline.stopSession();
@@ -606,6 +611,15 @@ void DragonPlayer::setNextSource(const QUrl &nextSource)
     Q_EMIT nextSourceChanged();
 
     d->decodePipeline.setNextSource(nextSource);
+}
+
+void DragonPlayer::setStreamName(const QString &name)
+{
+    qCDebug(dragonMediaBackendPlayer) << "setStreamName(" << name << ")";
+
+    if (auto *sink = d->audioSink()) {
+        sink->setStreamName(name);
+    }
 }
 
 void DragonPlayer::setPosition(qint64 posMs)

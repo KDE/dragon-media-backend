@@ -114,6 +114,7 @@ Q_SIGNALS:
 public Q_SLOTS:
     void setSource(const QUrl &source);
     void setNextSource(const QUrl &nextSource);
+    void setStreamName(const QString &name);
     void setPosition(qint64 positionMs);
     void setPrefinishMark(int32_t msec);
     void play();

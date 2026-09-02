@@ -19,6 +19,7 @@ K_PLUGIN_CLASS_WITH_JSON(DragonPipeWireAudioSink, "pipewire_sink.json")
 #include <spa/param/audio/format-utils.h>
 #include <spa/param/props.h>
 #include <spa/pod/iter.h>
+#include <spa/utils/dict.h>
 
 #include "dragonthreadname.h"
 #include <algorithm>
@@ -119,7 +120,7 @@ struct DragonPipeWireAudioSink::PwState {
     spa_hook streamListener{};
 };
 
-static constexpr struct pw_stream_events s_streamEvents = [] {
+static constexpr pw_stream_events s_streamEvents = [] {
     struct pw_stream_events ev{};
     ev.version = PW_VERSION_STREAM_EVENTS;
     ev.process = DragonPipeWireAudioSink::onProcess;
@@ -202,8 +203,19 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     pw_properties_set(props.get(), PW_KEY_APP_NAME, nodeName);
     pw_properties_set(props.get(), PW_KEY_NODE_NAME, nodeName);
     pw_properties_set(props.get(), PW_KEY_NODE_DESCRIPTION, nodeName);
-    pw_properties_set(props.get(), PW_KEY_MEDIA_NAME, nodeName);
+
+    const QString mediaName = resolvedStreamName();
+    const QByteArray mediaNameUtf8 = mediaName.toUtf8();
+    pw_properties_set(props.get(), PW_KEY_MEDIA_NAME, mediaNameUtf8.constData());
+
     pw_properties_set(props.get(), PW_KEY_NODE_ALWAYS_PROCESS, "true");
+
+    const QString appIconName = applicationIconName();
+    if (!appIconName.isEmpty()) {
+        const QByteArray appIconNameUtf8 = appIconName.toUtf8();
+        pw_properties_set(props.get(), PW_KEY_APP_ICON_NAME, appIconNameUtf8.constData());
+        pw_properties_set(props.get(), PW_KEY_APP_ID, appIconNameUtf8.constData());
+    }
 
     const QByteArray testSinkName = qgetenv("DRAGON_PW_TEST_SINK_NAME");
     if (!testSinkName.isEmpty()) {
@@ -221,9 +233,9 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     }
 
     uint8_t podBuffer[PW_POD_BUFFER_LENGTH];
-    struct spa_pod_builder b = SPA_POD_BUILDER_INIT(podBuffer, sizeof(podBuffer));
+    spa_pod_builder b = SPA_POD_BUILDER_INIT(podBuffer, sizeof(podBuffer));
 
-    struct spa_audio_info_raw audioInfo = {};
+    spa_audio_info_raw audioInfo = {};
     audioInfo.format = SPA_AUDIO_FORMAT_F32;
     audioInfo.rate = static_cast<uint32_t>(sampleRate);
     audioInfo.channels = static_cast<uint32_t>(channels);
@@ -237,7 +249,7 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
         audioInfo.position[1] = SPA_AUDIO_CHANNEL_FR;
     }
 
-    const struct spa_pod *params = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &audioInfo);
+    const spa_pod *params = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &audioInfo);
     if (!params) {
         qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to build audio format pod";
         Q_EMIT errorOccurred(i18n("PipeWire: failed to build audio format"));
@@ -347,6 +359,27 @@ void DragonPipeWireAudioSink::setMuted(bool muted)
     DragonAudioSink::setMuted(muted);
 }
 
+void DragonPipeWireAudioSink::setStreamName(const QString &name)
+{
+    DragonAudioSink::setStreamName(name);
+
+    if (!m_pw->stream || !m_open.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    const QString mediaName = resolvedStreamName();
+    const QByteArray mediaNameUtf8 = mediaName.toUtf8();
+
+    const spa_dict_item items[] = {
+        {PW_KEY_MEDIA_NAME, mediaNameUtf8.constData()},
+    };
+    const spa_dict dict = {0, std::size(items), items};
+
+    PwThreadLoopLock lock(m_pw->loop.get());
+    pw_stream_update_properties(m_pw->stream.get(), &dict);
+    qCDebug(dragonMediaBackendAudio) << "PipeWire: setStreamName() updated media.name to:" << mediaName;
+}
+
 void DragonPipeWireAudioSink::clearStream()
 {
     if (m_pw->stream) {
@@ -367,7 +400,7 @@ qint64 DragonPipeWireAudioSink::deviceQueuedSamples() const
         return 0;
     }
 
-    struct pw_time time{};
+    pw_time time{};
     if (pw_stream_get_time_n(m_pw->stream.get(), &time, sizeof(time)) != 0) {
         return 0;
     }
@@ -381,7 +414,7 @@ int DragonPipeWireAudioSink::audioBufferFrames() const
         return -1;
     }
 
-    struct pw_time time{};
+    pw_time time{};
     if (pw_stream_get_time_n(m_pw->stream.get(), &time, sizeof(time)) != 0) {
         return -1;
     }
@@ -432,12 +465,12 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
         return;
     }
 
-    struct pw_buffer *pwBuf = pw_stream_dequeue_buffer(stream);
+    pw_buffer *pwBuf = pw_stream_dequeue_buffer(stream);
     if (!pwBuf) {
         return;
     }
 
-    struct spa_buffer *spaBuf = pwBuf->buffer;
+    spa_buffer *spaBuf = pwBuf->buffer;
     if (!spaBuf || spaBuf->n_datas < 1 || !spaBuf->datas[0].data) {
         pw_stream_queue_buffer(stream, pwBuf);
         return;
@@ -448,7 +481,7 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
 
     uint32_t requestedFrames = pwBuf->requested;
     if (requestedFrames == 0) {
-        struct pw_time pwt{};
+        pw_time pwt{};
         if (pw_stream_get_time_n(stream, &pwt, sizeof(pwt)) == 0 && pwt.size > 0) {
             requestedFrames = pwt.size;
         } else {
@@ -474,7 +507,7 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
 
     const int channels = self->currentChannels();
 
-    struct pw_time pwt{};
+    pw_time pwt{};
     qint64 latencyUs = 0;
     if (pw_stream_get_time_n(stream, &pwt, sizeof(pwt)) == 0 && pwt.rate.denom > 0) {
         latencyUs = (pwt.delay * 1'000'000LL * pwt.rate.num) / pwt.rate.denom;
@@ -519,7 +552,7 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
     pw_stream_queue_buffer(stream, pwBuf);
 }
 
-void DragonPipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const struct pw_stream_control *control)
+void DragonPipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const pw_stream_control *control)
 {
     auto *self = static_cast<DragonPipeWireAudioSink *>(userdata);
     if (!self || !control || control->n_values == 0) {
@@ -565,7 +598,7 @@ void DragonPipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const s
     }
 }
 
-void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const struct spa_pod *param)
+void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const spa_pod *param)
 {
     auto *self = static_cast<DragonPipeWireAudioSink *>(userdata);
     if (!self || !param) {
@@ -574,20 +607,21 @@ void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const 
 
     qCDebug(dragonMediaBackendAudio) << "PipeWire param_changed id:" << id;
 
-    if (id == SPA_PARAM_Props) {
-        const struct spa_pod_prop *prop = nullptr;
+    if (id == SPA_PARAM_Props && spa_pod_is_object(param)) {
+        const spa_pod_prop *prop = nullptr;
         SPA_POD_OBJECT_FOREACH(reinterpret_cast<const struct spa_pod_object *>(param), prop)
         {
             if (prop->key == SPA_PROP_volume) {
-                const float *val = reinterpret_cast<const float *>(SPA_POD_BODY(&prop->value));
-                float value = val ? *val : 1.0f;
-                qCDebug(dragonMediaBackendAudio) << "PipeWire param_changed SPA_PROP_volume:" << value;
-                QMetaObject::invokeMethod(
-                    self,
-                    [self, value]() {
-                        self->onExternalVolumeChanged(value);
-                    },
-                    Qt::QueuedConnection);
+                float value = 0.0f;
+                if (spa_pod_get_float(&prop->value, &value) == 0) {
+                    qCDebug(dragonMediaBackendAudio) << "PipeWire param_changed SPA_PROP_volume:" << value;
+                    QMetaObject::invokeMethod(
+                        self,
+                        [self, value]() {
+                            self->onExternalVolumeChanged(value);
+                        },
+                        Qt::QueuedConnection);
+                }
             } else if (prop->key == SPA_PROP_mute) {
                 bool value = false;
                 if (spa_pod_get_bool(&prop->value, &value) == 0) {

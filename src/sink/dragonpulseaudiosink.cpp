@@ -285,9 +285,16 @@ bool DragonPulseAudioSink::connectToServer()
         const QString appName = QGuiApplication::applicationDisplayName();
         pa_proplist_sets(rawProplist, PA_PROP_APPLICATION_NAME, appName.isEmpty() ? "DragonMediaBackend" : appName.toUtf8().constData());
         pa_proplist_sets(rawProplist, PA_PROP_MEDIA_ROLE, "music");
+
+        const QString appId = applicationIconName();
+        if (!appId.isEmpty()) {
+            const QByteArray appIdUtf8 = appId.toUtf8();
+            pa_proplist_sets(rawProplist, PA_PROP_APPLICATION_ICON_NAME, appIdUtf8.constData());
+            pa_proplist_sets(rawProplist, PA_PROP_APPLICATION_ID, appIdUtf8.constData());
+        }
     }
 
-    ContextPtr ctx(pa_context_new_with_proplist(api, m_streamName.empty() ? "DragonMediaBackend" : m_streamName.c_str(), rawProplist));
+    ContextPtr ctx(pa_context_new_with_proplist(api, defaultStreamName().toUtf8().constData(), rawProplist));
     if (!ctx) {
         qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_context_new_with_proplist failed";
         Q_EMIT errorOccurred(i18n("PulseAudio: failed to create context"));
@@ -399,11 +406,33 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
             return false;
         }
 
-        const char *streamName = m_streamName.empty() ? "DragonMediaBackend" : m_streamName.c_str();
-        m_pa->stream.reset(pa_stream_new(m_pa->context.get(), streamName, &ss, &channelMap));
+        const QString mediaName = resolvedStreamName();
+        const QByteArray mediaNameUtf8 = mediaName.toUtf8();
+
+        pa_proplist *streamProplist = pa_proplist_new();
+        if (!streamProplist) {
+            pendingError = i18n("PulseAudio: failed to create stream proplist");
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_proplist_new failed";
+            return false;
+        }
+        auto streamProplistGuard = qScopeGuard([streamProplist]() {
+            pa_proplist_free(streamProplist);
+        });
+
+        pa_proplist_sets(streamProplist, PA_PROP_MEDIA_NAME, mediaNameUtf8.constData());
+        pa_proplist_sets(streamProplist, PA_PROP_APPLICATION_NAME, defaultStreamName().toUtf8().constData());
+        pa_proplist_sets(streamProplist, PA_PROP_MEDIA_ROLE, "music");
+        const QString appId = applicationIconName();
+        if (!appId.isEmpty()) {
+            const QByteArray appIdUtf8 = appId.toUtf8();
+            pa_proplist_sets(streamProplist, PA_PROP_APPLICATION_ICON_NAME, appIdUtf8.constData());
+            pa_proplist_sets(streamProplist, PA_PROP_APPLICATION_ID, appIdUtf8.constData());
+        }
+
+        m_pa->stream.reset(pa_stream_new_with_proplist(m_pa->context.get(), mediaNameUtf8.constData(), &ss, &channelMap, streamProplist));
         if (!m_pa->stream) {
             pendingError = i18n("PulseAudio: failed to create stream");
-            qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_stream_new failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_stream_new_with_proplist failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
             return false;
         }
 
@@ -645,7 +674,27 @@ bool DragonPulseAudioSink::isPaused() const
 
 void DragonPulseAudioSink::setStreamName(const QString &name)
 {
-    m_streamName = name.toStdString();
+    DragonAudioSink::setStreamName(name);
+
+    if (!m_pa->mainloop || !m_pa->stream || !m_open.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    ScopedMainloopLock lock(m_pa->mainloop.get());
+
+    pa_proplist *proplist = pa_proplist_new();
+    if (!proplist) {
+        return;
+    }
+
+    const QString mediaName = resolvedStreamName();
+    pa_proplist_sets(proplist, PA_PROP_MEDIA_NAME, mediaName.toUtf8().constData());
+
+    pa_operation *op = pa_stream_proplist_update(m_pa->stream.get(), PA_UPDATE_REPLACE, proplist, nullptr, nullptr);
+    if (op) {
+        pa_operation_unref(op);
+    }
+    pa_proplist_free(proplist);
 }
 
 void DragonPulseAudioSink::drainCallback(pa_stream *s, int success, void *userdata)

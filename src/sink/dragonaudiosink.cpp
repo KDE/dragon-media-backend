@@ -7,6 +7,9 @@
 #include "fft/dragonfftblock.h"
 #include "player/dragonpipe.h"
 
+#include <QGuiApplication>
+#include <QIcon>
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -142,7 +145,27 @@ void DragonAudioSink::onExternalVolumeChanged(float linearGain)
 
 void DragonAudioSink::setStreamName(const QString &name)
 {
-    Q_UNUSED(name);
+    m_streamName = name;
+}
+
+QString DragonAudioSink::defaultStreamName()
+{
+    const QString appName = QGuiApplication::applicationDisplayName();
+    return appName.isEmpty() ? QStringLiteral("DragonMediaBackend") : appName;
+}
+
+QString DragonAudioSink::resolvedStreamName() const
+{
+    return m_streamName.isEmpty() ? defaultStreamName() : m_streamName;
+}
+
+QString DragonAudioSink::applicationIconName()
+{
+    QString name = QGuiApplication::desktopFileName();
+    if (name.isEmpty() && qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+        name = QGuiApplication::windowIcon().name();
+    }
+    return name;
 }
 
 qint64 DragonAudioSink::positionMs() const

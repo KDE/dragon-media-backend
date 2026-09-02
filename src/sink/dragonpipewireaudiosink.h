@@ -34,6 +34,7 @@ public:
     void resume() override;
     void setGain(float linearGain) override;
     void setMuted(bool muted) override;
+    void setStreamName(const QString &name) override;
     void clearStream() override;
     [[nodiscard]] qint64 deviceQueuedSamples() const override;
 

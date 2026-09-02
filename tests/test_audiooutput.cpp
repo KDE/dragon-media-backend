@@ -10,6 +10,8 @@
 #include "logging_timestamp_init.h"
 
 #include "dragonpipe_test_utils.h"
+#include "helpers/pa_sink_input_props.h"
+#include "helpers/pw_node_props.h"
 #include "player/dragonpipe.h"
 #include "sink/dragonaudiosink.h"
 #include "sink/dragonaudiosinkfactory.h"
@@ -21,6 +23,9 @@
 #include <QProcess>
 #include <QRegularExpression>
 #include <QScopeGuard>
+
+#include <SDL3/SDL_hints.h>
+#include <SDL3/SDL_version.h>
 
 #include <atomic>
 #include <chrono>
@@ -43,6 +48,9 @@ private Q_SLOTS:
     void testVolumeChangedSignal();
     void testSetQueue();
     void testSetStreamNameSmoke();
+    void testStreamNameServerRoundTrip();
+    void testStreamNameLiveUpdate();
+    void testSdlStreamNameHints();
 
     void testPositionMsCalculation();
     void testTotalSamplesWritten();
@@ -204,6 +212,256 @@ void TestAudioOutput::testSetStreamNameSmoke()
     output->setStreamName(""_L1);
     output->setStreamName("Longer Name With Spaces"_L1);
     QVERIFY2(!output->isDeviceOpen(), "setStreamName should not open the audio device");
+}
+
+void TestAudioOutput::testStreamNameServerRoundTrip()
+{
+    const QString backend = currentSinkBackend();
+    if (backend != u"dragonsdlaudiosink"_s && backend != u"dragonpulseaudiosink"_s && backend != u"dragonpipewireaudiosink"_s) {
+        QSKIP("Stream-name server round trip requires the SDL, PulseAudio, or PipeWire backend");
+    }
+
+    const QString uniqueTag = u"DragonStreamNameTest_%1"_s.arg(QCoreApplication::applicationPid());
+    const QString priorDisplayName = QGuiApplication::applicationDisplayName();
+    QGuiApplication::setApplicationDisplayName(uniqueTag);
+    auto nameGuard = qScopeGuard([&priorDisplayName]() {
+        QGuiApplication::setApplicationDisplayName(priorDisplayName);
+    });
+
+    const QString desktopTag = u"dev.eean.dragontest"_s;
+    const QString priorDesktopFile = QGuiApplication::desktopFileName();
+    QGuiApplication::setDesktopFileName(desktopTag);
+    auto desktopGuard = qScopeGuard([&priorDesktopFile]() {
+        QGuiApplication::setDesktopFileName(priorDesktopFile);
+    });
+
+    const bool viaPulse = backend == u"dragonpulseaudiosink"_s;
+    const bool viaSdl = backend == u"dragonsdlaudiosink"_s;
+    auto serverProps = [uniqueTag, viaPulse]() -> std::optional<QJsonObject> {
+        QJsonObject props;
+        const bool found =
+            viaPulse ? PaSinkInputProps::sinkInputPropsByApplicationName(uniqueTag, props) : PwNodeProps::nodePropsByApplicationName(uniqueTag, props);
+        if (!found) {
+            return std::nullopt;
+        }
+        return props;
+    };
+    auto serverProp = [&serverProps](const QString &key) -> std::optional<QString> {
+        const auto props = serverProps();
+        if (!props) {
+            return std::nullopt;
+        }
+        return props->value(key).toString();
+    };
+
+    {
+        auto fresh = createAudioSink();
+        QVERIFY(fresh);
+
+        DragonPipe<float> freshPipe(65536);
+        fresh->setAudioPipe(&freshPipe);
+
+        fresh->open(44100, 2);
+        QVERIFY(fresh->isDeviceOpen());
+
+        fillQueue(&freshPipe, std::vector<float>(8192, 0.5f));
+        QTest::qWait(300);
+
+        const bool visible = QTest::qWaitFor(
+            [&serverProps]() {
+                return serverProps().has_value();
+            },
+            5000);
+        if (!visible) {
+            fresh->close();
+            if (backend == u"dragonsdlaudiosink"_s) {
+                QSKIP("SDL stream not visible in PipeWire (SDL audio not using its PipeWire driver)");
+            }
+            QFAIL("no stream with the test application name visible on the audio server");
+        }
+
+        QVERIFY2(QTest::qWaitFor(
+                     [&serverProp, &uniqueTag]() {
+                         return serverProp(u"media.name"_s) == uniqueTag;
+                     },
+                     5000),
+                 "a fresh stream with no stored name should fall back to the application name for media.name");
+
+        fresh->close();
+        QVERIFY2(QTest::qWaitFor(
+                     [&serverProps]() {
+                         return !serverProps().has_value();
+                     },
+                     5000),
+                 "a closed stream should disappear from the audio server");
+    }
+
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    DragonPipe<float> pipe(65536);
+    output->setAudioPipe(&pipe);
+
+    output->setStreamName(u"Dragon Seeded Track"_s);
+
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    fillQueue(&pipe, std::vector<float>(16384, 0.5f));
+    QTest::qWait(300);
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&serverProp]() {
+                     return serverProp(u"media.name"_s) == u"Dragon Seeded Track"_s;
+                 },
+                 5000),
+             "name set before open() should be visible as media.name on the stream");
+
+    const QString iconKey = viaPulse ? u"application.icon_name"_s : u"application.icon-name"_s;
+    QVERIFY2(QTest::qWaitFor(
+                 [&serverProp, iconKey, desktopTag]() {
+                     return serverProp(iconKey) == desktopTag;
+                 },
+                 5000),
+             "application icon name should be derived from the desktop file name");
+    QVERIFY2(QTest::qWaitFor(
+                 [&serverProp, desktopTag]() {
+                     return serverProp(u"application.id"_s) == desktopTag;
+                 },
+                 5000),
+             "application id should be derived from the desktop file name");
+
+    output->setStreamName(QString());
+    if (viaSdl) {
+        QVERIFY2(QTest::qWaitFor(
+                     [&serverProp]() {
+                         return serverProp(u"media.name"_s) == u"Dragon Seeded Track"_s;
+                     },
+                     5000),
+                 "an empty stream name on an open SDL stream should keep the previous media.name visible");
+    } else {
+        QVERIFY2(QTest::qWaitFor(
+                     [&serverProp, &uniqueTag]() {
+                         return serverProp(u"media.name"_s) == uniqueTag;
+                     },
+                     5000),
+                 "an empty stream name should reset media.name to the application name");
+    }
+
+    output->close();
+}
+
+void TestAudioOutput::testStreamNameLiveUpdate()
+{
+    const QString backend = currentSinkBackend();
+    if (backend != u"dragonsdlaudiosink"_s && backend != u"dragonpulseaudiosink"_s && backend != u"dragonpipewireaudiosink"_s) {
+        QSKIP("Live stream-name updates require the SDL, PulseAudio, or PipeWire backend");
+    }
+    const bool viaPulse = backend == u"dragonpulseaudiosink"_s;
+    const bool viaSdl = backend == u"dragonsdlaudiosink"_s;
+    if (viaSdl && SDL_GetVersion() < SDL_VERSIONNUM(3, 6, 0)) {
+        const int linkedSdlVersion = SDL_GetVersion();
+        QSKIP(u"live stream-name updates require SDL 3.6.0+; this SDL is %1.%2.%3"_s.arg(SDL_VERSIONNUM_MAJOR(linkedSdlVersion))
+                  .arg(SDL_VERSIONNUM_MINOR(linkedSdlVersion))
+                  .arg(SDL_VERSIONNUM_MICRO(linkedSdlVersion))
+                  .toUtf8()
+                  .constData());
+    }
+
+    const QString uniqueTag = u"DragonStreamNameLive_%1"_s.arg(QCoreApplication::applicationPid());
+    const QString priorDisplayName = QGuiApplication::applicationDisplayName();
+    QGuiApplication::setApplicationDisplayName(uniqueTag);
+    auto nameGuard = qScopeGuard([&priorDisplayName]() {
+        QGuiApplication::setApplicationDisplayName(priorDisplayName);
+    });
+
+    auto serverProps = [uniqueTag, viaPulse]() -> std::optional<QJsonObject> {
+        QJsonObject props;
+        const bool found =
+            viaPulse ? PaSinkInputProps::sinkInputPropsByApplicationName(uniqueTag, props) : PwNodeProps::nodePropsByApplicationName(uniqueTag, props);
+        if (!found) {
+            return std::nullopt;
+        }
+        return props;
+    };
+    auto serverProp = [&serverProps](const QString &key) -> std::optional<QString> {
+        const auto props = serverProps();
+        if (!props) {
+            return std::nullopt;
+        }
+        return props->value(key).toString();
+    };
+
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    DragonPipe<float> pipe(65536);
+    output->setAudioPipe(&pipe);
+
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    fillQueue(&pipe, std::vector<float>(16384, 0.5f));
+    QTest::qWait(300);
+
+    if (!QTest::qWaitFor(
+            [&serverProps]() {
+                return serverProps().has_value();
+            },
+            5000)) {
+        output->close();
+        if (viaSdl) {
+            QSKIP("SDL stream not visible in PipeWire (SDL audio not using its PipeWire driver)");
+        }
+        QFAIL("no stream with the test application name visible on the audio server");
+    }
+
+    output->setStreamName(u"Dragon Live Track"_s);
+    QVERIFY2(QTest::qWaitFor(
+                 [&serverProp]() {
+                     return serverProp(u"media.name"_s) == u"Dragon Live Track"_s;
+                 },
+                 5000),
+             "setStreamName() on an open stream should update media.name without a reconnect");
+
+    output->setStreamName(QString());
+    QVERIFY2(QTest::qWaitFor(
+                 [&serverProp, &uniqueTag]() {
+                     return serverProp(u"media.name"_s) == uniqueTag;
+                 },
+                 5000),
+             "an empty stream name should reset media.name to the application name");
+
+    output->close();
+}
+
+void TestAudioOutput::testSdlStreamNameHints()
+{
+    const QString backend = currentSinkBackend();
+    if (backend != u"dragonsdlaudiosink"_s) {
+        QSKIP("SDL hint assertions require the SDL backend");
+    }
+
+    const QString desktopTag = u"dev.eean.dragontest"_s;
+    const QString priorDesktopFile = QGuiApplication::desktopFileName();
+    QGuiApplication::setDesktopFileName(desktopTag);
+    auto desktopGuard = qScopeGuard([&priorDesktopFile]() {
+        QGuiApplication::setDesktopFileName(priorDesktopFile);
+    });
+
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    QCOMPARE(QString::fromUtf8(SDL_GetHint(SDL_HINT_AUDIO_DEVICE_APP_ICON_NAME)), desktopTag);
+
+    output->setStreamName(u"Dragon Hint Track"_s);
+    QCOMPARE(QString::fromUtf8(SDL_GetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME)), u"Dragon Hint Track"_s);
+
+    output->setStreamName(QString());
+    QVERIFY(!SDL_GetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME));
+
+    output->setStreamName(u"Dragon Hint Track Two"_s);
+    QCOMPARE(QString::fromUtf8(SDL_GetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME)), u"Dragon Hint Track Two"_s);
 }
 
 void TestAudioOutput::testPositionMsCalculation()

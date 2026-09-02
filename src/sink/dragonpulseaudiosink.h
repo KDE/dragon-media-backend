@@ -18,7 +18,6 @@
 #include <cstddef>
 #include <memory>
 #include <mutex>
-#include <string>
 
 struct pa_threaded_mainloop;
 struct pa_context;
@@ -82,7 +81,6 @@ private:
 
     std::atomic<float> m_cachedGain{1.0f};
     std::atomic<bool> m_cachedMuted{false};
-    std::string m_streamName;
     int m_lastSampleRate = 0;
     int m_lastChannels = 0;
 };

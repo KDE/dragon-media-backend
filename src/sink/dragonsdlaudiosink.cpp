@@ -12,7 +12,6 @@
 K_PLUGIN_CLASS_WITH_JSON(DragonSdlAudioSink, "sdl_sink.json")
 
 #include <QGuiApplication>
-#include <QIcon>
 #include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_init.h>
 #include <SDL3/SDL_log.h>
@@ -55,10 +54,15 @@ DragonSdlAudioSink::DragonSdlAudioSink(QObject *parent, const QVariantList &args
     Q_UNUSED(args);
     SDL_SetLogOutputFunction(SDLLogOutput, nullptr);
 
-    const QString iconName = QGuiApplication::windowIcon().name();
     SDL_SetHint(SDL_HINT_APP_NAME, QGuiApplication::applicationDisplayName().toUtf8().constData());
-    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_APP_ICON_NAME, iconName.isEmpty() ? "DragonMediaBackend" : iconName.toUtf8().constData());
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_ROLE, "music");
+
+    const QString appId = applicationIconName();
+    if (!appId.isEmpty()) {
+        const QByteArray appIdUtf8 = appId.toUtf8();
+        SDL_SetHint(SDL_HINT_APP_ID, appIdUtf8.constData());
+        SDL_SetHint(SDL_HINT_AUDIO_DEVICE_APP_ICON_NAME, appIdUtf8.constData());
+    }
 
     if (!SDL_Init(SDL_INIT_AUDIO)) {
         qCCritical(dragonMediaBackendAudio) << "SDL_Init(SDL_INIT_AUDIO) failed:" << SDL_GetError();
@@ -91,6 +95,9 @@ void DragonSdlAudioSink::open(int sampleRate, int channels)
     reset();
 
     auto *session = new AudioSession;
+
+    const QString openStreamName = resolvedStreamName();
+    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME, openStreamName.toUtf8().constData());
 
     const SDL_AudioSpec spec = {SDL_AUDIO_F32, channels, sampleRate};
 
@@ -215,7 +222,13 @@ qint64 DragonSdlAudioSink::deviceQueuedSamples() const
 
 void DragonSdlAudioSink::setStreamName(const QString &name)
 {
-    SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME, name.toUtf8().constData());
+    DragonAudioSink::setStreamName(name);
+
+    if (name.isEmpty()) {
+        SDL_ResetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME);
+    } else {
+        SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME, name.toUtf8().constData());
+    }
 }
 
 void DragonSdlAudioSink::notifyDecodeFinished()
