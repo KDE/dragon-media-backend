@@ -235,10 +235,8 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     uint8_t podBuffer[PW_POD_BUFFER_LENGTH];
     spa_pod_builder b = SPA_POD_BUILDER_INIT(podBuffer, sizeof(podBuffer));
 
-    spa_audio_info_raw audioInfo = {};
-    audioInfo.format = SPA_AUDIO_FORMAT_F32;
-    audioInfo.rate = static_cast<uint32_t>(sampleRate);
-    audioInfo.channels = static_cast<uint32_t>(channels);
+    spa_audio_info_raw audioInfo =
+        SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_F32, .rate = static_cast<uint32_t>(sampleRate), .channels = static_cast<uint32_t>(channels));
 
     // Explicit channel positions for mono and stereo.
     // For >2 channels, PipeWire infers positions from the channel count.
@@ -373,7 +371,7 @@ void DragonPipeWireAudioSink::setStreamName(const QString &name)
     const spa_dict_item items[] = {
         {PW_KEY_MEDIA_NAME, mediaNameUtf8.constData()},
     };
-    const spa_dict dict = {0, std::size(items), items};
+    const spa_dict dict = SPA_DICT_INIT_ARRAY(items);
 
     PwThreadLoopLock lock(m_pw->loop.get());
     pw_stream_update_properties(m_pw->stream.get(), &dict);
@@ -607,34 +605,30 @@ void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const 
 
     qCDebug(dragonMediaBackendAudio) << "PipeWire param_changed id:" << id;
 
-    if (id == SPA_PARAM_Props && spa_pod_is_object(param)) {
-        const spa_pod_prop *prop = nullptr;
-        SPA_POD_OBJECT_FOREACH(reinterpret_cast<const struct spa_pod_object *>(param), prop)
-        {
-            if (prop->key == SPA_PROP_volume) {
-                float value = 0.0f;
-                if (spa_pod_get_float(&prop->value, &value) == 0) {
-                    qCDebug(dragonMediaBackendAudio) << "PipeWire param_changed SPA_PROP_volume:" << value;
-                    QMetaObject::invokeMethod(
-                        self,
-                        [self, value]() {
-                            self->onExternalVolumeChanged(value);
-                        },
-                        Qt::QueuedConnection);
-                }
-            } else if (prop->key == SPA_PROP_mute) {
-                bool value = false;
-                if (spa_pod_get_bool(&prop->value, &value) == 0) {
-                    qCDebug(dragonMediaBackendAudio) << "PipeWire param_changed SPA_PROP_mute:" << value;
-                    QMetaObject::invokeMethod(
-                        self,
-                        [self, value]() {
-                            self->setMuted(value);
-                        },
-                        Qt::QueuedConnection);
-                }
-            }
-        }
+    if (id != SPA_PARAM_Props) {
+        return;
+    }
+
+    float volume = 0.0f;
+    if (const spa_pod_prop *prop = spa_pod_find_prop(param, nullptr, SPA_PROP_volume); prop != nullptr && spa_pod_get_float(&prop->value, &volume) == 0) {
+        qCDebug(dragonMediaBackendAudio) << "PipeWire param_changed SPA_PROP_volume:" << volume;
+        QMetaObject::invokeMethod(
+            self,
+            [self, volume]() {
+                self->onExternalVolumeChanged(volume);
+            },
+            Qt::QueuedConnection);
+    }
+
+    bool muted = false;
+    if (const spa_pod_prop *prop = spa_pod_find_prop(param, nullptr, SPA_PROP_mute); prop != nullptr && spa_pod_get_bool(&prop->value, &muted) == 0) {
+        qCDebug(dragonMediaBackendAudio) << "PipeWire param_changed SPA_PROP_mute:" << muted;
+        QMetaObject::invokeMethod(
+            self,
+            [self, muted]() {
+                self->setMuted(muted);
+            },
+            Qt::QueuedConnection);
     }
 }
 
