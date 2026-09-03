@@ -287,7 +287,7 @@ void MainWindow::connectPlayer()
         m_seeking = true;
     });
     m_playerConnections << connect(m_seekSlider, &QSlider::sliderMoved, this, [this](int position) {
-        m_player->seek(static_cast<qint64>(position));
+        m_player->setPosition(static_cast<qint64>(position));
     });
     m_playerConnections << connect(m_seekSlider, &QSlider::sliderReleased, this, [this]() {
         m_seeking = false;
@@ -362,7 +362,7 @@ void MainWindow::changeAudioSink(int index)
     if (!currentTracks.isEmpty()) {
         m_playlist->addTracks(currentTracks);
         m_playlist->setCurrentIndex(currentIndex);
-        m_player->seek(currentPosition);
+        m_player->setPosition(currentPosition);
         if (isPlaying) {
             m_player->play();
         }
@@ -495,7 +495,7 @@ void MainWindow::updateDuration(qint64 durationMs)
 void MainWindow::setPositionFromSlider()
 {
     m_seeking = false;
-    m_player->seek(static_cast<qint64>(m_seekSlider->value()));
+    m_player->setPosition(static_cast<qint64>(m_seekSlider->value()));
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
@@ -508,7 +508,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
         const int min = m_seekSlider->minimum();
         const int max = m_seekSlider->maximum();
         const int targetValue = min + static_cast<int>(ratio * (max - min));
-        m_player->seek(static_cast<qint64>(targetValue));
+        m_player->setPosition(static_cast<qint64>(targetValue));
         return false;
     }
     return QMainWindow::eventFilter(obj, event);

@@ -494,8 +494,8 @@ void TestPlayerBasics::testSeekNoOpWithoutMedia()
     DragonPlayer player;
     QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
 
-    player.seek(5000);
-    QVERIFY2(posSpy.count() >= 1, "seek() must emit positionChanged even without media");
+    player.setPosition(5000);
+    QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even without media");
     QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
     QCOMPARE(player.position(), 0);
 
@@ -518,8 +518,8 @@ void TestPlayerBasics::testSeekNoOpWithoutMedia()
     QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
 
     posSpy.clear();
-    player.seek(3000);
-    QVERIFY2(posSpy.count() >= 1, "seek() must emit positionChanged even with invalid source");
+    player.setPosition(3000);
+    QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even with invalid source");
     QCOMPARE(player.position(), 0);
 }
 
@@ -543,7 +543,7 @@ void TestPlayerBasics::testSeekBehaviorWithValidMedia()
     QTest::qWait(200);
     posSpy.clear();
 
-    player.seek(1000);
+    player.setPosition(1000);
     QTRY_VERIFY_WITH_TIMEOUT(posSpy.count() >= 1, 5000);
     QVERIFY2(player.position() >= 800 && player.position() <= 1200, qPrintable(u"Position should be near 1000ms after seek, got %1"_s.arg(player.position())));
 

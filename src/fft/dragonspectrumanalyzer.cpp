@@ -95,11 +95,6 @@ DragonSpectrumAnalyzer::~DragonSpectrumAnalyzer()
     }
 }
 
-DragonPlayer *DragonSpectrumAnalyzer::player() const
-{
-    return d->player.data();
-}
-
 DragonSpectrumAnalyzer::Mode DragonSpectrumAnalyzer::mode() const
 {
     return d->currentMode;

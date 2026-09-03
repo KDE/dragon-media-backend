@@ -769,9 +769,3 @@ void DragonPlayer::stop()
         d->setStatus(MediaStatus::LoadedMedia);
     }
 }
-
-void DragonPlayer::seek(qint64 posMs)
-{
-    qCDebug(dragonMediaBackendPlayer) << "seek(" << posMs << ")";
-    setPosition(posMs);
-}

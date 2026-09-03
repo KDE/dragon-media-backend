@@ -241,7 +241,7 @@ void TestNetworkPlayback::testSeekHttpFile()
 
     positionSpy.clear();
     qDebug() << "Seeking to 1000ms";
-    player.seek(1000);
+    player.setPosition(1000);
 
     QTRY_VERIFY_WITH_TIMEOUT(positionSpy.count() > 0, 5000);
 

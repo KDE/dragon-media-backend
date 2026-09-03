@@ -108,7 +108,7 @@ void TestPlayerPlayback::testSeekWithRealAudio()
     QVERIFY(helper.playAndWait());
 
     QTest::qWait(200);
-    player.seek(1000);
+    player.setPosition(1000);
     QTest::qWait(200);
 
     VERIFY_POSITION_NEAR(player.position(), 1000, 200);

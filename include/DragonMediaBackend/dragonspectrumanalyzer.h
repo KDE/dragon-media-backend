@@ -40,7 +40,6 @@ public:
     DragonSpectrumAnalyzer(DragonSpectrumAnalyzer &&) = delete;
     DragonSpectrumAnalyzer &operator=(DragonSpectrumAnalyzer &&) = delete;
 
-    [[nodiscard]] DragonPlayer *player() const;
     [[nodiscard]] Mode mode() const;
     [[nodiscard]] int frameRate() const;
     [[nodiscard]] bool isActive() const;

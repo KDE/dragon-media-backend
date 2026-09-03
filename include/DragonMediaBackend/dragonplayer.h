@@ -26,8 +26,6 @@ class DRAGONMEDIABACKEND_EXPORT DragonPlayer : public QObject
     Q_OBJECT
 
 public:
-    using AudioSink = DragonAudioOutput::Backend;
-
     enum class PlaybackState {
         StoppedState,
         PlayingState,
@@ -120,7 +118,6 @@ public Q_SLOTS:
     void play();
     void pause();
     void stop();
-    void seek(qint64 positionMs);
 
     friend class DragonDiagnostics;
     friend class DragonPlayerPrivate;
