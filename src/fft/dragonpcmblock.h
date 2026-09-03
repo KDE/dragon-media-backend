@@ -11,7 +11,7 @@
 
 static_assert(sizeof(float) == 4, "we assume 32-bit float");
 
-struct DragonFftBlock {
+struct DragonPcmBlock {
     static constexpr size_t MAX_SAMPLES = 1024;
     std::array<float, MAX_SAMPLES> samples{};
     size_t count = 0;

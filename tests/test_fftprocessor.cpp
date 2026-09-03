@@ -29,14 +29,14 @@ namespace
 {
 bool isFrequenciesEmpty(const DragonFftFrame &frame)
 {
-    return std::all_of(frame.frequenciesDb.begin(), frame.frequenciesDb.end(), [](float v) {
+    return std::all_of(frame.frequencies().begin(), frame.frequencies().end(), [](float v) {
         return v == 0.0f;
     });
 }
 
 bool isBarEmpty(const DragonFftFrame &frame)
 {
-    return std::all_of(frame.barData.begin(), frame.barData.end(), [](float v) {
+    return std::all_of(frame.bars().begin(), frame.bars().end(), [](float v) {
         return v == 0.0f;
     });
 }
@@ -129,7 +129,7 @@ void TestFftProcessor::testConstruction()
 
 void TestFftProcessor::testSetQueue()
 {
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -150,7 +150,7 @@ void TestFftProcessor::testSetSampleRate()
 
 void TestFftProcessor::testReset()
 {
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(440.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
@@ -218,7 +218,7 @@ void TestFftProcessor::testProcessLoopSineWave()
     constexpr float freq = 440.0f;
     auto sineWave = createSineWave(freq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
 
     const auto written1 = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
@@ -251,9 +251,9 @@ void TestFftProcessor::testProcessLoopSineWave()
 
     float peakMag = -80.0f;
     int peakBin = 0;
-    for (size_t i = 0; i < frame.frequenciesDb.size(); ++i) {
-        if (frame.frequenciesDb[i] > peakMag) {
-            peakMag = frame.frequenciesDb[i];
+    for (size_t i = 0; i < frame.frequencies().size(); ++i) {
+        if (frame.frequencies()[i] > peakMag) {
+            peakMag = frame.frequencies()[i];
             peakBin = static_cast<int>(i);
         }
     }
@@ -276,7 +276,7 @@ void TestFftProcessor::testProcessLoopSilence()
     constexpr int sampleRate = 44100;
     auto silence = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     const auto written = writeBlocks(pipe.producer(), silence);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
@@ -306,7 +306,7 @@ void TestFftProcessor::testProcessLoopSilence()
     QVERIFY2(!isFrequenciesEmpty(frame), "Silence should still produce a frame with frequency data");
 
     float maxMag = -200.0f;
-    for (float mag : frame.frequenciesDb) {
+    for (float mag : frame.frequencies()) {
         if (mag > maxMag)
             maxMag = mag;
     }
@@ -318,7 +318,7 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
     constexpr int sampleRate = 44100;
     auto sine1kHz = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
 
     for (int frame = 0; frame < 3; ++frame) {
         const auto written = writeBlocks(pipe.producer(), sine1kHz);
@@ -356,9 +356,9 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
 
     for (const auto &frame : frames) {
         QVERIFY2(!isFrequenciesEmpty(frame), "Each frame should have frequency data");
-        QVERIFY(frame.frequenciesDb.size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS));
+        QVERIFY(frame.frequencies().size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS));
         QVERIFY2(!isBarEmpty(frame), "Each frame should have bar data");
-        QVERIFY(frame.barData.size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS));
+        QVERIFY(frame.bars().size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS));
     }
 }
 
@@ -367,7 +367,7 @@ void TestFftProcessor::testFrameCallbackInvoked()
     constexpr int sampleRate = 44100;
     auto noise = createSineWave(2000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     const auto written = writeBlocks(pipe.producer(), noise);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
@@ -399,7 +399,7 @@ void TestFftProcessor::testPeakHoldDecay()
 {
     constexpr int sampleRate = 44100;
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
 
     auto sine = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE) * 2);
     auto silence = createSilence(static_cast<int>(DragonFftProcessor::FFT_SIZE) * 4);
@@ -420,7 +420,7 @@ void TestFftProcessor::testPeakHoldDecay()
     processor.setFrameCallback([&](const DragonFftFrame &frame) {
         std::scoped_lock lock(mutex);
         if (!isBarEmpty(frame)) {
-            float maxVal = *std::max_element(frame.barData.begin(), frame.barData.end());
+            float maxVal = *std::max_element(frame.bars().begin(), frame.bars().end());
             peakValues.push_back(maxVal);
         }
         frameCount.fetch_add(1, std::memory_order_relaxed);
@@ -464,7 +464,7 @@ void TestFftProcessor::testBarDataSizeValidation()
     constexpr float freq = 1000.0f;
     auto sineWave = createSineWave(freq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     const auto written2 = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written2 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
@@ -490,9 +490,9 @@ void TestFftProcessor::testBarDataSizeValidation()
 
     auto frame = processor.takeLatestFrame();
 
-    QVERIFY(frame.barData.size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS));
+    QVERIFY(frame.bars().size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS));
 
-    for (const float &val : frame.barData) {
+    for (const float &val : frame.bars()) {
         QVERIFY2(val >= -85.0f && val <= 10.0f, qPrintable(u"Bar value out of range: %1"_s.arg(val)));
     }
 }
@@ -517,7 +517,7 @@ void TestFftProcessor::testFftProducesOutputAboveThreshold()
 
     auto sineWave = createSineWave(frequency, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     const auto written3 = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written3 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
@@ -544,7 +544,7 @@ void TestFftProcessor::testFftProducesOutputAboveThreshold()
     auto frame = processor.takeLatestFrame();
 
     float peakMag = -80.0f;
-    for (const float &mag : frame.frequenciesDb) {
+    for (const float &mag : frame.frequencies()) {
         if (mag > peakMag)
             peakMag = mag;
     }
@@ -553,7 +553,7 @@ void TestFftProcessor::testFftProducesOutputAboveThreshold()
              qPrintable(u"Peak magnitude %1 dB too low for %2 Hz sine wave at %3 Hz sample rate"_s.arg(peakMag).arg(frequency).arg(sampleRate)));
 
     int binsAboveNoise = 0;
-    for (const float &mag : frame.frequenciesDb) {
+    for (const float &mag : frame.frequencies()) {
         if (mag > -60.0f)
             binsAboveNoise++;
     }
@@ -566,7 +566,7 @@ void TestFftProcessor::testFrameTimestamp()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     const auto written1 = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
@@ -581,7 +581,7 @@ void TestFftProcessor::testFrameTimestamp()
 
     processor.setFrameCallback([&](const DragonFftFrame &frame) {
         if (!firstTimestamp.has_value()) {
-            firstTimestamp = frame.timestamp;
+            firstTimestamp = frame.timestamp();
         }
         frameCount.fetch_add(1, std::memory_order_relaxed);
     });
@@ -601,7 +601,7 @@ void TestFftProcessor::testFrameTimestamp()
 
 void TestFftProcessor::testSampleRateChange()
 {
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -641,7 +641,7 @@ void TestFftProcessor::testFftModeOff()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
 
     const auto written2 = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written2 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
@@ -675,7 +675,7 @@ void TestFftProcessor::testFftModeBarsOnly()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     const auto written3 = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written3 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
@@ -702,8 +702,8 @@ void TestFftProcessor::testFftModeBarsOnly()
 
     auto frame = processor.takeLatestFrame();
     QVERIFY2(!isBarEmpty(frame), "BarsOnly mode should produce barData");
-    QVERIFY2(frame.barData.size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS),
-             qPrintable(QString("barData should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_BAR_BINS).arg(frame.barData.size())));
+    QVERIFY2(frame.bars().size() == static_cast<size_t>(DragonFftProcessor::NUM_BAR_BINS),
+             qPrintable(QString("barData should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_BAR_BINS).arg(frame.bars().size())));
     QVERIFY2(isFrequenciesEmpty(frame), "BarsOnly mode should not produce frequenciesDb");
     QVERIFY2(frameCount.load() > 0, "Callback should have been invoked");
 }
@@ -713,7 +713,7 @@ void TestFftProcessor::testFftModeDetailedOnly()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     const auto written4 = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written4 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
@@ -740,8 +740,8 @@ void TestFftProcessor::testFftModeDetailedOnly()
 
     auto frame = processor.takeLatestFrame();
     QVERIFY2(!isFrequenciesEmpty(frame), "DetailedOnly mode should produce frequenciesDb");
-    QVERIFY2(frame.frequenciesDb.size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS),
-             qPrintable(QString("frequenciesDb should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_LOG_BINS).arg(frame.frequenciesDb.size())));
+    QVERIFY2(frame.frequencies().size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS),
+             qPrintable(QString("frequenciesDb should have %1 elements, got %2"_L1).arg(DragonFftProcessor::NUM_LOG_BINS).arg(frame.frequencies().size())));
     QVERIFY2(isBarEmpty(frame), "DetailedOnly mode should not produce barData");
     QVERIFY2(frameCount.load() > 0, "Callback should have been invoked");
 }
@@ -751,7 +751,7 @@ void TestFftProcessor::testFftModeSwitch()
     constexpr int sampleRate = 44100;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -815,7 +815,7 @@ void TestFftProcessor::testFrameCountForThreeSecondsStereo()
     auto audio = createSilence(totalFloats);
 
     // Pipe must hold ceil(264600 / 1024) = 259 blocks. 512 gives comfortable headroom.
-    DragonPipe<DragonFftBlock> pipe(512);
+    DragonPipe<DragonPcmBlock> pipe(512);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -863,7 +863,7 @@ void TestFftProcessor::testConfigurableRate()
 
     auto audio = createSineWave(1000.0f, sampleRate, totalFloats);
 
-    DragonPipe<DragonFftBlock> pipe(512);
+    DragonPipe<DragonPcmBlock> pipe(512);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -901,7 +901,7 @@ void TestFftProcessor::testFftResumesAfterModeToggle()
     constexpr int sampleRate = 44100;
     constexpr int channels = 2;
 
-    DragonPipe<DragonFftBlock> pipe(512);
+    DragonPipe<DragonPcmBlock> pipe(512);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -973,7 +973,7 @@ void TestFftProcessor::testFftStopTokenHonoredInInnerLoop()
     constexpr int sampleRate = 44100;
     constexpr int channels = 2;
 
-    DragonPipe<DragonFftBlock> pipe(512);
+    DragonPipe<DragonPcmBlock> pipe(512);
 
     DragonFftProcessor processor;
     processor.setConsumer(pipe.consumer());
@@ -1024,7 +1024,7 @@ void TestFftProcessor::testFftFrequencyLocalization()
 
     auto sineWave = createSineWave(inputFreq, sampleRate, static_cast<int>(DragonFftProcessor::FFT_SIZE));
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     const auto written = writeBlocks(pipe.producer(), sineWave);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
@@ -1050,8 +1050,8 @@ void TestFftProcessor::testFftFrequencyLocalization()
 
     auto frame = processor.takeLatestFrame();
     QVERIFY2(!isFrequenciesEmpty(frame), "Should have frequency data");
-    QVERIFY2(frame.frequenciesDb.size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS),
-             qPrintable(u"Expected %1 bins, got %2"_s.arg(DragonFftProcessor::NUM_LOG_BINS).arg(frame.frequenciesDb.size())));
+    QVERIFY2(frame.frequencies().size() == static_cast<size_t>(DragonFftProcessor::NUM_LOG_BINS),
+             qPrintable(u"Expected %1 bins, got %2"_s.arg(DragonFftProcessor::NUM_LOG_BINS).arg(frame.frequencies().size())));
 
     const float melMin = 2595.0f * std::log10(1.0f + DragonFftProcessor::MIN_FREQ / 700.0f);
     const float melMax = 2595.0f * std::log10(1.0f + std::min(DragonFftProcessor::MAX_FREQ, static_cast<float>(sampleRate) / 2.0f) / 700.0f);
@@ -1061,9 +1061,9 @@ void TestFftProcessor::testFftFrequencyLocalization()
 
     int peakBin = 0;
     float peakMag = -200.0f;
-    for (int i = 0; i < static_cast<int>(frame.frequenciesDb.size()); ++i) {
-        if (frame.frequenciesDb[static_cast<size_t>(i)] > peakMag) {
-            peakMag = frame.frequenciesDb[static_cast<size_t>(i)];
+    for (int i = 0; i < static_cast<int>(frame.frequencies().size()); ++i) {
+        if (frame.frequencies()[static_cast<size_t>(i)] > peakMag) {
+            peakMag = frame.frequencies()[static_cast<size_t>(i)];
             peakBin = i;
         }
     }
@@ -1092,7 +1092,7 @@ void TestFftProcessor::testFftMultiTonePeaks()
             0.25f * std::sin(2.0f * std::numbers::pi_v<float> * freq1 * t) + 0.25f * std::sin(2.0f * std::numbers::pi_v<float> * freq2 * t);
     }
 
-    DragonPipe<DragonFftBlock> pipe(256);
+    DragonPipe<DragonPcmBlock> pipe(256);
     const auto written = writeBlocks(pipe.producer(), wave);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
@@ -1137,12 +1137,12 @@ void TestFftProcessor::testFftMultiTonePeaks()
         int bestBin = 0;
         float bestMag = -200.0f;
         int excludeLo = std::max(0, excludeCenter - excludeRange);
-        int excludeHi = std::min(static_cast<int>(frame.frequenciesDb.size()) - 1, excludeCenter + excludeRange);
-        for (int i = 0; i < static_cast<int>(frame.frequenciesDb.size()); ++i) {
+        int excludeHi = std::min(static_cast<int>(frame.frequencies().size()) - 1, excludeCenter + excludeRange);
+        for (int i = 0; i < static_cast<int>(frame.frequencies().size()); ++i) {
             if (i >= excludeLo && i <= excludeHi)
                 continue;
-            if (frame.frequenciesDb[static_cast<size_t>(i)] > bestMag) {
-                bestMag = frame.frequenciesDb[static_cast<size_t>(i)];
+            if (frame.frequencies()[static_cast<size_t>(i)] > bestMag) {
+                bestMag = frame.frequencies()[static_cast<size_t>(i)];
                 bestBin = i;
             }
         }

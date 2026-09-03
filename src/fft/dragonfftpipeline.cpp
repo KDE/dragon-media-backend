@@ -16,7 +16,7 @@
 #include <stop_token>
 #include <thread>
 
-DragonFftPipeline::DragonFftPipeline(DragonPipe<DragonFftBlock> *pipe)
+DragonFftPipeline::DragonFftPipeline(DragonPipe<DragonPcmBlock> *pipe)
     : m_fftPipe(pipe)
 {
 }

@@ -11,7 +11,6 @@
 #include <DragonMediaBackend/dragonplayer.h>
 
 #include "dragonpipe.h"
-#include "fft/dragonfftblock.h"
 
 #include <QObject>
 #include <QTimer>

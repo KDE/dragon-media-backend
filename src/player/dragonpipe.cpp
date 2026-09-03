@@ -88,5 +88,5 @@ size_t DragonPipe<T>::Consumer::ready() const
 }
 
 template class DRAGONMEDIABACKEND_EXPORT DragonPipe<float>;
-#include "fft/dragonfftblock.h"
-template class DRAGONMEDIABACKEND_EXPORT DragonPipe<DragonFftBlock>;
+#include "fft/dragonpcmblock.h"
+template class DRAGONMEDIABACKEND_EXPORT DragonPipe<DragonPcmBlock>;

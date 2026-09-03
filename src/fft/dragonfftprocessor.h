@@ -18,7 +18,7 @@
 #include <span>
 #include <stop_token>
 
-#include "dragonfftblock.h"
+#include "dragonpcmblock.h"
 #include "player/dragonpipe.h"
 
 template<typename T>
@@ -43,7 +43,7 @@ public:
     DragonFftProcessor(DragonFftProcessor &&) = delete;
     DragonFftProcessor &operator=(DragonFftProcessor &&) = delete;
 
-    void setConsumer(DragonPipe<DragonFftBlock>::Consumer consumer);
+    void setConsumer(DragonPipe<DragonPcmBlock>::Consumer consumer);
 
     void setChannelCount(int channels);
 
@@ -64,7 +64,7 @@ public:
     static void applyHannWindow(std::span<float> data);
 
 private:
-    DragonPipe<DragonFftBlock>::Consumer m_consumer;
+    DragonPipe<DragonPcmBlock>::Consumer m_consumer;
     int m_channelCount = 2;
     std::atomic<int> m_sampleRate{44100};
     std::atomic<FftMode> m_fftMode{FftMode::Off};
@@ -84,9 +84,9 @@ private:
     [[nodiscard]] float
     computeMelBin(std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float melMin, float melMax, float t0, float t1) const;
 
-    void fillDetailedBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq) const;
+    void fillDetailedBins(std::span<float> frequenciesDb, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq) const;
 
-    void fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float decayRate);
+    void fillBarBins(std::span<float> barData, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float decayRate);
 
     void emitFrame(const DragonFftFrame &frame);
 

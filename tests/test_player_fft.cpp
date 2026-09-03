@@ -185,11 +185,11 @@ void TestPlayerFft::testFftModeBothEmitsDetailedAndBarFrames()
     for (int i = 0; i < fftSpy.size(); ++i) {
         QVERIFY(fftSpy.at(i).at(0).isValid());
         auto frame = fftSpy.at(i).at(0).value<DragonFftFrame>();
-        if (std::any_of(frame.frequenciesDb.begin(), frame.frequenciesDb.end(), [](float v) {
+        if (std::any_of(frame.frequencies().begin(), frame.frequencies().end(), [](float v) {
                 return v != 0.0f;
             }))
             sawDetailed = true;
-        if (std::any_of(frame.barData.begin(), frame.barData.end(), [](float v) {
+        if (std::any_of(frame.bars().begin(), frame.bars().end(), [](float v) {
                 return v != 0.0f;
             }))
             sawBars = true;

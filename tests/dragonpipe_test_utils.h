@@ -40,16 +40,16 @@ inline size_t writeAll(DragonPipe<float>::Producer producer, std::span<const flo
     });
 }
 
-#include "fft/dragonfftblock.h"
-inline size_t writeBlocks(DragonPipe<DragonFftBlock>::Producer producer, std::span<const float> data)
+#include "fft/dragonpcmblock.h"
+inline size_t writeBlocks(DragonPipe<DragonPcmBlock>::Producer producer, std::span<const float> data)
 {
-    size_t blocksNeeded = (data.size() + DragonFftBlock::MAX_SAMPLES - 1) / DragonFftBlock::MAX_SAMPLES;
-    size_t written = producer.writeSomeWith(blocksNeeded, [&](std::span<DragonFftBlock> b1, std::span<DragonFftBlock> b2) {
+    size_t blocksNeeded = (data.size() + DragonPcmBlock::MAX_SAMPLES - 1) / DragonPcmBlock::MAX_SAMPLES;
+    size_t written = producer.writeSomeWith(blocksNeeded, [&](std::span<DragonPcmBlock> b1, std::span<DragonPcmBlock> b2) {
         size_t srcOffset = 0;
         size_t blockIdx = 0;
-        auto fillDst = [&](std::span<DragonFftBlock> dst) {
+        auto fillDst = [&](std::span<DragonPcmBlock> dst) {
             for (size_t i = 0; i < dst.size() && srcOffset < data.size(); ++i, ++blockIdx) {
-                size_t toCopy = std::min(data.size() - srcOffset, DragonFftBlock::MAX_SAMPLES);
+                size_t toCopy = std::min(data.size() - srcOffset, DragonPcmBlock::MAX_SAMPLES);
                 dst[i].count = toCopy;
                 dst[i].pts = std::chrono::microseconds(blockIdx * 1000);
                 for (size_t j = 0; j < toCopy; ++j, ++srcOffset) {

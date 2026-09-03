@@ -590,8 +590,8 @@ void MainWindow::updateFftFrame(const DragonFftFrame &frame)
     if (!m_fftCheckBox->isChecked()) {
         return;
     }
-    m_visualizer->updateBarData(frame.barData);
-    m_spectrogram->updateFrequencies(frame.frequenciesDb);
+    m_visualizer->updateBarData(frame.bars());
+    m_spectrogram->updateFrequencies(frame.frequencies());
 }
 
 void MainWindow::updateIcyMetadata(const DragonIcyMetadata &metadata)

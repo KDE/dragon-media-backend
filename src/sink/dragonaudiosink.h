@@ -19,7 +19,7 @@
 
 template<typename T>
 class DragonPipe;
-struct DragonFftBlock;
+struct DragonPcmBlock;
 
 class DRAGONMEDIABACKEND_EXPORT DragonAudioSink : public QObject
 {
@@ -67,7 +67,7 @@ public:
 
     // --- Shared logic (in base class, not virtual) ---
     void setAudioPipe(DragonPipe<float> *pipe);
-    void setFftPipe(DragonPipe<DragonFftBlock> *pipe);
+    void setFftPipe(DragonPipe<DragonPcmBlock> *pipe);
 
     void setQueueReady(bool ready);
     [[nodiscard]] bool isQueueReady() const;
@@ -134,10 +134,10 @@ protected:
 
 private:
     DragonPipe<float> *audioPipe() const;
-    DragonPipe<DragonFftBlock> *fftPipe() const;
+    DragonPipe<DragonPcmBlock> *fftPipe() const;
 
     std::atomic<DragonPipe<float> *> m_audioPipe{nullptr};
-    std::atomic<DragonPipe<DragonFftBlock> *> m_fftPipe{nullptr};
+    std::atomic<DragonPipe<DragonPcmBlock> *> m_fftPipe{nullptr};
 
     std::atomic<qint64> m_positionOffsetMs{0};
 

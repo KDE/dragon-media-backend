@@ -51,7 +51,7 @@ DragonFftProcessor::DragonFftProcessor()
 
 DragonFftProcessor::~DragonFftProcessor() = default;
 
-void DragonFftProcessor::setConsumer(DragonPipe<DragonFftBlock>::Consumer consumer)
+void DragonFftProcessor::setConsumer(DragonPipe<DragonPcmBlock>::Consumer consumer)
 {
     m_consumer = std::move(consumer);
 }
@@ -159,18 +159,17 @@ void DragonFftProcessor::processLoop(std::stop_token st)
             transformReal(m_inputWindow, fftOut);
 
             const float binToFreq = static_cast<float>(sr) / static_cast<float>(FFT_SIZE);
-            DragonFftFrame frame;
+            std::array<float, DragonFftFrame::NUM_FREQUENCIES> frequenciesDb{};
+            std::array<float, DragonFftFrame::NUM_BARS> barData{};
 
             if (mode == FftMode::DetailedOnly || mode == FftMode::Both) {
-                fillDetailedBins(frame, fftOut, binToFreq);
+                fillDetailedBins(frequenciesDb, fftOut, binToFreq);
             }
             if (mode == FftMode::BarsOnly || mode == FftMode::Both) {
-                fillBarBins(frame, fftOut, binToFreq, decayRate);
+                fillBarBins(barData, fftOut, binToFreq, decayRate);
             }
 
-            frame.timestamp = m_newestBlockPts;
-
-            emitFrame(frame);
+            emitFrame(DragonFftFrame(frequenciesDb, barData, m_newestBlockPts));
 
             m_lastFrameAtSample += step;
         }
@@ -187,8 +186,8 @@ bool DragonFftProcessor::drainPipeToHistory(std::stop_token st)
     const int ch = m_channelCount;
 
     while (m_consumer.ready() && !st.stop_requested()) {
-        m_consumer.readSomeWith(m_consumer.ready(), [&](std::span<const DragonFftBlock> b1, std::span<const DragonFftBlock> b2) {
-            auto processBlock = [&](const DragonFftBlock &blk) {
+        m_consumer.readSomeWith(m_consumer.ready(), [&](std::span<const DragonPcmBlock> b1, std::span<const DragonPcmBlock> b2) {
+            auto processBlock = [&](const DragonPcmBlock &blk) {
                 m_newestBlockPts = blk.pts;
 
                 for (size_t i = 0; i + ch <= blk.count; i += ch) {
@@ -280,30 +279,30 @@ float DragonFftProcessor::computeMelBin(std::span<const std::complex<float>, FFT
     return 20.0f * std::log10(std::max(maxMag, 1e-6f));
 }
 
-void DragonFftProcessor::fillDetailedBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq) const
+void DragonFftProcessor::fillDetailedBins(std::span<float> frequenciesDb, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq) const
 {
     const float melMin = hzToMel(MIN_FREQ);
     const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
 
-    for (auto [i, bin] : std::views::enumerate(frame.frequenciesDb)) {
-        const float t0 = static_cast<float>(i) / static_cast<float>(frame.frequenciesDb.size());
-        const float t1 = static_cast<float>(i + 1) / static_cast<float>(frame.frequenciesDb.size());
+    for (auto [i, bin] : std::views::enumerate(frequenciesDb)) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(frequenciesDb.size());
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(frequenciesDb.size());
         bin = computeMelBin(fftOut, binToFreq, melMin, melMax, t0, t1);
     }
 }
 
-void DragonFftProcessor::fillBarBins(DragonFftFrame &frame, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float decayRate)
+void DragonFftProcessor::fillBarBins(std::span<float> barData, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float decayRate)
 {
     const float melMin = hzToMel(MIN_FREQ);
     const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
 
-    for (auto [i, bin] : std::views::enumerate(frame.barData)) {
-        const float t0 = static_cast<float>(i) / static_cast<float>(frame.barData.size());
-        const float t1 = static_cast<float>(i + 1) / static_cast<float>(frame.barData.size());
+    for (auto [i, bin] : std::views::enumerate(barData)) {
+        const float t0 = static_cast<float>(i) / static_cast<float>(barData.size());
+        const float t1 = static_cast<float>(i + 1) / static_cast<float>(barData.size());
         bin = computeMelBin(fftOut, binToFreq, melMin, melMax, t0, t1);
     }
 
-    for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, frame.barData)) {
+    for (auto [prev, curr] : std::views::zip(m_prevBarFrequencies, barData)) {
         prev = std::max(curr, prev - decayRate);
         curr = prev;
     }

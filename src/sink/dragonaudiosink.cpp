@@ -4,7 +4,7 @@
  */
 
 #include "dragonaudiosink.h"
-#include "fft/dragonfftblock.h"
+#include "fft/dragonpcmblock.h"
 #include "player/dragonpipe.h"
 
 #include <QGuiApplication>
@@ -63,7 +63,7 @@ void DragonAudioSink::setAudioPipe(DragonPipe<float> *pipe)
     m_audioPipe.store(pipe, std::memory_order_release);
 }
 
-void DragonAudioSink::setFftPipe(DragonPipe<DragonFftBlock> *pipe)
+void DragonAudioSink::setFftPipe(DragonPipe<DragonPcmBlock> *pipe)
 {
     m_fftPipe.store(pipe, std::memory_order_release);
 }
@@ -259,13 +259,13 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
     const auto consumedSpan = std::span{m_callbackBuffer.data(), totalRead};
 
     if (auto *fp = m_fftPipe.load(std::memory_order_acquire)) {
-        size_t blocksNeeded = (totalRead + DragonFftBlock::MAX_SAMPLES - 1) / DragonFftBlock::MAX_SAMPLES;
-        fp->producer().writeSomeWith(blocksNeeded, [&](std::span<DragonFftBlock> fb1, std::span<DragonFftBlock> fb2) {
+        size_t blocksNeeded = (totalRead + DragonPcmBlock::MAX_SAMPLES - 1) / DragonPcmBlock::MAX_SAMPLES;
+        fp->producer().writeSomeWith(blocksNeeded, [&](std::span<DragonPcmBlock> fb1, std::span<DragonPcmBlock> fb2) {
             size_t srcOffset = 0;
-            auto fillBlock = [&](std::span<DragonFftBlock> dst) {
+            auto fillBlock = [&](std::span<DragonPcmBlock> dst) {
                 for (size_t i = 0; i < dst.size() && srcOffset < totalRead; ++i) {
                     size_t remaining = totalRead - srcOffset;
-                    size_t toCopy = std::min(remaining, DragonFftBlock::MAX_SAMPLES);
+                    size_t toCopy = std::min(remaining, DragonPcmBlock::MAX_SAMPLES);
                     dst[i].count = toCopy;
                     dst[i].pts = estimatedPts;
 
@@ -290,7 +290,7 @@ DragonPipe<float> *DragonAudioSink::audioPipe() const
     return m_audioPipe.load(std::memory_order_acquire);
 }
 
-DragonPipe<DragonFftBlock> *DragonAudioSink::fftPipe() const
+DragonPipe<DragonPcmBlock> *DragonAudioSink::fftPipe() const
 {
     return m_fftPipe.load(std::memory_order_acquire);
 }

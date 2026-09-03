@@ -9,6 +9,7 @@
 #include <DragonMediaBackend/dragonspectrumanalyzer.h>
 
 #include "fft/dragonfftpipeline.h"
+#include "fft/dragonpcmblock.h"
 
 #include <QMetaObject>
 #include <QPointer>
@@ -22,7 +23,7 @@ public:
     }
 
     QPointer<DragonPlayer> player;
-    DragonPipe<DragonFftBlock> fftPipe{256};
+    DragonPipe<DragonPcmBlock> fftPipe{256};
     DragonFftPipeline fftPipeline{&fftPipe};
     DragonSpectrumAnalyzer::Mode currentMode = DragonSpectrumAnalyzer::Mode::Off;
     int currentRate = 60;

@@ -17,13 +17,13 @@
 
 template<typename T>
 class DragonPipe;
-struct DragonFftBlock;
+struct DragonPcmBlock;
 class DragonFftProcessor;
 
 class DragonFftPipeline
 {
 public:
-    explicit DragonFftPipeline(DragonPipe<DragonFftBlock> *pipe);
+    explicit DragonFftPipeline(DragonPipe<DragonPcmBlock> *pipe);
     ~DragonFftPipeline();
 
     DragonFftPipeline(const DragonFftPipeline &) = delete;
@@ -57,7 +57,7 @@ private:
 
     std::jthread m_fftThread;
 
-    DragonPipe<DragonFftBlock> *const m_fftPipe;
+    DragonPipe<DragonPcmBlock> *const m_fftPipe;
 
     DragonSpectrumAnalyzer::Mode m_currentMode = DragonSpectrumAnalyzer::Mode::Off;
     int m_fftRate = 60;
