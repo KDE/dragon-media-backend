@@ -6,6 +6,7 @@
 #pragma once
 
 #include "dragoncompletion.h"
+#include "dragoncppcompat.h"
 #include "dragonmediabackend_export.h"
 #include "player/dragonevent.h"
 
@@ -14,7 +15,6 @@
 
 #include <cstdint>
 #include <functional>
-#include <generator>
 #include <memory>
 #include <optional>
 #include <span>
@@ -26,7 +26,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonDecoder : public QObject
     Q_OBJECT
 
 public:
-    using ReadCallback = std::move_only_function<int(std::span<uint8_t>)>;
+    using ReadCallback = dragon::compat::move_only_function<int(std::span<uint8_t>)>;
 
     enum class SeekWhence {
         Set,
@@ -46,7 +46,7 @@ public:
 
     DragonMediaBackend::InitResult initialize();
 
-    std::generator<DragonMediaBackend::DecodeEvent> decodeLoop(std::stop_token st);
+    dragon::compat::generator<DragonMediaBackend::DecodeEvent> decodeLoop(std::stop_token st);
 
     void requestSeek(qint64 positionMs);
 

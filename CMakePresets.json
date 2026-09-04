@@ -94,6 +94,84 @@
         "CXX": "clazy",
         "CCACHE_DISABLE": "ON"
       }
+    },
+    {
+      "name": "android-x86_64-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{DRAGON_QT_ANDROID_X86_64}/lib/cmake/Qt6/qt.toolchain.cmake",
+        "QT_CHAINLOAD_TOOLCHAIN_FILE": "$env{ANDROID_NDK}/build/cmake/android.toolchain.cmake",
+        "ANDROID_ABI": "x86_64",
+        "ANDROID_PLATFORM": "android-28",
+        "CMAKE_ANDROID_API": "28",
+        "QT_HOST_PATH": "$env{QT_HOST_PATH}",
+        "QT_HOST_PATH_CMAKE_DIR": "$env{QT_HOST_PATH_CMAKE_DIR}",
+        "ECM_DIR": "$env{ECM_DIR}",
+        "CMAKE_PREFIX_PATH": "$env{DRAGON_ANDROID_DEPS_ROOT}/ffmpeg/x86_64/lib/cmake;$env{DRAGON_ANDROID_DEPS_ROOT}/sdl3/x86_64/lib/cmake;$env{DRAGON_QT_ANDROID_X86_64}/lib/cmake",
+        "BUILD_TESTING": "OFF",
+        "BUILD_EXAMPLES": "OFF",
+        "CMAKE_FIND_ROOT_PATH": "$env{DRAGON_ANDROID_DEPS_ROOT}/sdl3/x86_64;$env{DRAGON_ANDROID_DEPS_ROOT}/ffmpeg/x86_64"
+      },
+      "environment": {
+        "PKG_CONFIG_PATH": "$env{DRAGON_ANDROID_DEPS_ROOT}/ffmpeg/x86_64/lib/pkgconfig",
+        "PKG_CONFIG_LIBDIR": "$env{DRAGON_ANDROID_DEPS_ROOT}/ffmpeg/x86_64/lib/pkgconfig"
+      }
+    },
+    {
+      "name": "android-arm64-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "$env{DRAGON_QT_ANDROID_ARM64}/lib/cmake/Qt6/qt.toolchain.cmake",
+        "QT_CHAINLOAD_TOOLCHAIN_FILE": "$env{ANDROID_NDK}/build/cmake/android.toolchain.cmake",
+        "ANDROID_ABI": "arm64-v8a",
+        "ANDROID_PLATFORM": "android-28",
+        "CMAKE_ANDROID_API": "28",
+        "QT_HOST_PATH": "$env{QT_HOST_PATH}",
+        "QT_HOST_PATH_CMAKE_DIR": "$env{QT_HOST_PATH_CMAKE_DIR}",
+        "ECM_DIR": "$env{ECM_DIR}",
+        "CMAKE_PREFIX_PATH": "$env{DRAGON_ANDROID_DEPS_ROOT}/ffmpeg/arm64-v8a/lib/cmake;$env{DRAGON_ANDROID_DEPS_ROOT}/sdl3/arm64-v8a/lib/cmake;$env{DRAGON_QT_ANDROID_ARM64}/lib/cmake",
+        "BUILD_TESTING": "OFF",
+        "BUILD_EXAMPLES": "OFF",
+        "CMAKE_FIND_ROOT_PATH": "$env{DRAGON_ANDROID_DEPS_ROOT}/sdl3/arm64-v8a;$env{DRAGON_ANDROID_DEPS_ROOT}/ffmpeg/arm64-v8a"
+      },
+      "environment": {
+        "PKG_CONFIG_PATH": "$env{DRAGON_ANDROID_DEPS_ROOT}/ffmpeg/arm64-v8a/lib/pkgconfig",
+        "PKG_CONFIG_LIBDIR": "$env{DRAGON_ANDROID_DEPS_ROOT}/ffmpeg/arm64-v8a/lib/pkgconfig"
+      }
+    },
+    {
+      "name": "android-x86_64",
+      "displayName": "Android x86_64 (emulator)",
+      "inherits": "android-x86_64-base",
+      "binaryDir": "${sourceDir}/build-android-x86_64"
+    },
+    {
+      "name": "android-arm64",
+      "displayName": "Android arm64-v8a (device/CI)",
+      "inherits": "android-arm64-base",
+      "binaryDir": "${sourceDir}/build-android-arm64"
+    },
+    {
+      "name": "android-x86_64-example",
+      "displayName": "Android x86_64 + QML example APK",
+      "inherits": "android-x86_64-base",
+      "binaryDir": "${sourceDir}/build-android-x86_64",
+      "cacheVariables": {
+        "BUILD_EXAMPLES": "ON"
+      }
+    },
+    {
+      "name": "android-arm64-example",
+      "displayName": "Android arm64-v8a + QML example APK",
+      "inherits": "android-arm64-base",
+      "binaryDir": "${sourceDir}/build-android-arm64",
+      "cacheVariables": {
+        "BUILD_EXAMPLES": "ON"
+      }
     }
   ],
   "buildPresets": [
@@ -128,6 +206,22 @@
         "CLAZY_CHECKS": "level0,level1,detaching-member,ifndef-define-typo,isempty-vs-count,qrequiredresult-candidates,reserve-candidates,signal-with-return-value,unneeded-cast,function-args-by-ref,function-args-by-value,returning-void-expression,no-ctor-missing-parent-argument,isempty-vs-count,qhash-with-char-pointer-key,raw-environment-function,qproperty-type-mismatch,old-style-connect,qstring-allocations,container-inside-loop,heap-allocated-small-trivial-type,inefficient-qlist,qstring-varargs,level2,detaching-member,heap-allocated-small-trivial-type,isempty-vs-count,qstring-varargs,qvariant-template-instantiation,raw-environment-function,reserve-candidates,signal-with-return-value,thread-with-slots,no-ctor-missing-parent-argument,no-missing-typeinfo",
         "CCACHE_DISABLE": "ON"
       }
+    },
+    {
+      "name": "android-x86_64",
+      "configurePreset": "android-x86_64"
+    },
+    {
+      "name": "android-arm64",
+      "configurePreset": "android-arm64"
+    },
+    {
+      "name": "android-x86_64-example",
+      "configurePreset": "android-x86_64-example"
+    },
+    {
+      "name": "android-arm64-example",
+      "configurePreset": "android-arm64-example"
     }
   ],
   "testPresets": [
@@ -200,9 +294,18 @@
       "displayName": "ASan build and test workflow",
       "description": "Configure, build, and run tests with AddressSanitizer enabled",
       "steps": [
-        { "type": "configure", "name": "asan" },
-        { "type": "build", "name": "asan" },
-        { "type": "test", "name": "asan" }
+        {
+          "type": "configure",
+          "name": "asan"
+        },
+        {
+          "type": "build",
+          "name": "asan"
+        },
+        {
+          "type": "test",
+          "name": "asan"
+        }
       ]
     },
     {
@@ -210,9 +313,18 @@
       "displayName": "Run ASan-built tests repeatedly, to find race conditions.",
       "description": "Configure, build, and run tests with AddressSanitizer enabled, repeating each test up to 20 times until failure",
       "steps": [
-        { "type": "configure", "name": "asan" },
-        { "type": "build", "name": "asan" },
-        { "type": "test", "name": "asan-repeat-test" }
+        {
+          "type": "configure",
+          "name": "asan"
+        },
+        {
+          "type": "build",
+          "name": "asan"
+        },
+        {
+          "type": "test",
+          "name": "asan-repeat-test"
+        }
       ]
     },
     {
@@ -220,9 +332,18 @@
       "displayName": "Run ASan-built tests repeatedly in parallel",
       "description": "Configure, build, and run tests with AddressSanitizer enabled, repeating each test up to 20 times until failure, with 25 parallel jobs",
       "steps": [
-        { "type": "configure", "name": "asan" },
-        { "type": "build", "name": "asan" },
-        { "type": "test", "name": "asan-repeat-test-parallel" }
+        {
+          "type": "configure",
+          "name": "asan"
+        },
+        {
+          "type": "build",
+          "name": "asan"
+        },
+        {
+          "type": "test",
+          "name": "asan-repeat-test-parallel"
+        }
       ]
     },
     {
@@ -230,9 +351,48 @@
       "displayName": "Your go-to build and test workflow",
       "description": "Configure, build, and run tests.",
       "steps": [
-        { "type": "configure", "name": "dev" },
-        { "type": "build", "name": "dev" },
-        { "type": "test", "name": "dev" }
+        {
+          "type": "configure",
+          "name": "dev"
+        },
+        {
+          "type": "build",
+          "name": "dev"
+        },
+        {
+          "type": "test",
+          "name": "dev"
+        }
+      ]
+    },
+    {
+      "name": "android-x86_64-example",
+      "displayName": "Configure, build, and package the Android x86_64 (emulator) QML example APK",
+      "description": "Requires the Android env from ~/scripts/android-env.sh (ANDROID_HOME, ANDROID_NDK, DRAGON_QT_ANDROID_*, DRAGON_ANDROID_DEPS_ROOT). Tests are not run: Android test binaries cannot execute on the host.",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "android-x86_64-example"
+        },
+        {
+          "type": "build",
+          "name": "android-x86_64-example"
+        }
+      ]
+    },
+    {
+      "name": "android-arm64-example",
+      "displayName": "Configure, build, and package the Android arm64-v8a (device) QML example APK",
+      "description": "Requires the Android env from ~/scripts/android-env.sh (ANDROID_HOME, ANDROID_NDK, DRAGON_QT_ANDROID_*, DRAGON_ANDROID_DEPS_ROOT). Tests are not run: Android test binaries cannot execute on the host.",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "android-arm64-example"
+        },
+        {
+          "type": "build",
+          "name": "android-arm64-example"
+        }
       ]
     },
     {
@@ -240,8 +400,14 @@
       "displayName": "Build to ~/kde",
       "description": "Configure and build dragon-sdl based on kde at ~/kde",
       "steps": [
-        { "type": "configure", "name": "kde-dev" },
-        { "type": "build", "name": "kde-dev" }
+        {
+          "type": "configure",
+          "name": "kde-dev"
+        },
+        {
+          "type": "build",
+          "name": "kde-dev"
+        }
       ]
     }
   ]

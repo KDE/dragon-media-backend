@@ -9,3 +9,4 @@
 /CMakeUserPresets.json
 compile_commands.json
 /.clangd
+/.ci-android-deps

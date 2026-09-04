@@ -14,6 +14,10 @@
 
 #include <cstdio>
 
+#ifdef Q_OS_ANDROID
+#include <android/log.h>
+#endif
+
 inline void DragonMediaBackend_install_timestamped_handler()
 {
     static bool installed = false;
@@ -50,6 +54,15 @@ inline void DragonMediaBackend_install_timestamped_handler()
             }
         }
 
+#ifdef Q_OS_ANDROID
+        const android_LogPriority priority = type == QtDebugMsg ? ANDROID_LOG_DEBUG
+            : type == QtInfoMsg                                 ? ANDROID_LOG_INFO
+            : type == QtWarningMsg                              ? ANDROID_LOG_WARN
+            : type == QtCriticalMsg                             ? ANDROID_LOG_ERROR
+                                                                : ANDROID_LOG_FATAL;
+        __android_log_print(priority, "DragonMediaBackend", "%s", qUtf8Printable(formattedMsg));
+#else
         fprintf(stderr, "%s\n", qUtf8Printable(formattedMsg));
+#endif
     });
 }

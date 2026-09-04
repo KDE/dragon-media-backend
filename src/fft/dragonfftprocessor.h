@@ -7,6 +7,7 @@
 
 #include "DragonMediaBackend/dragonfftframe.h"
 #include "DragonMediaBackend/dragonspectrumanalyzer.h"
+#include "dragoncppcompat.h"
 #include "dragonmediabackend_export.h"
 
 #include <array>
@@ -33,7 +34,7 @@ public:
     static constexpr int NUM_LOG_BINS = DragonFftFrame::NUM_FREQUENCIES;
     static constexpr int NUM_BAR_BINS = DragonFftFrame::NUM_BARS;
 
-    using FrameCallback = std::move_only_function<void(DragonFftFrame)>;
+    using FrameCallback = dragon::compat::move_only_function<void(DragonFftFrame)>;
 
     DragonFftProcessor();
     ~DragonFftProcessor();

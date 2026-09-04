@@ -6,6 +6,7 @@
 #include "dragonplayer_p.h"
 
 #include "sink/dragonaudiosinkfactory.h"
+#include "stream/dragonstreamfactory.h"
 #include <DragonMediaBackend/dragonaudiooutput.h>
 #include <DragonMediaBackend/dragonplayer.h>
 
@@ -84,7 +85,7 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     currentPosition = 0;
     aboutToFinishEmitted = false;
     qCDebug(dragonMediaBackendPlayer) << "onGaplessTransition: reset aboutToFinishEmitted for" << currentSource.toString();
-    currentIsLocal = currentSource.isLocalFile();
+    currentIsLocal = DragonStreamFactory::isLocalSource(currentSource);
     currentSeekable = currentIsLocal;
     currentDuration = durationMs;
     currentSampleRate = sampleRate;
@@ -593,7 +594,7 @@ void DragonPlayer::setSource(const QUrl &source)
         d->setStatus(MediaStatus::LoadingMedia);
     }
 
-    const bool isLocal = d->currentSource.isLocalFile();
+    const bool isLocal = DragonStreamFactory::isLocalSource(d->currentSource);
     const bool isHttp = d->currentSource.scheme() == QStringLiteral("http") || d->currentSource.scheme() == QStringLiteral("https");
 
     d->currentIsLocal = isLocal;

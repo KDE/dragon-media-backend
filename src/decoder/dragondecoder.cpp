@@ -222,7 +222,7 @@ DragonMediaBackend::InitResult DragonDecoder::initialize()
     return result;
 }
 
-std::generator<DragonMediaBackend::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token st)
+dragon::compat::generator<DragonMediaBackend::DecodeEvent> DragonDecoder::decodeLoop(std::stop_token st)
 {
     using namespace DragonMediaBackend;
 

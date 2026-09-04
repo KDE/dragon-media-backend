@@ -6,6 +6,7 @@ add_library(dragon_decoder_objs OBJECT
     dragondecoder.cpp
     dragondecodepipeline.cpp
     dragoncompletion.cpp
+    dragonffmpegjni.cpp
 )
 
 target_include_directories(dragon_decoder_objs PRIVATE

@@ -6,6 +6,7 @@
 #include "dragondecodepipeline.h"
 
 #include "dragondecoder.h"
+#include "dragonffmpegjni.h"
 #include "stream/dragonbufferprogress.h"
 #include "stream/dragonstream.h"
 #include "stream/dragonstreamfactory.h"
@@ -452,7 +453,7 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
 
     cancelPreWarm(QStringLiteral("New pre-warm started"));
 
-    if (next.isEmpty() || !next.isLocalFile()) {
+    if (next.isEmpty() || !DragonStreamFactory::isLocalSource(next)) {
         return;
     }
 
@@ -520,7 +521,9 @@ void DragonDecodePipeline::requestSeek(qint64 posMs)
 
 std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &source, bool)
 {
-    const bool isLocal = source.isLocalFile();
+    initAndroidJniBridge();
+
+    const bool isLocal = DragonStreamFactory::isLocalSource(source);
 
     std::shared_ptr<DragonStream> oldStream;
     {
@@ -586,8 +589,14 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         Q_EMIT bufferProgressChanged(1.0);
     }
 
-    auto decoder =
-        std::make_unique<DragonDecoder>(std::move(readCb), std::move(seekCb), stream ? stream->size() : -1, isLocal ? source.toLocalFile() : QString{});
+    const QString decoderPath = [&]() -> QString {
+        if (!isLocal) {
+            return {};
+        }
+        return source.isLocalFile() ? source.toLocalFile() : source.toString(QUrl::FullyEncoded);
+    }();
+
+    auto decoder = std::make_unique<DragonDecoder>(std::move(readCb), std::move(seekCb), stream ? stream->size() : -1, decoderPath);
 
     connect(decoder.get(), &DragonDecoder::streamError, this, [this](const QString &msg) {
         qCDebug(dragonMediaBackendDecode) << "Decoder mid-stream error:" << msg;

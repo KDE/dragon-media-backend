@@ -45,11 +45,40 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/sdl3-src" AND NOT DEFINED FETCHCONTENT_SOURCE_DIR
     set(FETCHCONTENT_SOURCE_DIR_SDL3 "${CMAKE_SOURCE_DIR}/sdl3-src")
 endif()
 
+if(ANDROID)
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_FLAGS "-std=c++23")
+    check_cxx_source_compiles("
+        #include <thread>
+        int main() { std::stop_token t; return t.stop_possible() ? 1 : 0; }
+    " DRAGON_HAVE_STD_STOP_TOKEN)
+    if(NOT DRAGON_HAVE_STD_STOP_TOKEN)
+        set(CMAKE_REQUIRED_FLAGS "-std=c++23 -fexperimental-library")
+        check_cxx_source_compiles("
+            #include <thread>
+            int main() { std::stop_source s; std::jthread j; return 0; }
+        " DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
+        if(NOT DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
+            message(FATAL_ERROR
+                "std::stop_token/std::jthread are unavailable and -fexperimental-library "
+                "did not enable them — the NDK's libc++ is too old for this pipeline.")
+        endif()
+        add_compile_options(-fexperimental-library)
+        message(STATUS "std::stop_token needs -fexperimental-library on this toolchain — enabled")
+    endif()
+endif()
+
+
 find_package(Qt6 REQUIRED COMPONENTS Core Network Gui)
-find_package(Qt6 COMPONENTS Widgets)
+find_package(Qt6 COMPONENTS Widgets Qml Quick QuickControls2)
 find_package(KF6KIO REQUIRED)
 find_package(KF6CoreAddons REQUIRED)
 find_package(KF6I18n REQUIRED)
+
+if(ANDROID)
+    message(STATUS "Android build: SDK=${ANDROID_SDK_ROOT} NDK=${ANDROID_NDK} ABI=${ANDROID_ABI}")
+endif()
+
 find_package(SDL3 QUIET)
 if(NOT TARGET SDL3::SDL3)
     message(STATUS "SDL3 not found via find_package, trying FetchContent...")
@@ -338,6 +367,10 @@ kde_configure_git_pre_commit_hook(CHECKS CLANG_FORMAT)
 option(BUILD_EXAMPLES "Build examples" ON)
 if(BUILD_EXAMPLES AND Qt6Widgets_FOUND)
     add_subdirectory(examples/qwidget)
+endif()
+
+if(BUILD_EXAMPLES AND Qt6Qml_FOUND AND Qt6Quick_FOUND AND Qt6QuickControls2_FOUND)
+    add_subdirectory(examples/qml)
 endif()
 
 option(BUILD_TESTING "Build tests" ON)

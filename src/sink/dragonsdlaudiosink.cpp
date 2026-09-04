@@ -5,6 +5,11 @@
 
 #include "dragonsdlaudiosink.h"
 
+#ifndef SDL_MAIN_HANDLED
+#define SDL_MAIN_HANDLED
+#endif
+#include <SDL3/SDL_main.h>
+
 #include "dragonmediabackend_audio_logging.h"
 
 #include <KPluginFactory>
@@ -56,6 +61,8 @@ DragonSdlAudioSink::DragonSdlAudioSink(QObject *parent, const QVariantList &args
 
     SDL_SetHint(SDL_HINT_APP_NAME, QGuiApplication::applicationDisplayName().toUtf8().constData());
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_ROLE, "music");
+
+    SDL_SetMainReady();
 
     const QString appId = applicationIconName();
     if (!appId.isEmpty()) {

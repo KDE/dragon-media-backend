@@ -14,5 +14,7 @@
 class DragonStreamFactory
 {
 public:
+    static bool isLocalSource(const QUrl &url);
+
     static std::shared_ptr<DragonStream> createStream(const QUrl &source);
 };

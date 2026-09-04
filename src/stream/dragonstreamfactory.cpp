@@ -12,9 +12,14 @@
 
 using namespace Qt::StringLiterals;
 
+bool DragonStreamFactory::isLocalSource(const QUrl &url)
+{
+    return url.isLocalFile() || url.scheme() == u"content"_s;
+}
+
 std::shared_ptr<DragonStream> DragonStreamFactory::createStream(const QUrl &source)
 {
-    if (source.isLocalFile()) {
+    if (isLocalSource(source)) {
         return nullptr;
     }
 

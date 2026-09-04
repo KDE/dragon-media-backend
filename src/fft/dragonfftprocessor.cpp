@@ -9,6 +9,7 @@
 
 #include "dragonmediabackend_fft_logging.h"
 
+#include "dragoncppcompat.h"
 #include "player/dragonpipe.h"
 #include <algorithm>
 #include <array>
@@ -284,7 +285,7 @@ void DragonFftProcessor::fillDetailedBins(std::span<float> frequenciesDb, std::s
     const float melMin = hzToMel(MIN_FREQ);
     const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
 
-    for (auto [i, bin] : std::views::enumerate(frequenciesDb)) {
+    for (auto [i, bin] : dragon::compat::views::enumerate(frequenciesDb)) {
         const float t0 = static_cast<float>(i) / static_cast<float>(frequenciesDb.size());
         const float t1 = static_cast<float>(i + 1) / static_cast<float>(frequenciesDb.size());
         bin = computeMelBin(fftOut, binToFreq, melMin, melMax, t0, t1);
@@ -296,7 +297,7 @@ void DragonFftProcessor::fillBarBins(std::span<float> barData, std::span<const s
     const float melMin = hzToMel(MIN_FREQ);
     const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
 
-    for (auto [i, bin] : std::views::enumerate(barData)) {
+    for (auto [i, bin] : dragon::compat::views::enumerate(barData)) {
         const float t0 = static_cast<float>(i) / static_cast<float>(barData.size());
         const float t1 = static_cast<float>(i + 1) / static_cast<float>(barData.size());
         bin = computeMelBin(fftOut, binToFreq, melMin, melMax, t0, t1);
@@ -323,7 +324,7 @@ void DragonFftProcessor::emitFrame(const DragonFftFrame &frame)
 void DragonFftProcessor::applyHannWindow(std::span<float> data)
 {
     const auto size = static_cast<float>(data.size());
-    for (auto [i, val] : std::views::enumerate(data)) {
+    for (auto [i, val] : dragon::compat::views::enumerate(data)) {
         const float window = 0.5f * (1.0f - std::cos(2.0f * std::numbers::pi_v<float> * static_cast<float>(i) / (size - 1.0f)));
         val *= window;
     }

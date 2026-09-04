@@ -1,0 +1,129 @@
+diff --git a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
+--- a/org/libsdl/app/SDLActivity.java
++++ b/org/libsdl/app/SDLActivity.java
+@@ -1,6 +1,5 @@
+ package org.libsdl.app;
+ 
+-import android.app.Activity;
+ import android.app.AlertDialog;
+ import android.app.Dialog;
+ import android.app.UiModeManager;
+@@ -63,7 +62,10 @@ import java.util.Locale;
+ /**
+     SDL Activity
+ */
+-public class SDLActivity extends Activity implements View.OnSystemUiVisibilityChangeListener {
++import android.app.Activity;
++import org.qtproject.qt.android.bindings.QtActivity;
++
++public class SDLActivity extends QtActivity implements View.OnSystemUiVisibilityChangeListener {
+     private static final String TAG = "SDL";
+     private static final int SDL_MAJOR_VERSION = 3;
+     private static final int SDL_MINOR_VERSION = 5;
+@@ -314,12 +316,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
+      */
+     protected String[] getLibraries() {
+         return new String[] {
+-            "SDL3",
+-            // "SDL3_image",
+-            // "SDL3_mixer",
+-            // "SDL3_net",
+-            // "SDL3_ttf",
+-            "main"
++            "SDL3"
+         };
+     }
+ 
+@@ -351,7 +348,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
+      * @return mask of SDL.SDL_INIT_* values.
+      */
+     protected int getInitSubsystems() {
+-        return SDL.SDL_INIT_EVERYTHING;
++        return SDL.SDL_INIT_AUDIO;
+     }
+ 
+     public static void initialize() {
+@@ -376,8 +373,14 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
+     }
+ 
+     // Setup
++    static {
++        System.loadLibrary("SDL3");
++        SDL.setupJNI(SDL.SDL_INIT_AUDIO);
++        SDL.initialize(SDL.SDL_INIT_AUDIO);
++    }
++
+     @Override
+-    protected void onCreate(Bundle savedInstanceState) {
++    public void onCreate(Bundle savedInstanceState) {
+         Log.v(TAG, "Manufacturer: " + Build.MANUFACTURER);
+         Log.v(TAG, "Device: " + Build.DEVICE);
+         Log.v(TAG, "Model: " + Build.MODEL);
+@@ -477,12 +480,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
+             }
+         }
+ 
+-        // Set up JNI
+-        SDL.setupJNI(getInitSubsystems());
+-
+-        // Initialize state
+-        SDL.initialize();
+-
+         // So we can call stuff from static callbacks
+         mSingleton = this;
+         SDL.setContext(this);
+@@ -964,21 +961,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
+             boolean readyToRun = (mSurface == null) ? mIsResumedCalled
+                     : (mSurface.mIsSurfaceReady && (mHasFocus || mHasMultiWindow) && mIsResumedCalled);
+             if (readyToRun) {
+-                if (mSDLThread == null) {
+-                    // This is the entry point to the C app.
+-                    // Start up the C app thread and enable sensor input for the first time
+-                    // FIXME: Why aren't we enabling sensor input at start?
+-
+-                    mSDLThread = new Thread(new SDLMain(), "SDLThread");
+-                    if (mSurface != null) {
+-                        mSurface.enableSensor(Sensor.TYPE_ACCELEROMETER, true);
+-                    }
+-                    mSDLThread.start();
+-
+-                    // No nativeResume(), don't signal Android_ResumeSem
+-                } else {
+-                    nativeResume();
+-                }
++                nativeResume();
+                 if (mSurface != null) {
+                     mSurface.handleResume();
+                 }
+@@ -2432,31 +2415,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
+ /**
+     Simple runnable to start the SDL application
+ */
+-class SDLMain implements Runnable {
+-    @Override
+-    public void run() {
+-        // Runs SDLActivity.main()
+-
+-        try {
+-            android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_DISPLAY);
+-        } catch (Exception e) {
+-            Log.v("SDL", "modify thread properties failed " + e.toString());
+-        }
+-
+-        SDLActivity.nativeInitMainThread();
+-        SDLActivity.mSingleton.main();
+-        SDLActivity.nativeCleanupMainThread();
+-
+-        if (SDLActivity.mSingleton != null && !SDLActivity.mSingleton.isFinishing()) {
+-            // Let's finish the Activity
+-            SDLActivity.mSDLThread = null;
+-            SDLActivity.mSDLMainFinished = true;
+-            SDLActivity.mSingleton.finish();
+-        }  // else: Activity is already being destroyed
+-
+-    }
+-}
+-
+ class SDLClipboardHandler implements
+     ClipboardManager.OnPrimaryClipChangedListener {
+ 

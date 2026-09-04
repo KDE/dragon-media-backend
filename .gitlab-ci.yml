@@ -29,3 +29,36 @@ windows_qt611:
     - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
     - git clone https://github.com/mborgerding/kissfft.git --depth=1 --branch 131.2.0 kissfft-src
     - git clone https://github.com/libsdl-org/SDL.git --depth=1 --branch release-3.4.12 sdl3-src
+
+.dragonqml_apk:
+  stage: build
+  image: storage.kde.org/vm-images/android-qt611-ci
+  tags:
+    - VM
+    - amd64
+  interruptible: true
+  variables:
+    DRAGON_ANDROID_DEPS_ROOT: "$CI_PROJECT_DIR/.ci-android-deps"
+  retry: 1
+  artifacts:
+    expire_in: 30 days
+    paths:
+      - build-android-*/examples/qml/android-build/*.apk
+
+dragonqml_apk_x86_64:
+  extends: .dragonqml_apk
+  cache:
+    key: "android-deps-x86_64:v1"
+    paths:
+      - .ci-android-deps/
+  script:
+    - bash ci/run-apk-job.sh x86_64
+
+dragonqml_apk_arm64:
+  extends: .dragonqml_apk
+  cache:
+    key: "android-deps-arm64:v1"
+    paths:
+      - .ci-android-deps/
+  script:
+    - bash ci/run-apk-job.sh arm64-v8a
