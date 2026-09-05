@@ -59,6 +59,7 @@ private Q_SLOTS:
     void onStreamStalled();
     void onStreamBuffering();
     void onStreamBuffered();
+    void onStreamSeekable(bool seekable);
 
 private:
     void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);

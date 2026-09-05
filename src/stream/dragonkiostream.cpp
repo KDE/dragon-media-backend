@@ -36,6 +36,8 @@ void DragonKioStream::start()
 {
     qCDebug(dragonMediaBackendNetwork) << "DragonKioStream start" << m_url.toString();
 
+    Q_EMIT seekableChanged(isSeekable());
+
     m_abort = false;
     m_error = false;
     m_finished = false;

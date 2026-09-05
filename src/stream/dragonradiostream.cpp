@@ -50,7 +50,9 @@ void DragonRadioStream::start()
     m_lastMetadata.clear();
     m_totalSize = -1;
     m_streamPosition = 0;
-    m_acceptsRanges = false;
+    if (m_acceptsRanges.exchange(false)) {
+        Q_EMIT seekableChanged(false);
+    }
 
     m_bufferProgress->reset();
 
@@ -263,8 +265,10 @@ void DragonRadioStream::onReplyMetaDataChanged()
 
         const QByteArray acceptRanges = m_reply->rawHeader("Accept-Ranges"_ba);
         if (acceptRanges.toLower() == "bytes") {
-            m_acceptsRanges = true;
-            qCDebug(dragonMediaBackendNetwork) << "Server supports Range requests";
+            if (!m_acceptsRanges.exchange(true)) {
+                qCDebug(dragonMediaBackendNetwork) << "Server supports Range requests";
+                Q_EMIT seekableChanged(true);
+            }
         }
     }
 }

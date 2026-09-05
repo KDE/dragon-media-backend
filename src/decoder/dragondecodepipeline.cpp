@@ -561,6 +561,7 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
         connect(stream.get(), &DragonStream::streamStalled, this, &DragonDecodePipeline::streamStalled, Qt::QueuedConnection);
         connect(stream.get(), &DragonStream::streamBuffering, this, &DragonDecodePipeline::streamBuffering, Qt::QueuedConnection);
         connect(stream.get(), &DragonStream::streamBuffered, this, &DragonDecodePipeline::streamBuffered, Qt::QueuedConnection);
+        connect(stream.get(), &DragonStream::seekableChanged, this, &DragonDecodePipeline::streamSeekableChanged, Qt::QueuedConnection);
 
         stream->start();
 
@@ -633,6 +634,12 @@ qint64 DragonDecodePipeline::streamSize() const
 {
     std::scoped_lock lock(m_streamMutex);
     return m_stream ? m_stream->size() : -1;
+}
+
+bool DragonDecodePipeline::streamIsSeekable() const
+{
+    std::scoped_lock lock(m_streamMutex);
+    return m_stream && m_stream->isSeekable();
 }
 
 void DragonDecodePipeline::setSamplesCallback(SamplesCallback callback)

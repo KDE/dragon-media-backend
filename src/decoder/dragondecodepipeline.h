@@ -62,6 +62,8 @@ public:
 
     qint64 streamSize() const;
 
+    bool streamIsSeekable() const;
+
 Q_SIGNALS:
     void sessionError(const QString &message);
 
@@ -74,6 +76,8 @@ Q_SIGNALS:
     void streamStalled();
     void streamBuffering();
     void streamBuffered();
+
+    void streamSeekableChanged(bool seekable);
 
 private:
     std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless);

@@ -30,6 +30,7 @@ private Q_SLOTS:
     void testPlayLocalWmaFileOverHttp();
     void testRadioToLocalFileTransition();
     void testSeekHttpFile();
+    void testSeekableDependsOnServerCapability();
 
 private:
     TestHttpServer *m_server = nullptr;
@@ -253,6 +254,47 @@ void TestNetworkPlayback::testSeekHttpFile()
 
     player.stop();
     qDebug() << "Seek HTTP file test completed successfully!";
+}
+
+void TestNetworkPlayback::testSeekableDependsOnServerCapability()
+{
+    QString wmaPath = fixturePath(u"gs-16b-1c-44100hz.wma"_s);
+    QVERIFY2(QFile::exists(wmaPath), qPrintable(u"WMA fixture not found: %1"_s.arg(wmaPath)));
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(m_server->port());
+    url.setPath(u"/gs-16b-1c-44100hz.wma"_s);
+
+    DragonPlayer player;
+    QSignalSpy seekableSpy(&player, &DragonPlayer::seekableChanged);
+    QVERIFY(seekableSpy.isValid());
+
+    m_server->setAcceptRanges(true);
+    m_server->serveFile(wmaPath);
+
+    player.setSource(url);
+    QTRY_VERIFY_WITH_TIMEOUT(player.seekable(), 10000);
+    QVERIFY(seekableSpy.contains(QList<QVariant>{true}));
+
+    m_server->setAcceptRanges(false);
+    seekableSpy.clear();
+
+    QUrl url2 = url;
+    url2.setQuery(u"reload=1"_s);
+    player.setSource(url2);
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::BufferedMedia, 10000);
+
+    QVERIFY(!QTest::qWaitFor(
+        [&]() {
+            return player.seekable() || seekableSpy.contains(QList<QVariant>{true});
+        },
+        500));
+    QVERIFY2(!player.seekable(), "seekable() must stay false when the server does not advertise Accept-Ranges");
+    QVERIFY(!seekableSpy.contains(QList<QVariant>{true}));
+
+    m_server->setAcceptRanges(true);
 }
 
 QTEST_MAIN(TestNetworkPlayback)

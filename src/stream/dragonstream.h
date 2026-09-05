@@ -36,6 +36,11 @@ public:
         return -1;
     }
 
+    virtual bool isSeekable() const
+    {
+        return false;
+    }
+
     virtual qint64 size() const
     {
         return -1;
@@ -54,4 +59,5 @@ Q_SIGNALS:
     void streamStalled();
     void streamBuffering();
     void streamBuffered();
+    void seekableChanged(bool seekable);
 };

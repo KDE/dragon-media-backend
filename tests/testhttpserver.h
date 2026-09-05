@@ -56,6 +56,16 @@ public:
         m_contentType = contentType;
     }
 
+    void setAcceptRanges(bool accept)
+    {
+        m_acceptRanges = accept;
+    }
+
+    [[nodiscard]] bool acceptRanges() const
+    {
+        return m_acceptRanges;
+    }
+
 private:
     void onNewConnection()
     {
@@ -94,29 +104,31 @@ private:
         qint64 rangeEnd = totalSize - 1;
         bool hasRange = false;
 
-        int rangeIdx = request.indexOf("Range: bytes=");
-        if (rangeIdx >= 0) {
-            int valueStart = rangeIdx + 13;
-            int lineEnd = request.indexOf("\r\n", valueStart);
-            QByteArray rangeValue = request.mid(valueStart, lineEnd - valueStart);
-            int dashIdx = rangeValue.indexOf('-');
-            if (dashIdx >= 0) {
-                QByteArray startStr = rangeValue.left(dashIdx);
-                QByteArray endStr = rangeValue.mid(dashIdx + 1);
-                bool ok1 = false, ok2 = false;
-                if (!startStr.isEmpty()) {
-                    rangeStart = startStr.toLongLong(&ok1);
-                }
-                if (!endStr.isEmpty()) {
-                    rangeEnd = endStr.toLongLong(&ok2);
-                }
-                if (ok1 || ok2) {
-                    hasRange = true;
-                    if (!ok2 || rangeEnd >= totalSize) {
-                        rangeEnd = totalSize - 1;
+        if (m_acceptRanges) {
+            int rangeIdx = request.indexOf("Range: bytes=");
+            if (rangeIdx >= 0) {
+                int valueStart = rangeIdx + 13;
+                int lineEnd = request.indexOf("\r\n", valueStart);
+                QByteArray rangeValue = request.mid(valueStart, lineEnd - valueStart);
+                int dashIdx = rangeValue.indexOf('-');
+                if (dashIdx >= 0) {
+                    QByteArray startStr = rangeValue.left(dashIdx);
+                    QByteArray endStr = rangeValue.mid(dashIdx + 1);
+                    bool ok1 = false, ok2 = false;
+                    if (!startStr.isEmpty()) {
+                        rangeStart = startStr.toLongLong(&ok1);
                     }
-                    if (rangeStart < 0)
-                        rangeStart = 0;
+                    if (!endStr.isEmpty()) {
+                        rangeEnd = endStr.toLongLong(&ok2);
+                    }
+                    if (ok1 || ok2) {
+                        hasRange = true;
+                        if (!ok2 || rangeEnd >= totalSize) {
+                            rangeEnd = totalSize - 1;
+                        }
+                        if (rangeStart < 0)
+                            rangeStart = 0;
+                    }
                 }
             }
         }
@@ -143,7 +155,9 @@ private:
             response.append("HTTP/1.1 200 OK\r\n");
             response.append("Content-Type: " + m_contentType + "\r\n");
             response.append("Content-Length: " + QByteArray::number(totalSize) + "\r\n");
-            response.append("Accept-Ranges: bytes\r\n");
+            if (m_acceptRanges) {
+                response.append("Accept-Ranges: bytes\r\n");
+            }
             response.append("Connection: close\r\n");
             response.append("\r\n");
         }
@@ -171,5 +185,6 @@ private:
     quint16 m_port = 0;
     QString m_filePath;
     QByteArray m_contentType;
+    bool m_acceptRanges = true;
     QList<QTcpSocket *> m_pendingClients;
 };

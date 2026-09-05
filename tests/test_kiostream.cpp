@@ -38,6 +38,8 @@ private Q_SLOTS:
     void testReadBlocksUntilStop();
     void testReadCancellation();
     void testSeeking();
+    void testSftpAssumedSeekable();
+    void testNonSftpNotSeekable();
 
     void testHttpKioRead();
     void testHttpKioSeekDataCorrect();
@@ -98,6 +100,7 @@ void TestKioStream::testConstruction()
     DragonKioStream stream;
     QCOMPARE(stream.size(), -1);
     QCOMPARE(stream.position(), 0);
+    QCOMPARE(stream.isSeekable(), false);
 }
 
 void TestKioStream::testSetUrl()
@@ -251,6 +254,37 @@ static QUrl httpUrl(TestHttpServer *server, const QString &path)
     url.setPort(server->port());
     url.setPath(path);
     return url;
+}
+
+void TestKioStream::testSftpAssumedSeekable()
+{
+    DragonKioStream stream;
+    stream.setUrl(QUrl(u"sftp://user@example.org/music/track.flac"_s));
+
+    QSignalSpy seekableSpy(&stream, &DragonStream::seekableChanged);
+    QVERIFY(seekableSpy.isValid());
+
+    stream.start();
+    QCOMPARE(stream.isSeekable(), true);
+    QVERIFY(seekableSpy.contains(QList<QVariant>{true}));
+
+    stream.stop();
+}
+
+void TestKioStream::testNonSftpNotSeekable()
+{
+    DragonKioStream localStream;
+    QSignalSpy localSpy(&localStream, &DragonStream::seekableChanged);
+    QVERIFY(localSpy.isValid());
+    localStream.setUrl(QUrl::fromLocalFile(m_testFilePath));
+    QCOMPARE(localStream.isSeekable(), false);
+    localStream.start();
+    QVERIFY(!localSpy.contains(QList<QVariant>{true}));
+    localStream.stop();
+
+    DragonKioStream httpStream;
+    httpStream.setUrl(QUrl(u"http://example.org/big.dat"_s));
+    QCOMPARE(httpStream.isSeekable(), false);
 }
 
 void TestKioStream::testHttpKioRead()

@@ -190,6 +190,14 @@ void DragonPlayerPrivate::onStreamBuffered()
     setStatus(DragonPlayer::MediaStatus::BufferedMedia);
 }
 
+void DragonPlayerPrivate::onStreamSeekable(bool seekable)
+{
+    if (currentSeekable != seekable) {
+        currentSeekable = seekable;
+        Q_EMIT q->seekableChanged(seekable);
+    }
+}
+
 void DragonPlayerPrivate::writeToQueues(std::span<const float> pcm, const std::stop_token &st)
 {
     if (pcm.empty()) {
@@ -347,6 +355,7 @@ void DragonPlayerPrivate::init()
     connect(&decodePipeline, &DragonDecodePipeline::streamStalled, this, &DragonPlayerPrivate::onStreamStalled, Qt::QueuedConnection);
     connect(&decodePipeline, &DragonDecodePipeline::streamBuffering, this, &DragonPlayerPrivate::onStreamBuffering, Qt::QueuedConnection);
     connect(&decodePipeline, &DragonDecodePipeline::streamBuffered, this, &DragonPlayerPrivate::onStreamBuffered, Qt::QueuedConnection);
+    connect(&decodePipeline, &DragonDecodePipeline::streamSeekableChanged, this, &DragonPlayerPrivate::onStreamSeekable, Qt::QueuedConnection);
 
     connect(
         &decodePipeline,
@@ -493,7 +502,7 @@ QCoro::Task<void> DragonPlayerPrivate::startLoad(QUrl source, uint64_t generatio
         Q_EMIT q->durationChanged(currentDuration);
     }
 
-    if (!currentIsLocal && decodePipeline.streamSize() > 0) {
+    if (!currentIsLocal && decodePipeline.streamIsSeekable()) {
         currentSeekable = true;
         Q_EMIT q->seekableChanged(true);
     }

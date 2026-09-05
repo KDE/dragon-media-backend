@@ -39,6 +39,11 @@ public:
 
     qint64 seek(qint64 offset) override;
 
+    [[nodiscard]] bool isSeekable() const override
+    {
+        return m_url.scheme() == QLatin1String("sftp");
+    }
+
     [[nodiscard]] qint64 size() const override;
     [[nodiscard]] qint64 position() const override;
 
