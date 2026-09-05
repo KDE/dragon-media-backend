@@ -200,7 +200,7 @@ if(PIPEWIRE_FOUND)
 endif()
 
 if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
-    foreach(_test ${_dragon_audio_tests})
+    foreach(_test ${_dragon_audio_tests} test_e2e_pipewire_gapless test_e2e_pulseaudio_gapless)
         if(TEST ${_test})
             set_tests_properties(${_test} PROPERTIES
                 FIXTURES_REQUIRED "dragon_pipewire"

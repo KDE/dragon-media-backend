@@ -22,7 +22,7 @@ inline void set(std::string_view name)
 }
 }
 
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__FreeBSD__)
 #include <pthread.h>
 #include <string>
 

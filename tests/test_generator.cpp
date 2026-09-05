@@ -2,24 +2,23 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
- * Tests for the std::generator<DecodeEvent> coroutine infrastructure using
+ * Tests for the dragon::compat::generator<DecodeEvent> coroutine infrastructure using
  * the production DragonMediaBackend event types, plus integration tests that
  * exercise the real DragonDecoder::decodeLoop() generator.
  */
 
 #include <QtCore>
 #include <QtTest>
-#include <stdfloat>
 
 #include "logging_timestamp_init.h"
 
 #include "decoder/dragondecoder.h"
 #include "player/dragonevent.h"
 
+#include "dragoncppcompat.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
-#include <generator>
 #include <numbers>
 #include <optional>
 #include <span>
@@ -33,7 +32,7 @@ using namespace DragonMediaBackend;
 
 namespace
 {
-std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, qint64 durationMs, std::vector<std::vector<float>> sampleBatches)
+dragon::compat::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, qint64 durationMs, std::vector<std::vector<float>> sampleBatches)
 {
     co_yield FormatReady{sampleRate, channels, durationMs};
 
@@ -46,13 +45,13 @@ std::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, qi
     co_yield DecodeEof{};
 }
 
-std::generator<DecodeEvent> createErrorGenerator(QString errorMessage)
+dragon::compat::generator<DecodeEvent> createErrorGenerator(QString errorMessage)
 {
     co_yield DecodeError{std::move(errorMessage)};
     co_return;
 }
 
-std::generator<DecodeEvent> createErrorMidStreamGenerator()
+dragon::compat::generator<DecodeEvent> createErrorMidStreamGenerator()
 {
     co_yield FormatReady{44100, 2, 1000};
     co_yield SamplesChunk{};

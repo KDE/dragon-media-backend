@@ -45,27 +45,26 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/sdl3-src" AND NOT DEFINED FETCHCONTENT_SOURCE_DIR
     set(FETCHCONTENT_SOURCE_DIR_SDL3 "${CMAKE_SOURCE_DIR}/sdl3-src")
 endif()
 
-if(ANDROID)
-    include(CheckCXXSourceCompiles)
-    set(CMAKE_REQUIRED_FLAGS "-std=c++23")
+# hey libc++ please implement C++23
+include(CheckCXXSourceCompiles)
+set(CMAKE_REQUIRED_FLAGS "-std=c++23")
+check_cxx_source_compiles("
+    #include <thread>
+    int main() { std::stop_token t; return t.stop_possible() ? 1 : 0; }
+" DRAGON_HAVE_STD_STOP_TOKEN)
+if(NOT DRAGON_HAVE_STD_STOP_TOKEN)
+    set(CMAKE_REQUIRED_FLAGS "-std=c++23 -fexperimental-library")
     check_cxx_source_compiles("
         #include <thread>
-        int main() { std::stop_token t; return t.stop_possible() ? 1 : 0; }
-    " DRAGON_HAVE_STD_STOP_TOKEN)
-    if(NOT DRAGON_HAVE_STD_STOP_TOKEN)
-        set(CMAKE_REQUIRED_FLAGS "-std=c++23 -fexperimental-library")
-        check_cxx_source_compiles("
-            #include <thread>
-            int main() { std::stop_source s; std::jthread j; return 0; }
-        " DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
-        if(NOT DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
-            message(FATAL_ERROR
-                "std::stop_token/std::jthread are unavailable and -fexperimental-library "
-                "did not enable them — the NDK's libc++ is too old for this pipeline.")
-        endif()
-        add_compile_options(-fexperimental-library)
-        message(STATUS "std::stop_token needs -fexperimental-library on this toolchain — enabled")
+        int main() { std::stop_source s; std::jthread j; return 0; }
+    " DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
+    if(NOT DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
+        message(FATAL_ERROR
+            "std::stop_token/std::jthread are unavailable and -fexperimental-library "
+            "did not enable them — the C++ standard library is too old for this pipeline.")
     endif()
+    add_compile_options(-fexperimental-library)
+    message(STATUS "std::stop_token needs -fexperimental-library on this toolchain — enabled")
 endif()
 
 

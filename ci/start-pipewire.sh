@@ -39,6 +39,12 @@ if [ ! -S "$XDG_RUNTIME_DIR/pipewire-0" ]; then
     exit 1
 fi
 
+if ! command -v wireplumber >/dev/null 2>&1; then
+    echo "WirePlumber not installed; skipping session manager (static config objects only)"
+    echo "PipeWire started without WirePlumber (PID $PW_PID)"
+    exit 0
+fi
+
 wireplumber > /tmp/dragon-wireplumber.log 2>&1 &
 WP_PID=$!
 

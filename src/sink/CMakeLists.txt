@@ -59,4 +59,9 @@ if(PIPEWIRE_FOUND)
     )
     target_link_libraries(dragonpipewireaudiosink PRIVATE DragonMediaBackend PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui KF6::I18n)
     target_compile_definitions(dragonpipewireaudiosink PRIVATE TRANSLATION_DOMAIN="dragonmediabackend")
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        # PipeWire's SPA headers use C99 compound literals, which Clang warns
+        # about in C++ mode (-Wc99-extensions), breaking -Werror builds
+        target_compile_options(dragonpipewireaudiosink PRIVATE -Wno-c99-extensions)
+    endif()
 endif()
