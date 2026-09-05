@@ -48,25 +48,13 @@ freebsd150_qt610:
   variables:
     DRAGON_ANDROID_DEPS_ROOT: "$CI_PROJECT_DIR/.ci-android-deps"
   retry: 1
-  artifacts:
-    expire_in: 30 days
-    paths:
-      - build-android-*/examples/qml/android-build/*.apk
 
 dragonqml_apk_x86_64:
   extends: .dragonqml_apk
-  cache:
-    key: "android-deps-x86_64:v1"
-    paths:
-      - .ci-android-deps/
   script:
     - bash ci/run-apk-job.sh x86_64
 
 dragonqml_apk_arm64:
   extends: .dragonqml_apk
-  cache:
-    key: "android-deps-arm64:v1"
-    paths:
-      - .ci-android-deps/
   script:
     - bash ci/run-apk-job.sh arm64-v8a
