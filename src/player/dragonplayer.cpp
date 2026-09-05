@@ -686,11 +686,12 @@ void DragonPlayer::play()
     }
 
     if (d->currentPlaybackState == PlaybackState::PausedState) {
-        if (d->audioOutput) {
+        if (d->decodePipeline.isActive() && d->audioOutput && d->audioOutput->sink()->isDeviceOpen()) {
             d->audioOutput->sink()->resume();
+            d->setPlaybackState(PlaybackState::PlayingState);
+            return;
         }
-        d->setPlaybackState(PlaybackState::PlayingState);
-        return;
+        qCDebug(dragonMediaBackendPlayer) << "play() paused but pipeline/sink not alive, restarting";
     }
 
     if (d->currentStatus == MediaStatus::LoadingMedia) {
@@ -733,16 +734,23 @@ void DragonPlayer::pause()
         return;
     }
 
-    d->requestedPlaybackState = PlaybackState::PausedState;
-
     if (d->currentPlaybackState == PlaybackState::PausedState) {
+        d->requestedPlaybackState = PlaybackState::PausedState;
         return;
     }
 
     if (d->currentStatus == MediaStatus::LoadingMedia) {
         qCDebug(dragonMediaBackendPlayer) << "pause() status is LoadingMedia, intent captured";
+        d->requestedPlaybackState = PlaybackState::PausedState;
         return;
     }
+
+    if (d->currentPlaybackState == PlaybackState::StoppedState) {
+        qCDebug(dragonMediaBackendPlayer) << "pause() while stopped, ignored";
+        return;
+    }
+
+    d->requestedPlaybackState = PlaybackState::PausedState;
 
     if (d->audioOutput) {
         d->audioOutput->sink()->pause();

@@ -58,6 +58,7 @@ private Q_SLOTS:
     void testStateMachineSequence_data();
     void testStateMachineSequence();
     void testPlayPauseStopSequence();
+    void testPauseWhileStoppedWithLoadedMedia();
     void testVolumeBoundaryValues();
     void testMuteAndVolumeInteraction();
     void testPositionTracking();
@@ -418,6 +419,41 @@ void TestPlayerBasics::testPlayPauseStopSequence()
     player.pause();
     QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayerBasics::testPauseWhileStoppedWithLoadedMedia()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    const QString path = TestFixture::fixturePath(u"sample-3s.mp3"_s);
+    if (!QFileInfo::exists(path))
+        QSKIP("sample-3s.mp3 fixture not available");
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::LoadedMedia);
+
+    QVERIFY(helper.playAndWait());
+    player.stop();
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    // Double-click flow: Elisa re-sets the same source after stop, which
+    // early-returns, then issues a pause. QMediaPlayer ignores pause while
+    // stopped, so the player must not enter PausedState here.
+    player.setSource(QUrl::fromLocalFile(path));
+    QTest::qWait(100);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    player.pause();
+    QCOMPARE(stateSpy.count(), 0);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    // The play/pause button must still work afterwards.
+    QVERIFY(helper.playAndWait());
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
+
+    player.stop();
 }
 
 void TestPlayerBasics::testVolumeBoundaryValues()
