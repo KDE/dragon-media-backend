@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "dragondrainstate.h"
 #include "dragonmediabackend_export.h"
 
 #include <QObject>
@@ -102,6 +103,11 @@ public:
     virtual void notifyDecodeFinished();
     virtual void resetDrainState();
 
+    [[nodiscard]] std::uint64_t drainEpoch() const
+    {
+        return m_drain.epoch();
+    }
+
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();
@@ -155,6 +161,6 @@ private:
     std::atomic<bool> m_queueReady{true};
 
 protected:
-    std::atomic<bool> m_decodeFinished{false};
+    DragonDrainState m_drain;
     std::atomic<int> m_underrunCount{0};
 };

@@ -205,12 +205,12 @@ void DragonAudioSink::resetPositionTracking()
 
 void DragonAudioSink::notifyDecodeFinished()
 {
-    m_decodeFinished.store(true, std::memory_order_release);
+    m_drain.notifyDecodeFinished();
 }
 
 void DragonAudioSink::resetDrainState()
 {
-    m_decodeFinished.store(false, std::memory_order_release);
+    m_drain.startNewEpoch();
 }
 
 std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts)
@@ -250,7 +250,7 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
     });
 
     if (totalRead == 0) {
-        if (!m_decodeFinished.load(std::memory_order_acquire)) {
+        if (!m_drain.decodeFinished()) {
             m_underrunCount.fetch_add(1, std::memory_order_relaxed);
         }
         return {};

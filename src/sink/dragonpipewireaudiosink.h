@@ -52,15 +52,12 @@ public:
 
 private:
     void setChannelVolumes(float linearGain);
-    void resetDrainState() override;
 
     struct PwState;
     std::unique_ptr<PwState> m_pw;
 
     std::atomic<bool> m_paused{false};
     std::atomic<bool> m_open{false};
-
-    std::atomic<bool> m_drainInitiated{false};
 
     std::mutex m_callbackDoneMutex;
     std::condition_variable m_callbackDoneCv;

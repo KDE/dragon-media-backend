@@ -227,20 +227,15 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
         if (ret < 0) {
             qCCritical(dragonMediaBackendAudio) << "PulseAudio pa_stream_write failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
         }
-    } else {
-        if (self->m_decodeFinished.load(std::memory_order_acquire) && !self->m_drainRequested.exchange(true, std::memory_order_acq_rel)
-            && self->m_decodeFinished.load(std::memory_order_acquire)) {
-            pa_operation *op = pa_stream_drain(s, DragonPulseAudioSink::drainCallback, self);
-            if (op) {
-                pa_operation_unref(op);
-            } else {
-                qCWarning(dragonMediaBackendAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
-            }
-        } else if (!self->m_decodeFinished.load(std::memory_order_acquire)) {
-            thread_local std::vector<float> silence;
-            silence.resize(floatsNeeded, 0.0f);
-            pa_stream_write(s, silence.data(), silence.size() * sizeof(float), nullptr, 0, PA_SEEK_RELATIVE);
+    } else if (self->m_drain.tryClaimDrain() && self->m_drain.claimIsCurrent()) {
+        pa_operation *op = pa_stream_drain(s, DragonPulseAudioSink::drainCallback, self);
+        if (!op) {
+            qCWarning(dragonMediaBackendAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
         }
+    } else if (!self->m_drain.decodeFinished()) {
+        thread_local std::vector<float> silence;
+        silence.resize(floatsNeeded, 0.0f);
+        pa_stream_write(s, silence.data(), silence.size() * sizeof(float), nullptr, 0, PA_SEEK_RELATIVE);
     }
 }
 
@@ -705,6 +700,10 @@ void DragonPulseAudioSink::drainCallback(pa_stream *s, int success, void *userda
     if (!success) {
         qCWarning(dragonMediaBackendAudio) << "PulseAudio stream drain failed";
     }
+    if (!self->m_drain.claimIsCurrent()) {
+        return;
+    }
+    self->m_drain.consumeEmission();
     Q_EMIT self->drained();
 }
 
@@ -790,12 +789,6 @@ void DragonPulseAudioSink::requestSinkInputInfo()
     if (op) {
         pa_operation_unref(op);
     }
-}
-
-void DragonPulseAudioSink::resetDrainState()
-{
-    DragonAudioSink::resetDrainState();
-    m_drainRequested.store(false, std::memory_order_release);
 }
 
 #include "dragonpulseaudiosink.moc"

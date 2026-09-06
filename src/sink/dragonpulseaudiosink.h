@@ -65,9 +65,6 @@ private:
     void resetStreamLocked();
     void applyVolume(float linearGain);
     void requestSinkInputInfo();
-    void resetDrainState() override;
-
-    std::atomic<bool> m_drainRequested{false};
 
     struct PaState;
     std::unique_ptr<PaState> m_pa;

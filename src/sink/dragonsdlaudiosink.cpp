@@ -248,8 +248,11 @@ void DragonSdlAudioSink::notifyDecodeFinished()
             auto *session = m_session.load(std::memory_order_acquire);
             if (session && session->stream) {
                 if (SDL_GetAudioStreamQueued(session->stream) == 0 && SDL_GetAudioStreamAvailable(session->stream) == 0) {
-                    m_drainTimer->stop();
-                    Q_EMIT drained();
+                    if (m_drain.tryClaimDrain()) {
+                        m_drain.consumeEmission();
+                        m_drainTimer->stop();
+                        Q_EMIT drained();
+                    }
                 }
             }
         });
