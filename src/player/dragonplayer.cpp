@@ -317,6 +317,10 @@ void DragonPlayerPrivate::init()
     });
 
     connect(audioOutput->sink(), &DragonAudioSink::drained, this, [this]() {
+        if (decodePipeline.isActive()) {
+            qCDebug(dragonMediaBackendPlayer) << "drained ignored, decode session still active (stale drain from previous track)";
+            return;
+        }
         setStatus(DragonPlayer::MediaStatus::EndOfMedia);
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
     });

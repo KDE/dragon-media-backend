@@ -518,7 +518,8 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
 
     auto *dst = static_cast<float *>(spaBuf->datas[0].data);
 
-    if (pcm.empty() && self->m_decodeFinished.load(std::memory_order_acquire) && !self->m_drainInitiated.exchange(true, std::memory_order_acq_rel)) {
+    if (pcm.empty() && self->m_decodeFinished.load(std::memory_order_acquire) && !self->m_drainInitiated.exchange(true, std::memory_order_acq_rel)
+        && self->m_decodeFinished.load(std::memory_order_acquire)) {
         spaBuf->datas[0].chunk->size = 0;
         spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
         pwBuf->size = 0;
@@ -639,8 +640,8 @@ void DragonPipeWireAudioSink::onDrained(void *userdata)
 
 void DragonPipeWireAudioSink::resetDrainState()
 {
-    m_drainInitiated.store(false, std::memory_order_release);
     DragonAudioSink::resetDrainState();
+    m_drainInitiated.store(false, std::memory_order_release);
 }
 
 #include "dragonpipewireaudiosink.moc"

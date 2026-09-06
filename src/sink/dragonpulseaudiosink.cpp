@@ -228,7 +228,8 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
             qCCritical(dragonMediaBackendAudio) << "PulseAudio pa_stream_write failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
         }
     } else {
-        if (self->m_decodeFinished.load(std::memory_order_acquire) && !self->m_drainRequested.exchange(true, std::memory_order_acq_rel)) {
+        if (self->m_decodeFinished.load(std::memory_order_acquire) && !self->m_drainRequested.exchange(true, std::memory_order_acq_rel)
+            && self->m_decodeFinished.load(std::memory_order_acquire)) {
             pa_operation *op = pa_stream_drain(s, DragonPulseAudioSink::drainCallback, self);
             if (op) {
                 pa_operation_unref(op);
@@ -793,8 +794,8 @@ void DragonPulseAudioSink::requestSinkInputInfo()
 
 void DragonPulseAudioSink::resetDrainState()
 {
-    m_drainRequested.store(false, std::memory_order_release);
     DragonAudioSink::resetDrainState();
+    m_drainRequested.store(false, std::memory_order_release);
 }
 
 #include "dragonpulseaudiosink.moc"
