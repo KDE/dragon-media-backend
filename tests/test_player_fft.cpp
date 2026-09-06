@@ -61,6 +61,7 @@ void TestPlayerFft::testLazyFftInitialization()
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
     QCOMPARE(analyzer.mode(), DragonSpectrumAnalyzer::Mode::Off);
+    QCOMPARE(analyzer.isActive(), false);
 
     skipIfMissing(u"sample-3s.mp3"_s);
 
@@ -71,6 +72,7 @@ void TestPlayerFft::testLazyFftInitialization()
     QTest::qWait(500);
 
     QVERIFY2(fftSpy.count() == 0, "FFT frames must not be emitted when mode is Off");
+    QVERIFY2(!analyzer.isActive(), "Analyzer must stay inactive while mode is Off, even while playing");
 
     player.stop();
 }
@@ -81,7 +83,10 @@ void TestPlayerFft::testFftModeToggleCreatesInfrastructure()
 
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
+    QSignalSpy activeSpy(&analyzer, &DragonSpectrumAnalyzer::activeChanged);
+
     analyzer.setMode(DragonSpectrumAnalyzer::Mode::BarsOnly);
+    QCOMPARE(analyzer.isActive(), false);
 
     int frameCount = 0;
     QObject::connect(
@@ -97,6 +102,14 @@ void TestPlayerFft::testFftModeToggleCreatesInfrastructure()
     player.play();
     QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
 
+    QCOMPARE(analyzer.isActive(), true);
+    QVERIFY2(std::any_of(activeSpy.begin(),
+                         activeSpy.end(),
+                         [](const QList<QVariant> &args) {
+                             return args.at(0).toBool();
+                         }),
+             "activeChanged(true) must be emitted when playback starts with a non-Off mode");
+
     for (int waits = 0; waits < 60 && frameCount == 0; ++waits) {
         QTest::qWait(50);
     }
@@ -104,6 +117,7 @@ void TestPlayerFft::testFftModeToggleCreatesInfrastructure()
     QVERIFY2(initialCount > 0, "FFT should produce frames with BarsOnly");
 
     analyzer.setMode(DragonSpectrumAnalyzer::Mode::Off);
+    QCOMPARE(analyzer.isActive(), false);
     frameCount = 0;
     QTest::qWait(300);
     int framesAfterOff = frameCount;
@@ -114,6 +128,8 @@ void TestPlayerFft::testFftModeToggleCreatesInfrastructure()
 
     frameCount = 0;
     analyzer.setMode(DragonSpectrumAnalyzer::Mode::BarsOnly);
+    QCOMPARE(analyzer.isActive(), true);
+    QVERIFY2(!activeSpy.isEmpty() && activeSpy.last().at(0).toBool(), "activeChanged(true) must be emitted when re-enabled while playing");
     QTest::qWait(500);
     QVERIFY2(frameCount > 0, "FFT frames should resume when re-enabled");
 
@@ -178,6 +194,7 @@ void TestPlayerFft::testFftModeBothEmitsDetailedAndBarFrames()
 
     QSignalSpy fftSpy(&analyzer, &DragonSpectrumAnalyzer::frameReady);
     analyzer.setMode(DragonSpectrumAnalyzer::Mode::Both);
+    QCOMPARE(analyzer.isActive(), true);
     QTRY_VERIFY_WITH_TIMEOUT(fftSpy.size() >= 5, 3000);
 
     bool sawDetailed = false;
