@@ -26,6 +26,9 @@ K_PLUGIN_CLASS_WITH_JSON(DragonSdlAudioSink, "sdl_sink.json")
 #include <chrono>
 #include <thread>
 
+// specifically on Windows the resampler never goes to zero
+constexpr int kMaxResamplerResidualBytes = 256;
+
 static void SDLLogOutput(void *userdata, int category, SDL_LogPriority priority, const char *message)
 {
     Q_UNUSED(userdata);
@@ -247,10 +250,13 @@ void DragonSdlAudioSink::notifyDecodeFinished()
         connect(m_drainTimer, &QTimer::timeout, this, [this]() {
             auto *session = m_session.load(std::memory_order_acquire);
             if (session && session->stream) {
-                if (SDL_GetAudioStreamQueued(session->stream) == 0 && SDL_GetAudioStreamAvailable(session->stream) == 0) {
+                const int queuedBytes = SDL_GetAudioStreamQueued(session->stream);
+                const int availableBytes = SDL_GetAudioStreamAvailable(session->stream);
+                if (availableBytes == 0 && queuedBytes <= kMaxResamplerResidualBytes) {
                     if (m_drain.tryClaimDrain()) {
                         m_drain.consumeEmission();
                         m_drainTimer->stop();
+                        qCDebug(dragonMediaBackendAudio) << "drain complete queuedBytes=" << queuedBytes;
                         Q_EMIT drained();
                     }
                 }

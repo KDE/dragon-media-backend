@@ -4,12 +4,16 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Core Test)
 
+include(ECMMarkNonGuiExecutable)
+
 option(DRAGON_CI_PIPEWIRE "Start a headless PipeWire daemon for audio tests" OFF)
 option(DRAGON_CI_NO_AUDIO "Disable tests that require a real audio device (for headless Windows CI)" OFF)
 
 function(dragon_add_test name)
     cmake_parse_arguments(ARG "" "" "LIBRARIES;ENVIRONMENT" ${ARGN})
     add_executable(${name} ${name}.cpp)
+    # let's you use see the output in the terminal on Windows:
+    ecm_mark_nongui_executable(${name})
     target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/src)
     target_link_libraries(${name} PRIVATE DragonMediaBackend Qt6::Test ${ARG_LIBRARIES})
     target_compile_definitions(${name} PRIVATE

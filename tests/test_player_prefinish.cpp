@@ -243,6 +243,8 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
     QVERIFY(helper.playAndWait());
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
+    QVERIFY2(waitForPlaybackStart(player), "Playback should start producing audio");
+
     const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QTRY_COMPARE(aboutToFinishSpy.count(), 1);
