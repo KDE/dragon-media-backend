@@ -78,5 +78,26 @@ if [ ! -S "$XDG_RUNTIME_DIR/pulse/native" ]; then
     exit 1
 fi
 
+# just waiting for the socket to exist isn't enough; WirePlumber still
+# needs to register the null audio sink node so playback streams can be
+# created. Poll until the auto_null sink appears.
+for i in $(seq 1 100); do
+    pw-cli list-objects Node 2>/dev/null | grep -q "node.name.*auto_null" && break
+    if ! kill -0 "$PW_PID" 2>/dev/null; then
+        echo "PipeWire exited while waiting for null audio sink"
+        cat /tmp/dragon-pipewire.log 2>/dev/null
+        exit 1
+    fi
+    sleep 0.1
+done
+
+if ! pw-cli list-objects Node 2>/dev/null | grep -q "node.name.*auto_null"; then
+    echo "PipeWire null audio sink did not appear within 10 seconds"
+    cat /tmp/dragon-pipewire.log 2>/dev/null
+    cat /tmp/dragon-wireplumber.log 2>/dev/null
+    kill "$WP_PID" "$PW_PID" 2>/dev/null || true
+    exit 1
+fi
+
 echo "PipeWire + WirePlumber started (PIDs $PW_PID, $WP_PID)"
 exit 0
