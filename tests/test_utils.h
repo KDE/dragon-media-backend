@@ -95,6 +95,19 @@ public:
     }
 };
 
+// The audio device starts consuming as soon as playback starts, and the first
+// callback can fire before the decoder has produced its first chunk, which
+// registers as an underrun. Wait until the pipeline has delivered samples so
+// underrun baselines measure only mid-playback starvation.
+inline bool waitForPipelinePrimed(DragonDiagnostics &diagnostics, int timeoutMs = 5000)
+{
+    return QTest::qWaitFor(
+        [&diagnostics]() {
+            return diagnostics.decodeQueueSize() > 0;
+        },
+        timeoutMs);
+}
+
 class PlayerHelper
 {
 public:

@@ -110,6 +110,9 @@ void TestSdlGapless::testGaplessSameFormat()
 
     QVERIFY2(trackSpy.count() >= 1, "At least one trackChanged signal expected");
 
+    // on Windows it must be stopped to flush pcm to disk
+    player.stop();
+
     QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
 
     auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
@@ -180,6 +183,9 @@ void TestSdlGapless::testSingleTrackIntegrity()
     // driver's device ring buffer still holds ~1s of audio. Wait for the
     // virtual clock to consume the device buffer before reading the file.
     QTest::qWait(2000);
+
+    // on Windows it must be stopped to flush pcm to disk
+    player.stop();
 
     QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
     auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);

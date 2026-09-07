@@ -164,6 +164,7 @@ void TestE2E::testSeamlessPlaybackTransition()
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    waitForPipelinePrimed(diagnostics);
     const int underrunsBefore = diagnostics.audioUnderrunCount();
     QVERIFY(helper.waitForTrackChange());
 
@@ -206,6 +207,7 @@ void TestE2E::testSeamlessPlaybackWithFormatChange()
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    waitForPipelinePrimed(diagnostics);
     const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QVERIFY(helper.waitForTrackChange());
@@ -419,6 +421,7 @@ void TestE2E::testSameFormatSeamlessTransition()
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    waitForPipelinePrimed(diagnostics);
     const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QVERIFY(helper.waitForTrackChange());
@@ -495,6 +498,7 @@ void TestE2E::testGaplessTransitionCoroutine()
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
+    waitForPipelinePrimed(diagnostics);
     const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QVERIFY(helper.waitForTrackChange());
@@ -536,6 +540,7 @@ void TestE2E::testGaplessFormatMismatch()
     QVERIFY(helper.playAndWait());
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
+    waitForPipelinePrimed(diagnostics);
     const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     QVERIFY(helper.waitForTrackChange());

@@ -176,6 +176,7 @@ private:
 
     auto stateSpy = SignalSpyHelper::stateSpy(&player);
     auto statusSpy = SignalSpyHelper::statusSpy(&player);
+    waitForPipelinePrimed(diagnostics);
     const int underrunsBefore = diagnostics.audioUnderrunCount();
 
     if (!helper.waitForTrackChange(30000)) {
