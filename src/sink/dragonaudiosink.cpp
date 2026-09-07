@@ -172,8 +172,16 @@ qint64 DragonAudioSink::positionMs() const
 {
     int channels = m_channels.load(std::memory_order_relaxed);
     int sampleRate = m_sampleRate.load(std::memory_order_relaxed);
+    const qint64 offset = m_positionOffsetMs.load(std::memory_order_relaxed);
     if (channels <= 0 || sampleRate <= 0) {
-        return m_positionOffsetMs.load(std::memory_order_relaxed);
+        return offset;
+    }
+
+    // Until the audio callback thread has processed a pending position reset,
+    // m_totalSamplesWritten still counts pre-seek samples already played out.
+    // Report just the new offset in that window.
+    if (m_positionResetPending.load(std::memory_order_acquire)) {
+        return offset;
     }
 
     qint64 written = m_totalSamplesWritten.load(std::memory_order_relaxed);
@@ -184,7 +192,7 @@ qint64 DragonAudioSink::positionMs() const
     }
 
     const qint64 frameCount = written / channels;
-    return (frameCount * 1000 / sampleRate) + m_positionOffsetMs.load(std::memory_order_relaxed);
+    return (frameCount * 1000 / sampleRate) + offset;
 }
 
 bool DragonAudioSink::hasFormat(int sampleRate, int channels) const
