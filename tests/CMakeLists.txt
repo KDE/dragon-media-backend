@@ -28,6 +28,8 @@ function(dragon_add_test name)
             string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
         endif()
     endif()
+    # needed for Windows:
+    string(REPLACE ";" "\\;" _qt_plugin_path "${_qt_plugin_path}")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
         ${ARG_ENVIRONMENT}
@@ -104,6 +106,9 @@ if(DEFINED ENV{QT_PLUGIN_PATH} AND NOT "$ENV{QT_PLUGIN_PATH}" STREQUAL "")
         string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
     endif()
 endif()
+
+# needed for Windows:
+string(REPLACE ";" "\\;" _qt_plugin_path "${_qt_plugin_path}")
 
 add_test(NAME test_e2e_sdl COMMAND test_e2e)
 set_property(TEST test_e2e_sdl APPEND PROPERTY ENVIRONMENT

@@ -10,6 +10,6 @@ Dependencies:
 Options:
   clang-format-versions: [22]
   per-test-timeout: 300
-  require-passing-tests-on: ['Linux']
+  require-passing-tests-on: ['Linux', 'Windows']
   cmake-options: '-DECM_QMLCACHE_UNITY_BUILD=ON -DDRAGON_CI_PIPEWIRE=ON'
   gcovr-arguments: '--exclude "examples/.*"'
