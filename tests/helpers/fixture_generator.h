@@ -172,12 +172,15 @@ inline BoundaryFixture makeTenSecondFixture(int sampleRate, int channels, int du
     const int totalSamples = durationFrames * channels;
     f.expectedSamples.resize(totalSamples, 0.0f);
 
-    constexpr double kFreq = 440.0;
+    constexpr double kChirpStartHz = 200.0;
+    constexpr double kChirpEndHz = 2000.0;
     constexpr float kAmplitude = 0.5f;
 
+    const double totalSeconds = static_cast<double>(durationFrames) / sampleRate;
     for (int frm = 0; frm < durationFrames; ++frm) {
-        double t = static_cast<double>(frm) / sampleRate;
-        float val = static_cast<float>(std::sin(2.0 * M_PI * kFreq * t) * kAmplitude);
+        const double t = static_cast<double>(frm) / sampleRate;
+        const double phase = 2.0 * M_PI * (kChirpStartHz * t + (kChirpEndHz - kChirpStartHz) * t * t / (2.0 * totalSeconds));
+        const float val = static_cast<float>(std::sin(phase) * kAmplitude);
         f.expectedSamples[frm * channels] = val;
         if (channels > 1) {
             f.expectedSamples[frm * channels + 1] = val;

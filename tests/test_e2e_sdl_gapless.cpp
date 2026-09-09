@@ -64,6 +64,7 @@ private Q_SLOTS:
     void testGaplessSameFormat();
     void testGaplessFormatChangeStateMachine();
     void testSingleTrackIntegrity();
+    void testTrackStartNotWiped();
 
 private:
     ScopedEnvVar m_sinkEnv{"DRAGONMULTIMEDIA_AUDIO_SINK", "dragonsdlaudiosink"};
@@ -193,89 +194,119 @@ void TestSdlGapless::testSingleTrackIntegrity()
     qDebug() << "Single-track: captured=" << capturedFrames << "expected=" << durationFrames;
     QVERIFY2(capturedFrames > 0, "Captured PCM empty");
 
-    // Find first non-zero frame SDL disk driver writes leading silence
-    // while the device is open but the decode pipeline hasn't filled the pipe yet.
-    // The start marker (frames 0-3) may be consumed by this initial starvation.
-    int alignFrame = -1;
-    for (int f = 0; f < capturedFrames; ++f) {
-        if (std::abs(capturedPcm[f * channels]) > 0.001f) {
-            alignFrame = f;
-            break;
-        }
-    }
-    QVERIFY2(alignFrame >= 0, "No audio content found in capture");
-    qDebug() << "Leading silence:" << alignFrame << "frames";
+    auto startHit = findSignature(capturedPcm, channels, kStartSignature, false, 0.3f);
+    QVERIFY2(startHit.found, "Start marker not found in capture: the beginning of the track was discarded");
+    constexpr int kMaxStartupSilenceFrames = 4096; // ~93ms; observed 1024
+    QVERIFY2(startHit.frameIndex <= kMaxStartupSilenceFrames, qPrintable(u"Too much startup silence before track start: %1 frames"_s.arg(startHit.frameIndex)));
+    qDebug() << "Leading silence:" << startHit.frameIndex << "frames";
 
-    // Verify end marker is present this is the key invariant the drain fix protects.
+    QVERIFY2(
+        capturedFrames - startHit.frameIndex >= durationFrames,
+        qPrintable(u"Capture too short for full track: %1 frames from marker, expected %2"_s.arg(capturedFrames - startHit.frameIndex).arg(durationFrames)));
+
+    // Verify end marker is present: the key invariant the drain fix protects.
     auto endHit = findSignature(capturedPcm, channels, kEndSignature, true, 0.3f);
     QVERIFY2(endHit.found, "End marker not found (truncation)");
+    const int audioSpan = static_cast<int>(endHit.frameIndex) - startHit.frameIndex + 1;
+    const int expectedSpan = durationFrames - static_cast<int>(kEndSignature.size()) + 1;
+    QVERIFY2(audioSpan >= expectedSpan,
+             qPrintable(u"Audio span %1 frames (start marker to end marker) too short, expected %2"_s.arg(audioSpan).arg(expectedSpan)));
 
-    // Count non-zero frames from alignFrame to end of actual audio
-    int lastNonZero = -1;
-    for (int f = capturedFrames - 1; f >= alignFrame; --f) {
-        if (std::abs(capturedPcm[f * channels]) > 0.001f) {
-            lastNonZero = f;
-            break;
-        }
-    }
-    QVERIFY2(lastNonZero > alignFrame, "Audio content too short");
-    const int audioSpan = lastNonZero - alignFrame + 1;
-    qDebug() << "Audio span:" << audioSpan << "frames (first non-zero to last non-zero)";
-
-    // The audio span should be close to the expected duration.
-    // Allow up to 10% tolerance: the SDL disk driver writes silence buffers
-    // during initial startup (before the pipe fills), which displaces an
-    // equivalent amount of audio from the real-time capture window.
-    const int maxLoss = durationFrames / 10;
-    QVERIFY2(
-        audioSpan >= durationFrames - maxLoss,
-        qPrintable(u"Audio span %1 too short, expected >= %2 (lost %3 frames)"_s.arg(audioSpan).arg(durationFrames - maxLoss).arg(durationFrames - audioSpan)));
-
-    // Sample-level comparison from alignFrame through end marker.
-    // Map captured frames back to expected samples using offset alignment.
-    // The alignFrame in captured corresponds to some offset in the source.
-    // We find this offset by matching the tone phase at alignFrame.
-    constexpr double kTol = 0.01;
-    int bestOffset = -1;
-    double bestScore = 1e9;
-    // Search within the first ~2000 source frames for best alignment
-    const int searchRange = std::min(2000, fixture.totalFrames - audioSpan);
-    for (int off = 0; off <= searchRange; ++off) {
-        double score = 0.0;
-        const int checkLen = std::min(100, audioSpan);
-        for (int i = 0; i < checkLen; ++i) {
-            score +=
-                std::abs(static_cast<double>(capturedPcm[(alignFrame + i) * channels]) - static_cast<double>(fixture.expectedSamples[(off + i) * channels]));
-        }
-        if (score < bestScore) {
-            bestScore = score;
-            bestOffset = off;
-        }
-    }
-    qDebug() << "Best alignment offset:" << bestOffset << "score:" << bestScore;
-    QVERIFY2(bestOffset >= 0, "Could not find alignment");
-
-    // Now compare samples using the found offset
-    int mismatches = 0;
-    double maxDev = 0.0;
-    const int compareEnd = std::min(audioSpan, fixture.totalFrames - bestOffset);
-    for (int i = 0; i < compareEnd; ++i) {
-        double md = 0.0;
-        for (int ch = 0; ch < channels; ++ch) {
-            md = std::max(md,
-                          std::abs(static_cast<double>(capturedPcm[(alignFrame + i) * channels + ch])
-                                   - static_cast<double>(fixture.expectedSamples[(bestOffset + i) * channels + ch])));
-        }
-        maxDev = std::max(maxDev, md);
-        if (md > kTol)
-            ++mismatches;
-    }
-    qDebug() << "PCM: compared=" << compareEnd << "mismatched=" << mismatches << "maxDev=" << maxDev;
-    QVERIFY2(mismatches <= std::max(50, compareEnd / 1000),
-             qPrintable(u"Too many mismatches: %1/%2 (max %3) maxDev=%4"_s.arg(mismatches).arg(compareEnd).arg(std::max(50, compareEnd / 1000)).arg(maxDev)));
+    QVERIFY2(verifySamples(capturedPcm, startHit.frameIndex, fixture.expectedSamples, 0, durationFrames, channels, kFlacQuantTolerance, "single-track"),
+             "Single track must reproduce sample-exactly from source frame 0");
 
     QFile::remove(fixture.filePath);
     QFile::remove(m_pcmCapturePath);
+}
+
+void TestSdlGapless::testTrackStartNotWiped()
+{
+    using namespace FixtureGenerator;
+
+    constexpr int channels = kDefaultChannels;
+
+    qputenv("SDL_AUDIODRIVER", "disk");
+    qputenv("SDL_AUDIO_DISK_OUTPUT_FILE", m_pcmCapturePath.toUtf8());
+    qputenv("SDL_AUDIO_DISK_TIMESCALE", "1");
+
+    const int shortFrames = kSampleRate * 2 / 3; // 29400 frames = 58800 samples < 65536
+    auto fixtureA = makeStartMarkerFixture(kSampleRate, channels, shortFrames);
+    FixtureGuard guardA{fixtureA.filePath};
+    QVERIFY(QFileInfo::exists(fixtureA.filePath));
+
+    QFile::remove(m_pcmCapturePath);
+
+    {
+        DragonPlayer player;
+        DragonDiagnostics diagnostics(&player);
+        PlayerHelper helper(&player);
+        QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(fixtureA.filePath)));
+        QVERIFY(helper.playAndWait());
+        VERIFY_AUDIO_ACTIVE(diagnostics);
+        QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, 15000);
+        QTest::qWait(2000); // let the disk driver drain its device buffer
+        player.stop();
+
+        QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
+        const auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
+        const int capturedFrames = static_cast<int>(capturedPcm.size()) / channels;
+        QVERIFY2(capturedFrames > 0, "Captured PCM empty");
+
+        auto startHit = findSignature(capturedPcm, channels, kStartSignature, false, 0.3f);
+        QVERIFY2(startHit.found, "Start marker not found in capture: the beginning of the track was discarded");
+
+        constexpr int kMaxStartupSilenceFrames = 4096; // ~93ms; observed 1024
+        QVERIFY2(startHit.frameIndex <= kMaxStartupSilenceFrames,
+                 qPrintable(u"Too much startup silence before track start: %1 frames"_s.arg(startHit.frameIndex)));
+
+        QVERIFY2(
+            capturedFrames - startHit.frameIndex >= fixtureA.totalFrames,
+            qPrintable(
+                u"Capture too short for full track: %1 frames from marker, expected %2"_s.arg(capturedFrames - startHit.frameIndex).arg(fixtureA.totalFrames)));
+
+        QVERIFY2(
+            verifySamples(capturedPcm, startHit.frameIndex, fixtureA.expectedSamples, 0, fixtureA.totalFrames, channels, kFlacQuantTolerance, "fresh-play"),
+            "Fresh play must reproduce the track sample-exactly from frame 0");
+    }
+
+    const int longFrames = kSampleRate * 3;
+    auto fixtureB = makeStartMarkerFixture(kSampleRate, channels, longFrames);
+    FixtureGuard guardB{fixtureB.filePath};
+    QVERIFY(QFileInfo::exists(fixtureB.filePath));
+
+    QFile::remove(m_pcmCapturePath);
+
+    {
+        DragonPlayer player;
+        DragonDiagnostics diagnostics(&player);
+        PlayerHelper helper(&player);
+        QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(fixtureA.filePath)));
+        QVERIFY(helper.playAndWait());
+        QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, 15000);
+
+        QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(fixtureB.filePath)));
+        QVERIFY(helper.playAndWait());
+        VERIFY_AUDIO_ACTIVE(diagnostics);
+        QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, 15000);
+        QTest::qWait(2000);
+        player.stop();
+
+        QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
+        const auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
+        const int capturedFrames = static_cast<int>(capturedPcm.size()) / channels;
+        QVERIFY2(capturedFrames > 0, "Captured PCM empty");
+
+        auto startHit = findSignature(capturedPcm, channels, kStartSignature, true, 0.3f);
+        QVERIFY2(startHit.found, "Start marker not found after reselect: the beginning of the second track was discarded");
+
+        QVERIFY2(capturedFrames - startHit.frameIndex >= fixtureB.totalFrames,
+                 qPrintable(u"Capture too short for full second track: %1 frames from marker, expected %2"_s.arg(capturedFrames - startHit.frameIndex)
+                                .arg(fixtureB.totalFrames)));
+
+        QVERIFY2(
+            verifySamples(capturedPcm, startHit.frameIndex, fixtureB.expectedSamples, 0, fixtureB.totalFrames, channels, kFlacQuantTolerance, "reselect-play"),
+            "Track played after stop must reproduce sample-exactly from frame 0");
+    }
 }
 
 QTEST_MAIN(TestSdlGapless)
