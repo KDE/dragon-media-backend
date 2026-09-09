@@ -72,6 +72,10 @@ public:
 
     void setQueueReady(bool ready);
     [[nodiscard]] bool isQueueReady() const;
+    [[nodiscard]] bool isFlushPending() const
+    {
+        return m_flushPending.load(std::memory_order_acquire);
+    }
 
     enum class PositionResetMode {
         Seek,

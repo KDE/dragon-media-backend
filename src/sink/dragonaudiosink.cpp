@@ -233,7 +233,6 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
         }
         m_totalSamplesWritten.store(0, std::memory_order_relaxed);
         m_queueReady.store(true, std::memory_order_release);
-        return {};
     }
 
     auto *ap = m_audioPipe.load(std::memory_order_acquire);

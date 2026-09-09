@@ -47,7 +47,7 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, Drag
         } else {
             audioOutput->sink()->resume();
         }
-        audioOutput->sink()->setQueueReady(true);
+        audioOutput->sink()->setQueueReady(!audioOutput->sink()->isFlushPending());
         setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
         break;
 
@@ -56,7 +56,7 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, Drag
             audioOutput->sink()->open(sampleRate, channels);
         }
         audioOutput->sink()->pause();
-        audioOutput->sink()->setQueueReady(true);
+        audioOutput->sink()->setQueueReady(!audioOutput->sink()->isFlushPending());
         setPlaybackState(DragonPlayer::PlaybackState::PausedState);
         break;
 
@@ -737,7 +737,7 @@ void DragonPlayer::play()
         d->audioOutput->sink()->open(d->currentSampleRate, d->currentChannels);
     }
     if (d->audioOutput) {
-        d->audioOutput->sink()->setQueueReady(true);
+        d->audioOutput->sink()->setQueueReady(!d->audioOutput->sink()->isFlushPending());
     }
     d->setPlaybackState(PlaybackState::PlayingState);
 }
