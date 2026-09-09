@@ -304,8 +304,6 @@ void TestPlayerSignals::testNextWhilePlayingWithoutExplicitStop()
     QTRY_VERIFY_WITH_TIMEOUT(stateSpy.count() >= 1, 5000);
 
     QVERIFY2(SignalSpyHelper::containsState(stateSpy, DragonPlayer::PlaybackState::StoppedState), "setSource(newUrl) while playing must emit StoppedState");
-    QVERIFY2(SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadedMedia),
-             "setSource(newUrl) while playing must emit LoadedMedia from implicit stop");
     QVERIFY2(SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadingMedia), "setSource(newUrl) while playing must emit LoadingMedia");
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);

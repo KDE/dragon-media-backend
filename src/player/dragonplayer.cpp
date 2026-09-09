@@ -526,15 +526,24 @@ void DragonPlayer::setSource(const QUrl &source)
     d->playRequestedReload = false;
 
     if (!playRequestedReload && d->currentSource == source && source.isValid()) {
-        qCDebug(dragonMediaBackendPlayer) << "setSource(sameUrl) early return";
-        if (d->currentStatus == MediaStatus::LoadingMedia) {
+        const bool hasLoadedMedia = d->currentStatus == MediaStatus::LoadedMedia || d->currentStatus == MediaStatus::BufferedMedia
+            || d->currentStatus == MediaStatus::StalledMedia || d->currentStatus == MediaStatus::EndOfMedia;
+
+        const bool isSettled = d->currentPlaybackState == PlaybackState::StoppedState && hasLoadedMedia;
+
+        if (!isSettled) {
+            qCDebug(dragonMediaBackendPlayer) << "setSource(sameUrl) early return";
+            if (d->currentStatus == MediaStatus::LoadingMedia) {
+                d->requestedPlaybackState = PlaybackState::StoppedState;
+                return; // Let the existing initialization finish
+            }
+
             d->requestedPlaybackState = PlaybackState::StoppedState;
-            return; // Let the existing initialization finish
+            stop();
+            return;
         }
 
-        d->requestedPlaybackState = PlaybackState::StoppedState;
-        stop();
-        return;
+        qCDebug(dragonMediaBackendPlayer) << "setSource(sameUrl) while stopped with loaded media: reloading";
     }
 
     if (d->audioOutput) {
@@ -553,9 +562,6 @@ void DragonPlayer::setSource(const QUrl &source)
 
     const bool wasPlayingOrPaused = d->currentPlaybackState == PlaybackState::PlayingState || d->currentPlaybackState == PlaybackState::PausedState;
 
-    const bool hadValidMedia = d->currentStatus == MediaStatus::LoadedMedia || d->currentStatus == MediaStatus::BufferedMedia
-        || d->currentStatus == MediaStatus::StalledMedia || d->currentStatus == MediaStatus::BufferingMedia || d->currentStatus == MediaStatus::EndOfMedia;
-
     d->currentSource = source;
     d->currentPosition = 0;
     d->currentDuration = 0;
@@ -569,9 +575,6 @@ void DragonPlayer::setSource(const QUrl &source)
         d->requestedPlaybackState = PlaybackState::StoppedState;
         if (wasPlayingOrPaused) {
             d->setPlaybackState(PlaybackState::StoppedState);
-        }
-        if (hadValidMedia || d->currentStatus == MediaStatus::InvalidMedia) {
-            Q_EMIT statusChanged(MediaStatus::LoadedMedia);
         }
 
         if (d->currentSource.isEmpty()) {

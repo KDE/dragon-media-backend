@@ -29,6 +29,7 @@ private Q_SLOTS:
     void testSetSourceFromFreshPlayerNoForceEmit();
     void testSetSourceSignalOrderFromFreshPlayer();
     void testSetSourceSignalOrderFromPlaying();
+    void testSetSourceSameUrlWhileStoppedReloads();
 
 private:
     void skipIfMissing(const QString &filename)
@@ -114,9 +115,33 @@ void TestPlayerSetSource::testSetSourceSignalOrderFromPlaying()
 
     QVERIFY2(tracker.verifyOrder(u"stateChanged(StoppedState, PlayingState)"_s, u"sourceChanged()"_s),
              "stateChanged(StoppedState, PlayingState) must precede sourceChanged");
-    QVERIFY2(tracker.verifyOrder(u"statusChanged(LoadedMedia)"_s, u"statusChanged(LoadingMedia)"_s),
-             "statusChanged(LoadedMedia) from implicit stop must precede LoadingMedia for new source");
+    QVERIFY2(tracker.verifyOrder(u"statusChanged(LoadingMedia)"_s, u"statusChanged(LoadedMedia)"_s),
+             "source swap while playing must go LoadingMedia -> LoadedMedia from the real load (no synthetic LoadedMedia from the implicit stop)");
     QVERIFY2(tracker.verifyOrder(u"statusChanged(LoadingMedia)"_s, u"sourceChanged()"_s), "statusChanged(LoadingMedia) must precede sourceChanged");
+}
+
+void TestPlayerSetSource::testSetSourceSameUrlWhileStoppedReloads()
+{
+    skipIfMissing(u"sample-3s.mp3"_s);
+
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.stopAndWait());
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::LoadedMedia);
+
+    SignalOrderTracker tracker(&player);
+    tracker.trackStatusChanges();
+
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    QVERIFY2(tracker.contains(u"statusChanged(LoadingMedia)"_s),
+             "setSource(sameUrl) while stopped with loaded media must run a real reload cycle (LoadingMedia)");
+    QVERIFY2(tracker.verifyOrder(u"statusChanged(LoadingMedia)"_s, u"statusChanged(LoadedMedia)"_s),
+             "reload must reach a fresh LoadedMedia after LoadingMedia so resume hooks can fire");
 }
 
 QTEST_MAIN(TestPlayerSetSource)
