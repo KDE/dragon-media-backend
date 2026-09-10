@@ -37,23 +37,6 @@ private Q_SLOTS:
     void testFftFrameRateApproaches60Hz();
 
     void testFftHistoryResetWhenReEnabled();
-
-private:
-    void skipIfMissing(const QString &filename)
-    {
-        if (!QFileInfo::exists(TestFixture::fixturePath(filename))) {
-            QSKIP(qPrintable(u"Fixture not available: %1"_s.arg(filename)));
-        }
-    }
-
-    void skipIfMissing(const QStringList &filenames)
-    {
-        for (const auto &f : filenames) {
-            if (!QFileInfo::exists(TestFixture::fixturePath(f))) {
-                QSKIP(qPrintable(u"Fixture not available: %1"_s.arg(f)));
-            }
-        }
-    }
 };
 
 void TestPlayerFft::testLazyFftInitialization()
@@ -62,8 +45,6 @@ void TestPlayerFft::testLazyFftInitialization()
     DragonSpectrumAnalyzer analyzer(&player);
     QCOMPARE(analyzer.mode(), DragonSpectrumAnalyzer::Mode::Off);
     QCOMPARE(analyzer.isActive(), false);
-
-    skipIfMissing(u"sample-3s.mp3"_s);
 
     PlayerHelper helper(&player);
     QSignalSpy fftSpy(&analyzer, &DragonSpectrumAnalyzer::frameReady);
@@ -79,8 +60,6 @@ void TestPlayerFft::testLazyFftInitialization()
 
 void TestPlayerFft::testFftModeToggleCreatesInfrastructure()
 {
-    skipIfMissing(u"gs-3s-2c-44100hz.ogg"_s);
-
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
     QSignalSpy activeSpy(&analyzer, &DragonSpectrumAnalyzer::activeChanged);
@@ -138,8 +117,6 @@ void TestPlayerFft::testFftModeToggleCreatesInfrastructure()
 
 void TestPlayerFft::testFftInfrastructurePersistsAcrossTrackChanges()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
-
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
     analyzer.setMode(DragonSpectrumAnalyzer::Mode::Both);
@@ -161,8 +138,6 @@ void TestPlayerFft::testFftInfrastructurePersistsAcrossTrackChanges()
 
 void TestPlayerFft::testFftOffSkipsInfrastructureOnTrackChange()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
-
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
 
@@ -183,8 +158,6 @@ void TestPlayerFft::testFftOffSkipsInfrastructureOnTrackChange()
 
 void TestPlayerFft::testFftModeBothEmitsDetailedAndBarFrames()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
     PlayerHelper helper(&player);
@@ -220,8 +193,6 @@ void TestPlayerFft::testFftModeBothEmitsDetailedAndBarFrames()
 
 void TestPlayerFft::testFftFrameRateApproaches60Hz()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);
     analyzer.setMode(DragonSpectrumAnalyzer::Mode::Both);
@@ -267,8 +238,6 @@ void TestPlayerFft::testFftHistoryResetWhenReEnabled()
     // sample history, which would cause a CPU spin and spurious frame burst.
     // The bug was in DragonFftPipeline::setMode() not calling reset() on
     // the processor before starting the thread on the Off→On transition.
-
-    skipIfMissing(u"sample-3s.mp3"_s);
 
     DragonPlayer player;
     DragonSpectrumAnalyzer analyzer(&player);

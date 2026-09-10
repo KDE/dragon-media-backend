@@ -30,29 +30,10 @@ private Q_SLOTS:
     void testSetSourceSignalOrderFromFreshPlayer();
     void testSetSourceSignalOrderFromPlaying();
     void testSetSourceSameUrlWhileStoppedReloads();
-
-private:
-    void skipIfMissing(const QString &filename)
-    {
-        if (!QFileInfo::exists(TestFixture::fixturePath(filename))) {
-            QSKIP(qPrintable(u"Fixture not available: %1"_s.arg(filename)));
-        }
-    }
-
-    void skipIfMissing(const QStringList &filenames)
-    {
-        for (const auto &f : filenames) {
-            if (!QFileInfo::exists(TestFixture::fixturePath(f))) {
-                QSKIP(qPrintable(u"Fixture not available: %1"_s.arg(f)));
-            }
-        }
-    }
 };
 
 void TestPlayerSetSource::testSetSourceFromFreshPlayerNoForceEmit()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
@@ -67,8 +48,6 @@ void TestPlayerSetSource::testSetSourceFromFreshPlayerNoForceEmit()
 
 void TestPlayerSetSource::testSetSourceSignalOrderFromFreshPlayer()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     SignalOrderTracker tracker(&player);
     tracker.trackSourceChanges();
@@ -91,8 +70,6 @@ void TestPlayerSetSource::testSetSourceSignalOrderFromFreshPlayer()
 
 void TestPlayerSetSource::testSetSourceSignalOrderFromPlaying()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -122,8 +99,6 @@ void TestPlayerSetSource::testSetSourceSignalOrderFromPlaying()
 
 void TestPlayerSetSource::testSetSourceSameUrlWhileStoppedReloads()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 

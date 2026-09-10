@@ -20,6 +20,23 @@
 
 using namespace Qt::StringLiterals;
 
+namespace
+{
+qint64 maxBackwardStep(const QSignalSpy &spy)
+{
+    qint64 maxBackward = 0;
+    qint64 prev = -1;
+    for (const auto &args : spy) {
+        const qint64 pos = args.at(0).toLongLong();
+        if (prev >= 0) {
+            maxBackward = std::max(maxBackward, prev - pos);
+        }
+        prev = pos;
+    }
+    return maxBackward;
+}
+}
+
 class TestPlayerPlayback : public QObject
 {
     Q_OBJECT
@@ -27,6 +44,12 @@ class TestPlayerPlayback : public QObject
 private Q_SLOTS:
     void testPositionTimerEmitsDuringPlayback();
     void testSeekWithRealAudio();
+    void testSeekNearEndSnapsToDuration();
+    void testPositionFrozenWhilePaused();
+    void testSetPositionWhilePausedThenResume();
+    void testSetPositionClampedToDuration();
+    void testPositionResetsOnGaplessTransition();
+    void testStopResetsPositionToZero();
 
     void testSetSourceDoesNotEmitPlayingState();
     void testSetSourceWhilePlayingEmitsStoppedState();
@@ -58,29 +81,10 @@ private Q_SLOTS:
     void testSetSourceThenPlayFirstTrack();
     void testPlayNextTrackAfterStop();
     void testPlayRapidNextNext();
-
-private:
-    void skipIfMissing(const QString &filename)
-    {
-        if (!QFileInfo::exists(TestFixture::fixturePath(filename))) {
-            QSKIP(qPrintable(u"Fixture not available: %1"_s.arg(filename)));
-        }
-    }
-
-    void skipIfMissing(const QStringList &filenames)
-    {
-        for (const auto &f : filenames) {
-            if (!QFileInfo::exists(TestFixture::fixturePath(f))) {
-                QSKIP(qPrintable(u"Fixture not available: %1"_s.arg(f)));
-            }
-        }
-    }
 };
 
 void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
 
@@ -99,27 +103,189 @@ void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
 
 void TestPlayerPlayback::testSeekWithRealAudio()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
+    DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
     QTest::qWait(200);
-    player.setPosition(1000);
-    QTest::qWait(200);
 
-    VERIFY_POSITION_NEAR(player.position(), 1000, 200);
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+    player.setPosition(1000);
+
+    VERIFY_POSITION_NEAR(player.position(), 1000, 50);
+
+    QTRY_VERIFY_WITH_TIMEOUT(diag.audioPositionMs() >= 1000, 5000);
+
+    QTest::qWait(700);
+    QVERIFY2(player.position() > 1000, "Position must keep advancing after seek");
+
+    VERIFY_POSITION_NEAR(player.position(), diag.audioPositionMs(), 250);
+
+    const qint64 backward = maxBackwardStep(posSpy);
+    QVERIFY2(backward < 300, qPrintable(u"Position jumped backwards by %1ms after seek"_s.arg(backward)));
 
     player.stop();
 }
 
+void TestPlayerPlayback::testSeekNearEndSnapsToDuration()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+
+    const qint64 duration = player.duration();
+    QVERIFY2(duration > 2000, qPrintable(u"Fixture must be longer than 2s, got %1ms"_s.arg(duration)));
+
+    QTest::qWait(200);
+
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+    QElapsedTimer clock;
+    player.setPosition(duration - 1000);
+    clock.start();
+
+    QVERIFY2(helper.waitForEndOfMedia(10000), "Seeking near the end must still reach EndOfMedia");
+    const qint64 elapsed = clock.elapsed();
+
+    QVERIFY2(elapsed >= 500 && elapsed < 1800,
+             qPrintable(u"EndOfMedia arrived %1ms after seeking to %2ms of a %3ms track"_s.arg(elapsed).arg(duration - 1000).arg(duration)));
+
+    QCOMPARE(player.position(), duration);
+    QVERIFY2(posSpy.count() > 0, "positionChanged must be emitted after seek");
+    QCOMPARE(posSpy.last().at(0).toLongLong(), duration);
+    for (const auto &args : posSpy) {
+        const qint64 pos = args.at(0).toLongLong();
+        QVERIFY2(pos <= duration + 50, qPrintable(u"Position %1ms exceeded duration %2ms"_s.arg(pos).arg(duration)));
+    }
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testPositionFrozenWhilePaused()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QTest::qWait(300);
+
+    QVERIFY(helper.pauseAndWait());
+    const qint64 pausedPos = player.position();
+    QVERIFY2(pausedPos > 0, "Position must have advanced before pause");
+
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+    QTest::qWait(400);
+    QCOMPARE(posSpy.count(), 0);
+    QCOMPARE(player.position(), pausedPos);
+
+    QVERIFY(helper.playAndWait());
+    QTest::qWait(300);
+    QVERIFY2(player.position() > pausedPos, "Position must resume advancing after play");
+    QVERIFY2(player.position() < pausedPos + 1000,
+             qPrintable(u"Position must not leap forward after resume: paused at %1ms, now %2ms"_s.arg(pausedPos).arg(player.position())));
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testSetPositionWhilePausedThenResume()
+{
+    DragonPlayer player;
+    DragonDiagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QTest::qWait(200);
+    QVERIFY(helper.pauseAndWait());
+
+    player.setPosition(1500);
+    VERIFY_POSITION_NEAR(player.position(), 1500, 50);
+
+    QTest::qWait(300);
+    VERIFY_POSITION_NEAR(player.position(), 1500, 50);
+
+    QVERIFY(helper.playAndWait());
+    QTest::qWait(700);
+    QVERIFY2(player.position() >= 1500, qPrintable(u"Position must resume from the seek target, got %1ms"_s.arg(player.position())));
+    QVERIFY2(player.position() < 2500, qPrintable(u"Position must not leap forward after resume, got %1ms"_s.arg(player.position())));
+    VERIFY_POSITION_NEAR(player.position(), diag.audioPositionMs(), 250);
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testSetPositionClampedToDuration()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    const qint64 duration = player.duration();
+    QVERIFY2(duration > 0, "Duration must be known after load");
+
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+
+    player.setPosition(duration + 5000);
+    QCOMPARE(player.position(), duration);
+    QCOMPARE(posSpy.last().at(0).toLongLong(), duration);
+
+    player.setPosition(-500);
+    QCOMPARE(player.position(), 0LL);
+    QCOMPARE(posSpy.last().at(0).toLongLong(), 0LL);
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testPositionResetsOnGaplessTransition()
+{
+    DragonPlayer player;
+    DragonDiagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    helper.setNextSource(u"gs-3s-2c-44100hz.ogg"_s);
+    QVERIFY(helper.playAndWait());
+
+    QVERIFY2(helper.waitForTrackChange(15000), "Gapless transition must occur");
+
+    QVERIFY2(player.position() < 700, qPrintable(u"Position must reset at gapless transition, got %1ms"_s.arg(player.position())));
+
+    const qint64 afterChange = player.position();
+    QTest::qWait(800);
+    QVERIFY2(player.position() > afterChange, "Position must advance on the new track");
+    VERIFY_POSITION_NEAR(player.position(), diag.audioPositionMs(), 250);
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testStopResetsPositionToZero()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QTest::qWait(300);
+    QVERIFY2(player.position() > 0, "Position must have advanced before stop");
+
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+    player.stop();
+    QCOMPARE(player.position(), 0LL);
+    QVERIFY2(posSpy.count() > 0, "stop() must emit positionChanged(0)");
+    QCOMPARE(posSpy.last().at(0).toLongLong(), 0LL);
+
+    const int spyCountAfterStop = posSpy.count();
+    player.stop();
+    QCOMPARE(player.position(), 0LL);
+    QCOMPARE(posSpy.count(), spyCountAfterStop);
+}
+
 void TestPlayerPlayback::testSetSourceDoesNotEmitPlayingState()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
@@ -136,9 +302,6 @@ void TestPlayerPlayback::testSetSourceDoesNotEmitPlayingState()
 
 void TestPlayerPlayback::testSetSourceWhilePlayingEmitsStoppedState()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-    skipIfMissing(u"gs-3s-2c-44100hz.ogg"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -172,8 +335,6 @@ void TestPlayerPlayback::testPlayWithNoSourceIsNoOp()
 
 void TestPlayerPlayback::testPlayDuringLoadingDefers()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
 
@@ -193,8 +354,6 @@ void TestPlayerPlayback::testPlayDuringLoadingDefers()
 
 void TestPlayerPlayback::testPauseDuringLoadingDefers()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
 
@@ -214,8 +373,6 @@ void TestPlayerPlayback::testPauseDuringLoadingDefers()
 
 void TestPlayerPlayback::testStopDuringLoadingDefers()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
     QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
@@ -234,8 +391,6 @@ void TestPlayerPlayback::testStopDuringLoadingDefers()
 
 void TestPlayerPlayback::testDeferredStateResetOnNewSource()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     player.play();
@@ -249,8 +404,6 @@ void TestPlayerPlayback::testDeferredStateResetOnNewSource()
 
 void TestPlayerPlayback::testPauseFromPlayingState()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
@@ -271,8 +424,6 @@ void TestPlayerPlayback::testPauseFromPlayingState()
 
 void TestPlayerPlayback::testStopFromPlayingStateDoesNotEmitLoadedMedia()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
@@ -295,8 +446,6 @@ void TestPlayerPlayback::testStopFromPlayingStateDoesNotEmitLoadedMedia()
 
 void TestPlayerPlayback::testPlayFromPausedStateResumes()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -322,8 +471,6 @@ void TestPlayerPlayback::testPlayFromPausedStateResumes()
 
 void TestPlayerPlayback::testMultiplePlayCallsIdempotent()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -342,8 +489,6 @@ void TestPlayerPlayback::testMultiplePlayCallsIdempotent()
 
 void TestPlayerPlayback::testPlayAfterStopRestartsDecoder()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -370,8 +515,6 @@ void TestPlayerPlayback::testPlayAfterStopRestartsDecoder()
 
 void TestPlayerPlayback::testSetSourceWhilePlayingStopsOldTrack()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -397,8 +540,6 @@ void TestPlayerPlayback::testSetSourceWhilePlayingStopsOldTrack()
 
 void TestPlayerPlayback::testEndOfMediaTransitionsToStoppedState()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -419,8 +560,6 @@ void TestPlayerPlayback::testEndOfMediaTransitionsToStoppedState()
 
 void TestPlayerPlayback::testPlayAtEndOfMediaRestarts()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -442,8 +581,6 @@ void TestPlayerPlayback::testPlayAtEndOfMediaRestarts()
 
 void TestPlayerPlayback::testPlayDuringLoadingStartsAudioOnComplete()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
 
@@ -463,8 +600,6 @@ void TestPlayerPlayback::testPlayDuringLoadingStartsAudioOnComplete()
 
 void TestPlayerPlayback::testStopDuringLoadingPreventsAudioStart()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
 
@@ -480,7 +615,6 @@ void TestPlayerPlayback::testStopDuringLoadingPreventsAudioStart()
 
 void TestPlayerPlayback::testPlayThenStopDuringLoadingCancelsStart()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
     DragonPlayer player;
     DragonDiagnostics diag(&player);
 
@@ -497,8 +631,6 @@ void TestPlayerPlayback::testPlayThenStopDuringLoadingCancelsStart()
 
 void TestPlayerPlayback::testSignalOrderOnSetSource()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     SignalOrderTracker tracker(&player);
     tracker.trackStateChanges();
@@ -512,8 +644,6 @@ void TestPlayerPlayback::testSignalOrderOnSetSource()
 }
 void TestPlayerPlayback::testSignalPresenceOnStop()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -535,8 +665,6 @@ void TestPlayerPlayback::testSignalPresenceOnStop()
 
 void TestPlayerPlayback::testDeferredPlayIntentDuringFormatResolution()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
@@ -553,8 +681,6 @@ void TestPlayerPlayback::testDeferredPlayIntentDuringFormatResolution()
 
 void TestPlayerPlayback::testSetSourceThenPlayFirstTrack()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
@@ -570,8 +696,6 @@ void TestPlayerPlayback::testSetSourceThenPlayFirstTrack()
 
 void TestPlayerPlayback::testPlayNextTrackAfterStop()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);
@@ -592,8 +716,6 @@ void TestPlayerPlayback::testPlayNextTrackAfterStop()
 
 void TestPlayerPlayback::testPlayRapidNextNext()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s, u"sample-3s.aac"_s});
-
     DragonPlayer player;
     DragonDiagnostics diag(&player);
     PlayerHelper helper(&player);

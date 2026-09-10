@@ -108,3 +108,12 @@ int DragonDiagnostics::audioUnderrunCount() const
     }
     return priv->audioOutput->sink()->underrunCount();
 }
+
+qint64 DragonDiagnostics::audioPositionMs() const
+{
+    DragonPlayerPrivate *priv = d->m_player->d.get();
+    if (!priv || !priv->audioOutput || !priv->audioOutput->sink()) {
+        return -1;
+    }
+    return priv->audioOutput->sink()->positionMs();
+}

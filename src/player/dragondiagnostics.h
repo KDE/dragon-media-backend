@@ -41,6 +41,8 @@ public:
 
     [[nodiscard]] int audioUnderrunCount() const;
 
+    [[nodiscard]] qint64 audioPositionMs() const;
+
 private:
     std::unique_ptr<DragonDiagnosticsPrivate> d;
 };

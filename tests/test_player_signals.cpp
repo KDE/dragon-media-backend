@@ -40,29 +40,10 @@ private Q_SLOTS:
 
     void testRapidSetSourceOnlyLastProcessed();
     void testSetSourceInterruptedByStop();
-
-private:
-    void skipIfMissing(const QString &filename)
-    {
-        if (!QFileInfo::exists(TestFixture::fixturePath(filename))) {
-            QSKIP(qPrintable(u"Fixture not available: %1"_s.arg(filename)));
-        }
-    }
-
-    void skipIfMissing(const QStringList &filenames)
-    {
-        for (const auto &f : filenames) {
-            if (!QFileInfo::exists(TestFixture::fixturePath(f))) {
-                QSKIP(qPrintable(u"Fixture not available: %1"_s.arg(f)));
-            }
-        }
-    }
 };
 
 void TestPlayerSignals::testPlayingChangedSignal()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -110,8 +91,6 @@ void TestPlayerSignals::testPlayingChangedSignal()
 
 void TestPlayerSignals::testMediaStatusChangedDedupOnRedundantStop()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -136,8 +115,6 @@ void TestPlayerSignals::testMediaStatusChangedDedupOnRedundantStop()
 
 void TestPlayerSignals::testSignalOrderOnPlay()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -155,8 +132,6 @@ void TestPlayerSignals::testSignalOrderOnPlay()
 
 void TestPlayerSignals::testSignalOrderOnPause()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -175,8 +150,6 @@ void TestPlayerSignals::testSignalOrderOnPause()
 
 void TestPlayerSignals::testSignalOrderOnEndOfMedia()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -203,8 +176,6 @@ void TestPlayerSignals::testSignalOrderOnEndOfMedia()
 
 void TestPlayerSignals::testDurationChangedAfterLoadedMedia()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     SignalOrderTracker tracker(&player);
     tracker.trackDurationChanges();
@@ -222,8 +193,6 @@ void TestPlayerSignals::testDurationChangedAfterLoadedMedia()
 
 void TestPlayerSignals::testSourceChangedFirstInSetSource()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     SignalOrderTracker tracker(&player);
     tracker.trackSourceChanges();
@@ -247,8 +216,6 @@ void TestPlayerSignals::testSourceChangedFirstInSetSource()
 
 void TestPlayerSignals::testSetSourceSameUrlStopsFirst()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -289,8 +256,6 @@ void TestPlayerSignals::testPauseFromStoppedIsNoOp()
 
 void TestPlayerSignals::testNextWhilePlayingWithoutExplicitStop()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -311,8 +276,6 @@ void TestPlayerSignals::testNextWhilePlayingWithoutExplicitStop()
 
 void TestPlayerSignals::testSetPositionZeroAtEndOfMedia()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -332,8 +295,6 @@ void TestPlayerSignals::testSetPositionZeroAtEndOfMedia()
 
 void TestPlayerSignals::testMultipleStopIdempotent()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -380,8 +341,6 @@ void TestPlayerSignals::testErrorChangedBeforeInvalidMedia()
 
 void TestPlayerSignals::testRapidSetSourceOnlyLastProcessed()
 {
-    skipIfMissing({u"sample-3s.mp3"_s, u"gs-3s-2c-44100hz.ogg"_s});
-
     DragonPlayer player;
 
     QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
@@ -405,7 +364,6 @@ void TestPlayerSignals::testRapidSetSourceOnlyLastProcessed()
 
 void TestPlayerSignals::testSetSourceInterruptedByStop()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
     DragonPlayer player;
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
     QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);

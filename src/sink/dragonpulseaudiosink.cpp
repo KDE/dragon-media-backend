@@ -601,25 +601,36 @@ void DragonPulseAudioSink::clearStream()
     }
 }
 
+qint64 DragonPulseAudioSink::queuedDurationUsLocked() const
+{
+    pa_usec_t latency = 0;
+    int negative = 0;
+    if (pa_stream_get_latency(m_pa->stream.get(), &latency, &negative) != 0 || negative) {
+        return -1;
+    }
+    return static_cast<qint64>(latency);
+}
+
 qint64 DragonPulseAudioSink::deviceQueuedSamples() const
 {
     if (!m_pa->mainloop || !m_pa->stream || !m_open.load(std::memory_order_acquire)) {
         return 0;
     }
 
+    const int channels = currentChannels();
+    const int sampleRate = currentSampleRate();
+    if (channels <= 0 || sampleRate <= 0) {
+        return 0;
+    }
+
     ScopedMainloopLock lock(m_pa->mainloop.get());
 
-    const pa_timing_info *ti = pa_stream_get_timing_info(m_pa->stream.get());
-    if (!ti) {
+    const qint64 queuedUs = queuedDurationUsLocked();
+    if (queuedUs < 0) {
         return 0;
     }
 
-    const qint64 bytesQueued = ti->write_index - ti->read_index;
-    if (bytesQueued < 0) {
-        return 0;
-    }
-
-    return bytesQueued / static_cast<qint64>(sizeof(float));
+    return queuedUs * sampleRate * channels / 1000000;
 }
 
 int DragonPulseAudioSink::audioBufferFrames() const
@@ -628,24 +639,19 @@ int DragonPulseAudioSink::audioBufferFrames() const
         return -1;
     }
 
-    const int channels = currentChannels();
-    if (channels <= 0) {
+    const int sampleRate = currentSampleRate();
+    if (sampleRate <= 0) {
         return -1;
     }
 
     ScopedMainloopLock lock(m_pa->mainloop.get());
 
-    const pa_timing_info *ti = pa_stream_get_timing_info(m_pa->stream.get());
-    if (!ti) {
+    const qint64 queuedUs = queuedDurationUsLocked();
+    if (queuedUs < 0) {
         return -1;
     }
 
-    const qint64 bytesQueued = ti->write_index - ti->read_index;
-    if (bytesQueued < 0) {
-        return 0;
-    }
-
-    return static_cast<int>(bytesQueued / static_cast<qint64>(channels * sizeof(float)));
+    return static_cast<int>(queuedUs * sampleRate / 1000000);
 }
 
 int DragonPulseAudioSink::audioBufferUs() const

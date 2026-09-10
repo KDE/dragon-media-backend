@@ -40,13 +40,6 @@ private Q_SLOTS:
     void testShortTrackEmitsImmediately();
 
 private:
-    void skipIfMissing(const QString &filename)
-    {
-        if (!QFileInfo::exists(TestFixture::fixturePath(filename))) {
-            QSKIP(qPrintable(u"Fixture not available: %1"_s.arg(filename)));
-        }
-    }
-
     bool waitForPlaybackStart(DragonPlayer &player, int timeoutMs = 5000)
     {
         QElapsedTimer timer;
@@ -110,8 +103,6 @@ void TestPlayerPrefinish::testPrefinishMarkNoDuplicateSignal()
 
 void TestPlayerPrefinish::testAboutToFinishNeverEmittedWhenDisabled()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -132,8 +123,6 @@ void TestPlayerPrefinish::testAboutToFinishNeverEmittedWhenDisabled()
 
 void TestPlayerPrefinish::testAboutToFinishEmitsOnce()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -150,8 +139,6 @@ void TestPlayerPrefinish::testAboutToFinishEmitsOnce()
 
 void TestPlayerPrefinish::testAboutToFinishTiming()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -176,8 +163,6 @@ void TestPlayerPrefinish::testAboutToFinishTiming()
 
 void TestPlayerPrefinish::testAboutToFinishResetsOnNewSource()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -199,8 +184,6 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnNewSource()
 
 void TestPlayerPrefinish::testAboutToFinishResetsOnSeekBack()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -225,9 +208,6 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnSeekBack()
 
 void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-    skipIfMissing(u"gs-3s-2c-44100hz.ogg"_s);
-
     DragonPlayer player;
     DragonDiagnostics diagnostics(&player);
     PlayerHelper helper(&player);
@@ -266,8 +246,6 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
 
 void TestPlayerPrefinish::testPrefinishMarkChangeResets()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 
@@ -294,8 +272,6 @@ void TestPlayerPrefinish::testPrefinishMarkChangeResets()
 
 void TestPlayerPrefinish::testShortTrackEmitsImmediately()
 {
-    skipIfMissing(u"sample-3s.mp3"_s);
-
     DragonPlayer player;
     PlayerHelper helper(&player);
 

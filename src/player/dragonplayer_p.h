@@ -25,6 +25,7 @@
 
 class DragonDiagnostics;
 class DragonAudioOutput;
+class DragonPositionEstimator;
 
 struct AliveGuard {
     std::atomic<bool> alive{true};
@@ -95,8 +96,7 @@ private:
 
     std::shared_ptr<AliveGuard> aliveGuard;
 
-    QTimer *positionTimer = nullptr;
-    qint64 currentPosition = 0;
+    DragonPositionEstimator *positionEstimator = nullptr;
 
     bool playRequestedReload = false;
 

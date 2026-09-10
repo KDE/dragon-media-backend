@@ -81,6 +81,7 @@ private Q_SLOTS:
 
     void testSeekWhilePaused();
     void testPositionStabilityDuringPause();
+    void testPositionAdvancesSmoothlyDuringPlayback();
 
     void testVolumeChangeWhilePlaying();
     void testExternalVolumeChangePropagates();
@@ -982,6 +983,45 @@ void TestAudioOutput::testPositionStabilityDuringPause()
     QVERIFY2(posAfterResume >= posAtPause, "Position must not go backward after resume from pause");
 
     output->close();
+}
+
+void TestAudioOutput::testPositionAdvancesSmoothlyDuringPlayback()
+{
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    DragonPipe<float> pipe(1 << 19);
+    output->setAudioPipe(&pipe);
+
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    const std::vector<float> quarterSecond(22050, 0.5f);
+    fillQueue(&pipe, quarterSecond);
+
+    QTest::qWait(300);
+
+    QVector<qint64> samples;
+    samples.reserve(25);
+    for (int i = 0; i < 25; ++i) {
+        fillQueue(&pipe, quarterSecond);
+        QTest::qWait(100);
+        samples.push_back(output->positionMs());
+    }
+
+    output->close();
+
+    for (qsizetype i = 1; i < samples.size(); ++i) {
+        QVERIFY2(samples[i] >= samples[i - 1] - 50,
+                 qPrintable(u"Position must not skip backwards (sample %1: %2 -> %3)"_s.arg(i).arg(samples[i - 1]).arg(samples[i])));
+        QVERIFY2(samples[i] - samples[i - 1] <= 250,
+                 qPrintable(u"Position must not leap forward in a burst (sample %1: %2 -> %3)"_s.arg(i).arg(samples[i - 1]).arg(samples[i])));
+    }
+
+    for (qsizetype i = 5; i < samples.size(); ++i) {
+        QVERIFY2(samples[i] - samples[i - 5] >= 200,
+                 qPrintable(u"Position must not stall for 500ms or longer (sample %1: %2 -> %3)"_s.arg(i).arg(samples[i - 5]).arg(samples[i])));
+    }
 }
 
 void TestAudioOutput::fillQueue(DragonPipe<float> *pipe, const std::vector<float> &data)
