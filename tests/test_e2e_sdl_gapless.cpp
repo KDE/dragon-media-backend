@@ -67,7 +67,7 @@ private Q_SLOTS:
     void testTrackStartNotWiped();
 
 private:
-    ScopedEnvVar m_sinkEnv{"DRAGONMULTIMEDIA_AUDIO_SINK", "dragonsdlaudiosink"};
+    ScopedEnvVar m_sinkEnv{"DRAGON_AUDIO_SINK", "dragonsdlaudiosink"};
     ScopedEnvVar m_sdlDriverEnv{"SDL_AUDIODRIVER", qgetenv("SDL_AUDIODRIVER")};
     ScopedEnvVar m_diskFileEnv{"SDL_AUDIO_DISK_OUTPUT_FILE", qgetenv("SDL_AUDIO_DISK_OUTPUT_FILE")};
     ScopedEnvVar m_diskTimescaleEnv{"SDL_AUDIO_DISK_TIMESCALE", qgetenv("SDL_AUDIO_DISK_TIMESCALE")};

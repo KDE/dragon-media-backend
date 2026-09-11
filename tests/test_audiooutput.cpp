@@ -991,7 +991,7 @@ void TestAudioOutput::fillQueue(DragonPipe<float> *pipe, const std::vector<float
 
 QString TestAudioOutput::currentSinkBackend()
 {
-    return qEnvironmentVariable("DRAGONMULTIMEDIA_AUDIO_SINK");
+    return qEnvironmentVariable("DRAGON_AUDIO_SINK");
 }
 
 bool TestAudioOutput::findSinkInputByApplicationName(const QString &appName, uint32_t &sinkInputIndexOut)

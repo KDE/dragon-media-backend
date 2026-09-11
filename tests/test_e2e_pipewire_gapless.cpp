@@ -35,7 +35,7 @@ void TestPwGapless::testGaplessSameFormat()
 {
     using namespace FixtureGenerator;
 
-    ScopedEnvVar sinkEnv("DRAGONMULTIMEDIA_AUDIO_SINK", "dragonpipewireaudiosink");
+    ScopedEnvVar sinkEnv("DRAGON_AUDIO_SINK", "dragonpipewireaudiosink");
     ScopedEnvVar testSinkEnv("DRAGON_PW_TEST_SINK_NAME", "dragon-test-sink");
 
     auto fixtureA = makeEndMarkerFixture(kSampleRate, kDefaultChannels, kDurationFrames);

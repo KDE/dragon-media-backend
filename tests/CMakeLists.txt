@@ -112,20 +112,20 @@ string(REPLACE ";" "\\;" _qt_plugin_path "${_qt_plugin_path}")
 
 add_test(NAME test_e2e_sdl COMMAND test_e2e)
 set_property(TEST test_e2e_sdl APPEND PROPERTY ENVIRONMENT
-    "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink"
+    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
     "QT_PLUGIN_PATH=${_qt_plugin_path}"
 )
 if(PULSEAUDIO_FOUND)
     add_test(NAME test_e2e_pulseaudio COMMAND test_e2e)
     set_property(TEST test_e2e_pulseaudio APPEND PROPERTY ENVIRONMENT
-        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpulseaudiosink"
+        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
 endif()
 if(PIPEWIRE_FOUND)
     add_test(NAME test_e2e_pipewire COMMAND test_e2e)
     set_property(TEST test_e2e_pipewire APPEND PROPERTY ENVIRONMENT
-        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpipewireaudiosink"
+        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
 endif()
@@ -136,7 +136,7 @@ dragon_add_test(test_network_playback LIBRARIES ${_player_libs})
 if(FLAC_FOUND)
     dragon_add_test(test_e2e_sdl_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC)
     set_property(TEST test_e2e_sdl_gapless APPEND PROPERTY ENVIRONMENT
-        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink"
+        "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
     )
 endif()
 
@@ -167,20 +167,20 @@ set_tests_properties(test_audiooutput PROPERTIES DISABLED TRUE)
 
 add_test(NAME test_audiooutput_sdl COMMAND test_audiooutput)
 set_property(TEST test_audiooutput_sdl APPEND PROPERTY ENVIRONMENT
-    "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink"
+    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
     "QT_PLUGIN_PATH=${_qt_plugin_path}"
 )
 if(PULSEAUDIO_FOUND)
     add_test(NAME test_audiooutput_pulseaudio COMMAND test_audiooutput)
     set_property(TEST test_audiooutput_pulseaudio APPEND PROPERTY ENVIRONMENT
-        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpulseaudiosink"
+        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
 endif()
 if(PIPEWIRE_FOUND)
     add_test(NAME test_audiooutput_pipewire COMMAND test_audiooutput)
     set_property(TEST test_audiooutput_pipewire APPEND PROPERTY ENVIRONMENT
-        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpipewireaudiosink"
+        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
 endif()
@@ -191,20 +191,20 @@ set_tests_properties(test_player_streamname PROPERTIES DISABLED TRUE)
 
 add_test(NAME test_player_streamname_sdl COMMAND test_player_streamname)
 set_property(TEST test_player_streamname_sdl APPEND PROPERTY ENVIRONMENT
-    "DRAGONMULTIMEDIA_AUDIO_SINK=dragonsdlaudiosink"
+    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
     "QT_PLUGIN_PATH=${_qt_plugin_path}"
 )
 if(PULSEAUDIO_FOUND)
     add_test(NAME test_player_streamname_pulseaudio COMMAND test_player_streamname)
     set_property(TEST test_player_streamname_pulseaudio APPEND PROPERTY ENVIRONMENT
-        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpulseaudiosink"
+        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
 endif()
 if(PIPEWIRE_FOUND)
     add_test(NAME test_player_streamname_pipewire COMMAND test_player_streamname)
     set_property(TEST test_player_streamname_pipewire APPEND PROPERTY ENVIRONMENT
-        "DRAGONMULTIMEDIA_AUDIO_SINK=dragonpipewireaudiosink"
+        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
 endif()

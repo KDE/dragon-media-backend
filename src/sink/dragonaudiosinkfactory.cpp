@@ -93,7 +93,7 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requ
         }
     }
 
-    const QString envSink = qEnvironmentVariable("DRAGONMULTIMEDIA_AUDIO_SINK");
+    const QString envSink = qEnvironmentVariable("DRAGON_AUDIO_SINK");
     if (!envSink.isEmpty()) {
         return tryLoadById(plugins, envSink, selectedSinkOut);
     }

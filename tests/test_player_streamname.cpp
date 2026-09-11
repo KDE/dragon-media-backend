@@ -49,7 +49,7 @@ private:
 
 QString TestPlayerStreamName::currentSinkBackend()
 {
-    return qEnvironmentVariable("DRAGONMULTIMEDIA_AUDIO_SINK");
+    return qEnvironmentVariable("DRAGON_AUDIO_SINK");
 }
 
 void TestPlayerStreamName::testOpenTimeSemantics()
