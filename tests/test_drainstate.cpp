@@ -18,6 +18,7 @@ private Q_SLOTS:
     void claimIsCurrentSemantics();
     void doubleNotify();
     void staleEventAfterReset();
+    void noReclaimAfterEmission();
 };
 
 void TestDrainState::startNewEpoch_table_data()
@@ -105,6 +106,27 @@ void TestDrainState::doubleNotify()
 
     QVERIFY(state.tryClaimDrain());
     QCOMPARE(state.tryClaimDrain(), false);
+}
+
+void TestDrainState::noReclaimAfterEmission()
+{
+    DragonDrainState state;
+    state.notifyDecodeFinished();
+    QVERIFY(state.tryClaimDrain());
+    state.consumeEmission();
+
+    QCOMPARE(state.decodeFinished(), true);
+    QCOMPARE(state.claimIsCurrent(), false);
+    QCOMPARE(state.tryClaimDrain(), false);
+    QCOMPARE(state.tryClaimDrain(), false);
+
+    state.startNewEpoch();
+    QCOMPARE(state.decodeFinished(), false);
+    QCOMPARE(state.tryClaimDrain(), false);
+
+    state.notifyDecodeFinished();
+    QVERIFY(state.tryClaimDrain());
+    QVERIFY(state.claimIsCurrent());
 }
 
 void TestDrainState::staleEventAfterReset()

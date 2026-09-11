@@ -44,7 +44,7 @@ public:
     [[nodiscard]] bool tryClaimDrain()
     {
         auto current = m_word.load(std::memory_order_acquire);
-        while (current & kDecodeFinished && !(current & kDrainInitiated)) {
+        while (current & kDecodeFinished && !(current & kDrainInitiated) && !(current & kDrainEmitted)) {
             if (m_word.compare_exchange_weak(current, current | kDrainInitiated, std::memory_order_acq_rel, std::memory_order_acquire)) {
                 m_claimedEpoch = current >> kEpochShift;
                 return true;
@@ -71,14 +71,20 @@ public:
 
     void consumeEmission()
     {
-        m_word.fetch_and(~kDrainInitiated, std::memory_order_acq_rel);
+        auto current = m_word.load(std::memory_order_acquire);
+        while (current & kDrainInitiated) {
+            if (m_word.compare_exchange_weak(current, (current & ~kDrainInitiated) | kDrainEmitted, std::memory_order_acq_rel, std::memory_order_acquire)) {
+                return;
+            }
+        }
     }
 
 private:
     static constexpr std::uint64_t kDecodeFinished = 1;
     static constexpr std::uint64_t kDrainInitiated = 1 << 1;
-    static constexpr std::uint64_t kFlagsMask = kDecodeFinished | kDrainInitiated;
-    static constexpr std::uint64_t kEpochShift = 2;
+    static constexpr std::uint64_t kDrainEmitted = 1 << 2;
+    static constexpr std::uint64_t kFlagsMask = kDecodeFinished | kDrainInitiated | kDrainEmitted;
+    static constexpr std::uint64_t kEpochShift = 3;
     static constexpr std::uint64_t kEpochStep = 1 << kEpochShift;
 
     std::atomic<std::uint64_t> m_word{0};

@@ -26,9 +26,6 @@ K_PLUGIN_CLASS_WITH_JSON(DragonSdlAudioSink, "sdl_sink.json")
 #include <chrono>
 #include <thread>
 
-// specifically on Windows the resampler never goes to zero
-constexpr int kMaxResamplerResidualBytes = 256;
-
 static void SDLLogOutput(void *userdata, int category, SDL_LogPriority priority, const char *message)
 {
     Q_UNUSED(userdata);
@@ -162,10 +159,6 @@ void DragonSdlAudioSink::close()
 {
     qCDebug(dragonMediaBackendAudio) << "close()";
 
-    if (m_drainTimer) {
-        m_drainTimer->stop();
-    }
-
     auto *oldSession = m_session.exchange(nullptr, std::memory_order_acq_rel);
 
     if (oldSession) {
@@ -239,39 +232,6 @@ void DragonSdlAudioSink::setStreamName(const QString &name)
     } else {
         SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME, name.toUtf8().constData());
     }
-}
-
-void DragonSdlAudioSink::notifyDecodeFinished()
-{
-    DragonAudioSink::notifyDecodeFinished();
-
-    if (!m_drainTimer) {
-        m_drainTimer = new QTimer(this);
-        connect(m_drainTimer, &QTimer::timeout, this, [this]() {
-            auto *session = m_session.load(std::memory_order_acquire);
-            if (session && session->stream) {
-                const int queuedBytes = SDL_GetAudioStreamQueued(session->stream);
-                const int availableBytes = SDL_GetAudioStreamAvailable(session->stream);
-                if (availableBytes == 0 && queuedBytes <= kMaxResamplerResidualBytes) {
-                    if (m_drain.tryClaimDrain()) {
-                        m_drain.consumeEmission();
-                        m_drainTimer->stop();
-                        qCDebug(dragonMediaBackendAudio) << "drain complete queuedBytes=" << queuedBytes;
-                        Q_EMIT drained();
-                    }
-                }
-            }
-        });
-    }
-    m_drainTimer->start(kDrainPollMs);
-}
-
-void DragonSdlAudioSink::resetDrainState()
-{
-    if (m_drainTimer) {
-        m_drainTimer->stop();
-    }
-    DragonAudioSink::resetDrainState();
 }
 
 bool DragonSdlAudioSink::isDeviceOpen() const
@@ -377,9 +337,25 @@ void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioSt
 
     if (!pcm.empty()) {
         SDL_PutAudioStreamData(stream, pcm.data(), static_cast<int>(pcm.size() * sizeof(float)));
-    } else {
-        qCDebug(dragonMediaBackendAudio) << "STARVATION additional=" << additional_amount << "floatsNeeded=" << floatsNeeded;
+        return;
     }
+
+    if (self->m_drain.tryClaimDrain() && self->m_drain.claimIsCurrent()) {
+        QMetaObject::invokeMethod(
+            self,
+            [self]() {
+                if (!self->m_drain.claimIsCurrent()) {
+                    return;
+                }
+                self->m_drain.consumeEmission();
+                qCDebug(dragonMediaBackendAudio) << "drain complete, all decoded audio played out";
+                Q_EMIT self->drained();
+            },
+            Qt::QueuedConnection);
+        return;
+    }
+
+    qCDebug(dragonMediaBackendAudio) << "STARVATION additional=" << additional_amount << "floatsNeeded=" << floatsNeeded;
 }
 
 #include "dragonsdlaudiosink.moc"

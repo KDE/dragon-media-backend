@@ -38,7 +38,9 @@ endfunction()
 
 set(_dragon_audio_tests
     test_player_basics
-    test_player_playback
+    test_player_playback_sdl
+    test_player_playback_pulseaudio
+    test_player_playback_pipewire
     test_player_signals
     test_player_prefinish
     test_player_fft
@@ -89,7 +91,10 @@ dragon_add_test(test_kiostream LIBRARIES Qt6::Network KF6::KIOCore)
 # Player tests
 set(_player_libs Qt6::Network SDL3::SDL3 PkgConfig::FFmpeg spsc_queue kissfft::kissfft)
 dragon_add_test(test_player_basics    LIBRARIES ${_player_libs})
+# Playback state tests are sensitive to audio-sink timing differences;
+# build one executable and run it once per backend via env var.
 dragon_add_test(test_player_playback  LIBRARIES ${_player_libs})
+set_tests_properties(test_player_playback PROPERTIES DISABLED TRUE)
 dragon_add_test(test_player_signals   LIBRARIES ${_player_libs})
 dragon_add_test(test_player_setsource LIBRARIES ${_player_libs})
 dragon_add_test(test_player_prefinish LIBRARIES ${_player_libs})
@@ -126,6 +131,27 @@ endif()
 if(PIPEWIRE_FOUND)
     add_test(NAME test_e2e_pipewire COMMAND test_e2e)
     set_property(TEST test_e2e_pipewire APPEND PROPERTY ENVIRONMENT
+        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
+        "QT_PLUGIN_PATH=${_qt_plugin_path}"
+    )
+endif()
+
+# Playback state tests (one executable, run once per backend via env var)
+add_test(NAME test_player_playback_sdl COMMAND test_player_playback)
+set_property(TEST test_player_playback_sdl APPEND PROPERTY ENVIRONMENT
+    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
+    "QT_PLUGIN_PATH=${_qt_plugin_path}"
+)
+if(PULSEAUDIO_FOUND)
+    add_test(NAME test_player_playback_pulseaudio COMMAND test_player_playback)
+    set_property(TEST test_player_playback_pulseaudio APPEND PROPERTY ENVIRONMENT
+        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
+        "QT_PLUGIN_PATH=${_qt_plugin_path}"
+    )
+endif()
+if(PIPEWIRE_FOUND)
+    add_test(NAME test_player_playback_pipewire COMMAND test_player_playback)
+    set_property(TEST test_player_playback_pipewire APPEND PROPERTY ENVIRONMENT
         "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
@@ -221,7 +247,7 @@ if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
 endif()
 
 if(DRAGON_CI_NO_AUDIO)
-    set(_no_audio_tests ${_dragon_audio_tests} test_e2e_sdl_gapless test_e2e_pipewire_gapless test_e2e_pulseaudio_gapless test_audiooutput)
+    set(_no_audio_tests ${_dragon_audio_tests} test_e2e_sdl_gapless test_e2e_pipewire_gapless test_e2e_pulseaudio_gapless test_audiooutput test_player_playback)
     foreach(_test ${_no_audio_tests})
         if(TEST ${_test})
             set_tests_properties(${_test} PROPERTIES DISABLED TRUE)
