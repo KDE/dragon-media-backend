@@ -779,6 +779,21 @@ void DragonPlayer::stop()
 
     d->requestedPlaybackState = PlaybackState::StoppedState;
 
+    if (d->currentStatus == MediaStatus::LoadingMedia) {
+        // stop()s playback but must not interrupt an in-flight load nor change media status
+        qCDebug(dragonMediaBackendPlayer) << "stop() during LoadingMedia, letting in-flight load continue";
+        if (d->audioOutput) {
+            d->audioOutput->sink()->close();
+            d->audioOutput->sink()->reset();
+            d->audioOutput->sink()->resetDrainState();
+        }
+        d->setPlaybackState(PlaybackState::StoppedState);
+        if (d->positionEstimator->position() != 0) {
+            d->positionEstimator->seek(0);
+        }
+        return;
+    }
+
     d->decodePipeline.stopSession();
 
     if (d->audioOutput) {
