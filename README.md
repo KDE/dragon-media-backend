@@ -22,6 +22,29 @@ A Qt C++ library intended for desktop music players.
  - Volume API keeps in sync with Linux desktop application volume
  - A QWidget-based desktop example app and a QML-based Android example app
 
+## Prerequisites
+
+Building the library requires the following:
+
+ - A C++23-capable compiler
+ - CMake >= 3.25
+ - pkg-config
+ - Qt >= 6.11
+ - QCoro 6*
+ - FFmpeg
+ - kissfft*
+ - SDL3*
+ - KDE Framework libraries:
+    - Extra CMake Modules
+    - KIO
+    - KCoreAddons
+    - KI18n
+
+And the optional but recommended audio sinks:
+ - PipeWire
+ - PulseAudio
+
+[*] Fetched automatically by CMake if not found on the system.
 
 ## Tech Stack
 Its tech stack relies on Qt, modern C++ jthreads and ffmpeg for decoding audio files. It primarily targets the Linux
