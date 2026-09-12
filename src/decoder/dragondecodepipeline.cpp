@@ -320,20 +320,7 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
 
     m_decoderAssignedCv.notify_one();
 
-    auto result = co_await *completion;
-
-    {
-        std::shared_ptr<DragonCompletion> keepAlive;
-        {
-            std::scoped_lock lock(m_decoderMutex);
-            keepAlive = m_pendingInitCompletion;
-            if (m_pendingInitCompletion == completion) {
-                m_pendingInitCompletion.reset();
-            }
-        }
-        Q_UNUSED(keepAlive)
-    }
-    co_return result;
+    co_return co_await *completion;
 }
 
 void DragonDecodePipeline::stopSession()
