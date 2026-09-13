@@ -4,6 +4,11 @@
 
 @PACKAGE_INIT@
 
+include(FeatureSummary)
+set_package_properties(DragonMediaBackend PROPERTIES
+    DESCRIPTION "KDE audio library using SDL3, ffmpeg, kissfft, and C++23"
+    URL "https://invent.kde.org/ianmonroe/dragon-media-backend")
+
 include(CMakeFindDependencyMacro)
 
 # Find required dependencies
