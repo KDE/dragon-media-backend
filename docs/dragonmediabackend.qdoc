@@ -1,0 +1,25 @@
+/*
+    SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+
+    SPDX-License-Identifier: CC-BY-SA-4.0
+*/
+
+/*!
+    \module DragonMediaBackend
+    \title Dragon Media Backend C++ Classes
+    \ingroup modules
+    \cmakepackage DragonMediaBackend
+    \cmakecomponent DragonMediaBackend
+
+    \brief Audio playback backend for music players.
+
+    Dragon Media Backend provides an audio playback engine with gapless
+    playback, FFT visualization data, radio stream support with
+    ICY metadata, and multi-backend audio output (PipeWire, PulseAudio, and
+    SDL3). It is built with FFmpeg, kissfft, and C++23.
+
+    The public API centers on \l DragonPlayer, the playback controller,
+    together with \l DragonAudioOutput for output controls, \l DragonSpectrumAnalyzer
+    for FFT outputs for visualization. Supporting value classes include \l DragonFftFrame
+    and \l DragonIcyMetadata.
+*/

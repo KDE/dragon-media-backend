@@ -96,6 +96,11 @@
       }
     },
     {
+      "name": "docs",
+      "displayName": "Configure for qdoc API documentation",
+      "inherits": "dev"
+    },
+    {
       "name": "android-x86_64-base",
       "hidden": true,
       "generator": "Ninja",
@@ -178,6 +183,24 @@
     {
       "name": "dev",
       "configurePreset": "dev"
+    },
+    {
+      "name": "docs-prepare",
+      "displayName": "Run qdoc prepare phase",
+      "configurePreset": "docs",
+      "targets": ["prepare_docs"]
+    },
+    {
+      "name": "docs",
+      "displayName": "Run qdoc generate phase",
+      "configurePreset": "docs",
+      "targets": ["generate_docs"]
+    },
+    {
+      "name": "docs-qch",
+      "displayName": "Run qhelpgenerator phase",
+      "configurePreset": "docs",
+      "targets": ["generate_qch"]
     },
     {
       "name": "kde-dev",
@@ -289,6 +312,29 @@
     }
   ],
   "workflowPresets": [
+    {
+      "name": "docs",
+      "displayName": "Generate the qdoc API documentation",
+      "description": "Configure (dev preset) and run the qdoc prepare and generate phases. Requires KDE_DOCS to point at a kde-qdoc-common checkout (see docs/README.md); build its index once with the matching DOC_DESTDIR for a warning-free website-style output.",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "docs"
+        },
+        {
+          "type": "build",
+          "name": "docs-prepare"
+        },
+        {
+          "type": "build",
+          "name": "docs"
+        },
+        {
+          "type": "build",
+          "name": "docs-qch"
+        }
+      ]
+    },
     {
       "name": "asan-test",
       "displayName": "ASan build and test workflow",

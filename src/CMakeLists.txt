@@ -50,3 +50,8 @@ target_link_libraries(DragonMediaBackend
         kissfft::kissfft
         QCoro6::Network
 )
+
+ecm_generate_qdoc(DragonMediaBackend ../docs/dragonmediabackend.qdocconf)
+if (TARGET generate_qch_DragonMediaBackend)
+    add_dependencies(generate_qch_DragonMediaBackend generate_docs_DragonMediaBackend)
+endif()

@@ -1,0 +1,28 @@
+/*
+    SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+
+    SPDX-License-Identifier: CC-BY-SA-4.0
+*/
+
+/*!
+    \page dragonmediabackend-index.html
+    \title Dragon Media Backend
+
+    Dragon Media Backend is an audio playback backend for music players.
+
+    \section1 Building with CMake
+
+    Use the \c {find_package()} command to locate the module in the
+    \c {DragonMediaBackend} package:
+
+    \code
+    find_package(DragonMediaBackend REQUIRED)
+    target_link_libraries(mytarget PRIVATE DragonMediaBackend::DragonMediaBackend)
+    \endcode
+
+    \section1 API Reference
+
+    \list
+        \li \l{Dragon Media Backend C++ Classes}
+    \endlist
+*/

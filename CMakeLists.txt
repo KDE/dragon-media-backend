@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(DragonMediaBackend
-    VERSION 0.1.0
+    VERSION 0.80.0
     DESCRIPTION "KDE audio library using SDL3, ffmpeg, kissfft, and C++23"
     LANGUAGES CXX
 )
@@ -28,6 +28,7 @@ include(KDEInstallDirs)
 include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
 include(ECMQtDeclareLoggingCategory)
+include(ECMGenerateQDoc)
 include(KDEClangFormat)
 include(KDEGitCommitHooks)
 

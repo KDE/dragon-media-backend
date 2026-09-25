@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+#
+# SPDX-License-Identifier: CC-BY-SA-4.0
+
+include($KDE_DOCS/global/qt-module-defaults.qdocconf)
+
+project = DragonMediaBackend
+description = Audio playback backend for music players
+
+documentationinheaders = true
+
+headerdirs += ../include/DragonMediaBackend
+sourcedirs += .
+
+outputformats = HTML
+
+navigation.landingpage = "Dragon Media Backend"
+
+qhp.projects            = DragonMediaBackend
+
+qhp.DragonMediaBackend.file                = dragonmediabackend.qhp
+qhp.DragonMediaBackend.namespace           = org.kde.dragonmediabackend.$QT_VERSION_TAG
+qhp.DragonMediaBackend.virtualFolder       = dragonmediabackend
+qhp.DragonMediaBackend.indexTitle          = Dragon Media Backend
+qhp.DragonMediaBackend.indexRoot           =
+
+qhp.DragonMediaBackend.subprojects         = classes
+qhp.DragonMediaBackend.subprojects.classes.title = C++ Classes
+qhp.DragonMediaBackend.subprojects.classes.indexTitle = Dragon Media Backend C++ Classes
+qhp.DragonMediaBackend.subprojects.classes.selectors = class fake:headerfile
+qhp.DragonMediaBackend.subprojects.classes.sortPages = true
+
+tagfile = dragonmediabackend.tags

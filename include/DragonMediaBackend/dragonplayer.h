@@ -21,11 +21,38 @@
 class DragonAudioOutput;
 class DragonPlayerPrivate;
 
+/*!
+ * \class DragonPlayer
+ * \inmodule DragonMediaBackend
+ *
+ * \brief Audio playback controller.
+ *
+ * DragonPlayer is the main entry point of Dragon Media Backend. It manages
+ * the state machine for media selection and playback of audio files.
+ *
+ * It can support gapless playback between sequential tracks: when aboutToFinish() is
+ * emitted the application can set nextSource() and it will play that track immediately
+ * after the current track is finished..
+ *
+ * \sa DragonAudioOutput, DragonSpectrumAnalyzer, DragonIcyMetadata
+ */
 class DRAGONMEDIABACKEND_EXPORT DragonPlayer : public QObject
 {
     Q_OBJECT
 
 public:
+    /*!
+     * \enum DragonPlayer::PlaybackState
+     *
+     * The playback state of the player.
+     *
+     * \value StoppedState
+     *        No media is being played.
+     * \value PlayingState
+     *        Media is being played.
+     * \value PausedState
+     *        Playback is paused and can be resumed with play().
+     */
     enum class PlaybackState {
         StoppedState,
         PlayingState,
@@ -33,6 +60,28 @@ public:
     };
     Q_ENUM(PlaybackState)
 
+    /*!
+     * \enum DragonPlayer::MediaStatus
+     *
+     * The status of the loaded media.
+     *
+     * \value NoMedia
+     *        No source has been set.
+     * \value LoadingMedia
+     *        The source is being opened and probed.
+     * \value LoadedMedia
+     *        The source is loaded and possibly playing.
+     * \value BufferingMedia
+     *        Buffering the network stream.
+     * \value StalledMedia
+     *        The network stream has stalled.
+     * \value BufferedMedia
+     *        Enough of a network stream is buffered for playback.
+     * \value EndOfMedia
+     *        Playback reached the end of the source.
+     * \value InvalidMedia
+     *        Something if off; check the DragonPlayer::error.
+     */
     enum class MediaStatus {
         NoMedia,
         LoadingMedia,
@@ -45,6 +94,22 @@ public:
     };
     Q_ENUM(MediaStatus)
 
+    /*!
+     * \enum DragonPlayer::Error
+     *
+     * The error state of the player.
+     *
+     * \value NoError
+     *        No error occurred.
+     * \value ResourceError
+     *        An audio resource could not be acquired.
+     * \value FormatError
+     *        The media format is not supported.
+     * \value NetworkError
+     *        A network error occurred while streaming.
+     * \value AccessDenied
+     *        Access to the source is denied.
+     */
     enum class Error {
         NoError,
         ResourceError,
@@ -54,7 +119,19 @@ public:
     };
     Q_ENUM(Error)
 
+    /*!
+     *
+     * Constructs the main controller. The audio output backends  - PipeWire, PulseAudio, SDL3
+     * - are probed in that order until a functional backend is found. Note that SDL Audio
+     * itself has a similar driver abstraction layer with multiple backends and is likely
+     * used anywhere outside of the Linux/Unix desktop environment.
+     */
     explicit DragonPlayer(QObject *parent = nullptr);
+
+    /*!
+     * Constructs a player using the audio backend \a requestedBackend,
+     * falling back to probing when it is not available.
+     */
     explicit DragonPlayer(DragonAudioOutput::Backend requestedBackend, QObject *parent = nullptr);
     ~DragonPlayer() override;
 
@@ -63,60 +140,282 @@ public:
     DragonPlayer(DragonPlayer &&) = delete;
     DragonPlayer &operator=(DragonPlayer &&) = delete;
 
+    /*!
+     * \property DragonPlayer::source
+     *
+     * The media being played. If it's currently playing, setting a new source
+     * stops playback, resets the position, and starts loading the new media.
+     */
     Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
+
+    /*!
+     * \property DragonPlayer::nextSource
+     *
+     * The source played when the current track finishes, used for
+     * gapless transitions. Set it in response to aboutToFinish().
+     *
+     * \sa aboutToFinish()
+     */
     Q_PROPERTY(QUrl nextSource READ nextSource WRITE setNextSource NOTIFY nextSourceChanged)
+
+    /*!
+     * \property DragonPlayer::playbackState
+     *
+     * The current playback state.
+     */
     Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY stateChanged)
+
+    /*!
+     * \property DragonPlayer::status
+     *
+     * The status of the loaded media.
+     */
     Q_PROPERTY(MediaStatus status READ status NOTIFY statusChanged)
+
+    /*!
+     * \property DragonPlayer::error
+     *
+     * The error state of the player, NoError when there is no error.
+     */
     Q_PROPERTY(Error error READ error NOTIFY errorChanged)
+
+    /*!
+     * \property DragonPlayer::errorString
+     *
+     * A human-readable description of the current error, if any.
+     */
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
+
+    /*!
+     * \property DragonPlayer::duration
+     *
+     * The duration of the current source in milliseconds, or 0 for
+     * streams of unknown duration.
+     */
     Q_PROPERTY(qint64 duration READ duration NOTIFY durationChanged)
+
+    /*!
+     * \property DragonPlayer::position
+     *
+     * The playback position in milliseconds. Setting it while a source
+     * is loaded seeks playback.
+     */
     Q_PROPERTY(qint64 position READ position WRITE setPosition NOTIFY positionChanged)
+
+    /*!
+     * \property DragonPlayer::seekable
+     *
+     * Whether the playback position of the current source can be
+     * changed. Radio streams are typically not seekable.
+     */
     Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged)
+
+    /*!
+     * \property DragonPlayer::bufferProgress
+     *
+     * How much of a network stream has been buffered, from 0.0 to 1.0.
+     * Always 1.0 for fully buffered local files.
+     */
     Q_PROPERTY(qreal bufferProgress READ bufferProgress NOTIFY bufferProgressChanged)
+
+    /*!
+     * \property DragonPlayer::prefinishMark
+     *
+     * How many milliseconds before the end of the source aboutToFinish()
+     * is emitted, allowing the next source to be queued for a gapless
+     * transition. The default is 100 milliseconds.
+     *
+     * \sa aboutToFinish()
+     */
     Q_PROPERTY(int32_t prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
 
+    /*!
+     * Returns the \l DragonAudioOutput instance controlling volume and
+     * mute for this player. The instance is owned by the player.
+     */
     [[nodiscard]] DragonAudioOutput *audioOutput() const;
 
+    /*!
+     * Returns the media being played.
+     */
     [[nodiscard]] QUrl source() const;
+
+    /*!
+     * Returns the source queued for the gapless transition at the end
+     * of the current track, or an empty URL if none is set.
+     */
     [[nodiscard]] QUrl nextSource() const;
+
+    /*!
+     * Returns the current playback state.
+     */
     [[nodiscard]] PlaybackState playbackState() const;
+
+    /*!
+     * Returns the status of the loaded media.
+     */
     [[nodiscard]] MediaStatus status() const;
+
+    /*!
+     * Returns the error state of the player.
+     */
     [[nodiscard]] Error error() const;
 
+    /*!
+     * Returns a human-readable description of the current error, if any.
+     */
     [[nodiscard]] QString errorString() const;
 
+    /*!
+     * Returns the duration of the current source in milliseconds.
+     */
     [[nodiscard]] qint64 duration() const;
+
+    /*!
+     * Returns the playback position in milliseconds.
+     */
     [[nodiscard]] qint64 position() const;
+
+    /*!
+     * Returns whether the current source is seekable.
+     */
     [[nodiscard]] bool seekable() const;
 
+    /*!
+     * Returns how much of a network stream has been buffered, from 0.0
+     * to 1.0.
+     */
     [[nodiscard]] qreal bufferProgress() const;
+
+    /*!
+     * Returns how many milliseconds before the end of the source
+     * aboutToFinish() is emitted.
+     */
     [[nodiscard]] int32_t prefinishMark() const;
 
 Q_SIGNALS:
+    /*!
+     * Emitted when the source property changes.
+     */
     void sourceChanged();
+
+    /*!
+     * Emitted when the queued next source changes.
+     */
     void nextSourceChanged();
+
+    /*!
+     * Emitted when the playing track changes, for example on a gapless
+     * transition or a source change.
+     */
     void trackChanged();
+
+    /*!
+     * Emitted when the playback state changes to \a newState, with the
+     * previous state in \a oldState.
+     */
     void stateChanged(PlaybackState newState, PlaybackState oldState);
+
+    /*!
+     * Emitted when the media status changes to \a status.
+     */
     void statusChanged(MediaStatus status);
+
+    /*!
+     * Emitted when the error state changes to \a error.
+     */
     void errorChanged(Error error);
+
+    /*!
+     * Emitted when the duration of the current source changes to \a
+     * durationMs milliseconds.
+     */
     void durationChanged(qint64 durationMs);
+
+    /*!
+     * Emitted while playing, when the playback position changes to \a
+     * positionMs milliseconds.
+     */
     void positionChanged(qint64 positionMs);
+
+    /*!
+     * Emitted when the seekable state of the current source changes to
+     * \a seekable.
+     */
     void seekableChanged(bool seekable);
+
+    /*!
+     * Emitted when the buffered amount of a network stream changes,
+     * with the new fraction in \a progress.
+     */
     void bufferProgressChanged(qreal progress);
+
+    /*!
+     * Emitted when the prefinish mark changes to \a msec milliseconds.
+     */
     void prefinishMarkChanged(int32_t msec);
 
+    /*!
+     * Emitted prefinishMark() milliseconds before the current source
+     * finishes. Set nextSource() in response to queue the next track
+     * for a gapless transition.
+     *
+     * \sa nextSource, setNextSource(), prefinishMark
+     */
     void aboutToFinish();
 
+    /*!
+     * Emitted when the ICY metadata of a radio stream changes, with the
+     * new \a metadata. Typically reports the track currently playing.
+     */
     void currentPlayingForRadiosChanged(const DragonIcyMetadata &metadata);
 
 public Q_SLOTS:
+    /*!
+     * Sets the media to be played to \a source. Any current playback is
+     * stopped and the position is reset.
+     */
     void setSource(const QUrl &source);
+
+    /*!
+     * Queues \a nextSource to be played when the current source
+     * finishes, providing a gapless transition.
+     */
     void setNextSource(const QUrl &nextSource);
+
+    /*!
+     * Sets the display name of the stream being played to \a name. Used
+     * when reporting ICY metadata for radio streams.
+     */
     void setStreamName(const QString &name);
+
+    /*!
+     * Seeks to \a positionMs milliseconds into the current source, when
+     * it is seekable.
+     */
     void setPosition(qint64 positionMs);
+
+    /*!
+     * Sets the prefinish mark to \a msec milliseconds.
+     *
+     * \sa aboutToFinish()
+     */
     void setPrefinishMark(int32_t msec);
+
+    /*!
+     * Starts or resumes playback of the current source.
+     */
     void play();
+
+    /*!
+     * Pauses playback. Call play() to resume from the same position.
+     */
     void pause();
+
+    /*!
+     * Stops playback and resets the position. The source remains loaded
+     * and playback can be restarted with play().
+     */
     void stop();
 
     friend class DragonDiagnostics;
