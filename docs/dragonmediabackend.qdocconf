@@ -12,6 +12,9 @@ documentationinheaders = true
 headerdirs += ../include/DragonMediaBackend
 sourcedirs += .
 
+imagedirs += ..
+images.fileextensions += *.svg
+
 outputformats = HTML
 
 navigation.landingpage = "Dragon Media Backend"

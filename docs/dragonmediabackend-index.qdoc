@@ -8,6 +8,8 @@
     \page dragonmediabackend-index.html
     \title Dragon Media Backend
 
+    \image logo.svg "Dragon Media Backend logo"
+
     Dragon Media Backend is an audio playback backend for music players.
 
     \section1 Building with CMake
