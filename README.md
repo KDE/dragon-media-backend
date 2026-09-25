@@ -8,7 +8,8 @@ Dragon Media Backend
 ------------------
 ![A mythical beast named Qilin or Kirin](logo.svg)
 
-A Qt C++ library intended for desktop music players.
+A Qt C++ library intended for desktop music players. [API documentation](https://eean.dev/dragon-media-backend/api/) is
+available.
 
 ## Features
  - Can play any audio ffmpeg decodes (~everything)
@@ -54,7 +55,12 @@ and the rest of the tech stack is cross-platform, probably it can run on anythin
 Decoding and FFT calculations are done on their own threads; audio data transfers are via lockless queue pipes. 
 
 ## Plans
-Dragon Media Backend implements a rather simple pipeline of input -> decoding -> sink (+FFT). The plan is to keep it
-that way; more complicated DSP features will be implemented via PipeWire and exclusive to it.
+Dragon Media Backend implements a rather simple pipeline of input -> decoding -> sink (+FFT). The sink drives the
+pipeline so we don't have to.
 
-Qt-based video playback functionality is a logical next step, but audio remains the focus for now.
+The plan is to keep simple; more complicated DSP features will be implemented via PipeWire and perhaps exclusive to it.
+
+This library is use-case oriented, currently that means just music players. It differs from Qt Multimedia and Phonon in
+that it will never provide raw PCM output/input, direct graph manipulation etc. 
+
+More specific plans available in the [todo file](todo.md).
