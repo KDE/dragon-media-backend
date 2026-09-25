@@ -36,13 +36,13 @@ void DragonDiagnostics::setSpectrumAnalyzer(DragonSpectrumAnalyzer *analyzer)
     d->m_analyzer = analyzer;
 }
 
-int DragonDiagnostics::audioBufferUs() const
+std::optional<std::chrono::microseconds> DragonDiagnostics::audioBufferDuration() const
 {
     DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->audioOutput) {
-        return -1;
+        return std::nullopt;
     }
-    return priv->audioOutput->sink()->audioBufferUs();
+    return priv->audioOutput->sink()->audioBufferDuration();
 }
 
 int DragonDiagnostics::audioBufferFrames() const
@@ -109,11 +109,11 @@ int DragonDiagnostics::audioUnderrunCount() const
     return priv->audioOutput->sink()->underrunCount();
 }
 
-qint64 DragonDiagnostics::audioPositionMs() const
+std::chrono::milliseconds DragonDiagnostics::audioPosition() const
 {
     DragonPlayerPrivate *priv = d->m_player->d.get();
     if (!priv || !priv->audioOutput || !priv->audioOutput->sink()) {
-        return -1;
+        return std::chrono::milliseconds{0};
     }
-    return priv->audioOutput->sink()->positionMs();
+    return priv->audioOutput->sink()->position();
 }

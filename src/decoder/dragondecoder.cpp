@@ -30,6 +30,15 @@ using namespace Qt::StringLiterals;
 
 static constexpr int IO_BUFFER_SIZE = 65536;
 
+// FFmpeg container durations are in AV_TIME_BASE units, which are microseconds.
+static std::optional<std::chrono::milliseconds> containerDuration(int64_t avDurationUs)
+{
+    if (avDurationUs == AV_NOPTS_VALUE) {
+        return std::nullopt;
+    }
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::microseconds{avDurationUs});
+}
+
 struct AvPacketDeleter {
     void operator()(AVPacket *pkt) const noexcept
     {
@@ -173,7 +182,7 @@ DragonMediaBackend::InitResult DragonDecoder::initialize()
         result.success = true;
         result.sampleRate = m_session->sampleRate;
         result.channels = m_session->nbChannels;
-        result.durationMs = (m_session->fmtCtx->duration != AV_NOPTS_VALUE) ? m_session->fmtCtx->duration / (AV_TIME_BASE / 1000) : -1;
+        result.duration = containerDuration(m_session->fmtCtx->duration);
         return result;
     }
 
@@ -212,7 +221,7 @@ DragonMediaBackend::InitResult DragonDecoder::initialize()
         return result;
     }
 
-    result.durationMs = (m_session->fmtCtx->duration != AV_NOPTS_VALUE) ? m_session->fmtCtx->duration / (AV_TIME_BASE / 1000) : -1;
+    result.duration = containerDuration(m_session->fmtCtx->duration);
     result.sampleRate = m_session->sampleRate;
     result.channels = m_session->nbChannels;
     result.success = true;
@@ -491,12 +500,12 @@ QString DragonDecoder::avErrorString(int errorCode) const
 bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
 {
     if (m_seekRequested.exchange(false, std::memory_order_acq_rel)) {
-        qint64 targetMs = m_seekTargetMs.load(std::memory_order_relaxed);
+        const auto targetMs = std::chrono::milliseconds{m_seekTarget.load(std::memory_order_relaxed)};
         AVRational msTimeBase = AVRational{1, 1000};
-        qint64 streamTimestamp = av_rescale_q(targetMs, msTimeBase, session.audioStream->time_base);
+        qint64 streamTimestamp = av_rescale_q(targetMs.count(), msTimeBase, session.audioStream->time_base);
         int seekRet = av_seek_frame(session.fmtCtx.get(), session.audioStreamIndex, streamTimestamp, AVSEEK_FLAG_BACKWARD);
         if (seekRet < 0) {
-            qCWarning(dragonMediaBackendDecoder) << "seek to" << targetMs << "ms failed:" << seekRet << "(" << avErrorString(seekRet)
+            qCWarning(dragonMediaBackendDecoder) << "seek to" << targetMs << "failed:" << seekRet << "(" << avErrorString(seekRet)
                                                  << "), continuing from current position";
         } else {
             avcodec_flush_buffers(session.codecCtx.get());
@@ -668,8 +677,8 @@ bool DragonDecoder::hasFatalError() const
     return m_hadFatalError.load(std::memory_order_relaxed);
 }
 
-void DragonDecoder::requestSeek(qint64 positionMs)
+void DragonDecoder::requestSeek(std::chrono::milliseconds position)
 {
-    m_seekTargetMs.store(std::max(qint64{0}, positionMs), std::memory_order_relaxed);
+    m_seekTarget.store(std::max(std::chrono::milliseconds::rep{0}, position.count()), std::memory_order_relaxed);
     m_seekRequested.store(true, std::memory_order_release);
 }

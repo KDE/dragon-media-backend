@@ -39,7 +39,7 @@ public:
     [[nodiscard]] qint64 deviceQueuedSamples() const override;
 
     [[nodiscard]] int audioBufferFrames() const override;
-    [[nodiscard]] int audioBufferUs() const override;
+    [[nodiscard]] std::optional<std::chrono::microseconds> audioBufferDuration() const override;
 
     [[nodiscard]] bool isDeviceOpen() const override;
     [[nodiscard]] bool isPaused() const override;

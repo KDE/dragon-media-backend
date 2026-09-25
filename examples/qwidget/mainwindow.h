@@ -9,6 +9,8 @@
 #include <DragonMediaBackend/dragonicymetadata.h>
 #include <QMainWindow>
 
+#include <chrono>
+
 class DragonPlayer;
 class DragonPlaylist;
 class DragonVisualizer;
@@ -41,8 +43,8 @@ private Q_SLOTS:
     void playLandSong();
     void playPlaylistItem(int index);
     void updatePlaybackState();
-    void updatePosition(qint64 positionMs);
-    void updateDuration(qint64 durationMs);
+    void updatePosition(std::chrono::milliseconds position);
+    void updateDuration(std::chrono::milliseconds duration);
     void setPositionFromSlider();
     void setVolumeFromSlider(int value);
     void updateStatus();
@@ -57,7 +59,7 @@ private:
 
     bool eventFilter(QObject *obj, QEvent *event) override;
 
-    [[nodiscard]] static QString formatTime(qint64 ms);
+    [[nodiscard]] static QString formatTime(std::chrono::milliseconds position);
 
     DragonPlayer *m_player = nullptr;
     DragonPlaylist *m_playlist = nullptr;
@@ -94,7 +96,7 @@ private:
     QLabel *m_underrunLabel = nullptr;
 
     bool m_seeking = false;
-    qint64 m_durationMs = 0;
+    std::chrono::milliseconds m_duration{};
     DragonIcyMetadata m_lastIcyMetadata;
 
     QComboBox *m_sinkComboBox = nullptr;

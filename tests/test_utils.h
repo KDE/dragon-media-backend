@@ -23,6 +23,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <ranges>
 #include <span>
 #include <stop_token>
@@ -30,6 +31,7 @@
 #include <vector>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 class TestFixture
 {
@@ -490,8 +492,8 @@ public:
             m_player,
             &DragonPlayer::positionChanged,
             m_player,
-            [this](qint64 pos) {
-                if (pos == 0) {
+            [this](std::chrono::milliseconds pos) {
+                if (pos == 0ms) {
                     m_events.append(u"positionChanged(0)"_s);
                 }
             },
@@ -505,8 +507,8 @@ public:
             m_player,
             &DragonPlayer::durationChanged,
             m_player,
-            [this](qint64 duration) {
-                m_events.append(u"durationChanged("_s + QString::number(duration) + u")"_s);
+            [this](std::optional<std::chrono::milliseconds> duration) {
+                m_events.append(u"durationChanged("_s + QString::number(duration ? duration->count() : -1) + u")"_s);
             },
             Qt::DirectConnection);
         m_connections.append(conn);
@@ -531,8 +533,8 @@ public:
             m_player,
             &DragonPlayer::positionChanged,
             m_player,
-            [this](qint64 pos) {
-                m_events.append(u"positionChanged("_s + QString::number(pos) + u")"_s);
+            [this](std::chrono::milliseconds pos) {
+                m_events.append(u"positionChanged("_s + QString::number(pos.count()) + u")"_s);
             },
             Qt::DirectConnection);
         m_connections.append(conn);
@@ -638,5 +640,12 @@ private:
 
 #define VERIFY_AUDIO_INACTIVE(diagnostics) QVERIFY2(!(diagnostics).isAudioActive(), u"Audio should be inactive"_s.toUtf8().constData())
 #define VERIFY_POSITION_NEAR(actual, expected, tolerance)                                                                                                      \
-    QVERIFY2(std::llabs(static_cast<qint64>(actual) - static_cast<qint64>(expected)) < static_cast<qint64>(tolerance),                                         \
-             qPrintable(u"Position mismatch: expected ~%1ms, got %2ms (tolerance %3ms)"_s.arg(expected).arg(actual).arg(tolerance)))
+    do {                                                                                                                                                       \
+        const auto actualMs_ = std::chrono::milliseconds(actual);                                                                                              \
+        const auto expectedMs_ = std::chrono::milliseconds(expected);                                                                                          \
+        const auto toleranceMs_ = std::chrono::milliseconds(tolerance);                                                                                        \
+        QVERIFY2(                                                                                                                                              \
+            std::llabs((actualMs_ - expectedMs_).count()) < toleranceMs_.count(),                                                                              \
+            qPrintable(                                                                                                                                        \
+                u"Position mismatch: expected ~%1ms, got %2ms (tolerance %3ms)"_s.arg(expectedMs_.count()).arg(actualMs_.count()).arg(toleranceMs_.count()))); \
+    } while (false)

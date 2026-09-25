@@ -11,18 +11,19 @@
 #include <QObject>
 #include <QTimer>
 
+#include <chrono>
 #include <functional>
 #include <optional>
 
 class DRAGONMEDIABACKEND_EXPORT DragonPositionEstimator : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(qint64 position READ position NOTIFY positionChanged)
+    Q_PROPERTY(std::chrono::milliseconds position READ position NOTIFY positionChanged)
 
 public:
-    using DevicePositionCallback = std::function<std::optional<qint64>()>;
+    using DevicePositionCallback = std::function<std::optional<std::chrono::milliseconds>()>;
 
-    using MonotonicClock = std::function<qint64()>;
+    using MonotonicClock = std::function<std::chrono::milliseconds()>;
 
     explicit DragonPositionEstimator(QObject *parent = nullptr);
 
@@ -30,41 +31,41 @@ public:
 
     void setMonotonicClock(MonotonicClock clock);
 
-    void setDuration(qint64 durationMs);
+    void setDuration(std::optional<std::chrono::milliseconds> duration);
 
-    [[nodiscard]] qint64 position() const;
+    [[nodiscard]] std::chrono::milliseconds position() const;
 
 public Q_SLOTS:
     void start();
 
     void freeze();
 
-    void seek(qint64 targetMs);
+    void seek(std::chrono::milliseconds target);
 
-    void trackChanged(qint64 durationMs);
+    void trackChanged(std::optional<std::chrono::milliseconds> duration);
 
     void snapToDuration();
 
-    void resetPosition(qint64 positionMs = 0);
+    void resetPosition(std::chrono::milliseconds position = {});
 
     void tick();
 
 Q_SIGNALS:
-    void positionChanged(qint64 positionMs);
+    void positionChanged(std::chrono::milliseconds position);
 
 private:
-    [[nodiscard]] qint64 elapsed() const;
-    [[nodiscard]] qint64 extrapolated() const;
-    void anchorAt(qint64 positionMs);
+    [[nodiscard]] std::chrono::milliseconds elapsed() const;
+    [[nodiscard]] std::chrono::milliseconds extrapolated() const;
+    void anchorAt(std::chrono::milliseconds position);
 
     QTimer *m_tickTimer = nullptr;
     QElapsedTimer m_clock;
     MonotonicClock m_monotonicClock;
     DevicePositionCallback m_devicePosition;
-    qint64 m_position = 0;
-    qint64 m_duration = -1;
-    qint64 m_anchorPositionMs = 0;
-    qint64 m_anchorElapsedMs = 0;
-    qint64 m_lastSyncElapsedMs = 0;
+    std::chrono::milliseconds m_position{};
+    std::optional<std::chrono::milliseconds> m_duration{};
+    std::chrono::milliseconds m_anchorPosition{};
+    std::chrono::milliseconds m_anchorElapsed{};
+    std::chrono::milliseconds m_lastSyncElapsed{};
     bool m_anchorValid = false;
 };

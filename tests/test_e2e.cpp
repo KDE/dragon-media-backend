@@ -17,6 +17,7 @@
 #include <DragonMediaBackend/dragonspectrumanalyzer.h>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 class TestE2E : public QObject
 {
@@ -62,7 +63,7 @@ void TestE2E::testPlayerWithMp3File()
     QVERIFY(player.source() == QUrl::fromLocalFile(path));
 
     QVERIFY2(durationSpy.count() >= 1, "durationChanged must be emitted after loading media");
-    QVERIFY2(player.duration() > 0, "Duration should be positive after loading media");
+    QVERIFY2(player.duration().value_or(0ms) > 0ms, "Duration should be positive after loading media");
     QVERIFY2(player.seekable(), "Player should be seekable after loading media");
 
     QVERIFY2(helper.playAndWait(), "Playback should start successfully");
@@ -80,7 +81,7 @@ void TestE2E::testPlayerWithOggFile()
     PlayerHelper helper(&player);
     QVERIFY(helper.setSourceAndWait(u"gs-3s-2c-44100hz.ogg"_s));
     QVERIFY(player.seekable());
-    QVERIFY2(player.duration() > 0, "Duration should be positive after loading OGG media");
+    QVERIFY2(player.duration().value_or(0ms) > 0ms, "Duration should be positive after loading OGG media");
 
     QVERIFY2(helper.playAndWait(), "Playback should start successfully for OGG");
     VERIFY_AUDIO_ACTIVE(diagnostics);
@@ -101,7 +102,7 @@ void TestE2E::testPlayerStopActuallyStopsAudio()
 
     VERIFY_AUDIO_ACTIVE(diagnostics);
     QTRY_VERIFY(diagnostics.audioBufferFrames() >= 0);
-    QTRY_VERIFY(diagnostics.audioBufferUs() >= 0);
+    QTRY_VERIFY(diagnostics.audioBufferDuration().has_value());
     QVERIFY(diagnostics.hasActiveDecoder());
     QVERIFY(diagnostics.decodeLoopActive() || diagnostics.decodeQueueSize() > 0);
 
@@ -109,7 +110,7 @@ void TestE2E::testPlayerStopActuallyStopsAudio()
     VERIFY_STOPPED_STATE(player);
     VERIFY_AUDIO_INACTIVE(diagnostics);
 
-    QTRY_VERIFY_WITH_TIMEOUT(diagnostics.audioBufferUs() == -1, 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(!diagnostics.audioBufferDuration().has_value(), 1000);
     QVERIFY2(diagnostics.audioBufferFrames() == -1, "Audio buffer frames should return -1 after stop");
     QVERIFY2(!diagnostics.hasActiveDecoder(), "Should not have active decoder after stop");
     QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active after stop");
@@ -328,7 +329,7 @@ void TestE2E::testGaplessGenerationCheck()
     helper.setNextSource(u"gs-3s-2c-44100hz.ogg"_s);
     QVERIFY(helper.playAndWait());
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.position() > 2000, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.position() > 2000ms, 10000);
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-1c-44100hz.flac"_s)));
 
     QVERIFY(helper.setSourceAndWait(u"gs-3s-1c-44100hz.flac"_s));
@@ -447,7 +448,7 @@ void TestE2E::testDiagnosticsBasicFunctionality()
     DragonDiagnostics diagnostics(&player);
     PlayerHelper helper(&player);
 
-    QVERIFY2(diagnostics.audioBufferUs() == -1, "Audio buffer should return -1 when stopped (no device)");
+    QVERIFY2(!diagnostics.audioBufferDuration().has_value(), "Audio buffer should be unknown when stopped (no device)");
     QVERIFY2(diagnostics.audioBufferFrames() == -1, "Audio buffer frames should return -1 when stopped (no device)");
     QVERIFY2(diagnostics.decodeQueueSize() == 0, "Decode queue should be 0 when stopped");
     QVERIFY2(diagnostics.fftQueueSize() == 0, "FFT queue should be 0 when stopped");
@@ -455,20 +456,21 @@ void TestE2E::testDiagnosticsBasicFunctionality()
     QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active when stopped");
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
-    QVERIFY2(diagnostics.audioBufferUs() == -1, "Audio buffer should return -1 before playback starts (no device yet)");
+    QVERIFY2(!diagnostics.audioBufferDuration().has_value(), "Audio buffer should be unknown before playback starts (no device yet)");
 
     QVERIFY(helper.playAndWait());
     QTest::qWait(100);
 
     VERIFY_AUDIO_ACTIVE(diagnostics);
     QVERIFY2(diagnostics.audioBufferFrames() >= 0, "Audio buffer should report >=0 frames during playback");
-    QVERIFY2(diagnostics.audioBufferUs() >= 0, "Audio buffer should report >=0 µs during playback");
+    QVERIFY2(diagnostics.audioBufferDuration().value_or(std::chrono::microseconds{0}) >= std::chrono::microseconds{0},
+             "Audio buffer should report >=0 µs during playback");
     QVERIFY2(diagnostics.hasActiveDecoder(), "Should have active decoder during playback");
     QVERIFY2(diagnostics.decodeQueueSize() > 0, "Decode queue should have samples during playback");
 
     QVERIFY(helper.stopAndWait());
 
-    QTRY_VERIFY_WITH_TIMEOUT(diagnostics.audioBufferUs() == -1, 1000);
+    QTRY_VERIFY_WITH_TIMEOUT(!diagnostics.audioBufferDuration().has_value(), 1000);
     QVERIFY2(diagnostics.audioBufferFrames() == -1, "Audio buffer frames should return -1 after stop");
     QVERIFY2(!diagnostics.hasActiveDecoder(), "Should not have active decoder after stop");
     QVERIFY2(!diagnostics.decodeLoopActive(), "Decode loop should not be active after stop");
@@ -551,7 +553,7 @@ void TestE2E::testGaplessFormatMismatch()
     QVERIFY(player.source() == QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-1c-44100hz.flac"_s)));
     QVERIFY(!player.nextSource().isValid());
 
-    QVERIFY(player.duration() > 0);
+    QVERIFY(player.duration().value_or(0ms) > 0ms);
     VERIFY_AUDIO_ACTIVE(diagnostics);
 
     const int underrunsAfter = diagnostics.audioUnderrunCount();

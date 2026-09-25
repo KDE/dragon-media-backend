@@ -6,8 +6,10 @@
 #pragma once
 
 #include <QString>
+#include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <variant>
 #include <vector>
@@ -18,7 +20,7 @@ namespace DragonMediaBackend
 struct FormatReady {
     int sampleRate = 0;
     int channels = 0;
-    qint64 durationMs = -1;
+    std::optional<std::chrono::milliseconds> duration{};
 };
 
 // A block of decoded PCM samples. `data` views a buffer kept alive by `owner`.

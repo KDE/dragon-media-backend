@@ -6,6 +6,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <coroutine>
 #include <memory>
 #include <optional>
@@ -24,7 +25,7 @@ struct InitResult {
     bool cancelled = false;
     int sampleRate = 0;
     int channels = 0;
-    qint64 durationMs = -1;
+    std::optional<std::chrono::milliseconds> duration{};
     bool isGapless = false;
     QString errorMessage;
 };

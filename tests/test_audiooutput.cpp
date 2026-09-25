@@ -34,6 +34,7 @@
 #include <vector>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 class TestAudioOutput : public QObject
 {
@@ -110,7 +111,7 @@ void TestAudioOutput::testConstruction()
     QVERIFY(!output->muted());
     QVERIFY(!output->isDeviceOpen());
     QVERIFY(output->isQueueReady());
-    QCOMPARE(output->positionMs(), 0);
+    QCOMPARE(output->position(), 0ms);
     QCOMPARE(output->totalSamplesWritten(), 0);
 }
 
@@ -470,11 +471,11 @@ void TestAudioOutput::testPositionMsCalculation()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    QVERIFY(output->positionMs() == 0);
+    QVERIFY(output->position() == 0ms);
     QVERIFY(output->totalSamplesWritten() == 0);
 
-    output->setPositionOffset(1000, DragonAudioSink::PositionResetMode::NormalTrackChange);
-    QVERIFY2(output->positionMs() == 1000, "positionMs should reflect the offset set via setPositionOffset");
+    output->setPositionOffset(1000ms, DragonAudioSink::PositionResetMode::NormalTrackChange);
+    QVERIFY2(output->position() == 1000ms, "position() should reflect the offset set via setPositionOffset");
 }
 
 void TestAudioOutput::testTotalSamplesWritten()
@@ -502,7 +503,7 @@ void TestAudioOutput::testReset()
     QTest::qWait(100);
 
     output->reset();
-    QVERIFY(output->positionMs() == 0);
+    QVERIFY(output->position() == 0ms);
     QVERIFY(output->totalSamplesWritten() == 0);
 
     output->close();
@@ -537,7 +538,7 @@ void TestAudioOutput::testStartStopLifecycle()
     QVERIFY(!output->isDeviceOpen());
 
     output->reset();
-    QVERIFY(output->positionMs() == 0);
+    QVERIFY(output->position() == 0ms);
 }
 
 void TestAudioOutput::testMultipleStartStopCycles()
@@ -597,13 +598,14 @@ void TestAudioOutput::testPositionTrackingWithData()
 
     QTest::qWait(1500);
 
-    qint64 posMs = output->positionMs();
-    QVERIFY2(posMs >= 100 && posMs <= 800, qPrintable(u"Expected position in [100, 800]ms after feeding 1s of audio (44100 stereo), got %1 ms"_s.arg(posMs)));
+    const std::chrono::milliseconds posMs = output->position();
+    QVERIFY2(posMs >= 100ms && posMs <= 800ms,
+             qPrintable(u"Expected position in [100, 800]ms after feeding 1s of audio (44100 stereo), got %1 ms"_s.arg(posMs.count())));
 
     output->close();
     output->reset();
 
-    QVERIFY(output->positionMs() == 0);
+    QVERIFY(output->position() == 0ms);
 }
 
 void TestAudioOutput::testQueueBehavior()
@@ -673,7 +675,7 @@ void TestAudioOutput::testStopWithActiveCallbacks()
     QVERIFY(!output->isDeviceOpen());
 
     output->reset();
-    QVERIFY(output->positionMs() == 0);
+    QVERIFY(output->position() == 0ms);
 }
 
 void TestAudioOutput::testRapidStartStopCycles()
@@ -719,7 +721,7 @@ void TestAudioOutput::testStopDuringStarvation()
     QVERIFY(!output->isDeviceOpen());
 
     output->reset();
-    QVERIFY(output->positionMs() == 0);
+    QVERIFY(output->position() == 0ms);
 }
 
 void TestAudioOutput::testQueueReadyApi()
@@ -760,7 +762,7 @@ void TestAudioOutput::testFlushOpensGate()
     output->setQueueReady(false);
     QVERIFY(!output->isQueueReady());
 
-    output->setPositionOffset(0, DragonAudioSink::PositionResetMode::NormalTrackChange);
+    output->setPositionOffset(0ms, DragonAudioSink::PositionResetMode::NormalTrackChange);
 
     QTest::qWait(100);
 
@@ -791,7 +793,7 @@ void TestAudioOutput::testGaplessTransition()
     const size_t queueSizeBefore = pipe.consumer().ready();
     QVERIFY2(queueSizeBefore > 0, "Queue should still have items");
 
-    output->setPositionOffset(0, DragonAudioSink::PositionResetMode::GaplessTransition);
+    output->setPositionOffset(0ms, DragonAudioSink::PositionResetMode::GaplessTransition);
 
     QTest::qWait(100);
 
@@ -820,7 +822,7 @@ void TestAudioOutput::testStartPaused()
     QVERIFY(output->isDeviceOpen());
     QVERIFY(output->hasFormat(44100, 2));
 
-    QCOMPARE(output->positionMs(), 0);
+    QCOMPARE(output->position(), 0ms);
     QCOMPARE(output->totalSamplesWritten(), 0);
 
     output->resume();
@@ -846,7 +848,7 @@ void TestAudioOutput::testPauseResumeCycle()
     fillQueue(&pipe, std::vector<float>(4096, 0.5f));
     QTest::qWait(100);
 
-    const qint64 posBefore = output->positionMs();
+    const std::chrono::milliseconds posBefore = output->position();
     const qint64 writtenBefore = output->totalSamplesWritten();
 
     QVERIFY(!output->isPaused());
@@ -857,7 +859,7 @@ void TestAudioOutput::testPauseResumeCycle()
 
     QTest::qWait(200);
 
-    QCOMPARE(output->positionMs(), posBefore);
+    QCOMPARE(output->position(), posBefore);
 
     const qint64 writtenAfterPause = output->totalSamplesWritten();
     QVERIFY2(writtenAfterPause <= writtenBefore + 2048, "Pause should stop or significantly reduce sample consumption");
@@ -938,11 +940,11 @@ void TestAudioOutput::testSeekWhilePaused()
     output->setQueueReady(false);
     QVERIFY(!output->isQueueReady());
 
-    const qint64 seekTargetMs = 30000;
-    output->setPositionOffset(seekTargetMs, DragonAudioSink::PositionResetMode::Seek);
+    const std::chrono::milliseconds seekTarget{30000};
+    output->setPositionOffset(seekTarget, DragonAudioSink::PositionResetMode::Seek);
 
-    const qint64 posAfterSeek = output->positionMs();
-    QCOMPARE(posAfterSeek, seekTargetMs);
+    const std::chrono::milliseconds posAfterSeek = output->position();
+    QCOMPARE(posAfterSeek, seekTarget);
 
     QCOMPARE(pipe.consumer().ready(), size_t(0));
 
@@ -968,18 +970,18 @@ void TestAudioOutput::testPositionStabilityDuringPause()
     QTest::qWait(100);
 
     output->pause();
-    const qint64 posAtPause = output->positionMs();
+    const std::chrono::milliseconds posAtPause = output->position();
 
     for (int i = 0; i < 5; ++i) {
         QTest::qWait(100);
-        const qint64 currentPos = output->positionMs();
+        const std::chrono::milliseconds currentPos = output->position();
         QCOMPARE(currentPos, posAtPause);
     }
 
     output->resume();
     QTest::qWait(100);
 
-    const qint64 posAfterResume = output->positionMs();
+    const std::chrono::milliseconds posAfterResume = output->position();
     QVERIFY2(posAfterResume >= posAtPause, "Position must not go backward after resume from pause");
 
     output->close();
@@ -1001,26 +1003,26 @@ void TestAudioOutput::testPositionAdvancesSmoothlyDuringPlayback()
 
     QTest::qWait(300);
 
-    QVector<qint64> samples;
+    QVector<std::chrono::milliseconds> samples;
     samples.reserve(25);
     for (int i = 0; i < 25; ++i) {
         fillQueue(&pipe, quarterSecond);
         QTest::qWait(100);
-        samples.push_back(output->positionMs());
+        samples.push_back(output->position());
     }
 
     output->close();
 
     for (qsizetype i = 1; i < samples.size(); ++i) {
-        QVERIFY2(samples[i] >= samples[i - 1] - 50,
-                 qPrintable(u"Position must not skip backwards (sample %1: %2 -> %3)"_s.arg(i).arg(samples[i - 1]).arg(samples[i])));
-        QVERIFY2(samples[i] - samples[i - 1] <= 250,
-                 qPrintable(u"Position must not leap forward in a burst (sample %1: %2 -> %3)"_s.arg(i).arg(samples[i - 1]).arg(samples[i])));
+        QVERIFY2(samples[i] >= samples[i - 1] - 50ms,
+                 qPrintable(u"Position must not skip backwards (sample %1: %2 -> %3)"_s.arg(i).arg(samples[i - 1].count()).arg(samples[i].count())));
+        QVERIFY2(samples[i] - samples[i - 1] <= 250ms,
+                 qPrintable(u"Position must not leap forward in a burst (sample %1: %2 -> %3)"_s.arg(i).arg(samples[i - 1].count()).arg(samples[i].count())));
     }
 
     for (qsizetype i = 5; i < samples.size(); ++i) {
-        QVERIFY2(samples[i] - samples[i - 5] >= 200,
-                 qPrintable(u"Position must not stall for 500ms or longer (sample %1: %2 -> %3)"_s.arg(i).arg(samples[i - 5]).arg(samples[i])));
+        QVERIFY2(samples[i] - samples[i - 5] >= 200ms,
+                 qPrintable(u"Position must not stall for 500ms or longer (sample %1: %2 -> %3)"_s.arg(i).arg(samples[i - 5].count()).arg(samples[i].count())));
     }
 }
 

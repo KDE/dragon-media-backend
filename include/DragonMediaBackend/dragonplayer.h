@@ -15,8 +15,10 @@
 #include <QString>
 #include <QUrl>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 
 class DragonAudioOutput;
 class DragonPlayerPrivate;
@@ -190,17 +192,22 @@ public:
      * \property DragonPlayer::duration
      *
      * The duration of the current source in milliseconds, or 0 for
-     * streams of unknown duration.
+     * streams of unknown duration. This qint64 property exists for
+     * QML, which cannot do arithmetic on std::chrono types; C++ code
+     * should use duration(), which reports unknown durations as an
+     * empty std::optional instead of 0.
      */
-    Q_PROPERTY(qint64 duration READ duration NOTIFY durationChanged)
+    Q_PROPERTY(qint64 duration READ durationMs NOTIFY durationChanged)
 
     /*!
      * \property DragonPlayer::position
      *
      * The playback position in milliseconds. Setting it while a source
-     * is loaded seeks playback.
+     * is loaded seeks playback. This qint64 property exists for QML,
+     * which cannot do arithmetic on std::chrono types; C++ code should
+     * use position() and setPosition() with std::chrono::milliseconds.
      */
-    Q_PROPERTY(qint64 position READ position WRITE setPosition NOTIFY positionChanged)
+    Q_PROPERTY(qint64 position READ positionMs WRITE setPositionMs NOTIFY positionChanged)
 
     /*!
      * \property DragonPlayer::seekable
@@ -223,11 +230,13 @@ public:
      *
      * How many milliseconds before the end of the source aboutToFinish()
      * is emitted, allowing the next source to be queued for a gapless
-     * transition. The default is 100 milliseconds.
+     * transition. The default is 100 milliseconds. This int32_t property
+     * exists for QML; C++ code should use prefinishMark() and
+     * setPrefinishMark() with std::chrono::milliseconds.
      *
      * \sa aboutToFinish()
      */
-    Q_PROPERTY(int32_t prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
+    Q_PROPERTY(int32_t prefinishMark READ prefinishMarkMs WRITE setPrefinishMarkMs NOTIFY prefinishMarkChanged)
 
     /*!
      * Returns the \l DragonAudioOutput instance controlling volume and
@@ -267,14 +276,15 @@ public:
     [[nodiscard]] QString errorString() const;
 
     /*!
-     * Returns the duration of the current source in milliseconds.
+     * Returns the duration of the current source, or an empty
+     * std::optional for streams of unknown duration.
      */
-    [[nodiscard]] qint64 duration() const;
+    [[nodiscard]] std::optional<std::chrono::milliseconds> duration() const;
 
     /*!
-     * Returns the playback position in milliseconds.
+     * Returns the playback position.
      */
-    [[nodiscard]] qint64 position() const;
+    [[nodiscard]] std::chrono::milliseconds position() const;
 
     /*!
      * Returns whether the current source is seekable.
@@ -288,10 +298,10 @@ public:
     [[nodiscard]] qreal bufferProgress() const;
 
     /*!
-     * Returns how many milliseconds before the end of the source
-     * aboutToFinish() is emitted.
+     * Returns how long before the end of the source aboutToFinish() is
+     * emitted.
      */
-    [[nodiscard]] int32_t prefinishMark() const;
+    [[nodiscard]] std::chrono::milliseconds prefinishMark() const;
 
 Q_SIGNALS:
     /*!
@@ -328,15 +338,15 @@ Q_SIGNALS:
 
     /*!
      * Emitted when the duration of the current source changes to \a
-     * durationMs milliseconds.
+     * duration. The optional is empty for streams of unknown duration.
      */
-    void durationChanged(qint64 durationMs);
+    void durationChanged(std::optional<std::chrono::milliseconds> duration);
 
     /*!
      * Emitted while playing, when the playback position changes to \a
-     * positionMs milliseconds.
+     * position.
      */
-    void positionChanged(qint64 positionMs);
+    void positionChanged(std::chrono::milliseconds position);
 
     /*!
      * Emitted when the seekable state of the current source changes to
@@ -351,9 +361,9 @@ Q_SIGNALS:
     void bufferProgressChanged(qreal progress);
 
     /*!
-     * Emitted when the prefinish mark changes to \a msec milliseconds.
+     * Emitted when the prefinish mark changes to \a msec.
      */
-    void prefinishMarkChanged(int32_t msec);
+    void prefinishMarkChanged(std::chrono::milliseconds msec);
 
     /*!
      * Emitted prefinishMark() milliseconds before the current source
@@ -390,17 +400,16 @@ public Q_SLOTS:
     void setStreamName(const QString &name);
 
     /*!
-     * Seeks to \a positionMs milliseconds into the current source, when
-     * it is seekable.
+     * Seeks to \a position into the current source, when it is seekable.
      */
-    void setPosition(qint64 positionMs);
+    void setPosition(std::chrono::milliseconds position);
 
     /*!
-     * Sets the prefinish mark to \a msec milliseconds.
+     * Sets the prefinish mark to \a msec.
      *
      * \sa aboutToFinish()
      */
-    void setPrefinishMark(int32_t msec);
+    void setPrefinishMark(std::chrono::milliseconds msec);
 
     /*!
      * Starts or resumes playback of the current source.
@@ -417,6 +426,17 @@ public Q_SLOTS:
      * and playback can be restarted with play().
      */
     void stop();
+
+private Q_SLOTS:
+    // Milliseconds-based slots backing the qint64/int32_t QML-facing
+    // properties; C++ code should use the std::chrono overloads above.
+    void setPositionMs(qint64 positionMs);
+    void setPrefinishMarkMs(int32_t msec);
+
+private:
+    [[nodiscard]] qint64 durationMs() const;
+    [[nodiscard]] qint64 positionMs() const;
+    [[nodiscard]] int32_t prefinishMarkMs() const;
 
     friend class DragonDiagnostics;
     friend class DragonPlayerPrivate;

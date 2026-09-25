@@ -420,13 +420,13 @@ int DragonPipeWireAudioSink::audioBufferFrames() const
     return static_cast<int>(time.queued / (currentChannels() * sizeof(float)));
 }
 
-int DragonPipeWireAudioSink::audioBufferUs() const
+std::optional<std::chrono::microseconds> DragonPipeWireAudioSink::audioBufferDuration() const
 {
-    int frames = audioBufferFrames();
+    const int frames = audioBufferFrames();
     if (frames < 0 || currentSampleRate() == 0) {
-        return -1;
+        return std::nullopt;
     }
-    return static_cast<int>((static_cast<qint64>(frames) * 1000000) / currentSampleRate());
+    return std::chrono::microseconds{(static_cast<qint64>(frames) * 1000000) / currentSampleRate()};
 }
 
 bool DragonPipeWireAudioSink::isDeviceOpen() const

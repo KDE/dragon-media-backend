@@ -78,9 +78,9 @@ bool DragonAudioSink::isQueueReady() const
     return m_queueReady.load(std::memory_order_acquire);
 }
 
-void DragonAudioSink::setPositionOffset(qint64 offsetMs, PositionResetMode mode)
+void DragonAudioSink::setPositionOffset(std::chrono::milliseconds offset, PositionResetMode mode)
 {
-    m_positionOffsetMs.store(offsetMs, std::memory_order_relaxed);
+    m_positionOffset.store(offset.count(), std::memory_order_relaxed);
 
     if (isPaused()) {
         if (mode == PositionResetMode::Seek || mode == PositionResetMode::NormalTrackChange) {
@@ -168,11 +168,11 @@ QString DragonAudioSink::applicationIconName()
     return name;
 }
 
-qint64 DragonAudioSink::positionMs() const
+std::chrono::milliseconds DragonAudioSink::position() const
 {
     int channels = m_channels.load(std::memory_order_relaxed);
     int sampleRate = m_sampleRate.load(std::memory_order_relaxed);
-    const qint64 offset = m_positionOffsetMs.load(std::memory_order_relaxed);
+    const auto offset = std::chrono::milliseconds{m_positionOffset.load(std::memory_order_relaxed)};
     if (channels <= 0 || sampleRate <= 0) {
         return offset;
     }
@@ -192,7 +192,7 @@ qint64 DragonAudioSink::positionMs() const
     }
 
     const qint64 frameCount = written / channels;
-    return (frameCount * 1000 / sampleRate) + offset;
+    return std::chrono::milliseconds{frameCount * 1000 / sampleRate} + offset;
 }
 
 bool DragonAudioSink::hasFormat(int sampleRate, int channels) const
@@ -208,7 +208,7 @@ qint64 DragonAudioSink::totalSamplesWritten() const
 void DragonAudioSink::resetPositionTracking()
 {
     m_totalSamplesWritten.store(0, std::memory_order_relaxed);
-    m_positionOffsetMs.store(0, std::memory_order_relaxed);
+    m_positionOffset.store(0, std::memory_order_relaxed);
 }
 
 void DragonAudioSink::notifyDecodeFinished()

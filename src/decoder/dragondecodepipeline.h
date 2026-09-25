@@ -46,7 +46,7 @@ public:
     bool isActive() const;
     bool hasFatalError() const;
 
-    void requestSeek(qint64 posMs);
+    void requestSeek(std::chrono::milliseconds position);
 
     using SamplesCallback = std::function<void(std::span<const float> samples, const std::stop_token &st)>;
 
@@ -69,7 +69,7 @@ Q_SIGNALS:
 
     void sessionFinished(const QUrl &source, bool hadFatalError);
 
-    void gaplessTransition(const QUrl &newSource, int sampleRate, int channels, qint64 durationMs);
+    void gaplessTransition(const QUrl &newSource, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration);
 
     void bufferProgressChanged(qreal progress);
 

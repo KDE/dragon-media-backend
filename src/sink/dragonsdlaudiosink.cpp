@@ -272,18 +272,14 @@ int DragonSdlAudioSink::audioBufferFrames() const
     return sampleFrames;
 }
 
-int DragonSdlAudioSink::audioBufferUs() const
+std::optional<std::chrono::microseconds> DragonSdlAudioSink::audioBufferDuration() const
 {
     const int frames = audioBufferFrames();
-    if (frames <= 0) {
-        return frames;
+    if (frames < 0 || currentSampleRate() <= 0) {
+        return std::nullopt;
     }
 
-    if (currentSampleRate() <= 0) {
-        return -1;
-    }
-
-    return static_cast<int>((static_cast<qint64>(frames) * 1000000) / currentSampleRate());
+    return std::chrono::microseconds{(static_cast<qint64>(frames) * 1000000) / currentSampleRate()};
 }
 
 void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int)

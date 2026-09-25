@@ -26,6 +26,7 @@
 
 using namespace Qt::StringLiterals;
 using namespace DragonMediaBackend;
+using namespace std::chrono_literals;
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -204,7 +205,7 @@ DecodeResult runDecoderCollecting(DragonDecoder &decoder, std::stop_token st = {
         FormatReady fr;
         fr.sampleRate = initRes.sampleRate;
         fr.channels = initRes.channels;
-        fr.durationMs = initRes.durationMs;
+        fr.duration = initRes.duration;
         result.format = fr;
     } else {
         DecodeError err;
@@ -375,8 +376,8 @@ void TestDecoder::testDurationInFormatReady()
     auto result = runDecoderCollecting(decoder);
 
     QVERIFY2(result.format.has_value(), "FormatReady should contain duration");
-    QVERIFY(result.format->durationMs >= 900);
-    QVERIFY(result.format->durationMs <= 1100);
+    QVERIFY(result.format->duration >= 900ms);
+    QVERIFY(result.format->duration <= 1100ms);
 }
 
 void TestDecoder::testEmptySource()

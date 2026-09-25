@@ -601,14 +601,14 @@ void DragonPulseAudioSink::clearStream()
     }
 }
 
-qint64 DragonPulseAudioSink::queuedDurationUsLocked() const
+std::optional<std::chrono::microseconds> DragonPulseAudioSink::queuedDurationLocked() const
 {
     pa_usec_t latency = 0;
     int negative = 0;
     if (pa_stream_get_latency(m_pa->stream.get(), &latency, &negative) != 0 || negative) {
-        return -1;
+        return std::nullopt;
     }
-    return static_cast<qint64>(latency);
+    return std::chrono::microseconds{static_cast<qint64>(latency)};
 }
 
 qint64 DragonPulseAudioSink::deviceQueuedSamples() const
@@ -625,12 +625,12 @@ qint64 DragonPulseAudioSink::deviceQueuedSamples() const
 
     ScopedMainloopLock lock(m_pa->mainloop.get());
 
-    const qint64 queuedUs = queuedDurationUsLocked();
-    if (queuedUs < 0) {
+    const auto queuedUs = queuedDurationLocked();
+    if (!queuedUs) {
         return 0;
     }
 
-    return queuedUs * sampleRate * channels / 1000000;
+    return queuedUs->count() * sampleRate * channels / 1000000;
 }
 
 int DragonPulseAudioSink::audioBufferFrames() const
@@ -646,22 +646,22 @@ int DragonPulseAudioSink::audioBufferFrames() const
 
     ScopedMainloopLock lock(m_pa->mainloop.get());
 
-    const qint64 queuedUs = queuedDurationUsLocked();
-    if (queuedUs < 0) {
+    const auto queuedUs = queuedDurationLocked();
+    if (!queuedUs) {
         return -1;
     }
 
-    return static_cast<int>(queuedUs * sampleRate / 1000000);
+    return static_cast<int>(queuedUs->count() * sampleRate / 1000000);
 }
 
-int DragonPulseAudioSink::audioBufferUs() const
+std::optional<std::chrono::microseconds> DragonPulseAudioSink::audioBufferDuration() const
 {
     const int frames = audioBufferFrames();
     if (frames <= 0 || currentSampleRate() <= 0) {
-        return -1;
+        return std::nullopt;
     }
 
-    return static_cast<int>((static_cast<qint64>(frames) * 1000000) / currentSampleRate());
+    return std::chrono::microseconds{(static_cast<qint64>(frames) * 1000000) / currentSampleRate()};
 }
 
 bool DragonPulseAudioSink::isDeviceOpen() const

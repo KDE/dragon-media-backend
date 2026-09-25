@@ -18,6 +18,7 @@
 #include <QUrl>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 class TestPlayerSignals : public QObject
 {
@@ -183,7 +184,7 @@ void TestPlayerSignals::testDurationChangedAfterLoadedMedia()
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
-    QVERIFY(player.duration() > 0);
+    QVERIFY(player.duration().value_or(0ms) > 0ms);
 
     QVERIFY2(tracker.containsPrefix(u"durationChanged("_s), "durationChanged must be emitted during load");
     QVERIFY2(tracker.contains(u"statusChanged(LoadedMedia)"_s), "LoadedMedia must be emitted");
@@ -287,7 +288,7 @@ void TestPlayerSignals::testSetPositionZeroAtEndOfMedia()
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::EndOfMedia);
 
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
-    player.setPosition(0);
+    player.setPosition(0ms);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 5000);
     QVERIFY2(SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadedMedia), "setPosition(0) at EndOfMedia must emit LoadedMedia");
@@ -358,7 +359,7 @@ void TestPlayerSignals::testRapidSetSourceOnlyLastProcessed()
 
     QVERIFY2(sourceSpy.count() >= 2, "Both setSource calls must emit sourceChanged");
 
-    QVERIFY2(player.duration() > 0, "Duration must be positive after loading");
+    QVERIFY2(player.duration().value_or(0ms) > 0ms, "Duration must be positive after loading");
     QVERIFY2(player.source() == sourceB, "Player source must be the last-set source");
 }
 

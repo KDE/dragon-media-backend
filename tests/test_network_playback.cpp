@@ -18,6 +18,7 @@
 #include "testhttpserver.h"
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 class TestNetworkPlayback : public QObject
 {
@@ -106,9 +107,9 @@ void TestNetworkPlayback::testPlayLocalWmaFileOverHttp()
         QSKIP("Media could not be loaded - skipping test");
     }
 
-    QTRY_VERIFY_WITH_TIMEOUT(durationSpy.count() > 0 || player.duration() > 0, 5000);
-    qDebug() << "Duration:" << player.duration() << "ms";
-    QVERIFY(player.duration() > 0);
+    QTRY_VERIFY_WITH_TIMEOUT(durationSpy.count() > 0 || player.duration().value_or(0ms) > 0ms, 5000);
+    qDebug() << "Duration:" << player.duration().value_or(0ms).count() << "ms";
+    QVERIFY(player.duration().value_or(0ms) > 0ms);
 
     qDebug() << "Starting playback...";
     player.play();
@@ -233,24 +234,24 @@ void TestNetworkPlayback::testSeekHttpFile()
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::BufferedMedia, 10000);
 
     QVERIFY2(player.seekable(), "HTTP file should be seekable");
-    QVERIFY2(player.duration() > 0, "Duration should be known");
+    QVERIFY2(player.duration().value_or(0ms) > 0ms, "Duration should be known");
 
     player.play();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 5000);
 
-    QTRY_VERIFY_WITH_TIMEOUT(player.position() > 500, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.position() > 500ms, 5000);
 
     positionSpy.clear();
     qDebug() << "Seeking to 1000ms";
-    player.setPosition(1000);
+    player.setPosition(1000ms);
 
     QTRY_VERIFY_WITH_TIMEOUT(positionSpy.count() > 0, 5000);
 
     qDebug() << "Position after seek:" << player.position();
-    QVERIFY2(player.position() >= 900 && player.position() <= 1200, "Position should be near 1000ms after seek");
+    QVERIFY2(player.position() >= 900ms && player.position() <= 1200ms, "Position should be near 1000ms after seek");
 
     QTest::qWait(500);
-    QVERIFY2(player.position() > 1000, "Playback should have advanced past 1000ms");
+    QVERIFY2(player.position() > 1000ms, "Playback should have advanced past 1000ms");
 
     player.stop();
     qDebug() << "Seek HTTP file test completed successfully!";

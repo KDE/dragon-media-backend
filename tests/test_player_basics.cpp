@@ -18,6 +18,7 @@
 #include <QUrl>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 class TestPlayerBasics : public QObject
 {
@@ -88,8 +89,8 @@ void TestPlayerBasics::testInitialState()
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
     QCOMPARE(player.error(), DragonPlayer::Error::NoError);
-    QCOMPARE(player.duration(), 0);
-    QCOMPARE(player.position(), 0);
+    QCOMPARE(player.duration(), std::nullopt);
+    QCOMPARE(player.position(), 0ms);
     QVERIFY(!player.seekable());
 }
 
@@ -506,21 +507,21 @@ void TestPlayerBasics::testPositionTracking()
 
     DragonPlayer player;
     PlayerHelper helper(&player);
-    QCOMPARE(player.position(), 0);
+    QCOMPARE(player.position(), 0ms);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
     QTest::qWait(500);
-    const qint64 posAfter500ms = player.position();
-    QVERIFY2(posAfter500ms > 0, "Position must advance during playback");
+    const std::chrono::milliseconds posAfter500ms = player.position();
+    QVERIFY2(posAfter500ms > 0ms, "Position must advance during playback");
 
     QTest::qWait(500);
-    const qint64 posAfter1000ms = player.position();
+    const std::chrono::milliseconds posAfter1000ms = player.position();
     QVERIFY2(posAfter1000ms > posAfter500ms, "Position must continue advancing during playback");
 
     player.stop();
-    const qint64 posAfterStop = player.position();
+    const std::chrono::milliseconds posAfterStop = player.position();
     QTest::qWait(300);
     QCOMPARE(player.position(), posAfterStop);
 }
@@ -530,33 +531,33 @@ void TestPlayerBasics::testSeekNoOpWithoutMedia()
     DragonPlayer player;
     QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
 
-    player.setPosition(5000);
+    player.setPosition(5000ms);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even without media");
-    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
-    QCOMPARE(player.position(), 0);
+    QCOMPARE(posSpy.at(0).at(0).value<std::chrono::milliseconds>(), 0ms);
+    QCOMPARE(player.position(), 0ms);
 
     posSpy.clear();
-    player.setPosition(10000);
+    player.setPosition(10000ms);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even without media");
-    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
-    QCOMPARE(player.position(), 0);
+    QCOMPARE(posSpy.at(0).at(0).value<std::chrono::milliseconds>(), 0ms);
+    QCOMPARE(player.position(), 0ms);
 
     posSpy.clear();
-    player.setPosition(-100);
-    QCOMPARE(player.position(), 0);
+    player.setPosition(-100ms);
+    QCOMPARE(player.position(), 0ms);
 
     player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTest::qWait(200);
 
     posSpy.clear();
-    player.setPosition(2000);
+    player.setPosition(2000ms);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even with invalid source");
-    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
+    QCOMPARE(posSpy.at(0).at(0).value<std::chrono::milliseconds>(), 0ms);
 
     posSpy.clear();
-    player.setPosition(3000);
+    player.setPosition(3000ms);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even with invalid source");
-    QCOMPARE(player.position(), 0);
+    QCOMPARE(player.position(), 0ms);
 }
 
 void TestPlayerBasics::testSeekBehaviorWithValidMedia()
@@ -568,7 +569,7 @@ void TestPlayerBasics::testSeekBehaviorWithValidMedia()
     DragonPlayer player;
     PlayerHelper helper(&player);
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
-    QVERIFY(player.duration() > 0);
+    QVERIFY2(player.duration().value_or(0ms) > 0ms, "Duration must be known");
     QVERIFY(player.seekable());
 
     QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
@@ -579,9 +580,10 @@ void TestPlayerBasics::testSeekBehaviorWithValidMedia()
     QTest::qWait(200);
     posSpy.clear();
 
-    player.setPosition(1000);
+    player.setPosition(1000ms);
     QTRY_VERIFY_WITH_TIMEOUT(posSpy.count() >= 1, 5000);
-    QVERIFY2(player.position() >= 800 && player.position() <= 1200, qPrintable(u"Position should be near 1000ms after seek, got %1"_s.arg(player.position())));
+    QVERIFY2(player.position() >= 800ms && player.position() <= 1200ms,
+             qPrintable(u"Position should be near 1000ms after seek, got %1"_s.arg(player.position().count())));
 
     player.stop();
 }
@@ -639,16 +641,16 @@ void TestPlayerBasics::testSetPositionEmitsDefaultWithoutMedia()
     DragonPlayer player;
     QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
 
-    player.setPosition(5000);
+    player.setPosition(5000ms);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even without media");
-    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
-    QCOMPARE(player.position(), 0);
+    QCOMPARE(posSpy.at(0).at(0).value<std::chrono::milliseconds>(), 0ms);
+    QCOMPARE(player.position(), 0ms);
 
     posSpy.clear();
-    player.setPosition(10000);
+    player.setPosition(10000ms);
     QVERIFY2(posSpy.count() >= 1, "setPosition() must emit positionChanged even without media");
-    QCOMPARE(posSpy.at(0).at(0).toLongLong(), 0);
-    QCOMPARE(player.position(), 0);
+    QCOMPARE(posSpy.at(0).at(0).value<std::chrono::milliseconds>(), 0ms);
+    QCOMPARE(player.position(), 0ms);
 }
 
 void TestPlayerBasics::testInvalidMediaStaysStopped()

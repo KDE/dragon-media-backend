@@ -17,6 +17,8 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <chrono>
+
 namespace
 {
 constexpr char kBridgeClass[] = "org/kde/dragonqmlexample/playback/DragonBridge";
@@ -42,7 +44,7 @@ void nativeStop(JNIEnv *, jobject)
 
 void nativeSeekTo(JNIEnv *, jobject, jlong positionMs)
 {
-    QMetaObject::invokeMethod(g_player, "setPosition", Qt::QueuedConnection, Q_ARG(qint64, positionMs));
+    QMetaObject::invokeMethod(g_player, "setPosition", Qt::QueuedConnection, Q_ARG(std::chrono::milliseconds, std::chrono::milliseconds{positionMs}));
 }
 
 void nativeSetDucking(JNIEnv *, jobject, jboolean duck)
@@ -118,7 +120,7 @@ DragonAndroidMediaSessionController::DragonAndroidMediaSessionController(DragonP
 
     pushIntMethod("onStateChanged", "(I)V", jint(player->playbackState()));
     pushIntMethod("onStatusChanged", "(I)V", jint(player->status()));
-    pushLongMethod("onDurationChanged", "(J)V", jlong(player->duration()));
+    pushLongMethod("onDurationChanged", "(J)V", jlong(player->duration().value_or(std::chrono::milliseconds{0}).count()));
     pushBoolMethod("onSeekableChanged", "(Z)V", jboolean(player->seekable()));
     pushError(player->error(), player->errorString());
 
@@ -142,8 +144,8 @@ DragonAndroidMediaSessionController::DragonAndroidMediaSessionController(DragonP
         pushIntMethod("onStatusChanged", "(I)V", jint(status));
     });
 
-    connect(player, &DragonPlayer::durationChanged, this, [](qint64 durationMs) {
-        pushLongMethod("onDurationChanged", "(J)V", jlong(durationMs));
+    connect(player, &DragonPlayer::durationChanged, this, [](std::optional<std::chrono::milliseconds> duration) {
+        pushLongMethod("onDurationChanged", "(J)V", jlong(duration ? duration->count() : 0));
     });
 
     connect(player, &DragonPlayer::seekableChanged, this, [](bool seekable) {
@@ -166,7 +168,7 @@ DragonAndroidMediaSessionController::DragonAndroidMediaSessionController(DragonP
     m_positionTimer->setInterval(500);
     connect(m_positionTimer, &QTimer::timeout, this, [this]() {
         if (m_player->playbackState() == DragonPlayer::PlaybackState::PlayingState) {
-            pushLongMethod("onPositionChanged", "(J)V", jlong(m_player->position()));
+            pushLongMethod("onPositionChanged", "(J)V", jlong(m_player->position().count()));
         } else {
             m_positionTimer->stop();
         }

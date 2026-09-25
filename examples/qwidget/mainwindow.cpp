@@ -14,6 +14,8 @@
 #include <DragonMediaBackend/dragonplayer.h>
 #include <DragonMediaBackend/dragonspectrumanalyzer.h>
 
+#include <chrono>
+
 #include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
@@ -230,8 +232,8 @@ void MainWindow::setupUi()
     connect(diagTimer, &QTimer::timeout, this, [this]() {
         if (!m_diagnostics)
             return;
-        const int µs = m_diagnostics->audioBufferUs();
-        m_sdlµsDiagLabel->display(µs);
+        const auto bufferUs = m_diagnostics->audioBufferDuration();
+        m_sdlµsDiagLabel->display(bufferUs ? static_cast<int>(bufferUs->count()) : -1);
 
         const std::size_t decodeSamples = m_diagnostics->decodeQueueSize();
         m_decodeDiagLabel->display(static_cast<int>(decodeSamples));
@@ -287,13 +289,17 @@ void MainWindow::connectPlayer()
         m_seeking = true;
     });
     m_playerConnections << connect(m_seekSlider, &QSlider::sliderMoved, this, [this](int position) {
-        m_player->setPosition(static_cast<qint64>(position));
+        m_player->setPosition(std::chrono::milliseconds{position});
     });
     m_playerConnections << connect(m_seekSlider, &QSlider::sliderReleased, this, [this]() {
         m_seeking = false;
     });
     m_playerConnections << connect(m_player, &DragonPlayer::positionChanged, this, &MainWindow::updatePosition);
-    m_playerConnections << connect(m_player, &DragonPlayer::durationChanged, this, &MainWindow::updateDuration);
+    m_playerConnections << connect(m_player, &DragonPlayer::durationChanged, this, [this](std::optional<std::chrono::milliseconds> duration) {
+        if (duration) {
+            updateDuration(*duration);
+        }
+    });
 
     m_playerConnections << connect(m_volumeSlider, &QSlider::valueChanged, this, &MainWindow::setVolumeFromSlider);
     m_playerConnections << connect(m_player->audioOutput(), &DragonAudioOutput::volumeChanged, this, [this]() {
@@ -329,7 +335,10 @@ void MainWindow::changeAudioSink(int index)
 
     QList<QUrl> currentTracks = m_playlist->tracks();
     int currentIndex = m_playlist->currentIndex();
-    qint64 currentPosition = m_player->position();
+    qint64 currentPosition = 0;
+    if (const auto pos = m_player->position(); pos >= std::chrono::milliseconds{0}) {
+        currentPosition = pos.count();
+    }
     bool isPlaying = m_player->playbackState() == DragonPlayer::PlaybackState::PlayingState;
     qreal currentVolume = m_player->audioOutput()->volume();
     bool gaplessEnabled = m_playlist->gaplessEnabled();
@@ -362,7 +371,7 @@ void MainWindow::changeAudioSink(int index)
     if (!currentTracks.isEmpty()) {
         m_playlist->addTracks(currentTracks);
         m_playlist->setCurrentIndex(currentIndex);
-        m_player->setPosition(currentPosition);
+        m_player->setPosition(std::chrono::milliseconds{currentPosition});
         if (isPlaying) {
             m_player->play();
         }
@@ -477,25 +486,25 @@ void MainWindow::updatePlaybackState()
     }
 }
 
-void MainWindow::updatePosition(qint64 positionMs)
+void MainWindow::updatePosition(std::chrono::milliseconds position)
 {
     if (!m_seeking)
-        m_seekSlider->setValue(static_cast<int>(positionMs));
+        m_seekSlider->setValue(static_cast<int>(position.count()));
 
-    m_timeLabel->setText("%1 / %2"_L1.arg(formatTime(positionMs)).arg(formatTime(m_durationMs)));
+    m_timeLabel->setText("%1 / %2"_L1.arg(formatTime(position)).arg(formatTime(m_duration)));
 }
 
-void MainWindow::updateDuration(qint64 durationMs)
+void MainWindow::updateDuration(std::chrono::milliseconds duration)
 {
-    m_durationMs = durationMs;
-    m_seekSlider->setMaximum(static_cast<int>(durationMs));
-    m_timeLabel->setText("%1 / %2"_L1.arg(formatTime(m_player->position())).arg(formatTime(durationMs)));
+    m_duration = duration;
+    m_seekSlider->setMaximum(static_cast<int>(duration.count()));
+    m_timeLabel->setText("%1 / %2"_L1.arg(formatTime(m_player->position())).arg(formatTime(duration)));
 }
 
 void MainWindow::setPositionFromSlider()
 {
     m_seeking = false;
-    m_player->setPosition(static_cast<qint64>(m_seekSlider->value()));
+    m_player->setPosition(std::chrono::milliseconds{m_seekSlider->value()});
 }
 
 bool MainWindow::eventFilter(QObject *obj, QEvent *event)
@@ -508,7 +517,7 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
         const int min = m_seekSlider->minimum();
         const int max = m_seekSlider->maximum();
         const int targetValue = min + static_cast<int>(ratio * (max - min));
-        m_player->setPosition(static_cast<qint64>(targetValue));
+        m_player->setPosition(std::chrono::milliseconds{targetValue});
         return false;
     }
     return QMainWindow::eventFilter(obj, event);
@@ -568,11 +577,12 @@ void MainWindow::updatePlaylistCurrentIndex(int index)
     m_prevButton->setEnabled(index > 0);
 }
 
-QString MainWindow::formatTime(qint64 ms)
+QString MainWindow::formatTime(std::chrono::milliseconds position)
 {
-    if (ms < 0)
+    if (position < std::chrono::milliseconds{0})
         return "00:00"_L1;
 
+    const qint64 ms = position.count();
     const qint64 totalSeconds = ms / 1000;
     const qint64 minutes = totalSeconds / 60;
     const qint64 seconds = totalSeconds % 60;

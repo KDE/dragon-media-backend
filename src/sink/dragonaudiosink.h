@@ -15,6 +15,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -53,9 +54,9 @@ public:
     [[nodiscard]] virtual bool isPaused() const = 0;
 
     // --- Diagnostics ---
-    [[nodiscard]] virtual int audioBufferUs() const
+    [[nodiscard]] virtual std::optional<std::chrono::microseconds> audioBufferDuration() const
     {
-        return -1;
+        return std::nullopt;
     }
     [[nodiscard]] virtual int audioBufferFrames() const
     {
@@ -83,7 +84,7 @@ public:
         NormalTrackChange
     };
 
-    void setPositionOffset(qint64 offsetMs, PositionResetMode mode = PositionResetMode::NormalTrackChange);
+    void setPositionOffset(std::chrono::milliseconds offset, PositionResetMode mode = PositionResetMode::NormalTrackChange);
 
     [[nodiscard]] float volume() const;
     void setVolume(float volume);
@@ -95,7 +96,7 @@ public:
     [[nodiscard]] qint64 totalSamplesWritten() const;
     void resetPositionTracking();
 
-    [[nodiscard]] qint64 positionMs() const;
+    [[nodiscard]] std::chrono::milliseconds position() const;
 
     virtual void clearStream() = 0;
 
@@ -149,7 +150,7 @@ private:
     std::atomic<DragonPipe<float> *> m_audioPipe{nullptr};
     std::atomic<DragonPipe<DragonPcmBlock> *> m_fftPipe{nullptr};
 
-    std::atomic<qint64> m_positionOffsetMs{0};
+    std::atomic<std::chrono::milliseconds::rep> m_positionOffset{0};
 
     float m_volume = 1.0f;
     bool m_muted = false;

@@ -49,7 +49,7 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
     if (initRes.success) {
         result.sampleRate = initRes.sampleRate;
         result.channels = initRes.channels;
-        result.duration = initRes.durationMs;
+        result.duration = initRes.duration ? initRes.duration->count() : 0;
     } else {
         result.hadError = true;
         result.errorMessage = initRes.errorMessage;

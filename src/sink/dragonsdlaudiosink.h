@@ -39,7 +39,7 @@ public:
 
     // Diagnostic helpers
     [[nodiscard]] int audioBufferFrames() const override;
-    [[nodiscard]] int audioBufferUs() const override;
+    [[nodiscard]] std::optional<std::chrono::microseconds> audioBufferDuration() const override;
 
 private:
     static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);

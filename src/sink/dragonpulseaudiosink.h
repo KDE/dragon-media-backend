@@ -43,7 +43,7 @@ public:
     [[nodiscard]] qint64 deviceQueuedSamples() const override;
 
     [[nodiscard]] int audioBufferFrames() const override;
-    [[nodiscard]] int audioBufferUs() const override;
+    [[nodiscard]] std::optional<std::chrono::microseconds> audioBufferDuration() const override;
 
     [[nodiscard]] bool isDeviceOpen() const override;
     [[nodiscard]] bool isPaused() const override;
@@ -65,7 +65,7 @@ private:
     void resetStreamLocked();
     void applyVolume(float linearGain);
     void requestSinkInputInfo();
-    [[nodiscard]] qint64 queuedDurationUsLocked() const;
+    [[nodiscard]] std::optional<std::chrono::microseconds> queuedDurationLocked() const;
 
     struct PaState;
     std::unique_ptr<PaState> m_pa;

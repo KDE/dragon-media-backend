@@ -9,8 +9,10 @@
 
 #include <QObject>
 
+#include <chrono>
 #include <cstddef>
 #include <memory>
+#include <optional>
 
 class DragonPlayer;
 class DragonSpectrumAnalyzer;
@@ -25,7 +27,7 @@ public:
 
     void setSpectrumAnalyzer(DragonSpectrumAnalyzer *analyzer);
 
-    [[nodiscard]] int audioBufferUs() const;
+    [[nodiscard]] std::optional<std::chrono::microseconds> audioBufferDuration() const;
 
     [[nodiscard]] int audioBufferFrames() const;
 
@@ -41,7 +43,7 @@ public:
 
     [[nodiscard]] int audioUnderrunCount() const;
 
-    [[nodiscard]] qint64 audioPositionMs() const;
+    [[nodiscard]] std::chrono::milliseconds audioPosition() const;
 
 private:
     std::unique_ptr<DragonDiagnosticsPrivate> d;

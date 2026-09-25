@@ -29,12 +29,14 @@
 
 using namespace Qt::StringLiterals;
 using namespace DragonMediaBackend;
+using namespace std::chrono_literals;
 
 namespace
 {
-dragon::compat::generator<DecodeEvent> createTestGenerator(int sampleRate, int channels, qint64 durationMs, std::vector<std::vector<float>> sampleBatches)
+dragon::compat::generator<DecodeEvent>
+createTestGenerator(int sampleRate, int channels, std::chrono::milliseconds duration, std::vector<std::vector<float>> sampleBatches)
 {
-    co_yield FormatReady{sampleRate, channels, durationMs};
+    co_yield FormatReady{sampleRate, channels, duration};
 
     for (const auto &batch : sampleBatches) {
         if (!batch.empty()) {
@@ -53,7 +55,7 @@ dragon::compat::generator<DecodeEvent> createErrorGenerator(QString errorMessage
 
 dragon::compat::generator<DecodeEvent> createErrorMidStreamGenerator()
 {
-    co_yield FormatReady{44100, 2, 1000};
+    co_yield FormatReady{44100, 2, std::chrono::milliseconds{1000}};
     co_yield SamplesChunk{};
     co_yield DecodeError{u"Mid-stream error"_s};
     co_yield DecodeEof{};
@@ -138,7 +140,7 @@ private Q_SLOTS:
 
 void TestGeneratorInfrastructure::testFormatReadyFirst()
 {
-    auto gen = createTestGenerator(44100, 2, 3000, {});
+    auto gen = createTestGenerator(44100, 2, 3000ms, {});
     auto it = gen.begin();
 
     QVERIFY(it != gen.end());
@@ -147,14 +149,14 @@ void TestGeneratorInfrastructure::testFormatReadyFirst()
     auto fr = std::get<FormatReady>(*it);
     QCOMPARE(fr.sampleRate, 44100);
     QCOMPARE(fr.channels, 2);
-    QCOMPARE(fr.durationMs, 3000);
+    QCOMPARE(fr.duration, std::chrono::milliseconds{3000});
 }
 
 void TestGeneratorInfrastructure::testSamplesChunkOrdering()
 {
     std::vector<std::vector<float>> batches = {{0.1f, 0.2f, 0.3f, 0.4f}, {0.5f, 0.6f, 0.7f, 0.8f}, {0.9f, 1.0f, 1.1f, 1.2f}};
 
-    auto gen = createTestGenerator(48000, 2, 5000, batches);
+    auto gen = createTestGenerator(48000, 2, 5000ms, batches);
 
     int eventCount = 0;
     int samplesSeen = 0;
@@ -197,7 +199,7 @@ void TestGeneratorInfrastructure::testDecodeEofLast()
 {
     std::vector<std::vector<float>> batches = {{1.0f, 2.0f}};
 
-    auto gen = createTestGenerator(44100, 1, 1000, batches);
+    auto gen = createTestGenerator(44100, 1, 1000ms, batches);
 
     std::optional<DecodeEvent> lastEvent;
     for (auto event : gen) {
@@ -233,7 +235,7 @@ void TestGeneratorInfrastructure::testSpanDataCopyableBeforeAdvance()
     std::vector<float> batch2 = {3.0f, 4.0f};
     std::vector<std::vector<float>> batches = {batch1, batch2};
 
-    auto gen = createTestGenerator(44100, 2, 1000, batches);
+    auto gen = createTestGenerator(44100, 2, 1000ms, batches);
 
     auto it = gen.begin();
     ++it;
@@ -261,7 +263,7 @@ void TestGeneratorInfrastructure::testEmptySampleBatches()
 {
     std::vector<std::vector<float>> batches = {{}, {1.0f, 2.0f}, {}};
 
-    auto gen = createTestGenerator(44100, 2, 1000, batches);
+    auto gen = createTestGenerator(44100, 2, 1000ms, batches);
 
     int samplesEvents = 0;
     int totalSamples = 0;
@@ -320,8 +322,8 @@ void TestGeneratorInfrastructure::testErrorMidStream()
 
 void TestGeneratorInfrastructure::testMultipleGeneratorsIndependent()
 {
-    auto gen1 = createTestGenerator(44100, 2, 3000, {{1.0f, 2.0f}});
-    auto gen2 = createTestGenerator(48000, 1, 5000, {{3.0f, 4.0f, 5.0f}});
+    auto gen1 = createTestGenerator(44100, 2, 3000ms, {{1.0f, 2.0f}});
+    auto gen2 = createTestGenerator(48000, 1, 5000ms, {{3.0f, 4.0f, 5.0f}});
 
     std::vector<int> rates1, rates2;
 
@@ -350,7 +352,7 @@ void TestGeneratorInfrastructure::testGeneratorPauseAndResume()
         batches.push_back({static_cast<float>(i)});
     }
 
-    auto gen = createTestGenerator(44100, 2, 10000, batches);
+    auto gen = createTestGenerator(44100, 2, 10000ms, batches);
 
     auto it = gen.begin();
     QVERIFY(it != gen.end());

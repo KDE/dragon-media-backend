@@ -252,19 +252,19 @@ void DragonDecodePipeline::processDecodeCompletion()
 
         int sampleRate = 0;
         int channels = 0;
-        qint64 durationMs = -1;
+        std::optional<std::chrono::milliseconds> duration{};
         if (m_pendingGaplessCompletion && m_pendingGaplessCompletion->isReady()) {
             const auto result = m_pendingGaplessCompletion->result();
             sampleRate = result.sampleRate;
             channels = result.channels;
-            durationMs = result.durationMs;
+            duration = result.duration;
         }
 
         plock.unlock();
 
         qCDebug(dragonMediaBackendDecode) << "decode thread gapless transition, decoder swapped for" << newSource.toString() << "sr=" << sampleRate
-                                          << "ch=" << channels << "duration=" << durationMs;
-        Q_EMIT gaplessTransition(newSource, sampleRate, channels, durationMs);
+                                          << "ch=" << channels << "duration=" << duration.value_or(std::chrono::milliseconds{-1}).count() << "ms";
+        Q_EMIT gaplessTransition(newSource, sampleRate, channels, duration);
     } else {
         const QUrl finishedSource = m_currentSource;
         plock.unlock();
@@ -498,11 +498,11 @@ bool DragonDecodePipeline::hasFatalError() const
     return m_activeDecoder && m_activeDecoder->hasFatalError();
 }
 
-void DragonDecodePipeline::requestSeek(qint64 posMs)
+void DragonDecodePipeline::requestSeek(std::chrono::milliseconds position)
 {
     std::scoped_lock lock(m_decoderMutex);
     if (m_activeDecoder) {
-        m_activeDecoder->requestSeek(posMs);
+        m_activeDecoder->requestSeek(position);
     }
 }
 
@@ -641,7 +641,7 @@ InitResult DragonDecodePipeline::makeSuccessResult(const FormatReady &fr, bool i
     result.success = true;
     result.sampleRate = fr.sampleRate;
     result.channels = fr.channels;
-    result.durationMs = fr.durationMs;
+    result.duration = fr.duration;
     result.isGapless = isGapless;
     return result;
 }

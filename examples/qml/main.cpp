@@ -16,9 +16,11 @@
 #include <QStringView>
 #include <QTimer>
 #include <QUrl>
+
 #include <QtQml/qqml.h>
 #include <QtQml/qqmlapplicationengine.h>
 #include <QtQml/qqmlcontext.h>
+#include <chrono>
 
 #ifdef Q_OS_ANDROID
 #include "mediasessioncontroller.h"
@@ -121,7 +123,7 @@ int main(int argc, char *argv[])
         if (autoplaySeekMs >= 0) {
             QTimer::singleShot(1500, &player, [seekMs = autoplaySeekMs, &player]() {
                 qDebug() << "autoplay: seek to" << seekMs << "ms (seekable:" << player.seekable() << ")";
-                player.setPosition(seekMs);
+                player.setPosition(std::chrono::milliseconds{seekMs});
             });
         }
     }

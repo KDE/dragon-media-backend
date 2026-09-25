@@ -18,7 +18,9 @@
 
 #include <QCoroTask>
 #include <atomic>
+#include <chrono>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stop_token>
 #include <vector>
@@ -55,7 +57,7 @@ private Q_SLOTS:
     void onDecodeFinished(const QUrl &source, bool hadFatalError);
     void onDecodeError(const QString &message);
 
-    void onGaplessTransition(const QUrl &newSource, int sampleRate, int channels, qint64 durationMs);
+    void onGaplessTransition(const QUrl &newSource, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration);
 
     void onStreamStalled();
     void onStreamBuffering();
@@ -86,7 +88,7 @@ private:
     DragonPlayer::Error currentError = DragonPlayer::Error::NoError;
     QString currentErrorString;
     DragonPlayer::PlaybackState requestedPlaybackState = DragonPlayer::PlaybackState::StoppedState;
-    qint64 currentDuration = 0;
+    std::optional<std::chrono::milliseconds> currentDuration{};
     bool currentSeekable = false;
     bool currentIsLocal = false;
     int currentSampleRate = 0;
@@ -102,7 +104,7 @@ private:
 
     uint64_t loadGeneration = 0;
 
-    int32_t prefinishMark = 0;
+    std::chrono::milliseconds prefinishMark{};
     bool aboutToFinishEmitted = false;
     bool inGaplessSetSource = false;
 };

@@ -9,18 +9,21 @@
 
 #include <QSignalSpy>
 
+#include <chrono>
 #include <optional>
+
+using namespace std::chrono_literals;
 
 namespace
 {
 struct FakeDevice {
-    std::optional<qint64> position;
+    std::optional<std::chrono::milliseconds> position;
 };
 
 class EstimatorHarness
 {
 public:
-    explicit EstimatorHarness(std::optional<qint64> devicePosition = qint64{0})
+    explicit EstimatorHarness(std::optional<std::chrono::milliseconds> devicePosition = std::chrono::milliseconds{0})
     {
         estimator.setMonotonicClock([this]() {
             return now;
@@ -37,7 +40,7 @@ public:
     EstimatorHarness &operator=(EstimatorHarness &&) = delete;
 
     DragonPositionEstimator estimator;
-    qint64 now = 0;
+    std::chrono::milliseconds now{0};
     FakeDevice device;
 };
 }
@@ -75,38 +78,38 @@ void TestPositionEstimator::testFrozenByDefault()
     EstimatorHarness h;
     QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
 
-    h.now = 5000;
+    h.now = 5000ms;
     h.estimator.tick();
 
-    QCOMPARE(h.estimator.position(), 0LL);
+    QCOMPARE(h.estimator.position(), 0ms);
     QCOMPARE(spy.count(), 0);
 }
 
 void TestPositionEstimator::testStartAnchorsToDeviceOnFirstTick()
 {
-    EstimatorHarness h{1234};
+    EstimatorHarness h{std::chrono::milliseconds{1234}};
 
     h.estimator.start();
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 1234LL);
+    QCOMPARE(h.estimator.position(), 1234ms);
 
-    h.now += 100;
+    h.now += 100ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 1334LL);
+    QCOMPARE(h.estimator.position(), 1334ms);
 }
 
 void TestPositionEstimator::testStartWithoutDeviceFallsBackToLastPosition()
 {
     EstimatorHarness h{std::nullopt};
 
-    h.estimator.resetPosition(700);
+    h.estimator.resetPosition(700ms);
     h.estimator.start();
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 700LL);
+    QCOMPARE(h.estimator.position(), 700ms);
 
-    h.now += 50;
+    h.now += 50ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 750LL);
+    QCOMPARE(h.estimator.position(), 750ms);
 }
 
 void TestPositionEstimator::testExtrapolatesBetweenSyncPoints()
@@ -116,8 +119,8 @@ void TestPositionEstimator::testExtrapolatesBetweenSyncPoints()
     h.estimator.start();
     h.estimator.tick();
 
-    h.device.position = 0;
-    for (qint64 t = 50; t <= 450; t += 50) {
+    h.device.position = 0ms;
+    for (auto t = 50ms; t <= 450ms; t += 50ms) {
         h.now = t;
         h.estimator.tick();
         QCOMPARE(h.estimator.position(), t);
@@ -132,15 +135,15 @@ void TestPositionEstimator::testNoReanchorWithinTolerance()
     h.estimator.start();
     h.estimator.tick();
 
-    h.now = 500;
-    h.device.position = 400;
+    h.now = 500ms;
+    h.device.position = 400ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 500LL);
+    QCOMPARE(h.estimator.position(), 500ms);
 
-    h.now = 1000;
-    h.device.position = 880;
+    h.now = 1000ms;
+    h.device.position = 880ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 1000LL);
+    QCOMPARE(h.estimator.position(), 1000ms);
     QCOMPARE(spy.count(), 3);
 }
 
@@ -151,15 +154,15 @@ void TestPositionEstimator::testReanchorsWhenDriftExceedsTolerance()
     h.estimator.start();
     h.estimator.tick();
 
-    h.now = 500;
-    h.device.position = 100;
+    h.now = 500ms;
+    h.device.position = 100ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 100LL);
+    QCOMPARE(h.estimator.position(), 100ms);
 
-    h.now = 600;
-    h.device.position = 200;
+    h.now = 600ms;
+    h.device.position = 200ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 200LL);
+    QCOMPARE(h.estimator.position(), 200ms);
 }
 
 void TestPositionEstimator::testFreezeHoldsPositionAndStopsTicking()
@@ -169,156 +172,156 @@ void TestPositionEstimator::testFreezeHoldsPositionAndStopsTicking()
 
     h.estimator.start();
     h.estimator.tick();
-    h.now = 300;
+    h.now = 300ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 300LL);
+    QCOMPARE(h.estimator.position(), 300ms);
 
     h.estimator.freeze();
-    QCOMPARE(h.estimator.position(), 300LL);
+    QCOMPARE(h.estimator.position(), 300ms);
 
-    h.now = 10000;
+    h.now = 10000ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 300LL);
+    QCOMPARE(h.estimator.position(), 300ms);
     QCOMPARE(spy.count(), 2);
 
-    h.device.position = 300;
+    h.device.position = 300ms;
     h.estimator.start();
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 300LL);
-    h.now = 10100;
+    QCOMPARE(h.estimator.position(), 300ms);
+    h.now = 10100ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 400LL);
+    QCOMPARE(h.estimator.position(), 400ms);
 }
 
 void TestPositionEstimator::testSeekReportsTargetImmediatelyAndReanchors()
 {
     EstimatorHarness h{std::nullopt};
-    h.estimator.setDuration(3000);
+    h.estimator.setDuration(3000ms);
     QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
 
-    h.estimator.seek(1000);
+    h.estimator.seek(1000ms);
     QCOMPARE(spy.count(), 1);
-    QCOMPARE(spy.at(0).at(0).toLongLong(), 1000LL);
-    QCOMPARE(h.estimator.position(), 1000LL);
+    QCOMPARE(spy.at(0).at(0).value<std::chrono::milliseconds>(), 1000ms);
+    QCOMPARE(h.estimator.position(), 1000ms);
 
     h.estimator.start();
     h.estimator.tick();
-    h.now = 200;
+    h.now = 200ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 1200LL);
+    QCOMPARE(h.estimator.position(), 1200ms);
 
-    h.now = 500;
-    h.device.position = 1050;
+    h.now = 500ms;
+    h.device.position = 1050ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 1050LL);
+    QCOMPARE(h.estimator.position(), 1050ms);
 }
 
 void TestPositionEstimator::testSeekClampsToDuration()
 {
     EstimatorHarness h;
-    h.estimator.setDuration(3000);
+    h.estimator.setDuration(3000ms);
     QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
 
-    h.estimator.seek(5000);
-    QCOMPARE(h.estimator.position(), 3000LL);
-    QCOMPARE(spy.last().at(0).toLongLong(), 3000LL);
+    h.estimator.seek(5000ms);
+    QCOMPARE(h.estimator.position(), 3000ms);
+    QCOMPARE(spy.last().at(0).value<std::chrono::milliseconds>(), 3000ms);
 
-    h.estimator.seek(-100);
-    QCOMPARE(h.estimator.position(), 0LL);
-    QCOMPARE(spy.last().at(0).toLongLong(), 0LL);
+    h.estimator.seek(-100ms);
+    QCOMPARE(h.estimator.position(), 0ms);
+    QCOMPARE(spy.last().at(0).value<std::chrono::milliseconds>(), 0ms);
     QCOMPARE(spy.count(), 2);
 }
 
 void TestPositionEstimator::testSeekWhileFrozenDoesNotAdvance()
 {
     EstimatorHarness h{std::nullopt};
-    h.estimator.setDuration(3000);
+    h.estimator.setDuration(3000ms);
 
-    h.estimator.seek(1500);
-    h.now = 1000;
+    h.estimator.seek(1500ms);
+    h.now = 1000ms;
     h.estimator.tick();
 
-    QCOMPARE(h.estimator.position(), 1500LL);
+    QCOMPARE(h.estimator.position(), 1500ms);
 }
 
 void TestPositionEstimator::testTrackChangedResetsToZeroWithNewDuration()
 {
-    EstimatorHarness h{2500};
-    h.estimator.setDuration(3000);
+    EstimatorHarness h{std::chrono::milliseconds{2500}};
+    h.estimator.setDuration(3000ms);
     QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
 
     h.estimator.start();
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 2500LL);
+    QCOMPARE(h.estimator.position(), 2500ms);
 
-    h.estimator.trackChanged(4000);
-    QCOMPARE(h.estimator.position(), 0LL);
-    QCOMPARE(spy.last().at(0).toLongLong(), 0LL);
+    h.estimator.trackChanged(4000ms);
+    QCOMPARE(h.estimator.position(), 0ms);
+    QCOMPARE(spy.last().at(0).value<std::chrono::milliseconds>(), 0ms);
 
-    h.device.position = 0;
-    h.now = 100;
+    h.device.position = 0ms;
+    h.now = 100ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 100LL);
+    QCOMPARE(h.estimator.position(), 100ms);
 
-    h.now = 5000;
-    h.device.position = 4500;
+    h.now = 5000ms;
+    h.device.position = 4500ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 4000LL);
+    QCOMPARE(h.estimator.position(), 4000ms);
 }
 
 void TestPositionEstimator::testSnapToDurationIsSticky()
 {
-    EstimatorHarness h{2990};
-    h.estimator.setDuration(3000);
+    EstimatorHarness h{std::chrono::milliseconds{2990}};
+    h.estimator.setDuration(3000ms);
     QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
 
     h.estimator.start();
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 2990LL);
+    QCOMPARE(h.estimator.position(), 2990ms);
 
     h.estimator.snapToDuration();
-    QCOMPARE(h.estimator.position(), 3000LL);
-    QCOMPARE(spy.last().at(0).toLongLong(), 3000LL);
+    QCOMPARE(h.estimator.position(), 3000ms);
+    QCOMPARE(spy.last().at(0).value<std::chrono::milliseconds>(), 3000ms);
 
-    h.now = 700;
-    h.device.position = 3000;
+    h.now = 700ms;
+    h.device.position = 3000ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 3000LL);
+    QCOMPARE(h.estimator.position(), 3000ms);
 }
 
 void TestPositionEstimator::testPositionClampedToDuration()
 {
-    EstimatorHarness h{900};
-    h.estimator.setDuration(1000);
+    EstimatorHarness h{std::chrono::milliseconds{900}};
+    h.estimator.setDuration(1000ms);
 
     h.estimator.start();
     h.estimator.tick();
 
-    h.now = 300;
+    h.now = 300ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 1000LL);
+    QCOMPARE(h.estimator.position(), 1000ms);
 
-    h.now = 400;
-    QCOMPARE(h.estimator.position(), 1000LL);
+    h.now = 400ms;
+    QCOMPARE(h.estimator.position(), 1000ms);
 }
 
 void TestPositionEstimator::testResetPositionIsSilent()
 {
-    EstimatorHarness h{1000};
+    EstimatorHarness h{std::chrono::milliseconds{1000}};
     QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
 
     h.estimator.start();
     h.estimator.tick();
     QCOMPARE(spy.count(), 1);
 
-    h.estimator.resetPosition(0);
+    h.estimator.resetPosition(0ms);
     QCOMPARE(spy.count(), 1);
-    QCOMPARE(h.estimator.position(), 0LL);
+    QCOMPARE(h.estimator.position(), 0ms);
 
-    h.device.position = 0;
-    h.now = 100;
+    h.device.position = 0ms;
+    h.now = 100ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 0LL);
+    QCOMPARE(h.estimator.position(), 0ms);
 }
 
 void TestPositionEstimator::testNoReanchorBeforeSyncIntervalElapses()
@@ -328,23 +331,23 @@ void TestPositionEstimator::testNoReanchorBeforeSyncIntervalElapses()
     h.estimator.start();
     h.estimator.tick();
 
-    h.now = 100;
-    h.device.position = 5000;
+    h.now = 100ms;
+    h.device.position = 5000ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 100LL);
+    QCOMPARE(h.estimator.position(), 100ms);
 
-    h.now = 499;
+    h.now = 499ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 499LL);
+    QCOMPARE(h.estimator.position(), 499ms);
 
-    h.now = 500;
+    h.now = 500ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 5000LL);
+    QCOMPARE(h.estimator.position(), 5000ms);
 
-    h.now = 600;
-    h.device.position = 5100;
+    h.now = 600ms;
+    h.device.position = 5100ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 5100LL);
+    QCOMPARE(h.estimator.position(), 5100ms);
 }
 
 void TestPositionEstimator::testDoubleFreezeKeepsPosition()
@@ -354,16 +357,16 @@ void TestPositionEstimator::testDoubleFreezeKeepsPosition()
 
     h.estimator.start();
     h.estimator.tick();
-    h.now = 300;
+    h.now = 300ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 300LL);
+    QCOMPARE(h.estimator.position(), 300ms);
 
     h.estimator.freeze();
     h.estimator.freeze();
 
-    h.now = 5000;
+    h.now = 5000ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 300LL);
+    QCOMPARE(h.estimator.position(), 300ms);
     QCOMPARE(spy.count(), 2);
 }
 
@@ -372,29 +375,29 @@ void TestPositionEstimator::testSeekWithUnknownDurationClampsToZero()
     EstimatorHarness h;
     QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
 
-    h.estimator.seek(1000);
-    QCOMPARE(h.estimator.position(), 0LL);
-    QCOMPARE(spy.last().at(0).toLongLong(), 0LL);
+    h.estimator.seek(1000ms);
+    QCOMPARE(h.estimator.position(), 0ms);
+    QCOMPARE(spy.last().at(0).value<std::chrono::milliseconds>(), 0ms);
 
-    h.estimator.setDuration(0);
-    h.estimator.seek(500);
-    QCOMPARE(h.estimator.position(), 0LL);
+    h.estimator.setDuration(0ms);
+    h.estimator.seek(500ms);
+    QCOMPARE(h.estimator.position(), 0ms);
 }
 
 void TestPositionEstimator::testNoDurationClampDuringExtrapolation()
 {
-    EstimatorHarness h{2000};
-    h.estimator.setDuration(0);
+    EstimatorHarness h{std::chrono::milliseconds{2000}};
+    h.estimator.setDuration(0ms);
 
     h.estimator.start();
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 2000LL);
+    QCOMPARE(h.estimator.position(), 2000ms);
 
     h.device.position = std::nullopt;
-    h.now = 1000;
+    h.now = 1000ms;
     h.estimator.tick();
-    QVERIFY2(h.estimator.position() > 2000LL, "Streams with unknown duration must not clamp the extrapolated position");
-    QCOMPARE(h.estimator.position(), 3000LL);
+    QVERIFY2(h.estimator.position() > 2000ms, "Streams with unknown duration must not clamp the extrapolated position");
+    QCOMPARE(h.estimator.position(), 3000ms);
 }
 
 void TestPositionEstimator::testDoubleStartReanchorsToDevice()
@@ -403,17 +406,17 @@ void TestPositionEstimator::testDoubleStartReanchorsToDevice()
 
     h.estimator.start();
     h.estimator.tick();
-    h.now = 100;
+    h.now = 100ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 100LL);
+    QCOMPARE(h.estimator.position(), 100ms);
 
-    h.device.position = 600;
+    h.device.position = 600ms;
     h.estimator.start();
-    QCOMPARE(h.estimator.position(), 100LL);
+    QCOMPARE(h.estimator.position(), 100ms);
 
-    h.now = 150;
+    h.now = 150ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 600LL);
+    QCOMPARE(h.estimator.position(), 600ms);
 }
 
 void TestPositionEstimator::testDurationBecomesKnownMidPlayback()
@@ -423,31 +426,31 @@ void TestPositionEstimator::testDurationBecomesKnownMidPlayback()
     h.estimator.start();
     h.estimator.tick();
 
-    h.now = 5000;
+    h.now = 5000ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 5000LL);
+    QCOMPARE(h.estimator.position(), 5000ms);
 
-    h.estimator.setDuration(4000);
-    QCOMPARE(h.estimator.position(), 4000LL);
+    h.estimator.setDuration(4000ms);
+    QCOMPARE(h.estimator.position(), 4000ms);
 
-    h.now = 5100;
+    h.now = 5100ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 4000LL);
+    QCOMPARE(h.estimator.position(), 4000ms);
 
-    h.estimator.setDuration(6000);
-    h.now = 5200;
+    h.estimator.setDuration(6000ms);
+    h.now = 5200ms;
     h.estimator.tick();
-    QCOMPARE(h.estimator.position(), 5200LL);
+    QCOMPARE(h.estimator.position(), 5200ms);
 }
 
 void TestPositionEstimator::testPositionProperty()
 {
     EstimatorHarness h{std::nullopt};
 
-    QCOMPARE(h.estimator.property("position").toLongLong(), 0LL);
-    h.estimator.setDuration(1000);
-    h.estimator.seek(420);
-    QCOMPARE(h.estimator.property("position").toLongLong(), 420LL);
+    QCOMPARE(h.estimator.property("position").value<std::chrono::milliseconds>(), 0ms);
+    h.estimator.setDuration(1000ms);
+    h.estimator.seek(420ms);
+    QCOMPARE(h.estimator.property("position").value<std::chrono::milliseconds>(), 420ms);
 }
 
 QTEST_GUILESS_MAIN(TestPositionEstimator)

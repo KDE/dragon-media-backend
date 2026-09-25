@@ -19,6 +19,7 @@
 #include <QUrl>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 class TestPlayerPrefinish : public QObject
 {
@@ -45,7 +46,7 @@ private:
         QElapsedTimer timer;
         timer.start();
         while (timer.elapsed() < timeoutMs) {
-            if (player.position() > 0) {
+            if (player.position() > 0ms) {
                 return true;
             }
             QTest::qWait(50);
@@ -57,21 +58,21 @@ private:
 void TestPlayerPrefinish::testPrefinishMarkDefaultValue()
 {
     DragonPlayer player;
-    QCOMPARE(player.prefinishMark(), 0);
+    QCOMPARE(player.prefinishMark(), 0ms);
 }
 
 void TestPlayerPrefinish::testPrefinishMarkGetterSetter()
 {
     DragonPlayer player;
 
-    player.setPrefinishMark(1000);
-    QCOMPARE(player.prefinishMark(), 1000);
+    player.setPrefinishMark(1000ms);
+    QCOMPARE(player.prefinishMark(), 1000ms);
 
-    player.setPrefinishMark(5000);
-    QCOMPARE(player.prefinishMark(), 5000);
+    player.setPrefinishMark(5000ms);
+    QCOMPARE(player.prefinishMark(), 5000ms);
 
-    player.setPrefinishMark(0);
-    QCOMPARE(player.prefinishMark(), 0);
+    player.setPrefinishMark(0ms);
+    QCOMPARE(player.prefinishMark(), 0ms);
 }
 
 void TestPlayerPrefinish::testPrefinishMarkChangedSignal()
@@ -79,14 +80,14 @@ void TestPlayerPrefinish::testPrefinishMarkChangedSignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::prefinishMarkChanged);
 
-    player.setPrefinishMark(1000);
+    player.setPrefinishMark(1000ms);
     QCOMPARE(spy.count(), 1);
-    QCOMPARE(spy.at(0).at(0).toInt(), 1000);
+    QCOMPARE(spy.at(0).at(0).value<std::chrono::milliseconds>(), 1000ms);
 
-    player.setPrefinishMark(2000);
+    player.setPrefinishMark(2000ms);
     QCOMPARE(spy.count(), 2);
-    QCOMPARE(spy.at(0).at(0).toInt(), 1000);
-    QCOMPARE(spy.at(1).at(0).toInt(), 2000);
+    QCOMPARE(spy.at(0).at(0).value<std::chrono::milliseconds>(), 1000ms);
+    QCOMPARE(spy.at(1).at(0).value<std::chrono::milliseconds>(), 2000ms);
 }
 
 void TestPlayerPrefinish::testPrefinishMarkNoDuplicateSignal()
@@ -94,10 +95,10 @@ void TestPlayerPrefinish::testPrefinishMarkNoDuplicateSignal()
     DragonPlayer player;
     QSignalSpy spy(&player, &DragonPlayer::prefinishMarkChanged);
 
-    player.setPrefinishMark(1000);
+    player.setPrefinishMark(1000ms);
     QCOMPARE(spy.count(), 1);
 
-    player.setPrefinishMark(1000);
+    player.setPrefinishMark(1000ms);
     QCOMPARE(spy.count(), 1);
 }
 
@@ -106,7 +107,7 @@ void TestPlayerPrefinish::testAboutToFinishNeverEmittedWhenDisabled()
     DragonPlayer player;
     PlayerHelper helper(&player);
 
-    QVERIFY(player.prefinishMark() == 0);
+    QVERIFY(player.prefinishMark() == 0ms);
 
     QSignalSpy spy(&player, &DragonPlayer::aboutToFinish);
 
@@ -126,7 +127,7 @@ void TestPlayerPrefinish::testAboutToFinishEmitsOnce()
     DragonPlayer player;
     PlayerHelper helper(&player);
 
-    player.setPrefinishMark(2500);
+    player.setPrefinishMark(2500ms);
     QSignalSpy spy(&player, &DragonPlayer::aboutToFinish);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -142,7 +143,7 @@ void TestPlayerPrefinish::testAboutToFinishTiming()
     DragonPlayer player;
     PlayerHelper helper(&player);
 
-    player.setPrefinishMark(2000);
+    player.setPrefinishMark(2000ms);
     QSignalSpy spy(&player, &DragonPlayer::aboutToFinish);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -166,7 +167,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnNewSource()
     DragonPlayer player;
     PlayerHelper helper(&player);
 
-    player.setPrefinishMark(2500);
+    player.setPrefinishMark(2500ms);
     QSignalSpy spy(&player, &DragonPlayer::aboutToFinish);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -187,7 +188,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnSeekBack()
     DragonPlayer player;
     PlayerHelper helper(&player);
 
-    player.setPrefinishMark(2500);
+    player.setPrefinishMark(2500ms);
     QSignalSpy spy(&player, &DragonPlayer::aboutToFinish);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -196,7 +197,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnSeekBack()
 
     QTRY_VERIFY_WITH_TIMEOUT(spy.count() == 1, 5000);
 
-    player.setPosition(0);
+    player.setPosition(0ms);
     QTest::qWait(200);
 
     QCOMPARE(spy.count(), 1);
@@ -212,7 +213,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
     DragonDiagnostics diagnostics(&player);
     PlayerHelper helper(&player);
 
-    player.setPrefinishMark(2500);
+    player.setPrefinishMark(2500ms);
     QSignalSpy aboutToFinishSpy(&player, &DragonPlayer::aboutToFinish);
     QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
     QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
@@ -249,7 +250,7 @@ void TestPlayerPrefinish::testPrefinishMarkChangeResets()
     DragonPlayer player;
     PlayerHelper helper(&player);
 
-    player.setPrefinishMark(2500);
+    player.setPrefinishMark(2500ms);
     QSignalSpy spy(&player, &DragonPlayer::aboutToFinish);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -258,12 +259,12 @@ void TestPlayerPrefinish::testPrefinishMarkChangeResets()
 
     QTRY_COMPARE(spy.count(), 1);
 
-    player.setPosition(0);
+    player.setPosition(0ms);
     QTest::qWait(200);
 
     spy.clear();
 
-    player.setPrefinishMark(2800);
+    player.setPrefinishMark(2800ms);
 
     QTRY_COMPARE(spy.count(), 1);
 
@@ -275,7 +276,7 @@ void TestPlayerPrefinish::testShortTrackEmitsImmediately()
     DragonPlayer player;
     PlayerHelper helper(&player);
 
-    player.setPrefinishMark(5000);
+    player.setPrefinishMark(5000ms);
     QSignalSpy spy(&player, &DragonPlayer::aboutToFinish);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));

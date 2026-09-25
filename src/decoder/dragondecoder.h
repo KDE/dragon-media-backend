@@ -13,6 +13,7 @@
 #include <QObject>
 #include <QString>
 
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -48,7 +49,7 @@ public:
 
     dragon::compat::generator<DragonMediaBackend::DecodeEvent> decodeLoop(std::stop_token st);
 
-    void requestSeek(qint64 positionMs);
+    void requestSeek(std::chrono::milliseconds position);
 
     bool hasFatalError() const;
 
@@ -63,7 +64,7 @@ private:
     QString m_filePath;
 
     std::atomic<bool> m_seekRequested{false};
-    std::atomic<qint64> m_seekTargetMs{0};
+    std::atomic<std::chrono::milliseconds::rep> m_seekTarget{0};
 
     struct DecodeSession;
     std::unique_ptr<DecodeSession> m_session;
