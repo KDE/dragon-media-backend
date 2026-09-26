@@ -70,8 +70,8 @@ endif()
 
 
 set(DRAGON_MIN_QT_VERSION 6.11)
-find_package(Qt6 ${DRAGON_MIN_QT_VERSION} REQUIRED COMPONENTS Core Network Gui)
-find_package(Qt6 ${DRAGON_MIN_QT_VERSION} COMPONENTS Widgets Qml Quick QuickControls2)
+find_package(Qt6 ${DRAGON_MIN_QT_VERSION} REQUIRED COMPONENTS Core Network Gui Qml QmlIntegration)
+find_package(Qt6 ${DRAGON_MIN_QT_VERSION} COMPONENTS Widgets Quick QuickControls2)
 find_package(KF6KIO REQUIRED)
 find_package(KF6CoreAddons REQUIRED)
 find_package(KF6I18n REQUIRED)

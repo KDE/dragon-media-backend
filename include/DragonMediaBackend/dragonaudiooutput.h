@@ -8,6 +8,7 @@
 #include "dragonmediabackend_export.h"
 
 #include <QObject>
+#include <QtQmlIntegration/qqmlintegration.h>
 
 #include <memory>
 
@@ -35,6 +36,8 @@ class DragonAudioOutputPrivate;
 class DRAGONMEDIABACKEND_EXPORT DragonAudioOutput : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(DragonAudioOutput)
+    QML_UNCREATABLE("Instances are created and owned by DragonPlayer")
 
     /*!
      * \property DragonAudioOutput::volume

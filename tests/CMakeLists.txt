@@ -92,6 +92,13 @@ dragon_add_test(test_kiostream LIBRARIES Qt6::Network KF6::KIOCore)
 set(_player_libs Qt6::Network SDL3::SDL3 PkgConfig::FFmpeg spsc_queue kissfft::kissfft)
 dragon_add_test(test_dragonduration LIBRARIES ${_player_libs})
 dragon_add_test(test_dragonduration_qml LIBRARIES ${_player_libs} Qt6::Qml)
+
+# QML module import test: loads org.kde.dragonmediabackend via an import
+# path the way the standalone qml6 runtime does (no context properties).
+dragon_add_test(test_qml_module LIBRARIES ${_player_libs} Qt6::Qml)
+target_compile_definitions(test_qml_module PRIVATE
+    DRAGON_QML_IMPORT_PATH="${PROJECT_BINARY_DIR}/bin"
+)
 dragon_add_test(test_player_basics    LIBRARIES ${_player_libs})
 # Playback state tests are sensitive to audio-sink timing differences;
 # build one executable and run it once per backend via env var.

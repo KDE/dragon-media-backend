@@ -11,6 +11,7 @@
 #include <QMetaType>
 #include <QSharedDataPointer>
 #include <QString>
+#include <QtQmlIntegration/qqmlintegration.h>
 
 class DragonIcyMetadataPrivate;
 
@@ -33,6 +34,12 @@ class DragonIcyMetadataPrivate;
  */
 class DRAGONMEDIABACKEND_EXPORT DragonIcyMetadata
 {
+    Q_GADGET
+    QML_VALUE_TYPE(dragonIcyMetadata)
+    Q_PROPERTY(QString streamTitle READ streamTitle WRITE setStreamTitle)
+    Q_PROPERTY(QString streamUrl READ streamUrl WRITE setStreamUrl)
+    Q_PROPERTY(bool isNull READ isNull CONSTANT)
+
 public:
     /*!
      * Constructs a null metadata object. isNull() returns \c true.

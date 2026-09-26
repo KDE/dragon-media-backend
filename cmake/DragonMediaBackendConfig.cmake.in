@@ -12,7 +12,7 @@ set_package_properties(DragonMediaBackend PROPERTIES
 include(CMakeFindDependencyMacro)
 
 # Find required dependencies
-find_dependency(Qt6 CONFIG COMPONENTS Core Network Gui REQUIRED)
+find_dependency(Qt6 CONFIG COMPONENTS Core Network Gui Qml QmlIntegration REQUIRED)
 find_dependency(QCoro6 CONFIG COMPONENTS Core REQUIRED)
 find_dependency(SDL3 CONFIG REQUIRED)
 find_dependency(KF6I18n CONFIG REQUIRED)

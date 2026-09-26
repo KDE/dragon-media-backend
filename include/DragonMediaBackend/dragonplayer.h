@@ -15,6 +15,7 @@
 #include <QObject>
 #include <QString>
 #include <QUrl>
+#include <QtQmlIntegration/qqmlintegration.h>
 
 #include <chrono>
 #include <memory>
@@ -41,6 +42,7 @@ class DragonPlayerPrivate;
 class DRAGONMEDIABACKEND_EXPORT DragonPlayer : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(DragonPlayer)
 
 public:
     /*!
@@ -236,6 +238,15 @@ public:
      * \sa aboutToFinish()
      */
     Q_PROPERTY(DragonDuration prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
+
+    /*!
+     * \property DragonPlayer::audioOutput
+     *
+     * The \l DragonAudioOutput instance controlling volume and mute for
+     * this player. The instance is owned by the player and constant for
+     * its lifetime.
+     */
+    Q_PROPERTY(DragonAudioOutput *audioOutput READ audioOutput CONSTANT)
 
     /*!
      * Returns the \l DragonAudioOutput instance controlling volume and

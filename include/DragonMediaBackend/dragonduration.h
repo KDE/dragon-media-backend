@@ -9,6 +9,7 @@
 
 #include <QObject>
 #include <QString>
+#include <QtQmlIntegration/qqmlintegration.h>
 
 #include <chrono>
 #include <optional>
@@ -33,6 +34,7 @@
 class DRAGONMEDIABACKEND_EXPORT DragonDuration
 {
     Q_GADGET
+    QML_VALUE_TYPE(dragonDuration)
     Q_PROPERTY(qint64 milliseconds READ toMilliseconds WRITE setMilliseconds)
     Q_PROPERTY(qreal seconds READ toSeconds WRITE setSeconds)
     Q_PROPERTY(bool valid READ isValid CONSTANT)

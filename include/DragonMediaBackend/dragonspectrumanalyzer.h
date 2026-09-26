@@ -9,6 +9,7 @@
 #include "dragonmediabackend_export.h"
 
 #include <QObject>
+#include <QtQmlIntegration/qqmlintegration.h>
 
 #include <cstddef>
 #include <memory>
@@ -36,6 +37,8 @@ class DragonSpectrumAnalyzerPrivate;
 class DRAGONMEDIABACKEND_EXPORT DragonSpectrumAnalyzer : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(DragonSpectrumAnalyzer)
+    QML_UNCREATABLE("Construct it in C++ with a DragonPlayer")
 
     /*!
      * \property DragonSpectrumAnalyzer::mode
