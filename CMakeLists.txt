@@ -296,6 +296,7 @@ install(TARGETS DragonMediaBackend
 set(DragonMediaBackend_PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonduration.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h

@@ -129,14 +129,13 @@ ApplicationWindow {
             Layout.fillWidth: true
             enabled: player.seekable
             from: 0
-            to: Math.max(player.duration, 1)
-            value: player.position
-            onMoved: player.position = value
+            to: Math.max(player.duration.milliseconds, 1)
+            value: player.position.milliseconds
+            onMoved: player.position.milliseconds = value
         }
 
         Label {
-            text: (player.position / 1000).toFixed(1) + "s / "
-                  + (player.duration / 1000).toFixed(1) + "s"
+            text: player.position.formatted() + " / " + player.duration.formatted()
         }
 
         RowLayout {

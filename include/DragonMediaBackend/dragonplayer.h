@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "dragonduration.h"
 #include "dragonfftframe.h"
 #include "dragonmediabackend_export.h"
 
@@ -16,7 +17,6 @@
 #include <QUrl>
 
 #include <chrono>
-#include <cstdint>
 #include <memory>
 #include <optional>
 
@@ -191,23 +191,21 @@ public:
     /*!
      * \property DragonPlayer::duration
      *
-     * The duration of the current source in milliseconds, or 0 for
-     * streams of unknown duration. This qint64 property exists for
-     * QML, which cannot do arithmetic on std::chrono types; C++ code
-     * should use duration(), which reports unknown durations as an
-     * empty std::optional instead of 0.
+     * The duration of the current source as a \l DragonDuration, which
+     * is \l {DragonDuration::valid}{invalid} for streams of unknown
+     * duration. C++ code should use duration(), which reports unknown
+     * durations as an empty std::optional.
      */
-    Q_PROPERTY(qint64 duration READ durationMs NOTIFY durationChanged)
+    Q_PROPERTY(DragonDuration duration READ duration NOTIFY durationChanged)
 
     /*!
      * \property DragonPlayer::position
      *
-     * The playback position in milliseconds. Setting it while a source
-     * is loaded seeks playback. This qint64 property exists for QML,
-     * which cannot do arithmetic on std::chrono types; C++ code should
-     * use position() and setPosition() with std::chrono::milliseconds.
+     * The playback position as a \l DragonDuration. Setting it while a
+     * source is loaded seeks playback. C++ code should use position()
+     * and setPosition() with std::chrono::milliseconds.
      */
-    Q_PROPERTY(qint64 position READ positionMs WRITE setPositionMs NOTIFY positionChanged)
+    Q_PROPERTY(DragonDuration position READ position WRITE setPosition NOTIFY positionChanged)
 
     /*!
      * \property DragonPlayer::seekable
@@ -228,15 +226,16 @@ public:
     /*!
      * \property DragonPlayer::prefinishMark
      *
-     * How many milliseconds before the end of the source aboutToFinish()
-     * is emitted, allowing the next source to be queued for a gapless
-     * transition. The default is 100 milliseconds. This int32_t property
-     * exists for QML; C++ code should use prefinishMark() and
-     * setPrefinishMark() with std::chrono::milliseconds.
+     * How long before the end of the source aboutToFinish() is emitted,
+     * allowing the next source to be queued for a gapless transition.
+     * The default is 0 milliseconds, meaning aboutToFinish() is only
+     * emitted when decoding finishes with no time remaining. C++ code
+     * should use prefinishMark() and setPrefinishMark() with
+     * std::chrono::milliseconds.
      *
      * \sa aboutToFinish()
      */
-    Q_PROPERTY(int32_t prefinishMark READ prefinishMarkMs WRITE setPrefinishMarkMs NOTIFY prefinishMarkChanged)
+    Q_PROPERTY(DragonDuration prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
 
     /*!
      * Returns the \l DragonAudioOutput instance controlling volume and
@@ -427,17 +426,7 @@ public Q_SLOTS:
      */
     void stop();
 
-private Q_SLOTS:
-    // Milliseconds-based slots backing the qint64/int32_t QML-facing
-    // properties; C++ code should use the std::chrono overloads above.
-    void setPositionMs(qint64 positionMs);
-    void setPrefinishMarkMs(int32_t msec);
-
 private:
-    [[nodiscard]] qint64 durationMs() const;
-    [[nodiscard]] qint64 positionMs() const;
-    [[nodiscard]] int32_t prefinishMarkMs() const;
-
     friend class DragonDiagnostics;
     friend class DragonPlayerPrivate;
     friend class DragonSpectrumAnalyzer;

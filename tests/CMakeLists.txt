@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
 
-find_package(Qt6 REQUIRED COMPONENTS Core Test)
+find_package(Qt6 REQUIRED COMPONENTS Core Qml Test)
 
 include(ECMMarkNonGuiExecutable)
 
@@ -90,6 +90,8 @@ dragon_add_test(test_kiostream LIBRARIES Qt6::Network KF6::KIOCore)
 
 # Player tests
 set(_player_libs Qt6::Network SDL3::SDL3 PkgConfig::FFmpeg spsc_queue kissfft::kissfft)
+dragon_add_test(test_dragonduration LIBRARIES ${_player_libs})
+dragon_add_test(test_dragonduration_qml LIBRARIES ${_player_libs} Qt6::Qml)
 dragon_add_test(test_player_basics    LIBRARIES ${_player_libs})
 # Playback state tests are sensitive to audio-sink timing differences;
 # build one executable and run it once per backend via env var.

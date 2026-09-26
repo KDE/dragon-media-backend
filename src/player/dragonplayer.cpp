@@ -149,7 +149,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
 
     // normal end of track with no gapless handoff: mark EndOfMedia and
     // Normal end of track with no gapless handoff: emit aboutToFinish
-    // here if all audio has been queued but positionMs() hasn't caught up
+    // here if all audio has been queued but position() hasn't caught up
     // yet (the ~200ms PA device buffer + pipe backlog).  Defer
     // EndOfMedia/StoppedState until the backend signals drained().
     if (prefinishMark > 0ms && !aboutToFinishEmitted && audioOutput && currentDuration) {
@@ -447,10 +447,6 @@ QString DragonPlayer::errorString() const
 {
     return d->currentErrorString;
 }
-qint64 DragonPlayer::durationMs() const
-{
-    return static_cast<qint64>(duration().value_or(std::chrono::milliseconds{0}).count());
-}
 std::optional<std::chrono::milliseconds> DragonPlayer::duration() const
 {
     return d->currentDuration;
@@ -458,10 +454,6 @@ std::optional<std::chrono::milliseconds> DragonPlayer::duration() const
 std::chrono::milliseconds DragonPlayer::position() const
 {
     return d->positionEstimator->position();
-}
-qint64 DragonPlayer::positionMs() const
-{
-    return static_cast<qint64>(position().count());
 }
 bool DragonPlayer::seekable() const
 {
@@ -650,11 +642,6 @@ void DragonPlayer::setStreamName(const QString &name)
     }
 }
 
-void DragonPlayer::setPositionMs(qint64 positionMs)
-{
-    setPosition(std::chrono::milliseconds{positionMs});
-}
-
 void DragonPlayer::setPosition(std::chrono::milliseconds position)
 {
     qCDebug(dragonMediaBackendPlayer) << "setPosition(" << position << ")";
@@ -685,16 +672,6 @@ void DragonPlayer::setPosition(std::chrono::milliseconds position)
 std::chrono::milliseconds DragonPlayer::prefinishMark() const
 {
     return d->prefinishMark;
-}
-
-int32_t DragonPlayer::prefinishMarkMs() const
-{
-    return static_cast<int32_t>(d->prefinishMark.count());
-}
-
-void DragonPlayer::setPrefinishMarkMs(int32_t msec)
-{
-    setPrefinishMark(std::chrono::milliseconds{msec});
 }
 
 void DragonPlayer::setPrefinishMark(std::chrono::milliseconds msec)

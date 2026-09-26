@@ -4,6 +4,7 @@
 
 add_library(dragon_player_objs OBJECT
     dragonplayer.cpp
+    dragonduration.cpp
     dragonaudiooutput.cpp
     dragonpipe.cpp
     dragondiagnostics.cpp
@@ -21,6 +22,7 @@ target_link_libraries(dragon_player_objs PRIVATE
     Qt6::Core
     Qt6::Network
     QCoro6::Core
+    KF6::CoreAddons
     KF6::I18n
 )
 

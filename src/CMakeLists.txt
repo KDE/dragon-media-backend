@@ -19,6 +19,7 @@ qt_add_library(DragonMediaBackend SHARED
     ${DragonMediaBackend_SOURCES}
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonduration.h
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
