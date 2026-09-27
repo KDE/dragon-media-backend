@@ -34,6 +34,7 @@ class DragonSpectrumAnalyzerPrivate;
  *
  * \sa DragonPlayer, DragonFftFrame
  */
+
 class DRAGONMEDIABACKEND_EXPORT DragonSpectrumAnalyzer : public QObject
 {
     Q_OBJECT

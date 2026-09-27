@@ -32,12 +32,83 @@ class DragonIcyMetadataPrivate;
  *
  * \sa DragonPlayer::currentPlayingForRadiosChanged()
  */
+
+/*!
+ * \qmlvaluetype dragonIcyMetadata
+ * \nativetype DragonIcyMetadata
+ * \inqmlmodule org.kde.dragonmediabackend
+ *
+ * \brief ICY metadata from a radio stream.
+ *
+ * dragonIcyMetadata carries the \l {https://cast.readme.io/docs/icy} {ICY}
+ * metadata of the track currently playing on a radio stream. It is
+ * delivered by DragonPlayer::currentPlayingForRadiosChanged:
+ *
+ * \qml
+ * DragonPlayer {
+ *     onCurrentPlayingForRadiosChanged: (metadata) => {
+ *         nowPlaying.text = metadata.streamTitle
+ *     }
+ * }
+ * \endqml
+ *
+ * The well-known fields streamTitle and streamUrl are exposed as
+ * properties; any other fields the stream provided are available in
+ * C++ through customFields(). An empty value type is null, which is
+ * reported by \l isNull.
+ */
+
 class DRAGONMEDIABACKEND_EXPORT DragonIcyMetadata
 {
     Q_GADGET
     QML_VALUE_TYPE(dragonIcyMetadata)
+
+    /*!
+     * \qmlproperty string org.kde.dragonmediabackend::dragonIcyMetadata::streamTitle
+     *
+     * The ICY stream title, typically the artist and track name of the
+     * song currently playing. Empty when the stream did not provide
+     * one; use hasStreamTitle() to distinguish that case.
+     */
+
+    /*!
+     * \property DragonIcyMetadata::streamTitle
+     *
+     * The ICY stream title, typically the artist and track name of the
+     * song currently playing. Empty when the stream did not provide
+     * one; use hasStreamTitle() to distinguish that case.
+     */
     Q_PROPERTY(QString streamTitle READ streamTitle WRITE setStreamTitle)
+
+    /*!
+     * \qmlproperty string org.kde.dragonmediabackend::dragonIcyMetadata::streamUrl
+     *
+     * The ICY stream URL, usually the stream's home page. Empty when
+     * the stream did not provide one; use hasStreamUrl() to
+     * distinguish that case.
+     */
+
+    /*!
+     * \property DragonIcyMetadata::streamUrl
+     *
+     * The ICY stream URL, usually the stream's home page. Empty when
+     * the stream did not provide one; use hasStreamUrl() to
+     * distinguish that case.
+     */
     Q_PROPERTY(QString streamUrl READ streamUrl WRITE setStreamUrl)
+
+    /*!
+     * \qmlproperty bool org.kde.dragonmediabackend::dragonIcyMetadata::isNull
+     *
+     * Whether the value type is empty and no metadata was set.
+     */
+
+    /*!
+     * \property DragonIcyMetadata::isNull
+     *
+     * Whether the object was default-constructed and no metadata was
+     * set.
+     */
     Q_PROPERTY(bool isNull READ isNull CONSTANT)
 
 public:

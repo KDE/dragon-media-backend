@@ -31,12 +31,79 @@
  * In QML the duration is not a number; use the \l milliseconds or
  * \l seconds sub-properties for arithmetic.
  */
+
+/*!
+ * \qmlvaluetype dragonDuration
+ * \nativetype DragonDuration
+ * \inqmlmodule org.kde.dragonmediabackend
+ *
+ * \brief A millisecond-precise duration value.
+ *
+ * dragonDuration is how the duration and position properties of
+ * DragonPlayer appear in QML. It is not a number; use the
+ * \l milliseconds or \l seconds sub-properties for arithmetic, and
+ * assign to one of them to seek:
+ *
+ * \qml
+ * DragonPlayer {
+ *     id: player
+ *     onPositionChanged: label.text = player.position.formatted()
+ *     Component.onCompleted: player.position.seconds = 30
+ * }
+ * Text { id: label }
+ * \endqml
+ *
+ * An invalid duration (for example the duration of a radio stream of
+ * unknown length) reports milliseconds as 0 and valid as false, and
+ * formatted() returns "--:--".
+ *
+ * \sa DragonPlayer::duration, DragonPlayer::position
+ */
+
 class DRAGONMEDIABACKEND_EXPORT DragonDuration
 {
     Q_GADGET
     QML_VALUE_TYPE(dragonDuration)
+
+    /*!
+     * \qmlproperty int org.kde.dragonmediabackend::dragonDuration::milliseconds
+     *
+     * The duration in milliseconds. Setting it makes the duration valid.
+     */
+
+    /*!
+     * \property DragonDuration::milliseconds
+     *
+     * The duration in milliseconds. Setting it makes the duration valid.
+     */
     Q_PROPERTY(qint64 milliseconds READ toMilliseconds WRITE setMilliseconds)
+
+    /*!
+     * \qmlproperty real org.kde.dragonmediabackend::dragonDuration::seconds
+     *
+     * The duration in fractional seconds. Setting it makes the duration
+     * valid.
+     */
+
+    /*!
+     * \property DragonDuration::seconds
+     *
+     * The duration in fractional seconds. Setting it makes the duration
+     * valid.
+     */
     Q_PROPERTY(qreal seconds READ toSeconds WRITE setSeconds)
+
+    /*!
+     * \qmlproperty bool org.kde.dragonmediabackend::dragonDuration::valid
+     *
+     * Whether the duration is known.
+     */
+
+    /*!
+     * \property DragonDuration::valid
+     *
+     * Whether the duration is known.
+     */
     Q_PROPERTY(bool valid READ isValid CONSTANT)
 
 public:
@@ -88,6 +155,13 @@ public:
      * serve a DragonDuration Q_PROPERTY directly.
      */
     [[nodiscard]] operator std::chrono::milliseconds() const; // implicit
+
+    /*!
+     * \qmlmethod string org.kde.dragonmediabackend::dragonDuration::formatted()
+     *
+     * Returns the duration localized as "m:ss" below one hour or
+     * "h:mm:ss" at or above it, or "--:--" when the duration is invalid.
+     */
 
     /*!
      * Returns the duration localized as "m:ss" below one hour or

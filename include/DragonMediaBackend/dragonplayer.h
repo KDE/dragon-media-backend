@@ -39,6 +39,40 @@ class DragonPlayerPrivate;
  *
  * \sa DragonAudioOutput, DragonSpectrumAnalyzer, DragonIcyMetadata
  */
+
+/*!
+ * \qmltype DragonPlayer
+ * \nativetype DragonPlayer
+ * \inqmlmodule org.kde.dragonmediabackend
+ *
+ * \brief Audio playback controller for QML.
+ *
+ * DragonPlayer plays audio from local files and network streams, and
+ * supports gapless transitions between sequential tracks: when
+ * \l aboutToFinish is emitted, set \l nextSource to play the next
+ * track immediately after the current one.
+ *
+ * Its QML interface follows the QMediaPlayer conventions: set
+ * \l source and call play(), pause() and stop(). Radio streams are
+ * supported, reporting ICY metadata through
+ * \l currentPlayingForRadiosChanged.
+ *
+ * The \l duration and \l position properties are dragonDuration value
+ * types; use their milliseconds and seconds sub-properties for
+ * arithmetic, and assign to position.milliseconds to seek.
+ *
+ * \qml
+ * DragonPlayer {
+ *     id: player
+ *     source: "file:///home/user/music/song.flac"
+ *     prefinishMark.milliseconds: 2000
+ *     onAboutToFinish: player.nextSource = playlist.next()
+ * }
+ * \endqml
+ *
+ * \sa DragonAudioOutput
+ */
+
 class DRAGONMEDIABACKEND_EXPORT DragonPlayer : public QObject
 {
     Q_OBJECT
@@ -145,12 +179,26 @@ public:
     DragonPlayer &operator=(DragonPlayer &&) = delete;
 
     /*!
+     * \qmlproperty url org.kde.dragonmediabackend::DragonPlayer::source
+     *
+     * The media being played. Setting a new source while playing stops
+     * playback, resets the position, and starts loading the new media.
+     */
+
+    /*!
      * \property DragonPlayer::source
      *
      * The media being played. If it's currently playing, setting a new source
      * stops playback, resets the position, and starts loading the new media.
      */
     Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
+
+    /*!
+     * \qmlproperty url org.kde.dragonmediabackend::DragonPlayer::nextSource
+     *
+     * The source played when the current track finishes, used for gapless
+     * transitions. Set it in response to \l aboutToFinish.
+     */
 
     /*!
      * \property DragonPlayer::nextSource
@@ -163,11 +211,28 @@ public:
     Q_PROPERTY(QUrl nextSource READ nextSource WRITE setNextSource NOTIFY nextSourceChanged)
 
     /*!
+     * \qmlproperty enumeration org.kde.dragonmediabackend::DragonPlayer::playbackState
+     *
+     * The current playback state: DragonPlayer.StoppedState,
+     * DragonPlayer.PlayingState, or DragonPlayer.PausedState.
+     */
+
+    /*!
      * \property DragonPlayer::playbackState
      *
      * The current playback state.
      */
     Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY stateChanged)
+
+    /*!
+     * \qmlproperty enumeration org.kde.dragonmediabackend::DragonPlayer::status
+     *
+     * The status of the loaded media: DragonPlayer.NoMedia,
+     * DragonPlayer.LoadingMedia, DragonPlayer.LoadedMedia,
+     * DragonPlayer.BufferingMedia, DragonPlayer.StalledMedia,
+     * DragonPlayer.BufferedMedia, DragonPlayer.EndOfMedia, or
+     * DragonPlayer.InvalidMedia.
+     */
 
     /*!
      * \property DragonPlayer::status
@@ -177,6 +242,13 @@ public:
     Q_PROPERTY(MediaStatus status READ status NOTIFY statusChanged)
 
     /*!
+     * \qmlproperty enumeration org.kde.dragonmediabackend::DragonPlayer::error
+     *
+     * The error state of the player, DragonPlayer.NoError when there is
+     * no error.
+     */
+
+    /*!
      * \property DragonPlayer::error
      *
      * The error state of the player, NoError when there is no error.
@@ -184,11 +256,24 @@ public:
     Q_PROPERTY(Error error READ error NOTIFY errorChanged)
 
     /*!
+     * \qmlproperty string org.kde.dragonmediabackend::DragonPlayer::errorString
+     *
+     * A human-readable description of the current error, if any.
+     */
+
+    /*!
      * \property DragonPlayer::errorString
      *
      * A human-readable description of the current error, if any.
      */
     Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
+
+    /*!
+     * \qmlproperty dragonDuration org.kde.dragonmediabackend::DragonPlayer::duration
+     *
+     * The duration of the current source, invalid for streams of unknown
+     * duration.
+     */
 
     /*!
      * \property DragonPlayer::duration
@@ -201,6 +286,12 @@ public:
     Q_PROPERTY(DragonDuration duration READ duration NOTIFY durationChanged)
 
     /*!
+     * \qmlproperty dragonDuration org.kde.dragonmediabackend::DragonPlayer::position
+     *
+     * The playback position. Assigning to it seeks playback.
+     */
+
+    /*!
      * \property DragonPlayer::position
      *
      * The playback position as a \l DragonDuration. Setting it while a
@@ -208,6 +299,13 @@ public:
      * and setPosition() with std::chrono::milliseconds.
      */
     Q_PROPERTY(DragonDuration position READ position WRITE setPosition NOTIFY positionChanged)
+
+    /*!
+     * \qmlproperty bool org.kde.dragonmediabackend::DragonPlayer::seekable
+     *
+     * Whether the playback position of the current source can be changed.
+     * Radio streams are typically not seekable.
+     */
 
     /*!
      * \property DragonPlayer::seekable
@@ -218,12 +316,26 @@ public:
     Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged)
 
     /*!
+     * \qmlproperty real org.kde.dragonmediabackend::DragonPlayer::bufferProgress
+     *
+     * How much of a network stream has been buffered, from 0.0 to 1.0.
+     * Always 1.0 for fully buffered local files.
+     */
+
+    /*!
      * \property DragonPlayer::bufferProgress
      *
      * How much of a network stream has been buffered, from 0.0 to 1.0.
      * Always 1.0 for fully buffered local files.
      */
     Q_PROPERTY(qreal bufferProgress READ bufferProgress NOTIFY bufferProgressChanged)
+
+    /*!
+     * \qmlproperty dragonDuration org.kde.dragonmediabackend::DragonPlayer::prefinishMark
+     *
+     * How long before the end of the source \l aboutToFinish is emitted.
+     * The default is 0 milliseconds.
+     */
 
     /*!
      * \property DragonPlayer::prefinishMark
@@ -238,6 +350,13 @@ public:
      * \sa aboutToFinish()
      */
     Q_PROPERTY(DragonDuration prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
+
+    /*!
+     * \qmlproperty DragonAudioOutput org.kde.dragonmediabackend::DragonPlayer::audioOutput
+     *
+     * The \l DragonAudioOutput controlling volume and mute for this
+     * player. Created and owned by the player.
+     */
 
     /*!
      * \property DragonPlayer::audioOutput
@@ -325,10 +444,28 @@ Q_SIGNALS:
     void nextSourceChanged();
 
     /*!
+     * \qmlsignal void org.kde.dragonmediabackend::DragonPlayer::trackChanged()
+     *
+     * Emitted when the playing track changes, for example on a gapless
+     * transition or a source change.
+     *
+     * The corresponding handler is \c onTrackChanged.
+     */
+
+    /*!
      * Emitted when the playing track changes, for example on a gapless
      * transition or a source change.
      */
     void trackChanged();
+
+    /*!
+     * \qmlsignal void org.kde.dragonmediabackend::DragonPlayer::stateChanged(enumeration newState, enumeration oldState)
+     *
+     * Emitted when the playback state changes to \a newState, with the
+     * previous state in \a oldState.
+     *
+     * The corresponding handler is \c onStateChanged.
+     */
 
     /*!
      * Emitted when the playback state changes to \a newState, with the
@@ -376,6 +513,16 @@ Q_SIGNALS:
     void prefinishMarkChanged(std::chrono::milliseconds msec);
 
     /*!
+     * \qmlsignal void org.kde.dragonmediabackend::DragonPlayer::aboutToFinish()
+     *
+     * Emitted prefinishMark milliseconds before the current source
+     * finishes. Set nextSource in response to queue the next track for a
+     * gapless transition.
+     *
+     * The corresponding handler is \c onAboutToFinish.
+     */
+
+    /*!
      * Emitted prefinishMark() milliseconds before the current source
      * finishes. Set nextSource() in response to queue the next track
      * for a gapless transition.
@@ -383,6 +530,15 @@ Q_SIGNALS:
      * \sa nextSource, setNextSource(), prefinishMark
      */
     void aboutToFinish();
+
+    /*!
+     * \qmlsignal void org.kde.dragonmediabackend::DragonPlayer::currentPlayingForRadiosChanged(dragonIcyMetadata metadata)
+     *
+     * Emitted when the ICY metadata of a radio stream changes, with the
+     * new \a metadata. Typically reports the track currently playing.
+     *
+     * The corresponding handler is \c onCurrentPlayingForRadiosChanged.
+     */
 
     /*!
      * Emitted when the ICY metadata of a radio stream changes, with the
@@ -422,14 +578,32 @@ public Q_SLOTS:
     void setPrefinishMark(std::chrono::milliseconds msec);
 
     /*!
+     * \qmlmethod void org.kde.dragonmediabackend::DragonPlayer::play()
+     *
+     * Starts or resumes playback of the current source.
+     */
+
+    /*!
      * Starts or resumes playback of the current source.
      */
     void play();
 
     /*!
+     * \qmlmethod void org.kde.dragonmediabackend::DragonPlayer::pause()
+     *
+     * Pauses playback. Call play() to resume from the same position.
+     */
+
+    /*!
      * Pauses playback. Call play() to resume from the same position.
      */
     void pause();
+
+    /*!
+     * \qmlmethod void org.kde.dragonmediabackend::DragonPlayer::stop()
+     *
+     * Stops playback and resets the position. The source remains loaded.
+     */
 
     /*!
      * Stops playback and resets the position. The source remains loaded
