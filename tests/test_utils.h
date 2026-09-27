@@ -97,6 +97,49 @@ public:
     }
 };
 
+// Saves the listed environment variables and restores their original values
+// (including "unset") on destruction, so a failing QVERIFY cannot leak test
+// env state into later tests of the same executable. An empty value means
+// "unset this variable".
+class EnvGuard
+{
+public:
+    using Var = std::pair<const char *, QByteArray>;
+
+    explicit EnvGuard(std::initializer_list<Var> vars)
+    {
+        for (const auto &[name, value] : vars) {
+            std::optional<QByteArray> saved;
+            if (qEnvironmentVariableIsSet(name)) {
+                saved = qEnvironmentVariable(name).toUtf8();
+            }
+            m_saved.append(std::make_pair(name, saved));
+            if (value.isEmpty()) {
+                qunsetenv(name);
+            } else {
+                qputenv(name, value);
+            }
+        }
+    }
+
+    ~EnvGuard()
+    {
+        for (const auto &[name, saved] : m_saved) {
+            if (saved) {
+                qputenv(name, *saved);
+            } else {
+                qunsetenv(name);
+            }
+        }
+    }
+
+    EnvGuard(const EnvGuard &) = delete;
+    EnvGuard &operator=(const EnvGuard &) = delete;
+
+private:
+    QList<std::pair<const char *, std::optional<QByteArray>>> m_saved;
+};
+
 // The audio device starts consuming as soon as playback starts, and the first
 // callback can fire before the decoder has produced its first chunk, which
 // registers as an underrun. Wait until the pipeline has delivered samples so

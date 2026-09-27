@@ -6,8 +6,8 @@
  * (SDL, PipeWire, PulseAudio backends).
  *
  * Provides marker-signature search in captured PCM, fixture file
- * lifetime management, env-var save/restore, and sample-level
- * verification of the captured gapless stream.
+ * lifetime management, and sample-level verification of the captured
+ * gapless stream.
  */
 
 #pragma once
@@ -88,33 +88,6 @@ struct FixtureGuard {
     {
         QFile::remove(path);
     }
-};
-
-class ScopedEnvVar
-{
-public:
-    ScopedEnvVar(const QByteArray &name, const QByteArray &value)
-        : m_name(name)
-        , m_oldValue(qgetenv(m_name.constData()))
-    {
-        qputenv(m_name.constData(), value);
-    }
-
-    ~ScopedEnvVar()
-    {
-        if (m_oldValue.isEmpty()) {
-            qunsetenv(m_name.constData());
-        } else {
-            qputenv(m_name.constData(), m_oldValue);
-        }
-    }
-
-    ScopedEnvVar(const ScopedEnvVar &) = delete;
-    ScopedEnvVar &operator=(const ScopedEnvVar &) = delete;
-
-private:
-    QByteArray m_name;
-    QByteArray m_oldValue;
 };
 
 [[nodiscard]] inline bool verifySamples(const std::vector<float> &captured,

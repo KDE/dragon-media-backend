@@ -6,10 +6,27 @@
 #include "dragonnullaudiosink.h"
 #include "dragonmediabackend_factory_logging.h"
 
+#include <KLocalizedString>
+#include <QMetaObject>
+
+namespace
+{
+QString nullSinkErrorMessage()
+{
+    return i18n("Could not find any audio sink plugins.");
+}
+}
+
 DragonNullAudioSink::DragonNullAudioSink(QObject *parent)
     : DragonAudioSink(parent)
 {
-    qCWarning(dragonMediaBackendFactory) << "Null audio sink created audio output will be silent";
+    qCWarning(dragonMediaBackendFactory) << "Null audio sink created; audio output will be silent";
+    QMetaObject::invokeMethod(
+        this,
+        [this]() {
+            Q_EMIT errorOccurred(nullSinkErrorMessage());
+        },
+        Qt::QueuedConnection);
 }
 
 bool DragonNullAudioSink::probe()
@@ -20,6 +37,7 @@ bool DragonNullAudioSink::probe()
 void DragonNullAudioSink::open(int sampleRate, int channels)
 {
     setFormat(sampleRate, channels);
+    Q_EMIT errorOccurred(nullSinkErrorMessage());
 }
 
 void DragonNullAudioSink::close()
@@ -45,8 +63,9 @@ qint64 DragonNullAudioSink::deviceQueuedSamples() const
 
 bool DragonNullAudioSink::isDeviceOpen() const
 {
-    // Report "open" so position tracking and format checks don't bail.
-    return currentSampleRate() > 0;
+    // Never open: there is no device. This also disables DragonPlayer's
+    // position tracking, which is acceptable for a broken install.
+    return false;
 }
 
 bool DragonNullAudioSink::isPaused() const

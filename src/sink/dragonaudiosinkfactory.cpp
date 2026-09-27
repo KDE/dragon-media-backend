@@ -5,6 +5,7 @@
 
 #include "dragonaudiosinkfactory.h"
 #include "dragonaudiosink.h"
+#include "dragonnullaudiosink.h"
 
 #include <KPluginFactory>
 #include <KPluginMetaData>
@@ -61,7 +62,20 @@ static std::unique_ptr<DragonAudioSink> tryLoadById(const QList<KPluginMetaData>
 
 std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requestedSink, DragonAudioOutput::Backend *selectedSinkOut)
 {
-    auto plugins = KPluginMetaData::findPlugins(u"DragonMediaBackend/AudioSink"_s);
+    if (requestedSink == DragonAudioOutput::Backend::Null) {
+        if (selectedSinkOut) {
+            *selectedSinkOut = DragonAudioOutput::Backend::Null;
+        }
+        return std::make_unique<DragonNullAudioSink>();
+    }
+
+    QString pluginDir = u"DragonMediaBackend/AudioSink"_s;
+    const QString envPluginDir = qEnvironmentVariable("DRAGON_AUDIO_SINK_PLUGIN_DIR");
+    if (!envPluginDir.isEmpty()) {
+        pluginDir = envPluginDir;
+        qCDebug(dragonMediaBackendFactory) << "Audio sink plugin search directory overridden via DRAGON_AUDIO_SINK_PLUGIN_DIR:" << pluginDir;
+    }
+    auto plugins = KPluginMetaData::findPlugins(pluginDir);
 
     std::ranges::sort(plugins, [](const KPluginMetaData &a, const KPluginMetaData &b) {
         return a.value(u"Priority"_s, 0) > b.value(u"Priority"_s, 0);
@@ -95,7 +109,15 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requ
 
     const QString envSink = qEnvironmentVariable("DRAGON_AUDIO_SINK");
     if (!envSink.isEmpty()) {
-        return tryLoadById(plugins, envSink, selectedSinkOut);
+        if (envSink == u"dragonnullaudiosink"_s) {
+            if (selectedSinkOut) {
+                *selectedSinkOut = DragonAudioOutput::Backend::Null;
+            }
+            return std::make_unique<DragonNullAudioSink>();
+        }
+        if (auto sink = tryLoadById(plugins, envSink, selectedSinkOut)) {
+            return sink;
+        }
     }
 
     for (const auto &md : plugins) {
@@ -104,5 +126,9 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requ
         }
     }
 
-    return nullptr;
+    qCWarning(dragonMediaBackendFactory) << "No audio sink plugin found or loaded, falling back to null audio sink";
+    if (selectedSinkOut) {
+        *selectedSinkOut = DragonAudioOutput::Backend::Null;
+    }
+    return std::make_unique<DragonNullAudioSink>();
 }

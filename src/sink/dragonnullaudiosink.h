@@ -6,8 +6,9 @@
 #pragma once
 
 #include "dragonaudiosink.h"
+#include "dragonmediabackend_export.h"
 
-class DragonNullAudioSink : public DragonAudioSink
+class DRAGONMEDIABACKEND_EXPORT DragonNullAudioSink : public DragonAudioSink
 {
     Q_OBJECT
 

@@ -74,12 +74,15 @@ public:
      *        Output through PulseAudio.
      * \value SDL
      *        Output through an SDL3 audio device.
+     * \value Null
+     *        A null audio sink that produces no sound (fallback).
      */
     enum class Backend {
         Auto,
         PipeWire,
         PulseAudio,
-        SDL
+        SDL,
+        Null,
     };
     Q_ENUM(Backend)
 

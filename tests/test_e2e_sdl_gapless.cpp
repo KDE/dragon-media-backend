@@ -67,10 +67,12 @@ private Q_SLOTS:
     void testTrackStartNotWiped();
 
 private:
-    ScopedEnvVar m_sinkEnv{"DRAGON_AUDIO_SINK", "dragonsdlaudiosink"};
-    ScopedEnvVar m_sdlDriverEnv{"SDL_AUDIODRIVER", qgetenv("SDL_AUDIODRIVER")};
-    ScopedEnvVar m_diskFileEnv{"SDL_AUDIO_DISK_OUTPUT_FILE", qgetenv("SDL_AUDIO_DISK_OUTPUT_FILE")};
-    ScopedEnvVar m_diskTimescaleEnv{"SDL_AUDIO_DISK_TIMESCALE", qgetenv("SDL_AUDIO_DISK_TIMESCALE")};
+    EnvGuard m_envGuard{
+        {"DRAGON_AUDIO_SINK", QByteArray("dragonsdlaudiosink")},
+        {"SDL_AUDIODRIVER", qgetenv("SDL_AUDIODRIVER")},
+        {"SDL_AUDIO_DISK_OUTPUT_FILE", qgetenv("SDL_AUDIO_DISK_OUTPUT_FILE")},
+        {"SDL_AUDIO_DISK_TIMESCALE", qgetenv("SDL_AUDIO_DISK_TIMESCALE")},
+    };
     QString m_pcmCapturePath;
 };
 
@@ -96,9 +98,11 @@ void TestSdlGapless::testGaplessSameFormat()
     QVERIFY(QFileInfo::exists(fixtureA.filePath));
     QVERIFY(QFileInfo::exists(fixtureB.filePath));
 
-    qputenv("SDL_AUDIODRIVER", "disk");
-    qputenv("SDL_AUDIO_DISK_OUTPUT_FILE", m_pcmCapturePath.toUtf8());
-    qputenv("SDL_AUDIO_DISK_TIMESCALE", "1");
+    EnvGuard diskDriverEnv{
+        {"SDL_AUDIODRIVER", QByteArray("disk")},
+        {"SDL_AUDIO_DISK_OUTPUT_FILE", m_pcmCapturePath.toUtf8()},
+        {"SDL_AUDIO_DISK_TIMESCALE", QByteArray("1")},
+    };
 
     QFile::remove(m_pcmCapturePath);
 
@@ -139,9 +143,11 @@ void TestSdlGapless::testGaplessFormatChangeStateMachine()
     QVERIFY(QFileInfo::exists(fixtureA.filePath));
     QVERIFY(QFileInfo::exists(fixtureB.filePath));
 
-    qputenv("SDL_AUDIODRIVER", "dummy");
-    qunsetenv("SDL_AUDIO_DISK_OUTPUT_FILE");
-    qunsetenv("SDL_AUDIO_DISK_TIMESCALE");
+    EnvGuard driverEnv{
+        {"SDL_AUDIODRIVER", QByteArray("dummy")},
+        {"SDL_AUDIO_DISK_OUTPUT_FILE", QByteArray()},
+        {"SDL_AUDIO_DISK_TIMESCALE", QByteArray()},
+    };
 
     DragonPlayer player;
     DragonDiagnostics diagnostics(&player);
@@ -163,9 +169,11 @@ void TestSdlGapless::testSingleTrackIntegrity()
     auto fixture = makeTenSecondFixture(kSampleRate, channels, durationFrames);
     QVERIFY(QFileInfo::exists(fixture.filePath));
 
-    qputenv("SDL_AUDIODRIVER", "disk");
-    qputenv("SDL_AUDIO_DISK_OUTPUT_FILE", m_pcmCapturePath.toUtf8());
-    qputenv("SDL_AUDIO_DISK_TIMESCALE", "1");
+    EnvGuard diskDriverEnv{
+        {"SDL_AUDIODRIVER", QByteArray("disk")},
+        {"SDL_AUDIO_DISK_OUTPUT_FILE", m_pcmCapturePath.toUtf8()},
+        {"SDL_AUDIO_DISK_TIMESCALE", QByteArray("1")},
+    };
     QFile::remove(m_pcmCapturePath);
 
     DragonPlayer player;
@@ -225,9 +233,11 @@ void TestSdlGapless::testTrackStartNotWiped()
 
     constexpr int channels = kDefaultChannels;
 
-    qputenv("SDL_AUDIODRIVER", "disk");
-    qputenv("SDL_AUDIO_DISK_OUTPUT_FILE", m_pcmCapturePath.toUtf8());
-    qputenv("SDL_AUDIO_DISK_TIMESCALE", "1");
+    EnvGuard diskDriverEnv{
+        {"SDL_AUDIODRIVER", QByteArray("disk")},
+        {"SDL_AUDIO_DISK_OUTPUT_FILE", m_pcmCapturePath.toUtf8()},
+        {"SDL_AUDIO_DISK_TIMESCALE", QByteArray("1")},
+    };
 
     const int shortFrames = kSampleRate * 2 / 3; // 29400 frames = 58800 samples < 65536
     auto fixtureA = makeStartMarkerFixture(kSampleRate, channels, shortFrames);

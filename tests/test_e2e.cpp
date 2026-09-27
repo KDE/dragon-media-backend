@@ -599,7 +599,7 @@ void TestE2E::testGaplessPreWarmError()
 
 void TestE2E::testGaplessStarvation()
 {
-    qputenv("DRAGON_TEST_SLOW_OPEN", "1");
+    EnvGuard slowOpenGuard({{"DRAGON_TEST_SLOW_OPEN", QByteArray("1")}});
 
     VERIFY_FIXTURE_EXISTS(u"gs-3s-2c-44100hz.ogg"_s);
     VERIFY_FIXTURE_EXISTS(u"gs-3s-2c-44100hz.m4a"_s);
@@ -626,8 +626,6 @@ void TestE2E::testGaplessStarvation()
     const int underrunsAfter = diagnostics.audioUnderrunCount();
 
     qDebug() << "Underruns before:" << underrunsBefore << "after:" << underrunsAfter << "delta:" << underrunsAfter - underrunsBefore;
-
-    qunsetenv("DRAGON_TEST_SLOW_OPEN");
 
     player.stop();
 

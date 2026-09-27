@@ -40,7 +40,7 @@ void TestPulseGapless::testGaplessSameFormat()
 {
     using namespace FixtureGenerator;
 
-    ScopedEnvVar sinkEnv("DRAGON_AUDIO_SINK", "dragonpulseaudiosink");
+    EnvGuard sinkEnv{{{"DRAGON_AUDIO_SINK", QByteArray("dragonpulseaudiosink")}}};
 
     auto fixtureA = makeEndMarkerFixture(kSampleRate, kDefaultChannels, kDurationFrames);
     auto fixtureB = makeStartMarkerFixture(kSampleRate, kDefaultChannels, kDurationFrames);

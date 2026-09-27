@@ -170,6 +170,7 @@ void MainWindow::setupUi()
     m_sinkComboBox->addItem(i18n("PipeWire"), static_cast<int>(DragonAudioOutput::Backend::PipeWire));
     m_sinkComboBox->addItem(i18n("PulseAudio"), static_cast<int>(DragonAudioOutput::Backend::PulseAudio));
     m_sinkComboBox->addItem(i18n("SDL"), static_cast<int>(DragonAudioOutput::Backend::SDL));
+    m_sinkComboBox->addItem(i18n("Null"), static_cast<int>(DragonAudioOutput::Backend::Null));
     int defaultIdx = m_sinkComboBox->findData(static_cast<int>(DragonAudioOutput::Backend::Auto));
     if (defaultIdx >= 0)
         m_sinkComboBox->setCurrentIndex(defaultIdx);

@@ -5,6 +5,7 @@
 add_library(dragon_sink_objs OBJECT
     dragonaudiosink.cpp
     dragonaudiosinkfactory.cpp
+    dragonnullaudiosink.cpp
     dragondrainstate.h
 )
 
@@ -19,12 +20,16 @@ target_link_libraries(dragon_sink_objs PRIVATE
     Qt6::Core
     Qt6::Gui
     KF6::CoreAddons
+    KF6::I18n
     QCoro6::Core
 )
 
 set_target_properties(dragon_sink_objs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-target_compile_definitions(dragon_sink_objs PRIVATE DragonMediaBackend_EXPORTS)
+target_compile_definitions(dragon_sink_objs PRIVATE
+    DragonMediaBackend_EXPORTS
+    TRANSLATION_DOMAIN="dragonmediabackend"
+)
 
 kcoreaddons_add_plugin(dragonsdlaudiosink
         SOURCES dragonsdlaudiosink.cpp ${dragonsdlaudiosink_SOURCES}
