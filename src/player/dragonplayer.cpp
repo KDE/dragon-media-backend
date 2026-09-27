@@ -52,6 +52,10 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, Drag
         } else {
             audioOutput->sink()->resume();
         }
+        if (!audioOutput->sink()->isDeviceOpen()) {
+            reportDeviceOpenFailure();
+            return;
+        }
         audioOutput->sink()->setQueueReady(!audioOutput->sink()->isFlushPending());
         setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
         break;
@@ -60,6 +64,10 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, Drag
         if (!audioOutput->sink()->isDeviceOpen() || !audioOutput->sink()->hasFormat(sampleRate, channels)) {
             audioOutput->sink()->open(sampleRate, channels);
         }
+        if (!audioOutput->sink()->isDeviceOpen()) {
+            reportDeviceOpenFailure();
+            return;
+        }
         audioOutput->sink()->pause();
         audioOutput->sink()->setQueueReady(!audioOutput->sink()->isFlushPending());
         setPlaybackState(DragonPlayer::PlaybackState::PausedState);
@@ -67,6 +75,18 @@ void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, Drag
 
     case DragonPlayer::PlaybackState::StoppedState:
         break;
+    }
+}
+
+void DragonPlayerPrivate::reportDeviceOpenFailure()
+{
+    // Generic contract check for every backend: a sink whose open() did not
+    // result in an open device cannot play. Sinks may report specifics via
+    // errorOccurred() during open(); supply a fallback otherwise. The player
+    // stays stopped instead of silently pretending to play.
+    qCWarning(dragonMediaBackendPlayer) << "audio device failed to open, refusing playback state transition";
+    if (currentError == DragonPlayer::Error::NoError) {
+        setError(DragonPlayer::Error::ResourceError, i18n("Failed to open the audio output device."));
     }
 }
 
@@ -738,6 +758,10 @@ void DragonPlayer::play()
 
     if (d->audioOutput && !d->audioOutput->sink()->isDeviceOpen() && d->currentSampleRate > 0) {
         d->audioOutput->sink()->open(d->currentSampleRate, d->currentChannels);
+    }
+    if (d->audioOutput && !d->audioOutput->sink()->isDeviceOpen()) {
+        d->reportDeviceOpenFailure();
+        return;
     }
     if (d->audioOutput) {
         d->audioOutput->sink()->setQueueReady(!d->audioOutput->sink()->isFlushPending());

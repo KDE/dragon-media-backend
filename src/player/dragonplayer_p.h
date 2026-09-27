@@ -66,6 +66,7 @@ private Q_SLOTS:
 
 private:
     void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);
+    void reportDeviceOpenFailure();
 
     void writeToQueues(std::span<const float> pcm, const std::stop_token &st);
 

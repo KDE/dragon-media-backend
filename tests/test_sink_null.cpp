@@ -18,6 +18,14 @@
 
 using namespace Qt::StringLiterals;
 
+// The null sink's error message goes through i18n(); force the C locale so
+// the English substring assertions below are stable regardless of the
+// environment the test suite runs in.
+[[maybe_unused]] static const bool s_cLocaleForced = [] {
+    qputenv("LC_ALL", "C");
+    return true;
+}();
+
 class TestSinkNull : public QObject
 {
     Q_OBJECT
@@ -37,9 +45,7 @@ void TestSinkNull::testFactoryExplicitNull()
     auto sink = createAudioSink(DragonAudioOutput::Backend::Null, &selectedSink);
     QVERIFY(sink != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
-    QVERIFY(sink->probe());
-    QVERIFY(!sink->isDeviceOpen());
-    QVERIFY(!sink->isPaused());
+    QVERIFY(qobject_cast<DragonNullAudioSink *>(sink.get()) != nullptr);
 }
 
 void TestSinkNull::testFactoryEnvRequestsNull()
@@ -102,13 +108,15 @@ void TestSinkNull::testNullSinkMethods()
     QVERIFY(!sink.isPaused());
     QCOMPARE(sink.deviceQueuedSamples(), 0);
 
-    // Opening should set format and emit error
+    // Opening records the format and reports the broken install, but the
+    // device never becomes open: that is the contract DragonPlayer's generic
+    // open-failure handling relies on to refuse playback.
     QSignalSpy errorSpy(&sink, &DragonAudioSink::errorOccurred);
     sink.open(44100, 2);
     QVERIFY(!sink.isDeviceOpen());
     QVERIFY(!sink.isPaused());
     QVERIFY(sink.hasFormat(44100, 2));
-    QVERIFY(errorSpy.count() >= 1);
+    QCOMPARE(errorSpy.count(), 1);
     QVERIFY(errorSpy.last().at(0).toString().contains(u"plugins"_s, Qt::CaseInsensitive));
 
     // Volume and mute operations
@@ -135,6 +143,8 @@ void TestSinkNull::testNullSinkSignals()
 
 void TestSinkNull::testPlayerWithNullSinkState()
 {
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
+
     DragonPlayer player(DragonAudioOutput::Backend::Null);
 
     QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
@@ -149,20 +159,34 @@ void TestSinkNull::testPlayerWithNullSinkState()
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::InvalidMedia);
     QVERIFY(player.errorString().contains(u"plugins"_s, Qt::CaseInsensitive));
 
-    // Attempting to play should keep playback state stopped and remain in error
+    // play() without a source is a no-op
     player.play();
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
-    // Setting a source
-    player.setSource(QUrl::fromLocalFile(QString::fromUtf8(DRAGON_SDL_TESTS_FIXTURES_DIR) + u"/sine_440_cbr.mp3"_s));
-    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    // Load a real file and request playback: the media loads successfully,
+    // but the sink's open() fails by contract (isDeviceOpen() stays false),
+    // so the player must refuse to enter PlayingState and keep reporting the
+    // resource error instead of silently pretending to play.
+    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
+    player.setSource(QUrl::fromLocalFile(QString::fromUtf8(DRAGON_SDL_TESTS_FIXTURES_DIR) + u"/sample-3s.mp3"_s));
     player.play();
+
+    // LoadingMedia -> LoadedMedia -> InvalidMedia (the playback gate re-sets
+    // the error once the load succeeds)
+    QTRY_VERIFY(statusSpy.count() >= 3);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::InvalidMedia);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.error(), DragonPlayer::Error::ResourceError);
+    QVERIFY(player.errorString().contains(u"plugins"_s, Qt::CaseInsensitive));
+    QVERIFY(stateSpy.isEmpty());
+
     player.pause();
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     player.stop();
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY(stateSpy.isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestSinkNull)

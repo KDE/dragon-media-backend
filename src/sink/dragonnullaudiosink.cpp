@@ -36,8 +36,10 @@ bool DragonNullAudioSink::probe()
 
 void DragonNullAudioSink::open(int sampleRate, int channels)
 {
-    setFormat(sampleRate, channels);
+    // Report the broken install on every open attempt; DragonPlayer's generic
+    // open-failure handling sees isDeviceOpen() == false and refuses playback.
     Q_EMIT errorOccurred(nullSinkErrorMessage());
+    setFormat(sampleRate, channels);
 }
 
 void DragonNullAudioSink::close()
@@ -63,8 +65,10 @@ qint64 DragonNullAudioSink::deviceQueuedSamples() const
 
 bool DragonNullAudioSink::isDeviceOpen() const
 {
-    // Never open: there is no device. This also disables DragonPlayer's
-    // position tracking, which is acceptable for a broken install.
+    // Never open: there is no device, and open() always fails by contract.
+    // The player refuses playback-state transitions to sinks that are not
+    // open after an open() attempt, so playback never starts and position
+    // tracking never begins.
     return false;
 }
 
