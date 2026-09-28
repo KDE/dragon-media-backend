@@ -10,6 +10,9 @@ description = Audio playback backend for music players
 documentationinheaders = true
 
 headerdirs += ../include/DragonMediaBackend
+# DragonDuration is a private C++ class, but it backs the public
+# dragonDuration QML value type, so qdoc needs to parse its header.
+headers += ../src/player/dragonduration.h
 sourcedirs += .
 
 imagedirs += ..

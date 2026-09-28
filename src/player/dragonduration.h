@@ -17,19 +17,11 @@
 /*!
  * \class DragonDuration
  * \inmodule DragonMediaBackend
+ * \internal
  *
  * \brief Millisecond-precise duration value for QML.
  *
- * DragonDuration is the property-facing serialization of
- * std::chrono::milliseconds. It converts implicitly to and from
- * std::chrono::milliseconds (and from std::optional, where an empty
- * optional maps to an invalid duration), so the C++ API can keep
- * using std::chrono types while Q_PROPERTYs declared with
- * DragonDuration appear to QML as value objects with \l milliseconds,
- * \l seconds and \l valid sub-properties and a formatted() invokable.
- *
- * In QML the duration is not a number; use the \l milliseconds or
- * \l seconds sub-properties for arithmetic.
+ * DragonDuration provides QML access to std::chrono::milliseconds properties.
  */
 
 /*!
@@ -40,9 +32,7 @@
  * \brief A millisecond-precise duration value.
  *
  * dragonDuration is how the duration and position properties of
- * DragonPlayer appear in QML. It is not a number; use the
- * \l milliseconds or \l seconds sub-properties for arithmetic, and
- * assign to one of them to seek:
+ * DragonPlayer appear in QML.
  *
  * \qml
  * DragonPlayer {

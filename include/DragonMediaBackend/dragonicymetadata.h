@@ -19,7 +19,7 @@ class DragonIcyMetadataPrivate;
  * \class DragonIcyMetadata
  * \inmodule DragonMediaBackend
  *
- * \brief Implicit-shared \l {https://cast.readme.io/docs/icy} {ICY metadata} from radio streams.
+ * \brief \l {https://cast.readme.io/docs/icy} {ICY metadata} from radio streams.
  *
  * While an internet radio stream is played, the stream interleaves ICY
  * metadata blocks with the audio. Dragon Media Backend extracts them and

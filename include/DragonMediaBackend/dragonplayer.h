@@ -5,9 +5,8 @@
 
 #pragma once
 
-#include "dragonduration.h"
-#include "dragonfftframe.h"
 #include "dragonmediabackend_export.h"
+#include "player/dragonduration.h"
 
 #include <DragonMediaBackend/dragonaudiooutput.h>
 #include <DragonMediaBackend/dragonicymetadata.h>
@@ -278,8 +277,8 @@ public:
     /*!
      * \property DragonPlayer::duration
      *
-     * The duration of the current source as a \l DragonDuration, which
-     * is \l {DragonDuration::valid}{invalid} for streams of unknown
+     * The duration of the current source as a \l dragonDuration value,
+     * which is \l {dragonDuration::valid}{invalid} for streams of unknown
      * duration. C++ code should use duration(), which reports unknown
      * durations as an empty std::optional.
      */
@@ -294,7 +293,7 @@ public:
     /*!
      * \property DragonPlayer::position
      *
-     * The playback position as a \l DragonDuration. Setting it while a
+     * The playback position as a \l dragonDuration value. Setting it while a
      * source is loaded seeks playback. C++ code should use position()
      * and setPosition() with std::chrono::milliseconds.
      */

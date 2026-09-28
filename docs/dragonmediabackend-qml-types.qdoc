@@ -1,0 +1,18 @@
+/*
+    SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+
+    SPDX-License-Identifier: CC-BY-SA-4.0
+*/
+
+/*!
+    \qmlmodule org.kde.dragonmediabackend
+    \title Dragon Media Backend QML Types
+    \brief QML types for audio playback, output control, and visualization.
+
+    The \c {org.kde.dragonmediabackend} QML module is provided by the
+    DragonMediaBackend library. Import it with:
+
+    \qml
+    import org.kde.dragonmediabackend
+    \endqml
+*/
