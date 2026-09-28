@@ -25,6 +25,8 @@
 #include <stop_token>
 #include <vector>
 
+using namespace std::chrono_literals;
+
 class DragonDiagnostics;
 class DragonAudioOutput;
 class DragonPositionEstimator;
@@ -105,7 +107,7 @@ private:
 
     uint64_t loadGeneration = 0;
 
-    std::chrono::milliseconds prefinishMark{};
+    std::chrono::milliseconds prefinishMark{2000ms};
     bool aboutToFinishEmitted = false;
     bool inGaplessSetSource = false;
 };

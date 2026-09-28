@@ -102,7 +102,7 @@ void TestDragonDuration::testPlayerPropertyRead()
     const QVariant value = player.property("prefinishMark");
     QVERIFY(value.isValid());
     QCOMPARE(value.metaType(), QMetaType::fromType<DragonDuration>());
-    QCOMPARE(value.value<DragonDuration>(), DragonDuration{0ms});
+    QCOMPARE(value.value<DragonDuration>(), DragonDuration{2000ms});
 
     const QVariant position = player.property("position");
     QVERIFY(position.isValid());

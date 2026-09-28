@@ -58,7 +58,7 @@ private:
 void TestPlayerPrefinish::testPrefinishMarkDefaultValue()
 {
     DragonPlayer player;
-    QCOMPARE(player.prefinishMark(), 0ms);
+    QCOMPARE(player.prefinishMark(), 2000ms);
 }
 
 void TestPlayerPrefinish::testPrefinishMarkGetterSetter()
@@ -107,7 +107,8 @@ void TestPlayerPrefinish::testAboutToFinishNeverEmittedWhenDisabled()
     DragonPlayer player;
     PlayerHelper helper(&player);
 
-    QVERIFY(player.prefinishMark() == 0ms);
+    player.setPrefinishMark(0ms);
+    QCOMPARE(player.prefinishMark(), 0ms);
 
     QSignalSpy spy(&player, &DragonPlayer::aboutToFinish);
 

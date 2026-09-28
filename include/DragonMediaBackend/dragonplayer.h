@@ -51,15 +51,6 @@ class DragonPlayerPrivate;
  * \l aboutToFinish is emitted, set \l nextSource to play the next
  * track immediately after the current one.
  *
- * Its QML interface follows the QMediaPlayer conventions: set
- * \l source and call play(), pause() and stop(). Radio streams are
- * supported, reporting ICY metadata through
- * \l currentPlayingForRadiosChanged.
- *
- * The \l duration and \l position properties are dragonDuration value
- * types; use their milliseconds and seconds sub-properties for
- * arithmetic, and assign to position.milliseconds to seek.
- *
  * \qml
  * DragonPlayer {
  *     id: player
@@ -333,7 +324,7 @@ public:
      * \qmlproperty dragonDuration org.kde.dragonmediabackend::DragonPlayer::prefinishMark
      *
      * How long before the end of the source \l aboutToFinish is emitted.
-     * The default is 0 milliseconds.
+     * The default is 2 seconds.
      */
 
     /*!
@@ -341,10 +332,7 @@ public:
      *
      * How long before the end of the source aboutToFinish() is emitted,
      * allowing the next source to be queued for a gapless transition.
-     * The default is 0 milliseconds, meaning aboutToFinish() is only
-     * emitted when decoding finishes with no time remaining. C++ code
-     * should use prefinishMark() and setPrefinishMark() with
-     * std::chrono::milliseconds.
+     * The default is 2 seconds.
      *
      * \sa aboutToFinish()
      */

@@ -59,8 +59,7 @@ struct DecodeError {
     QString message;
 };
 
-struct DecodeEof {
-};
+struct DecodeEof { };
 
 using DecodeEvent = std::variant<FormatReady, SamplesChunk, DecodeError, DecodeEof>;
 

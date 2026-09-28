@@ -5,10 +5,10 @@ Dependencies:
 - 'on': ['@all']
   'require':
     'frameworks/kio': '@stable-kf6'
-    'libraries/qcoro': '@stable-kf6'
+    'third-party/qcoro': '@stable-kf6'
 
 Options:
-  clang-format-versions: [22]
+  clang-format-versions: [23]
   per-test-timeout: 300
   require-passing-tests-on: ['Linux', 'Windows']
   cmake-options: '-DECM_QMLCACHE_UNITY_BUILD=ON -DDRAGON_CI_PIPEWIRE=ON'
