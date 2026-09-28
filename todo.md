@@ -17,3 +17,4 @@ next:
 * support replaygain
 * support equalizers
 * support CD via cdio
+* suport for fade out on stop, fade-out/fade-in on sudden track change

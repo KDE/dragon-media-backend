@@ -559,8 +559,11 @@ public Q_SLOTS:
     void setNextSource(const QUrl &nextSource);
 
     /*!
-     * Sets the display name of the stream being played to \a name. Used
-     * when reporting ICY metadata for radio streams.
+     * Sets the display name of the audio stream to \a name, as shown by the
+     * audio server (for example PipeWire's \c media.name or PulseAudio's
+     * \c media.name property). If \a name is empty, the application display
+     * name is used instead. The name is applied live when a stream is open
+     * and seeds the stream properties when playback opens one.
      */
     void setStreamName(const QString &name);
 
