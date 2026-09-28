@@ -179,12 +179,6 @@ public:
     void setCustomFields(const QHash<QString, QString> &fields);
 
     /*!
-     * Inserts the custom ICY field \a key with \a value, replacing any
-     * previous value stored under \a key.
-     */
-    void insertCustomField(const QString &key, const QString &value);
-
-    /*!
      * Returns \c true if this object was default-constructed and no
      * metadata was set.
      */

@@ -423,6 +423,7 @@ void DragonRadioStream::processMetadata(const QByteArray &metadata)
     };
 
     DragonIcyMetadata icy;
+    QHash<QString, QString> customFields;
     QByteArrayView v(metadata);
 
     while (!(v = ltrim(v)).isEmpty()) {
@@ -459,12 +460,14 @@ void DragonRadioStream::processMetadata(const QByteArray &metadata)
             } else if (key == "StreamUrl"_L1) {
                 icy.setStreamUrl(value);
             } else {
-                icy.insertCustomField(key, value);
+                customFields.insert(key, value);
             }
         }
         if (!v.isEmpty() && v.front() == ';')
             v = v.sliced(1);
     }
+
+    icy.setCustomFields(customFields);
 
     if (icy != m_lastMetadata) {
         m_lastMetadata = icy;

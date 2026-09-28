@@ -71,11 +71,6 @@ void DragonIcyMetadata::setCustomFields(const QHash<QString, QString> &fields)
     d->customFields = fields;
 }
 
-void DragonIcyMetadata::insertCustomField(const QString &key, const QString &value)
-{
-    d->customFields.insert(key, value);
-}
-
 bool DragonIcyMetadata::isNull() const
 {
     return d->streamTitle.isEmpty() && d->streamUrl.isEmpty() && d->customFields.isEmpty();
