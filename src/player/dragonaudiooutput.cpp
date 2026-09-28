@@ -58,10 +58,10 @@ DragonAudioOutput::Backend DragonAudioOutput::backend() const
     return d->selectedBackend;
 }
 
-void DragonAudioOutput::setVolume(qreal linearGain)
+void DragonAudioOutput::setVolume(qreal volume)
 {
     if (d->sink) {
-        d->sink->setVolume(static_cast<float>(linearGain));
+        d->sink->setVolume(static_cast<float>(volume));
     }
 }
 

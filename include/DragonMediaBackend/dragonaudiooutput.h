@@ -27,9 +27,10 @@ class DragonAudioOutputPrivate;
  * is created by \l DragonPlayer and accessed through
  * \l DragonPlayer::audioOutput.
  *
- * volume() takes a linear gain in the range 0.0 to 1.0. Applications
- * using a logarithmic volume scale should convert before setting it,
- * as \l DragonPlayer does for its QMediaPlayer-compatible API.
+ * volume() takes a perceptual volume value in the range 0.0 to 1.0. It
+ * is mapped logarithmically to the linear gain applied by the audio
+ * backend, so mid-range values yield a much lower linear gain (0.5 maps
+ * to roughly 15% amplitude).
  *
  * \sa DragonPlayer::audioOutput
  */
@@ -52,9 +53,9 @@ class DragonAudioOutputPrivate;
  * }
  * \endqml
  *
- * The \l volume property is a linear gain from 0.0 to 1.0.
- * Applications using a logarithmic volume scale should convert before
- * setting it.
+ * The \l volume property is a perceptual volume value from 0.0 to 1.0;
+ * it is mapped logarithmically to the linear gain applied by the audio
+ * backend.
  *
  * \sa DragonPlayer::audioOutput
  */
@@ -68,13 +69,17 @@ class DRAGONMEDIABACKEND_EXPORT DragonAudioOutput : public QObject
     /*!
      * \qmlproperty real org.kde.dragonmediabackend::DragonAudioOutput::volume
      *
-     * The linear output gain, from 0.0 (silent) to 1.0 (full volume).
+     * The perceptual volume, from 0.0 (silent) to 1.0 (full volume).
+     * Mapped logarithmically to the linear gain applied by the audio
+     * backend.
      */
 
     /*!
      * \property DragonAudioOutput::volume
      *
-     * The linear output gain, from 0.0 (silent) to 1.0 (full volume).
+     * The perceptual volume, from 0.0 (silent) to 1.0 (full volume).
+     * Mapped logarithmically to the linear gain applied by the audio
+     * backend.
      */
     Q_PROPERTY(qreal volume READ volume WRITE setVolume NOTIFY volumeChanged)
 
@@ -134,7 +139,7 @@ public:
     Q_ENUM(Backend)
 
     /*!
-     * Returns the linear output gain, from 0.0 to 1.0.
+     * Returns the perceptual volume, from 0.0 to 1.0.
      */
     [[nodiscard]] qreal volume() const;
 
@@ -151,9 +156,11 @@ public:
 
 public Q_SLOTS:
     /*!
-     * Sets the output gain to \a linearGain, in the range 0.0 to 1.0.
+     * Sets the volume to \a volume, in the range 0.0 to 1.0. The value
+     * is mapped logarithmically to the linear gain applied by the audio
+     * backend.
      */
-    void setVolume(qreal linearGain);
+    void setVolume(qreal volume);
 
     /*!
      * Mutes the output if \a muted is \c true, otherwise unmutes it.
