@@ -31,6 +31,7 @@ function(dragon_add_test name)
     # needed for Windows:
     string(REPLACE ";" "\\;" _qt_plugin_path "${_qt_plugin_path}")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
         ${ARG_ENVIRONMENT}
     )
@@ -128,12 +129,14 @@ string(REPLACE ";" "\\;" _qt_plugin_path "${_qt_plugin_path}")
 
 add_test(NAME test_e2e_sdl COMMAND test_e2e)
 set_property(TEST test_e2e_sdl APPEND PROPERTY ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen"
     "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
     "QT_PLUGIN_PATH=${_qt_plugin_path}"
 )
 if(PULSEAUDIO_FOUND)
     add_test(NAME test_e2e_pulseaudio COMMAND test_e2e)
     set_property(TEST test_e2e_pulseaudio APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
         "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
@@ -141,6 +144,7 @@ endif()
 if(PIPEWIRE_FOUND)
     add_test(NAME test_e2e_pipewire COMMAND test_e2e)
     set_property(TEST test_e2e_pipewire APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
         "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
@@ -149,12 +153,14 @@ endif()
 # Playback state tests (one executable, run once per backend via env var)
 add_test(NAME test_player_playback_sdl COMMAND test_player_playback)
 set_property(TEST test_player_playback_sdl APPEND PROPERTY ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen"
     "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
     "QT_PLUGIN_PATH=${_qt_plugin_path}"
 )
 if(PULSEAUDIO_FOUND)
     add_test(NAME test_player_playback_pulseaudio COMMAND test_player_playback)
     set_property(TEST test_player_playback_pulseaudio APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
         "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
@@ -162,6 +168,7 @@ endif()
 if(PIPEWIRE_FOUND)
     add_test(NAME test_player_playback_pipewire COMMAND test_player_playback)
     set_property(TEST test_player_playback_pipewire APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
         "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
@@ -204,12 +211,14 @@ set_tests_properties(test_audiooutput PROPERTIES DISABLED TRUE)
 
 add_test(NAME test_audiooutput_sdl COMMAND test_audiooutput)
 set_property(TEST test_audiooutput_sdl APPEND PROPERTY ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen"
     "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
     "QT_PLUGIN_PATH=${_qt_plugin_path}"
 )
 if(PULSEAUDIO_FOUND)
     add_test(NAME test_audiooutput_pulseaudio COMMAND test_audiooutput)
     set_property(TEST test_audiooutput_pulseaudio APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
         "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
@@ -217,6 +226,7 @@ endif()
 if(PIPEWIRE_FOUND)
     add_test(NAME test_audiooutput_pipewire COMMAND test_audiooutput)
     set_property(TEST test_audiooutput_pipewire APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
         "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
@@ -228,12 +238,14 @@ set_tests_properties(test_player_streamname PROPERTIES DISABLED TRUE)
 
 add_test(NAME test_player_streamname_sdl COMMAND test_player_streamname)
 set_property(TEST test_player_streamname_sdl APPEND PROPERTY ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen"
     "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
     "QT_PLUGIN_PATH=${_qt_plugin_path}"
 )
 if(PULSEAUDIO_FOUND)
     add_test(NAME test_player_streamname_pulseaudio COMMAND test_player_streamname)
     set_property(TEST test_player_streamname_pulseaudio APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
         "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
@@ -241,6 +253,7 @@ endif()
 if(PIPEWIRE_FOUND)
     add_test(NAME test_player_streamname_pipewire COMMAND test_player_streamname)
     set_property(TEST test_player_streamname_pipewire APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
         "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
         "QT_PLUGIN_PATH=${_qt_plugin_path}"
     )
