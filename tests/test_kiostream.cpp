@@ -722,7 +722,7 @@ void TestKioStream::testBackpressureNoDataLoss()
         }
     });
 
-    QTRY_VERIFY_WITH_TIMEOUT(gotEof.load() || totalRead.load() >= payload.size(), 30000);
+    QTRY_VERIFY_WITH_TIMEOUT(gotEof.load(), 30000);
     reader.join();
 
     QCOMPARE(received.size(), payload.size());
