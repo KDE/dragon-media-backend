@@ -380,7 +380,8 @@ void DragonPipeWireAudioSink::setStreamName(const QString &name)
 
 void DragonPipeWireAudioSink::clearStream()
 {
-    if (m_pw->stream) {
+    if (m_pw->stream && m_pw->loop) {
+        PwThreadLoopLock lock(m_pw->loop.get());
         pw_stream_flush(m_pw->stream.get(), false);
     }
 }

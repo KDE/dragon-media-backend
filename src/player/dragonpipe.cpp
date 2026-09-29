@@ -24,8 +24,17 @@ DragonPipe<T>::DragonPipe(size_t capacity)
 template<typename T>
 size_t DragonPipe<T>::Producer::write(std::span<const T> items, std::stop_token st)
 {
+    return write(items, std::move(st), {});
+}
+
+template<typename T>
+size_t DragonPipe<T>::Producer::write(std::span<const T> items, std::stop_token st, const std::function<bool()> &shouldAbort)
+{
     size_t written = 0;
     while (written < items.size() && !st.stop_requested()) {
+        if (shouldAbort && shouldAbort()) {
+            break;
+        }
         auto remaining = items.subspan(written);
         size_t n = m_pipe->m_queue.try_write(remaining.size(), [&](std::span<T> b1, std::span<T> b2) {
             auto in_iter = std::ranges::copy_n(remaining.begin(), b1.size(), b1.begin()).in;

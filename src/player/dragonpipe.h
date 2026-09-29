@@ -13,6 +13,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
+#include <functional>
 #include <mutex>
 #include <span>
 #include <stop_token>
@@ -31,6 +32,11 @@ public:
         Producer() = default;
 
         size_t write(std::span<const T> items, std::stop_token st);
+
+        // Writes items, but discards the unwritten remainder as soon as
+        // shouldAbort() returns true. Used so a producer parked on a full
+        // pipe can abandon stale content without waiting for a consumer.
+        size_t write(std::span<const T> items, std::stop_token st, const std::function<bool()> &shouldAbort);
 
         template<typename Func>
         size_t writeSomeWith(size_t maxItems, Func &&fn);

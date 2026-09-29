@@ -236,7 +236,15 @@ void DragonPlayerPrivate::writeToQueues(std::span<const float> pcm, const std::s
         return;
     }
 
-    audioPipe.producer().write(pcm, st);
+    const uint64_t generation = contentGeneration.load(std::memory_order_acquire);
+    audioPipe.producer().write(pcm, st, [this, generation]() {
+        return contentGeneration.load(std::memory_order_acquire) != generation;
+    });
+}
+
+void DragonPlayerPrivate::invalidateQueuedContent()
+{
+    contentGeneration.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
@@ -570,6 +578,7 @@ void DragonPlayer::setSource(const QUrl &source)
     }
 
     if (d->audioOutput) {
+        d->invalidateQueuedContent();
         d->audioOutput->sink()->setQueueReady(false);
         d->audioOutput->sink()->resetDrainState();
         d->audioOutput->sink()->setPositionOffset(0ms, DragonAudioSink::PositionResetMode::NormalTrackChange);
@@ -679,6 +688,7 @@ void DragonPlayer::setPosition(std::chrono::milliseconds position)
     const std::chrono::milliseconds upperBound = d->currentDuration ? std::max(*d->currentDuration, 0ms) : 0ms;
     position = std::clamp(position, 0ms, upperBound);
 
+    d->invalidateQueuedContent();
     d->decodePipeline.requestSeek(position);
 
     if (d->audioOutput) {

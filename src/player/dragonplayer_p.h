@@ -72,6 +72,8 @@ private:
 
     void writeToQueues(std::span<const float> pcm, const std::stop_token &st);
 
+    void invalidateQueuedContent();
+
     QCoro::Task<void> startLoad(QUrl source, uint64_t generation);
 
     void setPlaybackState(DragonPlayer::PlaybackState state);
@@ -106,6 +108,11 @@ private:
     bool playRequestedReload = false;
 
     uint64_t loadGeneration = 0;
+
+    // Bumped on seek and track change so the decode thread's producer can
+    // discard queued/in-flight stale audio itself instead of relying on the
+    // audio sink's consumer-side drain to win a race against fresh samples.
+    std::atomic<uint64_t> contentGeneration{0};
 
     std::chrono::milliseconds prefinishMark{2000ms};
     bool aboutToFinishEmitted = false;

@@ -8,6 +8,8 @@
 
 #include <QtTest>
 
+#include <atomic>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -196,6 +198,51 @@ private Q_SLOTS:
 
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{16});
         pipe.consumer().drain();
+        QCOMPARE_EQ(pipe.consumer().ready(), size_t{0});
+    }
+
+    void testWriteAbortWhileParkedOnFullPipe()
+    {
+        DragonPipe<float> pipe(16);
+
+        std::array<float, 16> fill{};
+        writeAll(pipe.producer(), fill);
+        QCOMPARE_EQ(pipe.producer().available(), size_t{0});
+
+        std::stop_source ss;
+        std::atomic<uint64_t> generation{0};
+        std::atomic<bool> writerReturned{false};
+
+        std::jthread writer([&] {
+            std::vector<float> stale(64, 1.0f);
+            pipe.producer().write(stale, ss.get_token(), [&generation, captured = generation.load()] {
+                return generation.load() != captured;
+            });
+            writerReturned.store(true);
+        });
+
+        QTest::qWait(10);
+        QVERIFY2(!writerReturned.load(), "writer must be parked while the pipe is full and no abort was signaled");
+
+        generation.fetch_add(1);
+
+        QTRY_VERIFY_WITH_TIMEOUT(writerReturned.load(), 100);
+        writer.join();
+    }
+
+    void testWriteAbortBeforeStart()
+    {
+        DragonPipe<float> pipe(64);
+
+        std::atomic<uint64_t> generation{1};
+
+        std::array<float, 8> data{};
+        const uint64_t captured = 0;
+        size_t n = pipe.producer().write(data, std::stop_source{}.get_token(), [&generation, captured] {
+            return generation.load() != captured;
+        });
+
+        QCOMPARE_EQ(n, size_t{0});
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{0});
     }
 
