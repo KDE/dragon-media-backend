@@ -43,6 +43,7 @@ set(_dragon_audio_tests
     test_player_playback_pulseaudio
     test_player_playback_pipewire
     test_player_signals
+    test_player_setsource
     test_player_prefinish
     test_player_fft
     test_e2e
