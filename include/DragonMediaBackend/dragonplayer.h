@@ -6,7 +6,6 @@
 #pragma once
 
 #include "dragonmediabackend_export.h"
-#include "player/dragonduration.h"
 
 #include <DragonMediaBackend/dragonaudiooutput.h>
 #include <DragonMediaBackend/dragonicymetadata.h>
@@ -19,6 +18,12 @@
 #include <chrono>
 #include <memory>
 #include <optional>
+
+#ifdef DRAGONMEDIABACKEND_INTERNAL_BUILD
+#include "player/dragonduration.h"
+#else
+class DragonDuration;
+#endif
 
 class DragonAudioOutput;
 class DragonPlayerPrivate;

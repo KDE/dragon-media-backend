@@ -5,6 +5,7 @@
 add_library(dragon_player_objs OBJECT
     dragonplayer.cpp
     dragonduration.cpp
+    dragonduration.h
     dragonaudiooutput.cpp
     dragonpipe.cpp
     dragondiagnostics.cpp
@@ -30,5 +31,6 @@ set_target_properties(dragon_player_objs PROPERTIES POSITION_INDEPENDENT_CODE ON
 
 target_compile_definitions(dragon_player_objs PRIVATE
     DragonMediaBackend_EXPORTS
+    DRAGONMEDIABACKEND_INTERNAL_BUILD
     TRANSLATION_DOMAIN="dragonmediabackend"
 )
