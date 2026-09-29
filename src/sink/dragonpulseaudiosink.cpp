@@ -22,6 +22,7 @@ K_PLUGIN_CLASS_WITH_JSON(DragonPulseAudioSink, "pulseaudio_sink.json")
 
 #include <chrono>
 #include <span>
+#include <thread>
 
 using namespace Qt::StringLiterals;
 
@@ -239,21 +240,19 @@ void DragonPulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *user
     }
 }
 
-bool DragonPulseAudioSink::connectToServer()
+DragonPulseAudioSink::ConnectResult DragonPulseAudioSink::connectToServer()
 {
     MainloopPtr ml(pa_threaded_mainloop_new());
     if (!ml) {
         qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_threaded_mainloop_new failed";
-        Q_EMIT errorOccurred(i18n("PulseAudio: failed to create mainloop"));
-        return false;
+        return std::unexpected(ConnectError{i18n("PulseAudio: failed to create mainloop")});
     }
 
     pa_threaded_mainloop_set_name(ml.get(), "dragon-pa");
 
     if (pa_threaded_mainloop_start(ml.get()) < 0) {
         qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_threaded_mainloop_start failed";
-        Q_EMIT errorOccurred(i18n("PulseAudio: failed to start mainloop"));
-        return false;
+        return std::unexpected(ConnectError{i18n("PulseAudio: failed to start mainloop")});
     }
 
     // From this point onward the PA thread may signal, so publish the mainloop
@@ -267,8 +266,7 @@ bool DragonPulseAudioSink::connectToServer()
     pa_mainloop_api *api = pa_threaded_mainloop_get_api(m_pa->mainloop.get());
     if (!api) {
         qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_threaded_mainloop_get_api returned null";
-        Q_EMIT errorOccurred(i18n("PulseAudio: failed to get mainloop API"));
-        return false;
+        return std::unexpected(ConnectError{i18n("PulseAudio: failed to get mainloop API")});
     }
 
     pa_proplist *rawProplist = pa_proplist_new();
@@ -293,8 +291,7 @@ bool DragonPulseAudioSink::connectToServer()
     ContextPtr ctx(pa_context_new_with_proplist(api, defaultStreamName().toUtf8().constData(), rawProplist));
     if (!ctx) {
         qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_context_new_with_proplist failed";
-        Q_EMIT errorOccurred(i18n("PulseAudio: failed to create context"));
-        return false;
+        return std::unexpected(ConnectError{i18n("PulseAudio: failed to create context")});
     }
 
     {
@@ -304,8 +301,7 @@ bool DragonPulseAudioSink::connectToServer()
 
         if (pa_context_connect(ctx.get(), nullptr, PA_CONTEXT_NOFLAGS, nullptr) < 0) {
             qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_context_connect failed";
-            Q_EMIT errorOccurred(i18n("PulseAudio: failed to connect context"));
-            return false;
+            return std::unexpected(ConnectError{i18n("PulseAudio: failed to connect context")});
         }
 
         pa_context_state_t state = pa_context_get_state(ctx.get());
@@ -315,9 +311,9 @@ bool DragonPulseAudioSink::connectToServer()
         }
 
         if (!PA_CONTEXT_IS_GOOD(state) || state != PA_CONTEXT_READY) {
-            qCCritical(dragonMediaBackendAudio) << "PulseAudio: context did not become ready:" << state;
-            Q_EMIT errorOccurred(i18n("PulseAudio: context not ready"));
-            return false;
+            qCCritical(dragonMediaBackendAudio) << "PulseAudio: context did not become ready, state:" << state
+                                                << "error:" << pa_strerror(pa_context_errno(ctx.get()));
+            return std::unexpected(ConnectError{i18n("PulseAudio: context not ready"), true});
         }
 
         pa_context_set_subscribe_callback(ctx.get(), DragonPulseAudioSink::subscribeCallback, this);
@@ -334,7 +330,7 @@ bool DragonPulseAudioSink::connectToServer()
     cleanupGuard.dismiss();
 
     qCDebug(dragonMediaBackendAudio) << "PulseAudio connected";
-    return true;
+    return {};
 }
 
 void DragonPulseAudioSink::resetStreamLocked()
@@ -383,120 +379,137 @@ void DragonPulseAudioSink::open(int sampleRate, int channels)
 
     preAllocateCallbackBuffer(static_cast<size_t>(sampleRate) * static_cast<size_t>(channels));
 
-    if (!connectToServer()) {
-        return;
-    }
+    // Session setup can transiently fail server-side: the pulse server (or
+    // pipewire-pulse standing in for it, e.g. in CI) may drop the connection
+    // or reject CREATE_PLAYBACK_STREAM while it is still tearing down the
+    // previous cycle's objects. Retry the full setup before giving up.
+    constexpr int kMaxOpenAttempts = 3;
+    constexpr auto kRetryBackoffBase = std::chrono::milliseconds(50);
 
-    QString pendingError;
-
-    auto openStream = [&]() -> bool {
-        pa_sample_spec ss;
-        ss.format = PA_SAMPLE_FLOAT32LE;
-        ss.rate = static_cast<uint32_t>(sampleRate);
-        ss.channels = static_cast<uint8_t>(channels);
-
-        pa_channel_map channelMap;
-        if (!pa_channel_map_init_auto(&channelMap, channels, PA_CHANNEL_MAP_DEFAULT)) {
-            pendingError = i18n("PulseAudio: failed to init channel map");
-            qCCritical(dragonMediaBackendAudio) << "PulseAudio: failed to init channel map for" << channels << "channels";
-            return false;
+    for (int attempt = 1; attempt <= kMaxOpenAttempts; ++attempt) {
+        if (attempt > 1) {
+            const auto backoff = kRetryBackoffBase * (attempt - 1);
+            qCWarning(dragonMediaBackendAudio) << "PulseAudio: stream setup failed, retrying in" << backoff.count() << "ms (attempt" << attempt << "of"
+                                               << kMaxOpenAttempts << ")";
+            std::this_thread::sleep_for(backoff);
         }
 
-        const QString mediaName = resolvedStreamName();
-        const QByteArray mediaNameUtf8 = mediaName.toUtf8();
-
-        pa_proplist *streamProplist = pa_proplist_new();
-        if (!streamProplist) {
-            pendingError = i18n("PulseAudio: failed to create stream proplist");
-            qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_proplist_new failed";
-            return false;
-        }
-        auto streamProplistGuard = qScopeGuard([streamProplist]() {
-            pa_proplist_free(streamProplist);
-        });
-
-        pa_proplist_sets(streamProplist, PA_PROP_MEDIA_NAME, mediaNameUtf8.constData());
-        pa_proplist_sets(streamProplist, PA_PROP_APPLICATION_NAME, defaultStreamName().toUtf8().constData());
-        pa_proplist_sets(streamProplist, PA_PROP_MEDIA_ROLE, "music");
-        const QString appId = applicationIconName();
-        if (!appId.isEmpty()) {
-            const QByteArray appIdUtf8 = appId.toUtf8();
-            pa_proplist_sets(streamProplist, PA_PROP_APPLICATION_ICON_NAME, appIdUtf8.constData());
-            pa_proplist_sets(streamProplist, PA_PROP_APPLICATION_ID, appIdUtf8.constData());
+        if (const ConnectResult connected = connectToServer(); !connected) {
+            if (!connected.error().retryable || attempt == kMaxOpenAttempts) {
+                Q_EMIT errorOccurred(connected.error().message);
+                return;
+            }
+            continue;
         }
 
-        m_pa->stream.reset(pa_stream_new_with_proplist(m_pa->context.get(), mediaNameUtf8.constData(), &ss, &channelMap, streamProplist));
-        if (!m_pa->stream) {
-            pendingError = i18n("PulseAudio: failed to create stream");
-            qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_stream_new_with_proplist failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
-            return false;
+        auto openStream = [&]() -> ConnectResult {
+            pa_sample_spec ss;
+            ss.format = PA_SAMPLE_FLOAT32LE;
+            ss.rate = static_cast<uint32_t>(sampleRate);
+            ss.channels = static_cast<uint8_t>(channels);
+
+            pa_channel_map channelMap;
+            if (!pa_channel_map_init_auto(&channelMap, channels, PA_CHANNEL_MAP_DEFAULT)) {
+                qCCritical(dragonMediaBackendAudio) << "PulseAudio: failed to init channel map for" << channels << "channels";
+                return std::unexpected(ConnectError{i18n("PulseAudio: failed to init channel map")});
+            }
+
+            const QString mediaName = resolvedStreamName();
+            const QByteArray mediaNameUtf8 = mediaName.toUtf8();
+
+            pa_proplist *streamProplist = pa_proplist_new();
+            if (!streamProplist) {
+                qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_proplist_new failed";
+                return std::unexpected(ConnectError{i18n("PulseAudio: failed to create stream proplist")});
+            }
+            auto streamProplistGuard = qScopeGuard([streamProplist]() {
+                pa_proplist_free(streamProplist);
+            });
+
+            pa_proplist_sets(streamProplist, PA_PROP_MEDIA_NAME, mediaNameUtf8.constData());
+            pa_proplist_sets(streamProplist, PA_PROP_APPLICATION_NAME, defaultStreamName().toUtf8().constData());
+            pa_proplist_sets(streamProplist, PA_PROP_MEDIA_ROLE, "music");
+            const QString appId = applicationIconName();
+            if (!appId.isEmpty()) {
+                const QByteArray appIdUtf8 = appId.toUtf8();
+                pa_proplist_sets(streamProplist, PA_PROP_APPLICATION_ICON_NAME, appIdUtf8.constData());
+                pa_proplist_sets(streamProplist, PA_PROP_APPLICATION_ID, appIdUtf8.constData());
+            }
+
+            m_pa->stream.reset(pa_stream_new_with_proplist(m_pa->context.get(), mediaNameUtf8.constData(), &ss, &channelMap, streamProplist));
+            if (!m_pa->stream) {
+                qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_stream_new_with_proplist failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
+                return std::unexpected(ConnectError{i18n("PulseAudio: failed to create stream")});
+            }
+
+            pa_stream_set_state_callback(m_pa->stream.get(), DragonPulseAudioSink::streamStateCallback, this);
+            pa_stream_set_write_callback(m_pa->stream.get(), DragonPulseAudioSink::writeCallback, this);
+            pa_stream_set_underflow_callback(m_pa->stream.get(), DragonPulseAudioSink::underflowCallback, this);
+
+            pa_buffer_attr bufferAttr;
+            bufferAttr.maxlength = static_cast<uint32_t>(-1);
+            bufferAttr.tlength = static_cast<uint32_t>(pa_bytes_per_second(&ss) * kDefaultBufferMs / 1000 * kDefaultTlengthMultiplier);
+            bufferAttr.prebuf = 0;
+            bufferAttr.minreq = sizeof(float) * 1024;
+            bufferAttr.fragsize = sizeof(float) * 1024;
+
+            pa_cvolume cvol;
+            pa_cvolume_set(&cvol, channels, pa_sw_volume_from_linear(m_cachedGain.load(std::memory_order_relaxed)));
+
+            int ret = pa_stream_connect_playback(
+                m_pa->stream.get(),
+                nullptr,
+                &bufferAttr,
+                static_cast<pa_stream_flags_t>(PA_STREAM_ADJUST_LATENCY | PA_STREAM_AUTO_TIMING_UPDATE | PA_STREAM_INTERPOLATE_TIMING),
+                &cvol,
+                nullptr);
+
+            if (ret < 0) {
+                qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_stream_connect_playback failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
+                return std::unexpected(ConnectError{i18n("PulseAudio: failed to connect stream")});
+            }
+
+            pa_stream_state_t streamState = pa_stream_get_state(m_pa->stream.get());
+            while (PA_STREAM_IS_GOOD(streamState) && streamState != PA_STREAM_READY) {
+                pa_threaded_mainloop_wait(m_pa->mainloop.get());
+                streamState = pa_stream_get_state(m_pa->stream.get());
+            }
+
+            if (!PA_STREAM_IS_GOOD(streamState) || streamState != PA_STREAM_READY) {
+                qCCritical(dragonMediaBackendAudio) << "PulseAudio: stream did not become ready, state:" << streamState
+                                                    << "context state:" << pa_context_get_state(m_pa->context.get())
+                                                    << "error:" << pa_strerror(pa_context_errno(m_pa->context.get()));
+                return std::unexpected(ConnectError{i18n("PulseAudio: stream not ready"), true});
+            }
+
+            m_pa->sinkInputIndex = pa_stream_get_index(m_pa->stream.get());
+            return {};
+        };
+
+        ConnectResult result;
+        {
+            ScopedMainloopLock lock(m_pa->mainloop.get());
+            result = openStream();
+            if (!result) {
+                resetStreamLocked();
+            }
+        } // ScopedMainloopLock released here
+
+        if (result) {
+            m_paused.store(false, std::memory_order_release);
+            m_open.store(true, std::memory_order_release);
+
+            qCDebug(dragonMediaBackendAudio) << "PulseAudio stream opened, sink_input_index:" << m_pa->sinkInputIndex;
+            return;
         }
 
-        pa_stream_set_state_callback(m_pa->stream.get(), DragonPulseAudioSink::streamStateCallback, this);
-        pa_stream_set_write_callback(m_pa->stream.get(), DragonPulseAudioSink::writeCallback, this);
-        pa_stream_set_underflow_callback(m_pa->stream.get(), DragonPulseAudioSink::underflowCallback, this);
-
-        pa_buffer_attr bufferAttr;
-        bufferAttr.maxlength = static_cast<uint32_t>(-1);
-        bufferAttr.tlength = static_cast<uint32_t>(pa_bytes_per_second(&ss) * kDefaultBufferMs / 1000 * kDefaultTlengthMultiplier);
-        bufferAttr.prebuf = 0;
-        bufferAttr.minreq = sizeof(float) * 1024;
-        bufferAttr.fragsize = sizeof(float) * 1024;
-
-        pa_cvolume cvol;
-        pa_cvolume_set(&cvol, channels, pa_sw_volume_from_linear(m_cachedGain.load(std::memory_order_relaxed)));
-
-        int ret =
-            pa_stream_connect_playback(m_pa->stream.get(),
-                                       nullptr,
-                                       &bufferAttr,
-                                       static_cast<pa_stream_flags_t>(PA_STREAM_ADJUST_LATENCY | PA_STREAM_AUTO_TIMING_UPDATE | PA_STREAM_INTERPOLATE_TIMING),
-                                       &cvol,
-                                       nullptr);
-
-        if (ret < 0) {
-            pendingError = i18n("PulseAudio: failed to connect stream");
-            qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_stream_connect_playback failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
-            return false;
-        }
-
-        pa_stream_state_t streamState = pa_stream_get_state(m_pa->stream.get());
-        while (PA_STREAM_IS_GOOD(streamState) && streamState != PA_STREAM_READY) {
-            pa_threaded_mainloop_wait(m_pa->mainloop.get());
-            streamState = pa_stream_get_state(m_pa->stream.get());
-        }
-
-        if (!PA_STREAM_IS_GOOD(streamState) || streamState != PA_STREAM_READY) {
-            pendingError = i18n("PulseAudio: stream not ready");
-            qCCritical(dragonMediaBackendAudio) << "PulseAudio: stream did not become ready";
-            return false;
-        }
-
-        m_pa->sinkInputIndex = pa_stream_get_index(m_pa->stream.get());
-        return true;
-    };
-
-    bool ok = false;
-    {
-        ScopedMainloopLock lock(m_pa->mainloop.get());
-        ok = openStream();
-        if (!ok) {
-            resetStreamLocked();
-        }
-    } // ScopedMainloopLock released here
-
-    if (!ok) {
-        if (!pendingError.isEmpty()) {
-            Q_EMIT errorOccurred(pendingError);
-        }
         disconnectFromServer();
-        return;
+
+        if (!result.error().retryable || attempt == kMaxOpenAttempts) {
+            Q_EMIT errorOccurred(result.error().message);
+            return;
+        }
     }
-
-    m_paused.store(false, std::memory_order_release);
-    m_open.store(true, std::memory_order_release);
-
-    qCDebug(dragonMediaBackendAudio) << "PulseAudio stream opened, sink_input_index:" << m_pa->sinkInputIndex;
 }
 
 void DragonPulseAudioSink::close()

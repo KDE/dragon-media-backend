@@ -16,6 +16,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstddef>
+#include <expected>
 #include <memory>
 #include <mutex>
 
@@ -60,7 +61,15 @@ public:
     static void sinkInputInfoCallback(pa_context *c, const pa_sink_input_info *info, int eol, void *userdata);
 
 private:
-    [[nodiscard]] bool connectToServer();
+    struct ConnectError {
+        QString message;
+        // true: the server refused or dropped the setup round-trip, open() may retry.
+        // false: local API failure, do not retry.
+        bool retryable = false;
+    };
+    using ConnectResult = std::expected<void, ConnectError>;
+
+    [[nodiscard]] ConnectResult connectToServer();
     void disconnectFromServer();
     void resetStreamLocked();
     void applyVolume(float linearGain);
