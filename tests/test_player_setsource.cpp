@@ -30,6 +30,7 @@ private Q_SLOTS:
     void testSetSourceSignalOrderFromFreshPlayer();
     void testSetSourceSignalOrderFromPlaying();
     void testSetSourceSameUrlWhileStoppedReloads();
+    void testSetSourceThenClearInSameTurnDoesNotLoad();
 };
 
 void TestPlayerSetSource::testSetSourceFromFreshPlayerNoForceEmit()
@@ -117,6 +118,24 @@ void TestPlayerSetSource::testSetSourceSameUrlWhileStoppedReloads()
              "setSource(sameUrl) while stopped with loaded media must run a real reload cycle (LoadingMedia)");
     QVERIFY2(tracker.verifyOrder(u"statusChanged(LoadingMedia)"_s, u"statusChanged(LoadedMedia)"_s),
              "reload must reach a fresh LoadedMedia after LoadingMedia so resume hooks can fire");
+}
+
+void TestPlayerSetSource::testSetSourceThenClearInSameTurnDoesNotLoad()
+{
+    DragonPlayer player;
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
+    player.setSource(QUrl());
+
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
+
+    QTest::qWait(3000);
+
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
+    for (const auto &args : statusSpy) {
+        QVERIFY2(args.at(0).value<DragonPlayer::MediaStatus>() != DragonPlayer::MediaStatus::LoadedMedia, "a cleared source must never reach LoadedMedia");
+    }
 }
 
 QTEST_MAIN(TestPlayerSetSource)

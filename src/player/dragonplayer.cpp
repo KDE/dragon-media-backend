@@ -602,6 +602,7 @@ void DragonPlayer::setSource(const QUrl &source)
         }
 
         if (d->currentSource.isEmpty()) {
+            ++d->loadGeneration;
             if (d->audioOutput) {
                 d->audioOutput->sink()->close();
                 d->audioOutput->sink()->reset();
