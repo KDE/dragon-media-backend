@@ -61,6 +61,7 @@ pipeline so we don't have to.
 The plan is to keep simple; more complicated DSP features will be implemented via PipeWire and perhaps exclusive to it.
 
 This library is use-case oriented, currently that means just music players. It differs from Qt Multimedia and Phonon in
-that it will never provide raw PCM output/input, direct graph manipulation etc. 
+that rather than provide raw PCM output/input, direct graph manipulation etc it would provide an API to accomplish the
+operation itself.
 
 More specific plans available in the [todo file](todo.md).
