@@ -642,7 +642,16 @@ void DragonPlayer::setSource(const QUrl &source)
     Q_EMIT seekableChanged(d->currentSeekable);
 
     ++d->loadGeneration;
-    d->startLoad(d->currentSource, d->loadGeneration);
+
+    const uint64_t generation = d->loadGeneration;
+    const QUrl sourceToLoad = d->currentSource;
+    auto *priv = d.get();
+    QMetaObject::invokeMethod(
+        priv,
+        [priv, sourceToLoad, generation]() {
+            priv->startLoad(sourceToLoad, generation);
+        },
+        Qt::QueuedConnection);
 }
 
 void DragonPlayer::setNextSource(const QUrl &nextSource)

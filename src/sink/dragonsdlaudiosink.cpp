@@ -336,6 +336,13 @@ void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioSt
         return;
     }
 
+    if (self->m_drain.decodeFinished()) {
+        SDL_FlushAudioStream(stream);
+        if (SDL_GetAudioStreamQueued(stream) > 0 || SDL_GetAudioStreamAvailable(stream) > 0) {
+            return;
+        }
+    }
+
     if (self->m_drain.tryClaimDrain() && self->m_drain.claimIsCurrent()) {
         QMetaObject::invokeMethod(
             self,
