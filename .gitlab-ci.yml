@@ -11,6 +11,7 @@ include:
       - /gitlab-templates/linux-qt6-next.yml
       - /gitlab-templates/windows-qt6.yml
       - /gitlab-templates/freebsd-qt6.yml
+      - /gitlab-templates/android-qt6.yml
 
 suse_tumbleweed_qt611:
   before_script:
@@ -37,6 +38,13 @@ freebsd150_qt611:
     - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
     - git clone https://github.com/mborgerding/kissfft.git --depth=1 --branch 131.2.0 kissfft-src
     - git clone https://github.com/libsdl-org/SDL.git --depth=1 --branch release-3.4.12 sdl3-src
+
+android_qt611:
+  before_script:
+    - git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
+    - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
+  script:
+    - bash ci/run-android-artifact-job.sh
 
 .dragonqml_apk:
   stage: build
