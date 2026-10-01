@@ -42,17 +42,17 @@ target_include_directories(DragonMediaBackend
 target_link_libraries(DragonMediaBackend
     PUBLIC
         Qt6::Core
-        Qt6::Network
         Qt6::QmlIntegration
-        PkgConfig::FFmpeg
-        QCoro6::Core
     PRIVATE
+        Qt6::Network
+        QCoro6::Core
+        QCoro6::Network
+        PkgConfig::FFmpeg
         Qt6::Gui
         KF6::KIOCore
         KF6::CoreAddons
         KF6::I18n
         kissfft::kissfft
-        QCoro6::Network
 )
 
 target_compile_definitions(DragonMediaBackend PRIVATE

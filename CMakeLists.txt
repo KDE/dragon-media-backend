@@ -293,6 +293,13 @@ install(TARGETS DragonMediaBackend
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
+# DLL hell, not clear if we should do this or not
+if(WIN32 AND TARGET SDL3-shared)
+    install(TARGETS SDL3-shared
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+endif()
+
 set(DragonMediaBackend_PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
