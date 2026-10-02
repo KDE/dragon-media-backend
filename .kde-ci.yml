@@ -6,7 +6,6 @@ Dependencies:
   'require':
     'frameworks/kio': '@stable-kf6'
     'third-party/qcoro': '@stable-kf6'
-    'libs/libflac': '@stable'
 
 Options:
   clang-format-versions: [23]
