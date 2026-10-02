@@ -13,7 +13,7 @@ add_library(dragon_stream_objs OBJECT
 
 target_include_directories(dragon_stream_objs PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/..
-    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend
     ${PROJECT_BINARY_DIR}
 )
 

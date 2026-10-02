@@ -5,9 +5,9 @@
 
 #include "mediasessioncontroller.h"
 
-#include <DragonMediaBackend/dragonaudiooutput.h>
-#include <DragonMediaBackend/dragonicymetadata.h>
-#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonAudioOutput>
+#include <DragonIcyMetadata>
+#include <DragonPlayer>
 
 #include <QtCore/qcoreapplication_platform.h>
 #include <QtCore/qjnienvironment.h>

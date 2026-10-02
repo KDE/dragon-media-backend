@@ -4,7 +4,7 @@
  */
 #pragma once
 
-#include <DragonMediaBackend/dragonfftframe.h>
+#include <DragonFftFrame>
 #include <QObject>
 #include <QtQmlIntegration/qqmlintegration.h>
 #include <span>

@@ -7,8 +7,8 @@
 
 #include "dragonmediabackend_export.h"
 
-#include <DragonMediaBackend/dragonaudiooutput.h>
-#include <DragonMediaBackend/dragonicymetadata.h>
+#include "dragonaudiooutput.h"
+#include "dragonicymetadata.h"
 
 #include <QObject>
 #include <QString>
@@ -31,6 +31,7 @@ class DragonPlayerPrivate;
 /*!
  * \class DragonPlayer
  * \inmodule DragonMediaBackend
+ * \inheaderfile DragonPlayer
  *
  * \brief Audio playback controller.
  *

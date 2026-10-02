@@ -10,8 +10,8 @@
 #include "stream/dragonbufferprogress.h"
 #include "stream/dragonstream.h"
 #include "stream/dragonstreamfactory.h"
-#include <DragonMediaBackend/dragonicymetadata.h>
-#include <DragonMediaBackend/dragonplayer.h>
+#include <dragonicymetadata.h>
+#include <dragonplayer.h>
 
 #include "dragonmediabackend_decode_logging.h"
 #include "dragonmediabackend_logging.h"

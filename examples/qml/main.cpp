@@ -5,9 +5,9 @@
 
 #include "stream/logging_timestamp.h"
 #include "visualizationcontroller.h"
-#include <DragonMediaBackend/dragonaudiooutput.h>
-#include <DragonMediaBackend/dragonplayer.h>
-#include <DragonMediaBackend/dragonspectrumanalyzer.h>
+#include <DragonAudioOutput>
+#include <DragonPlayer>
+#include <DragonSpectrumAnalyzer>
 
 #include <QFileInfo>
 #include <QGuiApplication>

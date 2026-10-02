@@ -14,7 +14,7 @@
 #include "test_utils.h"
 
 #include "player/dragondiagnostics.h"
-#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonPlayer>
 
 using namespace Qt::StringLiterals;
 using namespace GaplessTestUtils;

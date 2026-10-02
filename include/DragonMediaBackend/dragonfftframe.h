@@ -19,6 +19,7 @@ class DragonFftFramePrivate;
 /*!
  * \class DragonFftFrame
  * \inmodule DragonMediaBackend
+ * \inheaderfile DragonFftFrame
  *
  * \brief Value object holding one FFT visualization frame.
  *

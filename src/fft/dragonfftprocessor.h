@@ -5,10 +5,10 @@
 
 #pragma once
 
-#include "DragonMediaBackend/dragonfftframe.h"
-#include "DragonMediaBackend/dragonspectrumanalyzer.h"
 #include "dragoncppcompat.h"
 #include "dragonmediabackend_export.h"
+#include <dragonfftframe.h>
+#include <dragonspectrumanalyzer.h>
 
 #include <array>
 #include <atomic>

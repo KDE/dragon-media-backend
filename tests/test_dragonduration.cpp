@@ -11,7 +11,7 @@
 #include "logging_timestamp_init.h"
 
 #include "player/dragonduration.h"
-#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonPlayer>
 
 #include <QSignalSpy>
 #include <QVariant>

@@ -13,7 +13,7 @@
 #include "logging_timestamp_init.h"
 
 #include "player/dragondiagnostics.h"
-#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonPlayer>
 
 #include "testhttpserver.h"
 

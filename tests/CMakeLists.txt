@@ -4,6 +4,11 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Core Qml Test)
 
+# FLAC is a test-only dependency: libFLAC generates the deterministic
+# fixtures used by the gapless tests. It is never checked or linked when
+# tests are disabled.
+pkg_check_modules(FLAC REQUIRED IMPORTED_TARGET flac)
+
 include(ECMMarkNonGuiExecutable)
 
 option(DRAGON_CI_PIPEWIRE "Start a headless PipeWire daemon for audio tests" OFF)
@@ -178,15 +183,13 @@ endif()
 dragon_add_test(test_network_playback LIBRARIES ${_player_libs})
 
 # SDL gapless tests uses SDL disk driver for PCM capture verification
-if(FLAC_FOUND)
-    dragon_add_test(test_e2e_sdl_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC)
-    set_property(TEST test_e2e_sdl_gapless APPEND PROPERTY ENVIRONMENT
-        "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
-    )
-endif()
+dragon_add_test(test_e2e_sdl_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC)
+set_property(TEST test_e2e_sdl_gapless APPEND PROPERTY ENVIRONMENT
+    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
+)
 
 # PipeWire gapless tests requires PipeWire + WirePlumber with dragon-test-sink (monitor ports)
-if(PIPEWIRE_FOUND AND FLAC_FOUND)
+if(PIPEWIRE_FOUND)
     dragon_add_test(test_e2e_pipewire_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC PkgConfig::PIPEWIRE)
     if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
         set_tests_properties(test_e2e_pipewire_gapless PROPERTIES
@@ -197,7 +200,7 @@ endif()
 
 # PulseAudio gapless tests Pulse client output routed to dragon-test-sink,
 # captured via PipeWire monitor ports (requires PulseAudio on PipeWire)
-if(PIPEWIRE_FOUND AND PULSEAUDIO_FOUND AND FLAC_FOUND)
+if(PIPEWIRE_FOUND AND PULSEAUDIO_FOUND)
     dragon_add_test(test_e2e_pulseaudio_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC PkgConfig::PIPEWIRE)
     if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
         set_tests_properties(test_e2e_pulseaudio_gapless PROPERTIES

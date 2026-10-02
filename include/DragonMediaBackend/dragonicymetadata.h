@@ -18,6 +18,7 @@ class DragonIcyMetadataPrivate;
 /*!
  * \class DragonIcyMetadata
  * \inmodule DragonMediaBackend
+ * \inheaderfile DragonIcyMetadata
  *
  * \brief \l {https://cast.readme.io/docs/icy} {ICY metadata} from radio streams.
  *

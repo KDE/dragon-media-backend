@@ -12,7 +12,7 @@
 #include "test_utils.h"
 
 #include "player/dragonevent.h"
-#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonPlayer>
 
 #include <algorithm>
 #include <cmath>

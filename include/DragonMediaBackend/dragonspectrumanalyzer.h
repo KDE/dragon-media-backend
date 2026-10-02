@@ -20,6 +20,7 @@ class DragonSpectrumAnalyzerPrivate;
 /*!
  * \class DragonSpectrumAnalyzer
  * \inmodule DragonMediaBackend
+ * \inheaderfile DragonSpectrumAnalyzer
  *
  * \brief Control surface for the FFT visualization stream.
  *

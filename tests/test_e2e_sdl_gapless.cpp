@@ -20,7 +20,7 @@
 #include "test_utils.h"
 
 #include "player/dragondiagnostics.h"
-#include <DragonMediaBackend/dragonplayer.h>
+#include <DragonPlayer>
 
 #include <cmath>
 #include <cstring>

@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include <DragonMediaBackend/dragonfftframe.h>
-#include <DragonMediaBackend/dragonspectrumanalyzer.h>
+#include <dragonfftframe.h>
+#include <dragonspectrumanalyzer.h>
 
 #include <cstddef>
 #include <functional>

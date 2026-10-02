@@ -4,7 +4,7 @@
  */
 
 #include "visualizationcontroller.h"
-#include <DragonMediaBackend/dragonspectrumanalyzer.h>
+#include <DragonSpectrumAnalyzer>
 #include <algorithm>
 #include <array>
 #include <cmath>

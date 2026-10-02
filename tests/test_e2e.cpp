@@ -13,8 +13,8 @@
 #include "test_utils.h"
 
 #include "player/dragondiagnostics.h"
-#include <DragonMediaBackend/dragonplayer.h>
-#include <DragonMediaBackend/dragonspectrumanalyzer.h>
+#include <DragonPlayer>
+#include <DragonSpectrumAnalyzer>
 
 using namespace Qt::StringLiterals;
 using namespace std::chrono_literals;

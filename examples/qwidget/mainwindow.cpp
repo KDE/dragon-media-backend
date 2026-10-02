@@ -9,10 +9,10 @@
 #include "dragonvisualizer.h"
 
 #include "player/dragondiagnostics.h"
-#include <DragonMediaBackend/dragonaudiooutput.h>
-#include <DragonMediaBackend/dragonfftframe.h>
-#include <DragonMediaBackend/dragonplayer.h>
-#include <DragonMediaBackend/dragonspectrumanalyzer.h>
+#include <DragonAudioOutput>
+#include <DragonFftFrame>
+#include <DragonPlayer>
+#include <DragonSpectrumAnalyzer>
 
 #include <chrono>
 

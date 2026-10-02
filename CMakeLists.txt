@@ -4,7 +4,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(DragonMediaBackend
-    VERSION 0.81.1
+    VERSION 0.82.0
     DESCRIPTION "KDE audio library using SDL3, ffmpeg, kissfft, and C++23"
     LANGUAGES CXX
 )
@@ -21,16 +21,36 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(ECM 6.0.0 REQUIRED NO_MODULE)
+find_package(ECM 6.0.0 NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
+
+include(FeatureSummary)
+set_package_properties(ECM PROPERTIES
+    TYPE REQUIRED
+    DESCRIPTION "Extra CMake Modules."
+    URL "https://invent.kde.org/frameworks/extra-cmake-modules"
+)
+feature_summary(WHAT REQUIRED_PACKAGES_NOT_FOUND FATAL_ON_MISSING_REQUIRED_PACKAGES)
 
 include(KDEInstallDirs)
 include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
+include(ECMGenerateExportHeader)
+include(ECMGenerateHeaders)
 include(ECMQtDeclareLoggingCategory)
+include(ECMSetupVersion)
+include(ECMFeatureSummary)
 include(ECMGenerateQDoc)
 include(KDEClangFormat)
 include(KDEGitCommitHooks)
+
+ecm_setup_version(PROJECT
+    VARIABLE_PREFIX DRAGONMEDIABACKEND
+    VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_version.h"
+    PACKAGE_VERSION_FILE "${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfigVersion.cmake"
+    COMPATIBILITY SameMajorVersion
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+)
 
 if(MSVC)
     add_compile_options(/std:c++latest)
@@ -120,10 +140,27 @@ pkg_check_modules(FFmpeg IMPORTED_TARGET REQUIRED
 )
 
 pkg_check_modules(PIPEWIRE IMPORTED_TARGET libpipewire-0.3)
+if(PIPEWIRE_FOUND)
+    set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND PIPEWIRE)
+endif()
 
 pkg_check_modules(PULSEAUDIO IMPORTED_TARGET libpulse)
+if(PULSEAUDIO_FOUND)
+    set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND PULSEAUDIO)
+endif()
 
-pkg_check_modules(FLAC IMPORTED_TARGET flac)
+set_package_properties(PIPEWIRE PROPERTIES
+    TYPE OPTIONAL
+    DESCRIPTION "PipeWire multimedia server"
+    PURPOSE "PipeWire audio output sink"
+    URL "https://pipewire.org"
+)
+set_package_properties(PULSEAUDIO PROPERTIES
+    TYPE OPTIONAL
+    DESCRIPTION "PulseAudio sound server system for POSIX OSes"
+    PURPOSE "PulseAudio audio output sink"
+    URL "https://www.freedesktop.org/wiki/Software/PulseAudio/"
+)
 
 if(NOT TARGET PkgConfig::FFmpeg)
     add_library(PkgConfig::FFmpeg INTERFACE IMPORTED)
@@ -209,6 +246,8 @@ ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     HEADER "dragonmediabackend_logging.h"
     IDENTIFIER "dragonMediaBackendPlayer"
     CATEGORY_NAME "org.kde.dragonmediabackend.player"
+    DESCRIPTION "DragonMediaBackend (player core)"
+    EXPORT DragonMediaBackend
     DEFAULT_SEVERITY Info
 )
 
@@ -216,6 +255,8 @@ ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     HEADER "dragonmediabackend_decoder_logging.h"
     IDENTIFIER "dragonMediaBackendDecoder"
     CATEGORY_NAME "org.kde.dragonmediabackend.decoder"
+    DESCRIPTION "DragonMediaBackend (ffmpeg decoder)"
+    EXPORT DragonMediaBackend
     DEFAULT_SEVERITY Info
 )
 
@@ -223,6 +264,8 @@ ecm_qt_declare_logging_category(dragonsdlaudiosink_SOURCES
     HEADER "dragonmediabackend_audio_logging.h"
     IDENTIFIER "dragonMediaBackendAudio"
     CATEGORY_NAME "org.kde.dragonmediabackend.audio"
+    DESCRIPTION "DragonMediaBackend (SDL audio output)"
+    EXPORT DragonMediaBackend
     DEFAULT_SEVERITY Info
 )
 
@@ -230,6 +273,8 @@ ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     HEADER "dragonmediabackend_fft_logging.h"
     IDENTIFIER "dragonMediaBackendFft"
     CATEGORY_NAME "org.kde.dragonmediabackend.fft"
+    DESCRIPTION "DragonMediaBackend (FFT processor)"
+    EXPORT DragonMediaBackend
     DEFAULT_SEVERITY Info
 )
 
@@ -237,6 +282,8 @@ ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     HEADER "dragonmediabackend_network_logging.h"
     IDENTIFIER "dragonMediaBackendNetwork"
     CATEGORY_NAME "org.kde.dragonmediabackend.network"
+    DESCRIPTION "DragonMediaBackend (radio stream)"
+    EXPORT DragonMediaBackend
     DEFAULT_SEVERITY Info
 )
 
@@ -244,6 +291,8 @@ ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     HEADER "dragonmediabackend_decode_logging.h"
     IDENTIFIER "dragonMediaBackendDecode"
     CATEGORY_NAME "org.kde.dragonmediabackend.decode"
+    DESCRIPTION "DragonMediaBackend (decode pipeline)"
+    EXPORT DragonMediaBackend
     DEFAULT_SEVERITY Info
 )
 
@@ -251,6 +300,8 @@ ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     HEADER "dragonmediabackend_factory_logging.h"
     IDENTIFIER "dragonMediaBackendFactory"
     CATEGORY_NAME "org.kde.dragonmediabackend.factory"
+    DESCRIPTION "DragonMediaBackend (sink factory)"
+    EXPORT DragonMediaBackend
     DEFAULT_SEVERITY Info
 )
 
@@ -272,31 +323,47 @@ if(PIPEWIRE_FOUND)
     )
 endif()
 
+ecm_qt_install_logging_categories(
+    EXPORT DragonMediaBackend
+    FILE dragonmediabackend.categories
+    DESTINATION "${KDE_INSTALL_LOGGINGCATEGORIESDIR}"
+    SORT
+)
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOMOC_RELY_ON_EXPORTS ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 add_subdirectory(src)
 
-include(GenerateExportHeader)
-
-generate_export_header(DragonMediaBackend
+ecm_generate_export_header(DragonMediaBackend
     BASE_NAME DragonMediaBackend
     EXPORT_MACRO_NAME DRAGONMEDIABACKEND_EXPORT
     EXPORT_FILE_NAME dragonmediabackend_export.h
+    VERSION ${PROJECT_VERSION}
+    USE_VERSION_HEADER "\"dragonmediabackend_version.h\""
+    DEPRECATED_BASE_VERSION 0
+)
+
+ecm_generate_headers(DragonMediaBackend_CamelCase_HEADERS
+    HEADER_NAMES
+        DragonAudioOutput
+        DragonFftFrame
+        DragonIcyMetadata
+        DragonPlayer
+        DragonSpectrumAnalyzer
+    RELATIVE include/DragonMediaBackend
 )
 
 install(TARGETS DragonMediaBackend
     EXPORT DragonMediaBackend-targets
-    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    ${KF_INSTALL_TARGETS_DEFAULT_ARGS}
 )
 
 # DLL hell, not clear if we should do this or not
 if(WIN32 AND TARGET SDL3-shared)
     install(TARGETS SDL3-shared
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
     )
 endif()
 
@@ -307,38 +374,36 @@ set(DragonMediaBackend_PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h
     ${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_export.h
+    ${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_version.h
 )
 
 install(FILES ${DragonMediaBackend_PUBLIC_HEADERS}
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/DragonMediaBackend
+    ${DragonMediaBackend_CamelCase_HEADERS}
+    DESTINATION ${KDE_INSTALL_INCLUDEDIR}/DragonMediaBackend
+    COMPONENT Devel
 )
 
-install(FILES dragonmediabackend.categories DESTINATION ${KDE_INSTALL_DATAROOTDIR}/qlogging-categories6)
-
 include(CMakePackageConfigHelpers)
+
+set(CMAKECONFIG_INSTALL_DIR "${KDE_INSTALL_CMAKEPACKAGEDIR}/DragonMediaBackend")
 
 install(EXPORT DragonMediaBackend-targets
     FILE DragonMediaBackend-targets.cmake
     NAMESPACE DragonMediaBackend::
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMediaBackend
+    DESTINATION ${CMAKECONFIG_INSTALL_DIR}
 )
 
 configure_package_config_file(
     ${CMAKE_CURRENT_SOURCE_DIR}/cmake/DragonMediaBackendConfig.cmake.in
     ${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfig.cmake
-    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMediaBackend
-)
-
-write_basic_package_version_file(
-    ${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfig-version.cmake
-    VERSION ${PROJECT_VERSION}
-    COMPATIBILITY SameMajorVersion
+    INSTALL_DESTINATION ${CMAKECONFIG_INSTALL_DIR}
 )
 
 install(FILES
     ${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfig.cmake
-    ${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfig-version.cmake
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/DragonMediaBackend
+    ${CMAKE_CURRENT_BINARY_DIR}/DragonMediaBackendConfigVersion.cmake
+    DESTINATION ${CMAKECONFIG_INSTALL_DIR}
+    COMPONENT Devel
 )
 
 file(GLOB ALL_ROOT_FILES
@@ -386,3 +451,5 @@ if(BUILD_TESTING)
     enable_testing()
     add_subdirectory(tests)
 endif()
+
+ecm_feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)

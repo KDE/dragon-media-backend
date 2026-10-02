@@ -19,6 +19,7 @@ class DragonAudioOutputPrivate;
 /*!
  * \class DragonAudioOutput
  * \inmodule DragonMediaBackend
+ * \inheaderfile DragonAudioOutput
  *
  * \brief Audio output controls, wrapping the active audio backend.
  *

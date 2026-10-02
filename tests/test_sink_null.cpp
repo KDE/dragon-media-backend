@@ -10,11 +10,11 @@
 
 #include "test_utils.h"
 
-#include "DragonMediaBackend/dragonaudiooutput.h"
-#include "DragonMediaBackend/dragonplayer.h"
 #include "sink/dragonaudiosink.h"
 #include "sink/dragonaudiosinkfactory.h"
 #include "sink/dragonnullaudiosink.h"
+#include <DragonAudioOutput>
+#include <DragonPlayer>
 
 using namespace Qt::StringLiterals;
 

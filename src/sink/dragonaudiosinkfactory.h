@@ -6,7 +6,7 @@
 #pragma once
 
 #include "dragonmediabackend_export.h"
-#include <DragonMediaBackend/dragonaudiooutput.h>
+#include <dragonaudiooutput.h>
 #include <memory>
 
 class DragonAudioSink;

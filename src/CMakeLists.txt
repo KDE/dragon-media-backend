@@ -8,8 +8,6 @@ add_subdirectory(stream)
 add_subdirectory(fft)
 add_subdirectory(sink)
 
-include(GenerateExportHeader)
-
 qt_add_library(DragonMediaBackend SHARED
     $<TARGET_OBJECTS:dragon_player_objs>
     $<TARGET_OBJECTS:dragon_decoder_objs>
@@ -26,11 +24,16 @@ qt_add_library(DragonMediaBackend SHARED
 
 add_library(DragonMediaBackend::DragonMediaBackend ALIAS DragonMediaBackend)
 
+set_target_properties(DragonMediaBackend PROPERTIES
+    VERSION     ${DRAGONMEDIABACKEND_VERSION}
+    SOVERSION   ${DRAGONMEDIABACKEND_SOVERSION}
+)
+
 target_include_directories(DragonMediaBackend
     PUBLIC
-        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include/DragonMediaBackend>
         $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>
-        $<INSTALL_INTERFACE:include>
+        $<INSTALL_INTERFACE:${KDE_INSTALL_INCLUDEDIR}/DragonMediaBackend>
     PRIVATE
         # The generated qmltyperegistrations.cpp includes the public headers
         # by file name via __has_include().

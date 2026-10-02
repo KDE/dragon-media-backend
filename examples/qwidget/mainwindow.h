@@ -5,8 +5,8 @@
 
 #pragma once
 
-#include <DragonMediaBackend/dragonfftframe.h>
-#include <DragonMediaBackend/dragonicymetadata.h>
+#include <DragonFftFrame>
+#include <DragonIcyMetadata>
 #include <QMainWindow>
 
 #include <chrono>

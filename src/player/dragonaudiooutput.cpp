@@ -6,8 +6,8 @@
 #include "dragonplayer_p.h"
 #include "sink/dragonaudiosink.h"
 #include "sink/dragonaudiosinkfactory.h"
-#include <DragonMediaBackend/dragonaudiooutput.h>
-#include <DragonMediaBackend/dragonplayer.h>
+#include <dragonaudiooutput.h>
+#include <dragonplayer.h>
 
 #include <memory>
 

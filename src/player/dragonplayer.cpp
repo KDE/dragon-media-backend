@@ -8,9 +8,9 @@
 #include "dragonpositionestimator.h"
 #include "sink/dragonaudiosinkfactory.h"
 #include "stream/dragonstreamfactory.h"
-#include <DragonMediaBackend/dragonaudiooutput.h>
-#include <DragonMediaBackend/dragonfftframe.h>
-#include <DragonMediaBackend/dragonplayer.h>
+#include <dragonaudiooutput.h>
+#include <dragonfftframe.h>
+#include <dragonplayer.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
