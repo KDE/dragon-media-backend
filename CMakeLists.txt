@@ -89,7 +89,7 @@ if(NOT DRAGON_HAVE_STD_STOP_TOKEN)
 endif()
 
 
-set(DRAGON_MIN_QT_VERSION 6.11)
+set(DRAGON_MIN_QT_VERSION 6.8)
 find_package(Qt6 ${DRAGON_MIN_QT_VERSION} REQUIRED COMPONENTS Core Network Gui Qml QmlIntegration)
 find_package(Qt6 ${DRAGON_MIN_QT_VERSION} COMPONENTS Widgets Quick QuickControls2)
 find_package(KF6KIO REQUIRED)
