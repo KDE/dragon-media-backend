@@ -67,6 +67,8 @@ private Q_SLOTS:
     void onStreamSeekable(bool seekable);
 
 private:
+    bool streamStateTransitionsAllowed() const;
+
     void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);
     void reportDeviceOpenFailure();
 

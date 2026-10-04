@@ -13,6 +13,7 @@
 #include "logging_timestamp_init.h"
 
 #include "player/dragondiagnostics.h"
+#include "test_utils.h"
 #include <DragonPlayer>
 
 #include "testhttpserver.h"
@@ -26,11 +27,13 @@ class TestNetworkPlayback : public QObject
 
 private Q_SLOTS:
     void initTestCase();
+    void init();
     void cleanupTestCase();
 
     void testPlayLocalWmaFileOverHttp();
     void testRadioToLocalFileTransition();
     void testSeekHttpFile();
+    void testStatusOrderingDuringSlowLoad();
     void testSeekableDependsOnServerCapability();
 
 private:
@@ -48,6 +51,11 @@ void TestNetworkPlayback::initTestCase()
 {
     m_server = new TestHttpServer(this);
     QVERIFY2(m_server->start(), "Failed to start HTTP server");
+}
+
+void TestNetworkPlayback::init()
+{
+    m_server->clearThrottle();
 }
 
 void TestNetworkPlayback::cleanupTestCase()
@@ -228,13 +236,14 @@ void TestNetworkPlayback::testSeekHttpFile()
 
     DragonPlayer player;
     QSignalSpy positionSpy(&player, &DragonPlayer::positionChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     player.setSource(url);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::BufferedMedia, 10000);
 
     QVERIFY2(player.seekable(), "HTTP file should be seekable");
-    QVERIFY2(player.duration().value_or(0ms) > 0ms, "Duration should be known");
+    QTRY_VERIFY2_WITH_TIMEOUT(player.duration().value_or(0ms) > 0ms, "Duration should be known", 5000);
 
     player.play();
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 5000);
@@ -255,6 +264,44 @@ void TestNetworkPlayback::testSeekHttpFile()
 
     player.stop();
     qDebug() << "Seek HTTP file test completed successfully!";
+}
+
+void TestNetworkPlayback::testStatusOrderingDuringSlowLoad()
+{
+    QString wmaPath = fixturePath(u"gs-16b-1c-44100hz.wma"_s);
+    QVERIFY2(QFile::exists(wmaPath), qPrintable(u"WMA fixture not found: %1"_s.arg(wmaPath)));
+
+    m_server->serveFile(wmaPath);
+    m_server->setThrottle(4 * 1024, 20);
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(m_server->port());
+    url.setPath(u"/gs-16b-1c-44100hz.wma"_s);
+
+    DragonPlayer player;
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+    QVERIFY(statusSpy.isValid());
+
+    player.setSource(url);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.duration().value_or(0ms) > 0ms, 15000);
+
+    int loadedIndex = -1;
+    for (int i = 0; i < statusSpy.count(); ++i) {
+        const auto status = statusSpy.at(i).at(0).value<DragonPlayer::MediaStatus>();
+        if (status == DragonPlayer::MediaStatus::LoadedMedia) {
+            loadedIndex = i;
+            break;
+        }
+        QVERIFY2(status != DragonPlayer::MediaStatus::StalledMedia && status != DragonPlayer::MediaStatus::BufferingMedia
+                     && status != DragonPlayer::MediaStatus::BufferedMedia,
+                 qPrintable(u"Status jumped to %1 before LoadedMedia"_s.arg(static_cast<int>(status))));
+    }
+    QVERIFY2(loadedIndex >= 0, "Media never reached LoadedMedia");
+
+    player.stop();
 }
 
 void TestNetworkPlayback::testSeekableDependsOnServerCapability()

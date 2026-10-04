@@ -14,6 +14,7 @@
 #include <QObject>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QTimer>
 
 class TestHttpServer : public QObject
 {
@@ -59,6 +60,17 @@ public:
     void setAcceptRanges(bool accept)
     {
         m_acceptRanges = accept;
+    }
+
+    void setThrottle(int chunkBytes, int intervalMs)
+    {
+        m_throttleChunkBytes = chunkBytes;
+        m_throttleIntervalMs = intervalMs;
+    }
+
+    void clearThrottle()
+    {
+        m_throttleChunkBytes = 0;
     }
 
     [[nodiscard]] bool acceptRanges() const
@@ -162,10 +174,48 @@ private:
             response.append("\r\n");
         }
 
+        if (m_throttleChunkBytes > 0) {
+            sendThrottled(socket, response, content, sendOffset, sendLength);
+        } else {
+            socket->write(response);
+            socket->write(content.mid(sendOffset, sendLength));
+            socket->flush();
+            socket->disconnectFromHost();
+        }
+    }
+
+    void sendThrottled(QTcpSocket *socket, const QByteArray &response, const QByteArray &content, qint64 sendOffset, qint64 sendLength)
+    {
         socket->write(response);
-        socket->write(content.mid(sendOffset, sendLength));
-        socket->flush();
-        socket->disconnectFromHost();
+
+        const int chunk = m_throttleChunkBytes;
+        auto *timer = new QTimer(socket);
+        timer->setInterval(m_throttleIntervalMs);
+        qint64 sent = 0;
+
+        QObject::connect(timer, &QTimer::timeout, socket, [socket, timer, content, sendOffset, sendLength, chunk, sent]() mutable {
+            const qint64 remaining = sendLength - sent;
+            const qint64 now = qMin<qint64>(chunk, remaining);
+            socket->write(content.mid(sendOffset + sent, now));
+            sent += now;
+            if (sent >= sendLength) {
+                timer->stop();
+                socket->flush();
+                socket->disconnectFromHost();
+            }
+        });
+
+        const qint64 first = qMin<qint64>(chunk, sendLength);
+        if (first > 0) {
+            socket->write(content.mid(sendOffset, first));
+            sent = first;
+        }
+        if (sent < sendLength) {
+            timer->start();
+        } else {
+            socket->flush();
+            socket->disconnectFromHost();
+        }
     }
 
     void sendError(QTcpSocket *socket, int code, const QByteArray &message)
@@ -186,5 +236,7 @@ private:
     QString m_filePath;
     QByteArray m_contentType;
     bool m_acceptRanges = true;
+    int m_throttleChunkBytes = 0;
+    int m_throttleIntervalMs = 0;
     QList<QTcpSocket *> m_pendingClients;
 };

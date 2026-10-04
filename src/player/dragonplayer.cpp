@@ -200,18 +200,36 @@ void DragonPlayerPrivate::onDecodeError(const QString &message)
     Q_EMIT q->errorChanged(currentError);
 }
 
+// the stream signals come from the network I/O system, unlike the rest of the states.
+// must ensure they don't change the status until the song is loaded, this is just a state machine design choice
+// also block them when they don't make sense, like NoMedia and InvalidMedia
+bool DragonPlayerPrivate::streamStateTransitionsAllowed() const
+{
+    return currentStatus != DragonPlayer::MediaStatus::NoMedia && currentStatus != DragonPlayer::MediaStatus::LoadingMedia
+        && currentStatus != DragonPlayer::MediaStatus::InvalidMedia;
+}
+
 void DragonPlayerPrivate::onStreamStalled()
 {
+    if (!streamStateTransitionsAllowed()) {
+        return;
+    }
     setStatus(DragonPlayer::MediaStatus::StalledMedia);
 }
 
 void DragonPlayerPrivate::onStreamBuffering()
 {
+    if (!streamStateTransitionsAllowed()) {
+        return;
+    }
     setStatus(DragonPlayer::MediaStatus::BufferingMedia);
 }
 
 void DragonPlayerPrivate::onStreamBuffered()
 {
+    if (!streamStateTransitionsAllowed()) {
+        return;
+    }
     setStatus(DragonPlayer::MediaStatus::BufferedMedia);
 }
 
