@@ -121,6 +121,7 @@ if(NOT TARGET SDL3::SDL3)
     set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
     set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
     set(SDL_RENDER OFF CACHE BOOL "" FORCE)
+    set(SDL_UNIX_CONSOLE_BUILD ON FORCE)
     FetchContent_MakeAvailable(SDL3)
     # Disable PCH on MSVC it fails on virtiofs/network drives with C1083
     if(TARGET SDL3-shared)
@@ -133,10 +134,10 @@ endif()
 find_package(PkgConfig REQUIRED)
 
 pkg_check_modules(FFmpeg IMPORTED_TARGET REQUIRED
-    libavformat
-    libavcodec
-    libswresample
-    libavutil
+    libavformat>=60
+    libavcodec>=60
+    libswresample>=4
+    libavutil>=58
 )
 
 pkg_check_modules(PIPEWIRE IMPORTED_TARGET libpipewire-0.3)

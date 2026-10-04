@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
-#include <cstring>
 #include <memory>
 #include <span>
 #include <thread>
@@ -322,7 +321,9 @@ bool DragonDecoder::initializeAvio(DecodeSession &session)
         return ret < 0 ? AVERROR(ENOSYS) : ret;
     };
 
-    session.avioCtx.reset(avio_alloc_context(ioBuffer, IO_BUFFER_SIZE, 0, this, readPacket, nullptr, m_seekCallback ? seekPacket : nullptr));
+    // seekFn only needed to workaround a GCC 13 bug https://gcc.gnu.org/bugzilla/show_bug.cgi?id=94039
+    int64_t (*seekFn)(void *opaque, int64_t offset, int whence) = seekPacket;
+    session.avioCtx.reset(avio_alloc_context(ioBuffer, IO_BUFFER_SIZE, 0, this, readPacket, nullptr, m_seekCallback ? seekFn : nullptr));
     if (!session.avioCtx) {
         av_free(ioBuffer);
         m_hadFatalError.store(true, std::memory_order_relaxed);
@@ -658,7 +659,11 @@ std::optional<DragonMediaBackend::SamplesChunk> DragonDecoder::resampleInto(Deco
     auto ownedBuffer = session.m_bufferPool->acquire(neededSize);
 
     uint8_t *outData[1] = {reinterpret_cast<uint8_t *>(ownedBuffer->data())};
+#if LIBSWRESAMPLE_VERSION_INT < AV_VERSION_INT(4, 14, 100)
+    const int converted = swr_convert(session.swrCtx.get(), outData, maxOutSamples, const_cast<const uint8_t **>(in), inSamples);
+#else
     const int converted = swr_convert(session.swrCtx.get(), outData, maxOutSamples, in, inSamples);
+#endif
     if (converted < 0) {
         qCWarning(dragonMediaBackendDecoder) << "swr_convert failed";
         return std::nullopt;
