@@ -27,10 +27,10 @@ available.
 
 Building the library requires the following:
 
- - A C++23-capable compiler
+ - A C++23-capable compiler (GCC >= 13)
  - CMake >= 3.25
  - pkg-config
- - Qt >= 6.11
+ - Qt >= 6.8
  - QCoro 6*
  - FFmpeg
  - kissfft*
