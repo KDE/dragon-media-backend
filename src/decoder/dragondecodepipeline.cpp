@@ -436,7 +436,10 @@ void DragonDecodePipeline::stop()
 
 void DragonDecodePipeline::setNextSource(const QUrl &next)
 {
-    m_nextSource = next;
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        m_nextSource = next;
+    }
 
     cancelPreWarm(QStringLiteral("New pre-warm started"));
 
@@ -601,6 +604,7 @@ void DragonDecodePipeline::cancelPreWarm(const QString &reason)
         std::scoped_lock lock(m_decoderMutex);
         m_preWarmedDecoder.reset();
         pending = m_pendingGaplessCompletion;
+        m_pendingGaplessCompletion.reset();
     }
     if (pending) {
         pending->cancel(reason);

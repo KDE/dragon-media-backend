@@ -846,6 +846,13 @@ void DragonPlayer::stop()
 
     d->requestedPlaybackState = PlaybackState::StoppedState;
 
+    if (!d->nextSource.isEmpty()) {
+        d->nextSource.clear();
+        qCDebug(dragonMediaBackendPlayer) << "stop(): disarming next source";
+        Q_EMIT nextSourceChanged();
+        d->decodePipeline.setNextSource(QUrl());
+    }
+
     if (d->currentStatus == MediaStatus::LoadingMedia) {
         // stop()s playback but must not interrupt an in-flight load nor change media status
         qCDebug(dragonMediaBackendPlayer) << "stop() during LoadingMedia, letting in-flight load continue";

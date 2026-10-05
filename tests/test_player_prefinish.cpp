@@ -39,6 +39,8 @@ private Q_SLOTS:
     void testAboutToFinishResetsOnGaplessTransition();
     void testPrefinishMarkChangeResets();
     void testShortTrackEmitsImmediately();
+    void testStopDuringArmedWindowDisarms();
+    void testDisarmMidWindow();
 
 private:
     bool waitForPlaybackStart(DragonPlayer &player, int timeoutMs = 5000)
@@ -291,6 +293,72 @@ void TestPlayerPrefinish::testShortTrackEmitsImmediately()
 
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, 10000);
     QCOMPARE(spy.count(), 1);
+
+    player.stop();
+}
+
+void TestPlayerPrefinish::testStopDuringArmedWindowDisarms()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    player.setPrefinishMark(2500ms);
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+    QSignalSpy nextSourceChangedSpy(&player, &DragonPlayer::nextSourceChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
+    QVERIFY(helper.playAndWait());
+
+    QVERIFY2(waitForPlaybackStart(player), "Playback should start producing audio");
+
+    const int nextSourceChangesBeforeStop = nextSourceChangedSpy.count();
+    player.stop();
+
+    QCOMPARE(player.nextSource(), QUrl());
+    QVERIFY(nextSourceChangedSpy.count() > nextSourceChangesBeforeStop);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::LoadedMedia);
+
+    // No handoff may run after the stop: the armed transition, even if its
+    // signal was queued before the stop, must abort on the cleared arm.
+    QTest::qWait(500);
+    QCOMPARE(trackChangedSpy.count(), 0);
+    QVERIFY2(helper.verifyNoEndOfMedia(statusSpy), "stop() with a disarmed next source must not reach EndOfMedia");
+
+    // Replaying must restart the current source from the beginning.
+    player.play();
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.position() > 0ms, 5000);
+    QCOMPARE(player.source(), QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
+    QCOMPARE(trackChangedSpy.count(), 0);
+
+    player.stop();
+}
+
+void TestPlayerPrefinish::testDisarmMidWindow()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    player.setPrefinishMark(2500ms);
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
+    QVERIFY(helper.playAndWait());
+
+    QVERIFY2(waitForPlaybackStart(player), "Playback should start producing audio");
+
+    // Disarm while still inside the prefinish window: the track must end via
+    // the normal EndOfMedia path instead of the gapless handoff.
+    player.setNextSource(QUrl());
+    QCOMPARE(player.nextSource(), QUrl());
+
+    QVERIFY2(helper.waitForEndOfMedia(15000), "Track should reach EndOfMedia after the arm was cleared");
+    QCOMPARE(trackChangedSpy.count(), 0);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     player.stop();
 }
