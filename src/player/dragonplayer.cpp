@@ -107,7 +107,6 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     }
 
     currentSource = nextSource;
-    nextSource.clear();
     aboutToFinishEmitted = false;
     qCDebug(dragonMediaBackendPlayer) << "onGaplessTransition: reset aboutToFinishEmitted for" << currentSource.toString();
     currentIsLocal = DragonStreamFactory::isLocalSource(currentSource);
@@ -124,6 +123,7 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     positionEstimator->trackChanged(duration);
 
     Q_EMIT q->trackChanged();
+    nextSource.clear();
     Q_EMIT q->sourceChanged();
     Q_EMIT q->nextSourceChanged();
     Q_EMIT q->seekableChanged(currentSeekable);
