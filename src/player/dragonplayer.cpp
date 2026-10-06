@@ -111,6 +111,9 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     qCDebug(dragonMediaBackendPlayer) << "onGaplessTransition: reset aboutToFinishEmitted for" << currentSource.toString();
     currentIsLocal = DragonStreamFactory::isLocalSource(currentSource);
     currentSeekable = currentIsLocal;
+    if (!currentIsLocal && decodePipeline.streamIsSeekable()) {
+        currentSeekable = true;
+    }
     currentDuration = duration;
     currentSampleRate = sampleRate;
     currentChannels = channels;
@@ -388,6 +391,20 @@ void DragonPlayerPrivate::init()
     connect(audioOutput->sink(), &DragonAudioSink::drained, this, [this]() {
         if (decodePipeline.isActive()) {
             qCDebug(dragonMediaBackendPlayer) << "drained ignored, decode session still active (stale drain from previous track)";
+            return;
+        }
+        if (!nextSource.isEmpty()) {
+            qCDebug(dragonMediaBackendPlayer) << "drained with pending nextSource, handing off to" << nextSource.toString();
+            const QUrl next = nextSource;
+            if (decodePipeline.promotePreWarmedDecoder()) {
+                if (audioOutput->sink()->isDeviceOpen()) {
+                    audioOutput->sink()->resume();
+                    audioOutput->sink()->setQueueReady(!audioOutput->sink()->isFlushPending());
+                }
+            } else {
+                q->setSource(next);
+                q->play();
+            }
             return;
         }
         if (currentDuration && *currentDuration > 0ms && currentPlaybackState == DragonPlayer::PlaybackState::PlayingState) {

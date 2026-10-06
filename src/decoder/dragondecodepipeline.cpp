@@ -243,35 +243,61 @@ void DragonDecodePipeline::processDecodeCompletion()
 {
     qCDebug(dragonMediaBackendDecode) << "processDecodeCompletion() called";
 
-    std::unique_lock plock(m_decoderMutex);
-    if (m_preWarmedDecoder) {
-        m_activeDecoder = std::move(m_preWarmedDecoder);
-        const QUrl newSource = m_nextSource;
-        m_currentSource = newSource;
-        m_nextSource.clear();
-
-        int sampleRate = 0;
-        int channels = 0;
-        std::optional<std::chrono::milliseconds> duration{};
-        if (m_pendingGaplessCompletion && m_pendingGaplessCompletion->isReady()) {
-            const auto result = m_pendingGaplessCompletion->result();
-            sampleRate = result.sampleRate;
-            channels = result.channels;
-            duration = result.duration;
-        }
-
-        plock.unlock();
-
-        qCDebug(dragonMediaBackendDecode) << "decode thread gapless transition, decoder swapped for" << newSource.toString() << "sr=" << sampleRate
-                                          << "ch=" << channels << "duration=" << duration.value_or(std::chrono::milliseconds{-1}).count() << "ms";
-        Q_EMIT gaplessTransition(newSource, sampleRate, channels, duration);
-    } else {
-        const QUrl finishedSource = m_currentSource;
-        plock.unlock();
-
-        qCDebug(dragonMediaBackendDecode) << "decode thread no pre-warmed decoder, emitting sessionFinished for" << finishedSource.toString();
-        Q_EMIT sessionFinished(finishedSource, false);
+    if (promotePreWarmedDecoder()) {
+        return;
     }
+
+    std::unique_lock plock(m_decoderMutex);
+    const QUrl finishedSource = m_currentSource;
+    plock.unlock();
+
+    qCDebug(dragonMediaBackendDecode) << "decode thread no pre-warmed decoder, emitting sessionFinished for" << finishedSource.toString();
+    Q_EMIT sessionFinished(finishedSource, false);
+}
+
+bool DragonDecodePipeline::promotePreWarmedDecoder()
+{
+    std::unique_lock plock(m_decoderMutex);
+    if (!m_preWarmedDecoder || m_activeDecoder) {
+        return false;
+    }
+
+    m_activeDecoder = std::move(m_preWarmedDecoder);
+    const QUrl newSource = m_nextSource;
+    m_currentSource = newSource;
+    m_nextSource.clear();
+
+    std::shared_ptr<DragonStream> retiredStream;
+    {
+        std::scoped_lock lock(m_streamMutex);
+        retiredStream = std::move(m_stream);
+        m_stream = std::move(m_nextStream);
+        m_nextStream.reset();
+    }
+
+    int sampleRate = 0;
+    int channels = 0;
+    std::optional<std::chrono::milliseconds> duration{};
+    if (m_pendingGaplessCompletion && m_pendingGaplessCompletion->isReady()) {
+        const auto result = m_pendingGaplessCompletion->result();
+        sampleRate = result.sampleRate;
+        channels = result.channels;
+        duration = result.duration;
+    }
+
+    plock.unlock();
+
+    if (retiredStream) {
+        disconnect(retiredStream->bufferProgress(), nullptr, this, nullptr);
+        retiredStream->stop();
+    }
+
+    m_decoderAssignedCv.notify_all();
+
+    qCDebug(dragonMediaBackendDecode) << "gapless transition, decoder swapped for" << newSource.toString() << "sr=" << sampleRate << "ch=" << channels
+                                      << "duration=" << duration.value_or(std::chrono::milliseconds{-1}).count() << "ms";
+    Q_EMIT gaplessTransition(newSource, sampleRate, channels, duration);
+    return true;
 }
 
 QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, bool isGapless)
@@ -423,13 +449,19 @@ void DragonDecodePipeline::stop()
     }
 
     std::shared_ptr<DragonStream> oldStream;
+    std::shared_ptr<DragonStream> oldNextStream;
     {
         std::scoped_lock lock(m_streamMutex);
         oldStream = std::move(m_stream);
         m_stream.reset();
+        oldNextStream = std::move(m_nextStream);
+        m_nextStream.reset();
     }
     if (oldStream) {
         oldStream->stop();
+    }
+    if (oldNextStream) {
+        oldNextStream->stop();
     }
     qCDebug(dragonMediaBackendDecode) << "stop() full teardown complete";
 }
@@ -443,7 +475,7 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
 
     cancelPreWarm(QStringLiteral("New pre-warm started"));
 
-    if (next.isEmpty() || !DragonStreamFactory::isLocalSource(next)) {
+    if (next.isEmpty() || !DragonStreamFactory::supportsGaplessPreWarm(next)) {
         return;
     }
 
@@ -509,7 +541,7 @@ void DragonDecodePipeline::requestSeek(std::chrono::milliseconds position)
     }
 }
 
-std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &source, bool)
+std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &source, bool isPreWarm)
 {
     initAndroidJniBridge();
 
@@ -518,8 +550,13 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
     std::shared_ptr<DragonStream> oldStream;
     {
         std::scoped_lock lock(m_streamMutex);
-        oldStream = std::move(m_stream);
-        m_stream = DragonStreamFactory::createStream(source);
+        if (isPreWarm) {
+            oldStream = std::move(m_nextStream);
+            m_nextStream = DragonStreamFactory::createStream(source);
+        } else {
+            oldStream = std::move(m_stream);
+            m_stream = DragonStreamFactory::createStream(source);
+        }
     }
     if (oldStream) {
         disconnect(oldStream->bufferProgress(), nullptr, this, nullptr);
@@ -530,9 +567,9 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
     // alive on the decode thread even if the main/prewarm thread replaces
     // m_stream mid-decode, eliminating the use-after-free that a raw capture
     // would have.
-    const std::shared_ptr<DragonStream> stream = [this]() {
+    const std::shared_ptr<DragonStream> stream = [this, isPreWarm]() {
         std::scoped_lock lock(m_streamMutex);
-        return m_stream;
+        return isPreWarm ? m_nextStream : m_stream;
     }();
 
     DragonDecoder::ReadCallback readCb;
@@ -540,6 +577,10 @@ std::unique_ptr<DragonDecoder> DragonDecodePipeline::createDecoder(const QUrl &s
 
     if (stream) {
         stream->setUrl(source);
+
+        if (isPreWarm && stream->thread() != thread()) {
+            stream->moveToThread(thread());
+        }
 
         connect(stream.get(), &DragonStream::errorOccurred, this, [this](const QString &message) {
             Q_EMIT sessionError(message.isEmpty() ? i18n("Stream error") : message);
@@ -612,6 +653,16 @@ void DragonDecodePipeline::cancelPreWarm(const QString &reason)
     if (m_preWarmThread.joinable()) {
         m_preWarmThread.request_stop();
         m_preWarmThread.join();
+    }
+    std::shared_ptr<DragonStream> nextStream;
+    {
+        std::scoped_lock lock(m_streamMutex);
+        nextStream = std::move(m_nextStream);
+        m_nextStream.reset();
+    }
+    if (nextStream) {
+        disconnect(nextStream->bufferProgress(), nullptr, this, nullptr);
+        nextStream->stop();
     }
 }
 

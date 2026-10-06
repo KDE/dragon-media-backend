@@ -41,6 +41,7 @@ private Q_SLOTS:
     void clearPlaylist();
     void playKexp();
     void playLandSong();
+    void playCd();
     void playPlaylistItem(int index);
     void updatePlaybackState();
     void updatePosition(std::chrono::milliseconds position);
@@ -56,6 +57,8 @@ private Q_SLOTS:
 private:
     void setupUi();
     void connectPlayer();
+
+    void startCdTrackListing(const QUrl &driveRoot);
 
     bool eventFilter(QObject *obj, QEvent *event) override;
 
@@ -73,6 +76,7 @@ private:
     QPushButton *m_prevButton = nullptr;
     QPushButton *m_kexpButton = nullptr;
     QPushButton *m_playLandSongButton = nullptr;
+    QPushButton *m_playCdButton = nullptr;
 
     QSlider *m_seekSlider = nullptr;
     QLabel *m_timeLabel = nullptr;

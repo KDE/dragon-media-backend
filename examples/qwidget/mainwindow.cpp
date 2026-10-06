@@ -41,6 +41,8 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <memory>
+
 #include <KIO/ListJob>
 #include <KIO/UDSEntry>
 
@@ -118,6 +120,10 @@ void MainWindow::setupUi()
     m_playLandSongButton = new QPushButton(i18n("Play The Land Song"), this);
     m_playLandSongButton->setToolTip(i18n("Play The Land Song"));
     hBtnLayout->addWidget(m_playLandSongButton);
+
+    m_playCdButton = new QPushButton(i18n("Play CD"), this);
+    m_playCdButton->setToolTip(i18n("Play all tracks of the audio CD in the disc drive"));
+    hBtnLayout->addWidget(m_playCdButton);
 
     vLayout->addLayout(hBtnLayout);
 
@@ -262,6 +268,7 @@ void MainWindow::connectPlayer()
     m_playerConnections << connect(m_prevButton, &QPushButton::clicked, m_playlist, &DragonPlaylist::playPrevious);
     m_playerConnections << connect(m_kexpButton, &QPushButton::clicked, this, &MainWindow::playKexp);
     m_playerConnections << connect(m_playLandSongButton, &QPushButton::clicked, this, &MainWindow::playLandSong);
+    m_playerConnections << connect(m_playCdButton, &QPushButton::clicked, this, &MainWindow::playCd);
 
     m_playerConnections << connect(m_playlistWidget, &QListWidget::activated, this, [this](const QModelIndex &index) {
         m_playlist->setCurrentIndex(index.row());
@@ -448,6 +455,73 @@ void MainWindow::playLandSong()
     m_playlist->addTrack(QUrl("http://www.historyworkshop.org.uk/wp-content/uploads/2011/05/01-The-Land-Song.mp3"_L1));
     m_playlist->setCurrentIndex(0);
     m_player->play();
+}
+
+void MainWindow::playCd()
+{
+    m_statusLabel->setText(i18n("Looking for a CD drive…"));
+
+    const auto driveRoot = std::make_shared<QUrl>();
+    auto *baseJob = KIO::listDir(QUrl(u"audiocd:/"_s), KIO::HideProgressInfo);
+    connect(baseJob, &KIO::ListJob::entries, this, [driveRoot](KIO::Job *, const KIO::UDSEntryList &entries) {
+        if (!driveRoot->isEmpty()) {
+            return;
+        }
+        for (const KIO::UDSEntry &entry : entries) {
+            const QString target = entry.stringValue(KIO::UDSEntry::UDS_TARGET_URL);
+            if (!target.isEmpty()) {
+                *driveRoot = QUrl(target);
+                break;
+            }
+        }
+    });
+    connect(baseJob, &KJob::result, this, [this, baseJob, driveRoot]() {
+        baseJob->deleteLater();
+        if (baseJob->error() != KJob::NoError) {
+            m_statusLabel->setText(baseJob->errorString());
+            return;
+        }
+        if (driveRoot->isEmpty()) {
+            m_statusLabel->setText(i18n("No CD drive found."));
+            return;
+        }
+        startCdTrackListing(*driveRoot);
+    });
+}
+
+void MainWindow::startCdTrackListing(const QUrl &driveRoot)
+{
+    m_statusLabel->setText(i18n("Reading the CD…"));
+
+    const auto trackUrls = std::make_shared<QList<QUrl>>();
+    auto *trackJob = KIO::listDir(driveRoot, KIO::HideProgressInfo);
+    connect(trackJob, &KIO::ListJob::entries, this, [trackUrls, driveRoot](KIO::Job *, const KIO::UDSEntryList &entries) {
+        for (const KIO::UDSEntry &entry : entries) {
+            if (entry.isDir()) {
+                continue;
+            }
+            if (!entry.stringValue(KIO::UDSEntry::UDS_MIME_TYPE).startsWith(u"audio/"_s)) {
+                continue;
+            }
+            QUrl trackUrl = driveRoot;
+            trackUrl.setPath(driveRoot.path() + u'/' + entry.stringValue(KIO::UDSEntry::UDS_NAME));
+            trackUrls->append(trackUrl);
+        }
+    });
+    connect(trackJob, &KJob::result, this, [this, trackJob, trackUrls]() {
+        trackJob->deleteLater();
+        if (trackJob->error() != KJob::NoError) {
+            m_statusLabel->setText(trackJob->errorString());
+            return;
+        }
+        if (trackUrls->isEmpty()) {
+            m_statusLabel->setText(i18n("No audio tracks found on the CD."));
+            return;
+        }
+        m_playlist->clear();
+        m_playlist->addTracks(*trackUrls);
+        m_statusLabel->setText(i18np("Playing %1 CD track…", "Playing %1 CD tracks…", trackUrls->size()));
+    });
 }
 
 void MainWindow::playPlaylistItem(int index)

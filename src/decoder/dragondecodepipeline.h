@@ -52,6 +52,8 @@ public:
 
     void setSamplesCallback(SamplesCallback callback);
 
+    bool promotePreWarmedDecoder();
+
     static DragonMediaBackend::InitResult makeSuccessResult(const DragonMediaBackend::FormatReady &fr, bool isGapless = false);
     static DragonMediaBackend::InitResult makeErrorResult(const QString &message, bool isGapless = false);
     static DragonMediaBackend::InitResult makeCancelledResult(const QString &message, bool isGapless = false);
@@ -80,7 +82,7 @@ Q_SIGNALS:
     void streamSeekableChanged(bool seekable);
 
 private:
-    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isGapless);
+    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isPreWarm);
     void cancelPreWarm(const QString &reason);
 
     void startDecodeThread();
@@ -113,10 +115,7 @@ private:
 
     std::shared_ptr<DragonMediaBackend::DragonCompletion> m_pendingGaplessCompletion;
 
-    // Guards m_stream. Held only for brief snapshots; never held while
-    // blocking on a stream read/seek (those run on the decode thread and use
-    // their own shared_ptr snapshot), so it cannot deadlock against the
-    // decode loop.
     mutable std::mutex m_streamMutex;
     std::shared_ptr<DragonStream> m_stream;
+    std::shared_ptr<DragonStream> m_nextStream;
 };

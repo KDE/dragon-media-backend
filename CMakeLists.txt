@@ -150,6 +150,11 @@ if(PULSEAUDIO_FOUND)
     set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND PULSEAUDIO)
 endif()
 
+pkg_check_modules(LIBCDIO IMPORTED_TARGET libcdio libcdio++)
+if(LIBCDIO_FOUND)
+    set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND LIBCDIO)
+endif()
+
 set_package_properties(PIPEWIRE PROPERTIES
     TYPE OPTIONAL
     DESCRIPTION "PipeWire multimedia server"
@@ -161,6 +166,12 @@ set_package_properties(PULSEAUDIO PROPERTIES
     DESCRIPTION "PulseAudio sound server system for POSIX OSes"
     PURPOSE "PulseAudio audio output sink"
     URL "https://www.freedesktop.org/wiki/Software/PulseAudio/"
+)
+set_package_properties(LIBCDIO PROPERTIES
+    TYPE OPTIONAL
+    DESCRIPTION "libcdio CD-DA access library with a C++ interface"
+    PURPOSE "Playing audio CDs through audiocd:/ URLs"
+    URL "https://www.gnu.org/software/libcdio/"
 )
 
 if(NOT TARGET PkgConfig::FFmpeg)
@@ -445,6 +456,10 @@ endif()
 
 if(BUILD_EXAMPLES AND Qt6Qml_FOUND AND Qt6Quick_FOUND AND Qt6QuickControls2_FOUND)
     add_subdirectory(examples/qml)
+endif()
+
+if(BUILD_EXAMPLES)
+    add_subdirectory(examples/playcd)
 endif()
 
 option(BUILD_TESTING "Build tests" ON)

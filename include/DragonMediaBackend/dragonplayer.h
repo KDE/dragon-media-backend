@@ -186,6 +186,11 @@ public:
      *
      * The media being played. If it's currently playing, setting a new source
      * stops playback, resets the position, and starts loading the new media.
+     *
+     * Local files, http(s) radio streams, KIO URLs, and audio CD tracks are
+     * supported. CD tracks use the same \c audiocd:/ URLs that Dolphin and
+     * the audiocd KIO worker produce, for example
+     * \c {audiocd:/Track 03.wav?device=/dev/sr0}.
      */
     Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
 
@@ -201,6 +206,10 @@ public:
      *
      * The source played when the current track finishes, used for
      * gapless transitions. Set it in response to aboutToFinish().
+     *
+     * Gapless transitions are supported for local files and \c audiocd:/ CD
+     * track URLs (when the backend is built with libcdio); other sources
+     * advance without the gapless handoff.
      *
      * \sa aboutToFinish()
      */

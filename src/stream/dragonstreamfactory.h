@@ -7,14 +7,18 @@
 
 #include "dragonstream.h"
 
+#include "dragonmediabackend_export.h"
+
 #include <QUrl>
 
 #include <memory>
 
-class DragonStreamFactory
+class DRAGONMEDIABACKEND_EXPORT DragonStreamFactory
 {
 public:
     static bool isLocalSource(const QUrl &url);
+
+    static bool supportsGaplessPreWarm(const QUrl &url);
 
     static std::shared_ptr<DragonStream> createStream(const QUrl &source);
 };

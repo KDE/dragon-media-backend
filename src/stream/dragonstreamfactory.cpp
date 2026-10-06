@@ -5,6 +5,10 @@
 
 #include "dragonstreamfactory.h"
 
+#ifdef DRAGON_HAVE_LIBCDIO
+#include "dragoncdstream.h"
+#endif
+
 #include "dragonkiostream.h"
 #include "dragonradiostream.h"
 
@@ -17,6 +21,16 @@ bool DragonStreamFactory::isLocalSource(const QUrl &url)
     return url.isLocalFile() || url.scheme() == u"content"_s;
 }
 
+bool DragonStreamFactory::supportsGaplessPreWarm(const QUrl &url)
+{
+#ifdef DRAGON_HAVE_LIBCDIO
+    if (url.scheme() == u"audiocd"_s) {
+        return true;
+    }
+#endif
+    return isLocalSource(url);
+}
+
 std::shared_ptr<DragonStream> DragonStreamFactory::createStream(const QUrl &source)
 {
     if (isLocalSource(source)) {
@@ -24,6 +38,12 @@ std::shared_ptr<DragonStream> DragonStreamFactory::createStream(const QUrl &sour
     }
 
     const QString scheme = source.scheme();
+
+#ifdef DRAGON_HAVE_LIBCDIO
+    if (scheme == u"audiocd"_s) {
+        return std::make_shared<DragonCdStream>();
+    }
+#endif
 
     if (scheme == u"http"_s || scheme == u"https"_s) {
         return std::make_shared<DragonRadioStream>();

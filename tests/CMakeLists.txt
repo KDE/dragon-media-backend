@@ -95,6 +95,12 @@ dragon_add_test(test_positionestimator LIBRARIES Qt6::Core)
 dragon_add_test(test_radiostream LIBRARIES Qt6::Network)
 dragon_add_test(test_kiostream LIBRARIES Qt6::Network KF6::KIOCore)
 
+# CD audio tests: run against generated bin/cue images through libcdio's
+# bincue driver, so no CD hardware is required.
+if(LIBCDIO_FOUND)
+    dragon_add_test(test_cdstream LIBRARIES ${_player_libs} KF6::KIOCore)
+endif()
+
 # Player tests
 set(_player_libs Qt6::Network SDL3::SDL3 PkgConfig::FFmpeg spsc_queue kissfft::kissfft)
 dragon_add_test(test_dragonduration LIBRARIES ${_player_libs})

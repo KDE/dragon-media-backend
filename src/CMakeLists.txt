@@ -58,6 +58,10 @@ target_link_libraries(DragonMediaBackend
         kissfft::kissfft
 )
 
+if(LIBCDIO_FOUND)
+    target_link_libraries(DragonMediaBackend PRIVATE PkgConfig::LIBCDIO)
+endif()
+
 target_compile_definitions(DragonMediaBackend PRIVATE
     DRAGONMEDIABACKEND_INTERNAL_BUILD
 )
