@@ -6,14 +6,11 @@
 #include "dragoncdstream.h"
 
 #include "dragonbufferprogress.h"
+#include "dragoncddisc.h"
 #include "dragonmediabackend_network_logging.h"
 
 #include <KLocalizedString>
 #include <QUrlQuery>
-
-#include <cdio++/cdio.hpp>
-#include <cdio/disc.h>
-#include <cdio/track.h>
 
 #include <algorithm>
 #include <bit>
@@ -28,6 +25,8 @@ namespace
 
 constexpr int SAMPLES_PER_SECTOR = DragonCdStream::SECTOR_SIZE / 2; // 16-bit samples
 constexpr int ENDIANNESS_PROBE_SECTORS = 10;
+static_assert(DragonCdStream::SECTOR_SIZE == DragonCdDisc::SECTOR_SIZE);
+static_assert(DragonCdStream::READ_BLOCK_SECTORS == DragonCdDisc::READ_BLOCK_SECTORS);
 
 #pragma pack(push, 1)
 struct WavHeader {
@@ -145,9 +144,8 @@ void DragonCdStream::start()
     m_totalSize = -1;
     m_cacheSectors = 0;
     m_cacheStartLsn = -1;
-    m_readSectorsLimit = READ_BLOCK_SECTORS;
     m_swapLeBe = false;
-    m_device.reset();
+    m_disc.reset();
     m_bufferProgress->reset();
 
     const QString fileName = m_url.fileName();
@@ -167,60 +165,50 @@ void DragonCdStream::start()
         return;
     }
 
-    m_device = std::make_unique<CdioDevice>();
-    const QByteArray deviceBytes = device.toLocal8Bit();
-    // Note: the single-argument open() maps to cdio_open_cd(), which only
-    // probes OS device drivers and rejects disk images; cdio_open() with
-    // DRIVER_UNKNOWN scans everything, including bin/cue images.
-    if (!m_device->open(deviceBytes.isEmpty() ? nullptr : deviceBytes.constData(), DRIVER_UNKNOWN)) {
-        fail(i18n("Could not open the CD device. Check that a disc is present."));
+    auto disc = DragonCdDisc::acquire(device);
+    if (!disc) {
+        fail(disc.error());
         return;
     }
+    m_disc = std::move(*disc);
 
-    const discmode_t discmode = m_device->getDiscmode();
-    if (discmode != CDIO_DISC_MODE_CD_DA && discmode != CDIO_DISC_MODE_CD_MIXED) {
-        fail(i18n("The disc is not an Audio CD."));
-        return;
-    }
-
-    const track_t firstTrack = m_device->getFirstTrackNum();
-    const track_t numTracks = m_device->getNumTracks();
-    if (firstTrack == CDIO_INVALID_TRACK || numTracks == CDIO_INVALID_TRACK || numTracks <= 0) {
-        fail(i18n("The CD has no tracks."));
-        return;
-    }
-    const int lastTrack = int(firstTrack) + int(numTracks) - 1;
+    const int firstTrack = m_disc->firstTrack();
+    const int lastTrack = m_disc->lastTrack();
 
     int trackNum = -1;
     if (haveTrackOverride) {
         trackNum = trackOverride;
     } else {
-        trackNum = trackNumberFromName(fileName, int(firstTrack), lastTrack).value_or(-1);
+        trackNum = trackNumberFromName(fileName, firstTrack, lastTrack).value_or(-1);
     }
-    if (trackNum < int(firstTrack) || trackNum > lastTrack) {
+    const DragonCdDisc::Track *track = m_disc->track(trackNum);
+    if (!track) {
         fail(i18n("Track not found on the CD: %1", fileName));
         return;
     }
 
-    CdioTrack track(m_device->getCdIo(), track_t(trackNum));
-    if (track.getFormat() != TRACK_FORMAT_AUDIO) {
+    if (!track->isAudio) {
         fail(i18n("CD track %1 is not an audio track.", trackNum));
         return;
     }
 
-    const lsn_t startLsn = track.getLsn();
-    const unsigned int secCount = track.getSecCount();
-    if (startLsn == CDIO_INVALID_LSN || secCount == 0) {
+    if (track->lastLsn < track->firstLsn) {
         fail(i18n("Could not determine the length of CD track %1.", trackNum));
         return;
     }
 
-    m_firstLsn = startLsn;
-    m_lastLsn = int64_t(startLsn) + int64_t(secCount) - 1;
+    m_firstLsn = track->firstLsn;
+    m_lastLsn = track->lastLsn;
     const qint64 dataBytes = (m_lastLsn - m_firstLsn + 1) * SECTOR_SIZE;
 
     m_wavHeader = makeWavHeader(uint32_t(dataBytes));
-    detectEndianness();
+
+    if (const auto knownSwap = m_disc->swapLeBe()) {
+        m_swapLeBe = *knownSwap;
+    } else if (const auto probedSwap = detectEndianness()) {
+        m_swapLeBe = *probedSwap;
+        m_disc->setSwapLeBe(*probedSwap);
+    }
 
     m_totalSize = WAV_HEADER_SIZE + dataBytes;
 
@@ -237,10 +225,7 @@ void DragonCdStream::stop()
     m_abort = true;
 
     std::scoped_lock lock(m_ioMutex);
-    if (m_device) {
-        m_device->close();
-        m_device.reset();
-    }
+    m_disc.reset();
     m_cacheSectors = 0;
     m_cacheStartLsn = -1;
 }
@@ -257,7 +242,7 @@ int DragonCdStream::read(std::span<uint8_t> buf, std::stop_token st)
 
     std::scoped_lock lock(m_ioMutex);
 
-    if (m_abort.load() || m_error.load() || !m_device) {
+    if (m_abort.load() || m_error.load() || !m_disc) {
         return -1;
     }
 
@@ -309,7 +294,7 @@ int DragonCdStream::read(std::span<uint8_t> buf, std::stop_token st)
 
 bool DragonCdStream::fillCache(int64_t lsn)
 {
-    if (!m_device) {
+    if (!m_disc) {
         return false;
     }
 
@@ -318,23 +303,12 @@ bool DragonCdStream::fillCache(int64_t lsn)
         return false;
     }
 
-    uint32_t sectors = uint32_t(std::min<int64_t>(m_readSectorsLimit, remaining));
-    for (;;) {
-        try {
-            m_device->readSectors(m_blockCache.data(), lsn_t(lsn), CDIO_READ_MODE_AUDIO, sectors);
-        } catch (DriverOpException &e) {
-            if (sectors > 1) {
-                m_readSectorsLimit = int32_t(sectors / 2);
-                qCDebug(dragonMediaBackendNetwork) << "CD read of" << sectors << "sectors at lsn" << lsn << "failed:" << e.get_msg() << "- retrying with"
-                                                   << m_readSectorsLimit << "sectors";
-                sectors = uint32_t(m_readSectorsLimit);
-                continue;
-            }
-            qCWarning(dragonMediaBackendNetwork) << "CD read error at lsn" << lsn << ":" << e.get_msg();
-            fail(i18n("Error reading the CD. The disc may have been ejected."));
-            return false;
-        }
-        break;
+    const uint32_t sectors = m_disc->readAudioSectors(m_blockCache, lsn, uint32_t(std::min<int64_t>(READ_BLOCK_SECTORS, remaining)));
+    if (sectors == 0) {
+        qCWarning(dragonMediaBackendNetwork) << "CD read error at lsn" << lsn;
+        m_disc->invalidate();
+        fail(i18n("Error reading the CD. The disc may have been ejected."));
+        return false;
     }
 
     if (m_swapLeBe) {
@@ -346,13 +320,11 @@ bool DragonCdStream::fillCache(int64_t lsn)
     return true;
 }
 
-void DragonCdStream::detectEndianness()
+std::optional<bool> DragonCdStream::detectEndianness() const
 {
-    m_swapLeBe = false;
-
     const int64_t trackSectors = m_lastLsn - m_firstLsn + 1;
     if (trackSectors < 2) {
-        return;
+        return std::nullopt;
     }
 
     std::vector<uint8_t> sector(SECTOR_SIZE);
@@ -369,10 +341,8 @@ void DragonCdStream::detectEndianness()
         double swappedSum0 = 0.0, swappedSum1 = 0.0;
 
         for (int64_t lsn = from; lsn < to; ++lsn) {
-            try {
-                m_device->readSectors(sector.data(), lsn_t(lsn), CDIO_READ_MODE_AUDIO, 1);
-            } catch (DriverOpException &) {
-                return; // inconclusive, assume host endianness
+            if (m_disc->readAudioSectors(sector, lsn, 1) == 0) {
+                return std::nullopt;
             }
             const auto pcm = std::span{reinterpret_cast<const uint16_t *>(sector.data()), static_cast<size_t>(SAMPLES_PER_SECTOR)};
             uint16_t lastNative = 0, lastSwapped = 0;
@@ -394,15 +364,15 @@ void DragonCdStream::detectEndianness()
         const double swappedFactor = swappedSum1 / swappedSum0;
         const double diff = nativeFactor - swappedFactor;
         if (diff > 0.5) {
-            m_swapLeBe = true;
             qCDebug(dragonMediaBackendNetwork) << "Drive produces CD samples in other endianness; swapping";
-            return;
+            return true;
         }
         if (diff < -0.5) {
             qCDebug(dragonMediaBackendNetwork) << "Drive produces CD samples in host endianness";
-            return;
+            return false;
         }
     }
+    return std::nullopt;
 }
 
 qint64 DragonCdStream::seek(qint64 offset)
@@ -442,10 +412,7 @@ DragonBufferProgress *DragonCdStream::bufferProgress() const
 void DragonCdStream::fail(const QString &message)
 {
     m_error = true;
-    if (m_device) {
-        m_device->close();
-        m_device.reset();
-    }
+    m_disc.reset();
     qCWarning(dragonMediaBackendNetwork) << "DragonCdStream:" << message;
     Q_EMIT errorOccurred(message);
 }

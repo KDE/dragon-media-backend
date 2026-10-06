@@ -21,8 +21,8 @@
 #include <stop_token>
 #include <vector>
 
-class CdioDevice;
 class DragonBufferProgress;
+class DragonCdDisc;
 
 class DRAGONMEDIABACKEND_EXPORT DragonCdStream : public DragonStream
 {
@@ -62,21 +62,18 @@ public:
 
 private:
     bool fillCache(int64_t lsn);
-    void detectEndianness();
+    [[nodiscard]] std::optional<bool> detectEndianness() const;
     void fail(const QString &message);
 
     QUrl m_url;
     DragonBufferProgress *m_bufferProgress = nullptr;
 
     std::mutex m_ioMutex;
-    std::unique_ptr<CdioDevice> m_device;
+    std::shared_ptr<DragonCdDisc> m_disc;
 
     std::vector<uint8_t> m_blockCache;
     int64_t m_cacheStartLsn = -1;
     int32_t m_cacheSectors = 0;
-
-    int32_t m_readSectorsLimit = READ_BLOCK_SECTORS;
-
     std::array<uint8_t, 44> m_wavHeader{};
     int64_t m_firstLsn = 0;
     int64_t m_lastLsn = -1;
