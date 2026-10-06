@@ -82,8 +82,21 @@ Q_SIGNALS:
     void streamSeekableChanged(bool seekable);
 
 private:
-    std::unique_ptr<DragonDecoder> createDecoder(const QUrl &source, bool isPreWarm);
+    struct Session {
+        Session(DragonDecodePipeline *owner, std::shared_ptr<DragonStream> stream);
+        ~Session();
+        Session(const Session &) = delete;
+        Session &operator=(const Session &) = delete;
+
+        DragonDecodePipeline *const owner;
+        const std::shared_ptr<DragonStream> stream;
+        std::unique_ptr<DragonDecoder> decoder;
+    };
+
+    std::unique_ptr<Session> createSession(const QUrl &source, bool isPreWarm);
     void cancelPreWarm(const QString &reason);
+    // Requires m_decoderMutex.
+    bool hasActiveDecoder() const;
 
     void startDecodeThread();
     bool waitForDecoderAssignment(std::stop_token st);
@@ -106,16 +119,13 @@ private:
     std::condition_variable_any m_decodeLoopFinishedCv;
     // Written on the decode thread, read from the main thread (diagnostics).
     std::atomic<bool> m_decodeLoopActive{false};
-    std::unique_ptr<DragonDecoder> m_activeDecoder;
-    std::unique_ptr<DragonDecoder> m_preWarmedDecoder;
+    std::unique_ptr<Session> m_activeSession;
+    // The next track, decoded up to its first frame for a gapless handoff.
+    std::unique_ptr<Session> m_preWarmedSession;
 
     std::jthread m_preWarmThread;
 
     std::shared_ptr<DragonMediaBackend::DragonCompletion> m_pendingInitCompletion;
 
     std::shared_ptr<DragonMediaBackend::DragonCompletion> m_pendingGaplessCompletion;
-
-    mutable std::mutex m_streamMutex;
-    std::shared_ptr<DragonStream> m_stream;
-    std::shared_ptr<DragonStream> m_nextStream;
 };
