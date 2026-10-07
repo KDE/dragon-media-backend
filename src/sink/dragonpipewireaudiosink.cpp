@@ -386,6 +386,20 @@ void DragonPipeWireAudioSink::clearStream()
     }
 }
 
+void DragonPipeWireAudioSink::resetDrainState()
+{
+    if (!m_drain.startNewEpoch()) {
+        return;
+    }
+
+    if (m_paused.load(std::memory_order_acquire) || !m_open.load(std::memory_order_acquire) || !m_pw->loop || !m_pw->stream) {
+        return;
+    }
+    qCDebug(dragonMediaBackendAudio) << "PipeWire resetDrainState() reactivating drained stream";
+    PwThreadLoopLock lock(m_pw->loop.get());
+    pw_stream_set_active(m_pw->stream.get(), true);
+}
+
 void DragonPipeWireAudioSink::setChannelVolumes(float linearGain)
 {
     const auto ch = static_cast<uint32_t>(currentChannels());

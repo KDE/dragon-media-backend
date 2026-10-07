@@ -119,6 +119,10 @@ void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleR
     currentChannels = channels;
 
     audioOutput->sink()->setStreamName(QString());
+    // If the previous track had already finished decoding (late nextSource),
+    // the sink may have started draining it; the new track's audio follows
+    // in the same stream, so start a fresh drain epoch.
+    audioOutput->sink()->resetDrainState();
 
     decodePipeline.setCurrentSource(currentSource);
 
@@ -394,17 +398,14 @@ void DragonPlayerPrivate::init()
             return;
         }
         if (!nextSource.isEmpty()) {
-            qCDebug(dragonMediaBackendPlayer) << "drained with pending nextSource, handing off to" << nextSource.toString();
+            // A nextSource queued after decoding finished is normally handed
+            // off gaplessly by the decode pipeline before playback drains.
+            // Getting here means it could not be pre-warmed in time (or at
+            // all), so start it as a regular track.
+            qCDebug(dragonMediaBackendPlayer) << "drained with pending nextSource, starting" << nextSource.toString();
             const QUrl next = nextSource;
-            if (decodePipeline.promotePreWarmedDecoder()) {
-                if (audioOutput->sink()->isDeviceOpen()) {
-                    audioOutput->sink()->resume();
-                    audioOutput->sink()->setQueueReady(!audioOutput->sink()->isFlushPending());
-                }
-            } else {
-                q->setSource(next);
-                q->play();
-            }
+            q->setSource(next);
+            q->play();
             return;
         }
         if (currentDuration && *currentDuration > 0ms && currentPlaybackState == DragonPlayer::PlaybackState::PlayingState) {

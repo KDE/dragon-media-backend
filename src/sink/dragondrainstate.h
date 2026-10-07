@@ -20,13 +20,13 @@ public:
         m_word.fetch_or(kDecodeFinished, std::memory_order_acq_rel);
     }
 
-    void startNewEpoch()
+    bool startNewEpoch()
     {
         auto current = m_word.load(std::memory_order_acquire);
         while (true) {
             const auto next = (current & ~kFlagsMask) + kEpochStep;
             if (m_word.compare_exchange_weak(current, next, std::memory_order_acq_rel, std::memory_order_acquire)) {
-                return;
+                return current & (kDrainInitiated | kDrainEmitted);
             }
         }
     }

@@ -165,7 +165,7 @@ bool DragonDecodePipeline::waitForDecoderAssignment(std::stop_token st)
     qCDebug(dragonMediaBackendDecode) << "decode thread waiting for decoder... activeDecoder=" << hasActiveDecoder();
 
     m_decoderAssignedCv.wait(lock, st, [this]() {
-        return hasActiveDecoder();
+        return hasActiveDecoder() || hasLateHandoff();
     });
 
     qCDebug(dragonMediaBackendDecode) << "decode thread woke up activeDecoder=" << hasActiveDecoder() << " outerStopRequested=" << st.stop_requested();
@@ -173,6 +173,12 @@ bool DragonDecodePipeline::waitForDecoderAssignment(std::stop_token st)
     if (st.stop_requested()) {
         qCDebug(dragonMediaBackendDecode) << "decode thread outer loop stop requested, breaking";
         return false;
+    }
+
+    if (hasLateHandoff()) {
+        lock.unlock();
+        qCDebug(dragonMediaBackendDecode) << "decode thread promoting late pre-warmed decoder";
+        promotePreWarmedDecoder();
     }
 
     return true;
@@ -281,6 +287,7 @@ void DragonDecodePipeline::processDecodeCompletion()
 
     std::unique_lock plock(m_decoderMutex);
     const QUrl finishedSource = m_currentSource;
+    m_awaitingLateHandoff = !hasActiveDecoder() && !m_sessionStopSource.stop_requested();
     plock.unlock();
 
     qCDebug(dragonMediaBackendDecode) << "decode thread no pre-warmed decoder, emitting sessionFinished for" << finishedSource.toString();
@@ -295,6 +302,7 @@ bool DragonDecodePipeline::promotePreWarmedDecoder()
     }
 
     std::unique_ptr<Session> retired = std::exchange(m_activeSession, std::move(m_preWarmedSession));
+    m_awaitingLateHandoff = false;
     const QUrl newSource = m_nextSource;
     m_currentSource = newSource;
     m_nextSource.clear();
@@ -313,8 +321,6 @@ bool DragonDecodePipeline::promotePreWarmedDecoder()
 
     // Stops the finished track's stream (closing its device, if any).
     retired.reset();
-
-    m_decoderAssignedCv.notify_all();
 
     qCDebug(dragonMediaBackendDecode) << "gapless transition, decoder swapped for" << newSource.toString() << "sr=" << sampleRate << "ch=" << channels
                                       << "duration=" << duration.value_or(std::chrono::milliseconds{-1}).count() << "ms";
@@ -364,6 +370,7 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
         std::scoped_lock lock(m_decoderMutex);
         m_pendingInitCompletion = completion;
         m_currentSource = source;
+        m_awaitingLateHandoff = false;
         m_activeSession = std::move(session);
         m_sessionStopSource = std::stop_source{};
     }
@@ -377,6 +384,10 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
 
 void DragonDecodePipeline::stopSession()
 {
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        m_awaitingLateHandoff = false;
+    }
     bool stoppable = m_sessionStopSource.request_stop();
     qCDebug(dragonMediaBackendDecode) << "stopSession() called requesting decode session stop" << stoppable;
 
@@ -475,6 +486,7 @@ void DragonDecodePipeline::stop()
         std::scoped_lock lock(m_decoderMutex);
         activeSession = std::move(m_activeSession);
         preWarmedSession = std::move(m_preWarmedSession);
+        m_awaitingLateHandoff = false;
         m_decodeLoopActive = false;
     }
     activeSession.reset();
@@ -523,16 +535,22 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
         if (st.stop_requested()) {
             result = makeCancelledResult(QStringLiteral("Pre-warm cancelled"), true);
         } else if (result.success) {
-            std::scoped_lock lock(m_decoderMutex);
-            if (!st.stop_requested()) {
-                m_preWarmedSession = std::move(session);
-            } else {
-                result = makeCancelledResult(QStringLiteral("Pre-warm cancelled"), true);
+            {
+                std::scoped_lock lock(m_decoderMutex);
+                if (!st.stop_requested()) {
+                    m_preWarmedSession = std::move(session);
+                } else {
+                    result = makeCancelledResult(QStringLiteral("Pre-warm cancelled"), true);
+                }
             }
         }
 
         if (completion) {
             completion->setResult(result);
+        }
+
+        if (result.success) {
+            m_decoderAssignedCv.notify_all();
         }
     });
 }
@@ -540,6 +558,12 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
 bool DragonDecodePipeline::hasActiveDecoder() const
 {
     return m_activeSession && m_activeSession->decoder;
+}
+
+bool DragonDecodePipeline::hasLateHandoff() const
+{
+    // The completion carries the format that promotion reports.
+    return m_awaitingLateHandoff && m_preWarmedSession && !hasActiveDecoder() && m_pendingGaplessCompletion && m_pendingGaplessCompletion->isReady();
 }
 
 bool DragonDecodePipeline::isActive() const

@@ -211,6 +211,7 @@ private Q_SLOTS:
     void testReadErrorInvalidatesDisc();
     void testChangedImageReopensDisc();
     void testGaplessPlayerTransition();
+    void testLateNextSourceGaplessTransition();
 
 private:
     QString m_cuePath;
@@ -698,6 +699,63 @@ void TestCdStream::testGaplessPlayerTransition()
                  },
                  30000),
              "Track 2 did not start producing audio");
+}
+
+void TestCdStream::testLateNextSourceGaplessTransition()
+{
+    createTwoTrackImage();
+
+    DragonPlayer player;
+    if (player.audioOutput()->backend() == DragonAudioOutput::Backend::Null) {
+        QSKIP("No audio sink available");
+    }
+    PlayerHelper helper(&player);
+    player.setPrefinishMark(100ms);
+
+    const QUrl track1 = cdTrackUrl(u"Track 01.wav"_s, m_cuePath);
+    const QUrl track2 = cdTrackUrl(u"Track 02.wav"_s, m_cuePath);
+
+    QVERIFY2(helper.setSourceAndWait(track1), "Track 1 failed to load");
+
+    bool queued = false;
+    connect(&player, &DragonPlayer::aboutToFinish, &player, [&]() {
+        if (!queued) {
+            queued = true;
+            player.setNextSource(track2);
+        }
+    });
+
+    QSignalSpy trackSpy(&player, &DragonPlayer::trackChanged);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    QVERIFY2(helper.playAndWait(), "Track 1 failed to start playing");
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&]() {
+                     return trackSpy.count() > 0;
+                 },
+                 60000),
+             "Late gapless transition to track 2 did not happen");
+    QVERIFY(queued);
+    QVERIFY(player.source() == track2);
+    QVERIFY(player.error() == DragonPlayer::Error::NoError);
+
+    for (const auto &args : statusSpy) {
+        const auto status = args.at(0).value<DragonPlayer::MediaStatus>();
+        QVERIFY2(status != DragonPlayer::MediaStatus::EndOfMedia, "EndOfMedia during late gapless transition");
+        QVERIFY2(status != DragonPlayer::MediaStatus::StalledMedia, "StalledMedia during late gapless transition");
+        QVERIFY2(status != DragonPlayer::MediaStatus::LoadingMedia, "Track 2 was reloaded instead of handed off gaplessly");
+    }
+
+    QVERIFY(player.seekable());
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&]() {
+                     return player.position() > 500ms;
+                 },
+                 30000),
+             "Track 2 did not start producing audio");
+    QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
 }
 
 QTEST_MAIN(TestCdStream)

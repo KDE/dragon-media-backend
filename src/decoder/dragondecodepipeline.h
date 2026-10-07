@@ -52,8 +52,6 @@ public:
 
     void setSamplesCallback(SamplesCallback callback);
 
-    bool promotePreWarmedDecoder();
-
     static DragonMediaBackend::InitResult makeSuccessResult(const DragonMediaBackend::FormatReady &fr, bool isGapless = false);
     static DragonMediaBackend::InitResult makeErrorResult(const QString &message, bool isGapless = false);
     static DragonMediaBackend::InitResult makeCancelledResult(const QString &message, bool isGapless = false);
@@ -97,6 +95,10 @@ private:
     void cancelPreWarm(const QString &reason);
     // Requires m_decoderMutex.
     bool hasActiveDecoder() const;
+    // Requires m_decoderMutex.
+    bool hasLateHandoff() const;
+
+    bool promotePreWarmedDecoder();
 
     void startDecodeThread();
     bool waitForDecoderAssignment(std::stop_token st);
@@ -122,6 +124,7 @@ private:
     std::unique_ptr<Session> m_activeSession;
     // The next track, decoded up to its first frame for a gapless handoff.
     std::unique_ptr<Session> m_preWarmedSession;
+    bool m_awaitingLateHandoff = false;
 
     std::jthread m_preWarmThread;
 
