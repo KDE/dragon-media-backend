@@ -502,6 +502,7 @@ bool DragonDecoder::readAndProcessPacket(DecodeSession &session)
 {
     if (m_seekRequested.exchange(false, std::memory_order_acq_rel)) {
         const auto targetMs = std::chrono::milliseconds{m_seekTarget.load(std::memory_order_relaxed)};
+        qCDebug(dragonMediaBackendDecoder) << "processing seek request to" << targetMs << "at packet" << session.packetCount;
         AVRational msTimeBase = AVRational{1, 1000};
         qint64 streamTimestamp = av_rescale_q(targetMs.count(), msTimeBase, session.audioStream->time_base);
         int seekRet = av_seek_frame(session.fmtCtx.get(), session.audioStreamIndex, streamTimestamp, AVSEEK_FLAG_BACKWARD);

@@ -24,6 +24,7 @@
 class DragonPlayer;
 class DragonDecoder;
 class DragonStream;
+
 class DragonDecodePipeline : public QObject
 {
     Q_OBJECT
@@ -129,15 +130,19 @@ private:
     std::unique_ptr<Session> createSession(const QUrl &source, bool isPreWarm);
     void cancelPreWarm();
 
+    void dropFailedPreWarm(const QUrl &next);
+
     enum class Action {
         Wait,
         Decode,
         Promote,
+        Finalize,
     };
     [[nodiscard]] Action nextAction() const;
     void decodeThreadMain(std::stop_token st);
     void runCurrentSession(std::unique_lock<std::mutex> &lock);
     bool promoteNext(std::unique_lock<std::mutex> &lock);
+    void finalizeSession(std::unique_lock<std::mutex> &lock);
     void startDecodeThread();
 
     SamplesCallback m_samplesCallback;
@@ -161,6 +166,7 @@ private:
     QUrl m_currentSource;
     std::unique_ptr<Session> m_activeSession;
     std::optional<NextTrack> m_next;
+    bool m_endReported = false;
     std::shared_ptr<DragonMediaBackend::DragonCompletion> m_startCompletion;
 
     std::jthread m_preWarmThread;

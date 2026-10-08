@@ -216,19 +216,6 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
         return;
     }
 
-    if (!nextSource.isEmpty()) {
-        // Gapless handoff: don't close the device the next track's audio
-        // is already flowing into the pipe and the PA callback will consume
-        // it seamlessly without a gap.
-        q->setSource(nextSource);
-        return;
-    }
-
-    // normal end of track with no gapless handoff: mark EndOfMedia and
-    // Normal end of track with no gapless handoff: emit aboutToFinish
-    // here if all audio has been queued but position() hasn't caught up
-    // yet (the ~200ms PA device buffer + pipe backlog).  Defer
-    // EndOfMedia/StoppedState until the backend signals drained().
     if (prefinishMark > 0ms && !aboutToFinishEmitted && audioOutput && currentDuration) {
         const qint64 pipeBacklog = static_cast<qint64>(audioPipe.consumer().ready());
         const qint64 eventualSamples = audioOutput->sink()->totalSamplesWritten() + pipeBacklog;
@@ -452,22 +439,25 @@ void DragonPlayerPrivate::init()
             qCDebug(dragonMediaBackendPlayer) << "drained ignored, decode session still active (stale drain from previous track)";
             return;
         }
-        if (!nextSource.isEmpty()) {
-            // A nextSource queued after decoding finished is normally handed
-            // off gaplessly by the decode pipeline before playback drains.
-            // Getting here means it could not be pre-warmed in time (or at
-            // all), so start it as a regular track.
-            qCDebug(dragonMediaBackendPlayer) << "drained with pending nextSource, starting" << nextSource.toString();
-            const QUrl next = nextSource;
-            q->setSource(next);
-            q->play();
-            return;
-        }
         if (currentDuration && *currentDuration > 0ms && currentPlaybackState == DragonPlayer::PlaybackState::PlayingState) {
             positionEstimator->snapToDuration();
         }
         setStatus(DragonPlayer::MediaStatus::EndOfMedia);
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
+
+        if (!nextSource.isEmpty()) {
+            const QUrl next = nextSource;
+            QMetaObject::invokeMethod(
+                this,
+                [this, next]() {
+                    if (nextSource == next) {
+                        qCDebug(dragonMediaBackendPlayer) << "drained with pending nextSource, starting" << next.toString() << "as a regular track";
+                        q->setSource(next);
+                        q->play();
+                    }
+                },
+                Qt::QueuedConnection);
+        }
     });
 
     connect(audioOutput->sink(), &DragonAudioSink::trackStarted, this, &DragonPlayerPrivate::onSinkTrackStarted, Qt::QueuedConnection);

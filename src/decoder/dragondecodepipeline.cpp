@@ -150,6 +150,9 @@ void DragonDecodePipeline::decodeThreadMain(std::stop_token st)
         case Action::Promote:
             promoteNext(lock);
             break;
+        case Action::Finalize:
+            finalizeSession(lock);
+            break;
         case Action::Wait:
             break;
         }
@@ -162,7 +165,10 @@ DragonDecodePipeline::Action DragonDecodePipeline::nextAction() const
     case Phase::Starting:
         return Action::Decode;
     case Phase::Finished:
-        return (m_next && m_next->ready()) ? Action::Promote : Action::Wait;
+        if (m_next && m_next->ready()) {
+            return Action::Promote;
+        }
+        return (!m_next && !m_endReported) ? Action::Finalize : Action::Wait;
     case Phase::Idle:
     case Phase::Decoding:
     case Phase::Stopped:
@@ -275,6 +281,11 @@ void DragonDecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
         if (m_phase == Phase::Decoding) {
             m_phase = (wasStopped || fatal) ? Phase::Stopped : Phase::Finished;
         }
+        if (fatal) {
+            // The fatal sessionFinished below counts as this session's
+            // reported end.
+            m_endReported = true;
+        }
         if (m_activeSession) {
             m_activeSession->decoder.reset();
         }
@@ -304,19 +315,21 @@ void DragonDecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
         boundaryCallback(event);
     }
 
-    bool nothingQueued = false;
-    {
-        std::scoped_lock relock(m_decoderMutex);
-        nothingQueued = !m_next;
-    }
+    lock.lock();
+}
 
-    if (nothingQueued) {
-        qCDebug(dragonMediaBackendDecode) << "decode thread EOF with nothing queued, emitting sessionFinished for" << finishedSource.toString();
-        Q_EMIT sessionFinished(finishedSource, false);
-    } else {
-        qCDebug(dragonMediaBackendDecode) << "decode thread EOF with next track pending/ready, no sessionFinished";
+void DragonDecodePipeline::finalizeSession(std::unique_lock<std::mutex> &lock)
+{
+    QUrl finishedSource;
+    if (m_endReported) {
+        return;
     }
+    m_endReported = true;
+    finishedSource = m_currentSource;
 
+    lock.unlock();
+    qCDebug(dragonMediaBackendDecode) << "decode thread finalizing track, emitting sessionFinished for" << finishedSource.toString();
+    Q_EMIT sessionFinished(finishedSource, false);
     lock.lock();
 }
 
@@ -348,6 +361,7 @@ bool DragonDecodePipeline::promoteNext(std::unique_lock<std::mutex> &lock)
         m_currentSource = newSource;
         m_next.reset();
         m_phase = Phase::Starting;
+        m_endReported = false;
         promoted = true;
     } else {
         if (m_next) {
@@ -417,6 +431,7 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
         m_currentSource = source;
         m_activeSession = std::move(session);
         m_phase = Phase::Starting;
+        m_endReported = false;
         m_sessionStopSource = std::stop_source{};
     }
 
@@ -547,16 +562,23 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
     m_preWarmThread = std::jthread([this, next](std::stop_token st) {
         DragonThreadName::set("dragon-prewarm");
         auto session = createSession(next, true);
-        if (st.stop_requested() || !session) {
-            if (!session) {
-                qCWarning(dragonMediaBackendDecode) << "pre-warm failed to create a session for" << next.toString();
-            }
+        if (st.stop_requested()) {
+            return;
+        }
+        if (!session) {
+            qCWarning(dragonMediaBackendDecode) << "pre-warm failed to create a session for" << next.toString();
+            dropFailedPreWarm(next);
             return;
         }
 
         const InitResult result = session->decoder->initialize();
-        if (st.stop_requested() || !result.success) {
-            qCDebug(dragonMediaBackendDecode) << "pre-warm of" << next.toString() << "cancelled or failed";
+        if (st.stop_requested()) {
+            qCDebug(dragonMediaBackendDecode) << "pre-warm of" << next.toString() << "cancelled";
+            return;
+        }
+        if (!result.success) {
+            qCDebug(dragonMediaBackendDecode) << "pre-warm of" << next.toString() << "failed to load";
+            dropFailedPreWarm(next);
             return;
         }
 
@@ -689,6 +711,17 @@ void DragonDecodePipeline::cancelPreWarm()
         }
     }
     retired.reset();
+}
+
+void DragonDecodePipeline::dropFailedPreWarm(const QUrl &next)
+{
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        if (m_next && m_next->url == next) {
+            m_next.reset();
+        }
+    }
+    m_stateChanged.notify_all();
 }
 
 void DragonDecodePipeline::setCurrentSource(const QUrl &source)

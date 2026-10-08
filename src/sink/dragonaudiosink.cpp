@@ -85,14 +85,14 @@ void DragonAudioSink::setPositionOffset(std::chrono::milliseconds offset, Positi
 
     if (isPaused()) {
         if (mode == PositionResetMode::Seek || mode == PositionResetMode::NormalTrackChange) {
-            auto *pipe = m_audioPipe.load(std::memory_order_acquire);
-            if (pipe) {
-                pipe->consumer().drain();
-            }
+            m_queueReady.store(false, std::memory_order_release); // gate the producer during the flush
             close();
-            setQueueReady(true);
+            m_flushPending.store(false, std::memory_order_release);
+            m_positionResetPending.store(false, std::memory_order_release);
+            processStreamFlush();
+        } else {
+            m_totalSamplesWritten.store(0, std::memory_order_relaxed);
         }
-        m_totalSamplesWritten.store(0, std::memory_order_relaxed);
         return;
     }
 
