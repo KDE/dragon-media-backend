@@ -1166,18 +1166,18 @@ void TestAudioOutput::testDrainCallback()
         3000);
     QVERIFY2(consumed, "Audio callback should have consumed all pipe data before drain");
 
-    output->notifyDecodeFinished();
+    QVERIFY(output->boundaryEndOfStream());
 
     const bool drained = QTest::qWaitFor(
         [&]() {
             return drainSpy.count() > 0;
         },
         5000);
-    QVERIFY2(drained, "drained() signal should fire after decode finished and pipe empty");
+    QVERIFY2(drained, "drained() signal should fire after the in-band end of stream and pipe empty");
 
-    const auto epochBefore = output->drainEpoch();
-    output->resetDrainState();
-    QVERIFY(output->drainEpoch() != epochBefore);
+    QVERIFY(!output->boundaryEndOfStream());
+
+    output->setPositionOffset(std::chrono::milliseconds{0}, DragonAudioSink::PositionResetMode::NormalTrackChange);
     output->resume();
 
     fillQueue(&pipe, std::vector<float>(8820, 0.5f));
@@ -1188,7 +1188,7 @@ void TestAudioOutput::testDrainCallback()
         3000);
     QVERIFY2(consumedAgain, "Audio callback should have consumed all pipe data before the second drain");
 
-    output->notifyDecodeFinished();
+    QVERIFY(output->boundaryEndOfStream());
 
     const qint64 countAfterFirstDrain = drainSpy.count();
     const bool drainedAgain = QTest::qWaitFor(
@@ -1196,7 +1196,7 @@ void TestAudioOutput::testDrainCallback()
             return drainSpy.count() > countAfterFirstDrain;
         },
         5000);
-    QVERIFY2(drainedAgain, "drained() signal should fire again after resetDrainState() re-arms the drain");
+    QVERIFY2(drainedAgain, "drained() signal should fire again after a flush re-arms the end of stream");
 
     QTest::qWait(150);
     QCOMPARE(drainSpy.count(), countAfterFirstDrain + 1);
@@ -1218,8 +1218,6 @@ void TestAudioOutput::testDrainRepeatCycles()
 
     constexpr int kCycles = 10;
     for (int i = 0; i < kCycles; ++i) {
-        const auto epochBefore = output->drainEpoch();
-
         fillQueue(&pipe, std::vector<float>(8820, 0.5f));
         const bool consumed = QTest::qWaitFor(
             [&]() {
@@ -1228,7 +1226,7 @@ void TestAudioOutput::testDrainRepeatCycles()
             3000);
         QVERIFY2(consumed, qPrintable(u"cycle %1: audio data not consumed"_s.arg(i)));
 
-        output->notifyDecodeFinished();
+        QVERIFY2(output->boundaryEndOfStream(), qPrintable(u"cycle %1: end of stream could not be armed"_s.arg(i)));
 
         const qint64 countBefore = drainSpy.count();
         const bool drained = QTest::qWaitFor(
@@ -1237,13 +1235,11 @@ void TestAudioOutput::testDrainRepeatCycles()
             },
             5000);
         QVERIFY2(drained, qPrintable(u"cycle %1: drained() did not fire"_s.arg(i)));
-        QCOMPARE(output->drainEpoch(), epochBefore);
 
         QTest::qWait(50);
         QCOMPARE(drainSpy.count(), countBefore + 1);
 
-        output->resetDrainState();
-        QVERIFY(output->drainEpoch() != epochBefore);
+        output->setPositionOffset(std::chrono::milliseconds{0}, DragonAudioSink::PositionResetMode::NormalTrackChange);
         output->resume();
     }
 

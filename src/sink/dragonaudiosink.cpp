@@ -9,6 +9,7 @@
 
 #include <QGuiApplication>
 #include <QIcon>
+#include <QMetaObject>
 
 #include <algorithm>
 #include <chrono>
@@ -98,6 +99,7 @@ void DragonAudioSink::setPositionOffset(std::chrono::milliseconds offset, Positi
     switch (mode) {
     case PositionResetMode::Seek:
     case PositionResetMode::NormalTrackChange:
+        m_queueReady.store(false, std::memory_order_release);
         m_flushPending.store(true, std::memory_order_release);
         m_positionResetPending.store(true, std::memory_order_release);
         break;
@@ -211,14 +213,90 @@ void DragonAudioSink::resetPositionTracking()
     m_positionOffset.store(0, std::memory_order_relaxed);
 }
 
-void DragonAudioSink::notifyDecodeFinished()
+bool DragonAudioSink::boundaryTrackStart(std::uint32_t trackId, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration)
 {
-    m_drain.notifyDecodeFinished();
+    StreamBoundary boundary;
+    boundary.kind = StreamBoundary::Kind::TrackStart;
+    boundary.epoch = m_boundaryEpoch.load(std::memory_order_acquire);
+    boundary.streamSample = m_producerSamples.load(std::memory_order_relaxed);
+    boundary.trackId = trackId;
+    boundary.sampleRate = sampleRate;
+    boundary.channels = channels;
+    boundary.duration = duration;
+
+    if (!m_boundaries.push(boundary)) {
+        qWarning("boundary ring full; dropping track boundary (seek/flush the stream first)");
+        return false;
+    }
+    return true;
 }
 
-void DragonAudioSink::resetDrainState()
+bool DragonAudioSink::boundaryEndOfStream()
 {
-    m_drain.startNewEpoch();
+    auto expected = static_cast<std::int8_t>(EosState::None);
+    if (!m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Pending), std::memory_order_acq_rel, std::memory_order_acquire)) {
+        return false;
+    }
+    m_eosSample.store(m_producerSamples.load(std::memory_order_relaxed), std::memory_order_release);
+    return true;
+}
+
+bool DragonAudioSink::retractEndOfStream()
+{
+    auto expected = static_cast<std::int8_t>(EosState::Pending);
+    return m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::None), std::memory_order_acq_rel, std::memory_order_acquire);
+}
+
+void DragonAudioSink::samplesProduced(std::uint64_t epochTag, std::size_t count)
+{
+    if (count == 0) {
+        return;
+    }
+    if (epochTag != m_boundaryEpoch.load(std::memory_order_acquire)) {
+        return;
+    }
+    m_producerSamples.fetch_add(count, std::memory_order_relaxed);
+}
+
+bool DragonAudioSink::endOfStreamPending() const
+{
+    return m_eosState.load(std::memory_order_acquire) == static_cast<std::int8_t>(EosState::Pending)
+        && m_streamSamplesRead.load(std::memory_order_acquire) >= m_eosSample.load(std::memory_order_acquire);
+}
+
+bool DragonAudioSink::tryClaimDrained()
+{
+    if (!endOfStreamPending()) {
+        return false;
+    }
+    auto expected = static_cast<std::int8_t>(EosState::Pending);
+    return m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Claimed), std::memory_order_acq_rel, std::memory_order_acquire);
+}
+
+bool DragonAudioSink::takeDrainedEmission()
+{
+    auto expected = static_cast<std::int8_t>(EosState::Claimed);
+    return m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Emitted), std::memory_order_acq_rel, std::memory_order_acquire);
+}
+
+void DragonAudioSink::processStreamFlush()
+{
+    m_boundaryEpoch.fetch_add(1, std::memory_order_acq_rel);
+
+    if (auto *ap = m_audioPipe.load(std::memory_order_acquire)) {
+        ap->consumer().drain();
+    }
+    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+
+    m_producerSamples.store(0, std::memory_order_relaxed);
+    m_streamSamplesRead.store(0, std::memory_order_relaxed);
+    while (m_boundaries.peek() != nullptr) {
+        m_boundaries.pop();
+    }
+    m_eosState.store(static_cast<std::int8_t>(EosState::None), std::memory_order_release);
+    m_formatChangePending.store(false, std::memory_order_relaxed);
+
+    m_queueReady.store(true, std::memory_order_release);
 }
 
 std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts)
@@ -228,11 +306,7 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
     }
 
     if (m_flushPending.exchange(false, std::memory_order_acq_rel)) {
-        if (auto *ap = m_audioPipe.load(std::memory_order_acquire)) {
-            ap->consumer().drain();
-        }
-        m_totalSamplesWritten.store(0, std::memory_order_relaxed);
-        m_queueReady.store(true, std::memory_order_release);
+        processStreamFlush();
     }
 
     auto *ap = m_audioPipe.load(std::memory_order_acquire);
@@ -240,12 +314,53 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
         return {};
     }
 
-    if (m_callbackBuffer.size() < maxSamples) {
-        m_callbackBuffer.resize(maxSamples);
+    size_t budget = maxSamples;
+    while (const StreamBoundary *boundary = m_boundaries.peek()) {
+        if (boundary->epoch != m_boundaryEpoch.load(std::memory_order_acquire)) {
+            m_boundaries.pop();
+            continue;
+        }
+        if (m_streamSamplesRead.load(std::memory_order_relaxed) < boundary->streamSample) {
+            if (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels()) {
+                budget = std::min<size_t>(budget, boundary->streamSample - m_streamSamplesRead.load(std::memory_order_relaxed));
+            }
+            break;
+        }
+
+        if (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels()) {
+            if (!m_formatChangePending.exchange(true, std::memory_order_acq_rel)) {
+                const int sampleRate = boundary->sampleRate;
+                const int channels = boundary->channels;
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, sampleRate, channels]() {
+                        Q_EMIT formatChangeRequired(sampleRate, channels);
+                    },
+                    Qt::QueuedConnection);
+            }
+            return {};
+        }
+
+        m_boundaries.pop();
+        m_formatChangePending.store(false, std::memory_order_relaxed);
+        m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+        m_positionOffset.store(boundary->startOffset.count(), std::memory_order_relaxed);
+        const std::uint32_t trackId = boundary->trackId;
+        const std::optional<std::chrono::milliseconds> duration = boundary->duration;
+        QMetaObject::invokeMethod(
+            this,
+            [this, trackId, duration]() {
+                Q_EMIT trackStarted(trackId, duration);
+            },
+            Qt::QueuedConnection);
+    }
+
+    if (m_callbackBuffer.size() < budget) {
+        m_callbackBuffer.resize(budget);
     }
     size_t totalRead = 0;
 
-    ap->consumer().readSomeWith(maxSamples, [&](std::span<const float> b1, std::span<const float> b2) {
+    ap->consumer().readSomeWith(budget, [&](std::span<const float> b1, std::span<const float> b2) {
         totalRead = b1.size() + b2.size();
         if (totalRead == 0) {
             return;
@@ -257,10 +372,45 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
     });
 
     if (totalRead == 0) {
-        if (!m_drain.decodeFinished()) {
+        if (!endOfStreamPending()) {
             m_underrunCount.fetch_add(1, std::memory_order_relaxed);
         }
         return {};
+    }
+
+    m_streamSamplesRead.fetch_add(totalRead, std::memory_order_relaxed);
+
+    bool crossedBoundary = false;
+    while (const StreamBoundary *boundary = m_boundaries.peek()) {
+        if (boundary->epoch != m_boundaryEpoch.load(std::memory_order_acquire)) {
+            m_boundaries.pop();
+            continue;
+        }
+        if (m_streamSamplesRead.load(std::memory_order_relaxed) < boundary->streamSample) {
+            break;
+        }
+        if (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels()) {
+            break;
+        }
+
+        m_boundaries.pop();
+        m_formatChangePending.store(false, std::memory_order_relaxed);
+        m_positionOffset.store(boundary->startOffset.count(), std::memory_order_relaxed);
+        m_totalSamplesWritten.store(static_cast<qint64>(m_streamSamplesRead.load(std::memory_order_relaxed) - boundary->streamSample),
+                                    std::memory_order_relaxed);
+        const std::uint32_t trackId = boundary->trackId;
+        const std::optional<std::chrono::milliseconds> duration = boundary->duration;
+        QMetaObject::invokeMethod(
+            this,
+            [this, trackId, duration]() {
+                Q_EMIT trackStarted(trackId, duration);
+            },
+            Qt::QueuedConnection);
+        crossedBoundary = true;
+    }
+
+    if (!crossedBoundary) {
+        m_totalSamplesWritten.fetch_add(static_cast<qint64>(totalRead), std::memory_order_relaxed);
     }
 
     const auto consumedSpan = std::span{m_callbackBuffer.data(), totalRead};
@@ -287,11 +437,8 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
         });
     }
 
-    m_totalSamplesWritten.fetch_add(static_cast<qint64>(totalRead), std::memory_order_relaxed);
-
     return consumedSpan;
 }
-
 DragonPipe<float> *DragonAudioSink::audioPipe() const
 {
     return m_audioPipe.load(std::memory_order_acquire);

@@ -24,7 +24,6 @@
 class DragonPlayer;
 class DragonDecoder;
 class DragonStream;
-
 class DragonDecodePipeline : public QObject
 {
     Q_OBJECT
@@ -51,6 +50,20 @@ public:
     using SamplesCallback = std::function<void(std::span<const float> samples, const std::stop_token &st)>;
 
     void setSamplesCallback(SamplesCallback callback);
+
+    struct BoundaryEvent {
+        enum class Kind {
+            TrackStart,
+            EndOfStream,
+        };
+        Kind kind;
+        QUrl url; // TrackStart only
+        int sampleRate = 0; // TrackStart only
+        int channels = 0; // TrackStart only
+        std::optional<std::chrono::milliseconds> duration; // TrackStart only
+    };
+    using BoundaryCallback = std::function<bool(const BoundaryEvent &)>;
+    void setBoundaryCallback(BoundaryCallback callback);
 
     static DragonMediaBackend::InitResult makeSuccessResult(const DragonMediaBackend::FormatReady &fr, bool isGapless = false);
     static DragonMediaBackend::InitResult makeErrorResult(const QString &message, bool isGapless = false);
@@ -89,46 +102,64 @@ private:
         DragonDecodePipeline *const owner;
         const std::shared_ptr<DragonStream> stream;
         std::unique_ptr<DragonDecoder> decoder;
+        bool preInitialized = false;
+        std::optional<DragonMediaBackend::FormatReady> format;
+    };
+
+    struct NextTrack {
+        QUrl url;
+        std::unique_ptr<Session> session;
+        std::optional<DragonMediaBackend::FormatReady> format;
+        [[nodiscard]] bool ready() const
+        {
+            return session && format;
+        }
+    };
+
+    enum class Phase {
+        Idle,
+        Starting,
+        Decoding,
+        Finished,
+        Stopped,
     };
 
     std::unique_ptr<Session> createSession(const QUrl &source, bool isPreWarm);
-    void cancelPreWarm(const QString &reason);
-    // Requires m_decoderMutex.
-    bool hasActiveDecoder() const;
-    // Requires m_decoderMutex.
-    bool hasLateHandoff() const;
+    void cancelPreWarm();
 
-    bool promotePreWarmedDecoder();
-
+    enum class Action {
+        Wait,
+        Decode,
+        Promote,
+    };
+    [[nodiscard]] Action nextAction() const;
+    void decodeThreadMain(std::stop_token st);
+    void runCurrentSession(std::unique_lock<std::mutex> &lock);
+    bool promoteNext(std::unique_lock<std::mutex> &lock);
     void startDecodeThread();
-    bool waitForDecoderAssignment(std::stop_token st);
-    std::pair<bool, bool> executeDecodeSession();
-    void processDecodeCompletion();
 
     SamplesCallback m_samplesCallback;
     // Guards m_samplesCallback, which is installed from the main thread and
     // invoked on the decode thread.
     mutable std::mutex m_samplesCallbackMutex;
 
+    BoundaryCallback m_boundaryCallback;
+    mutable std::mutex m_boundaryCallbackMutex;
+
     DragonPlayer *m_player = nullptr;
-    QUrl m_currentSource;
-    QUrl m_nextSource;
 
     std::jthread m_decodeThread;
     std::stop_source m_sessionStopSource;
     mutable std::mutex m_decoderMutex;
-    std::condition_variable_any m_decoderAssignedCv;
-    std::condition_variable_any m_decodeLoopFinishedCv;
+    std::condition_variable_any m_stateChanged;
     // Written on the decode thread, read from the main thread (diagnostics).
     std::atomic<bool> m_decodeLoopActive{false};
+
+    Phase m_phase = Phase::Idle;
+    QUrl m_currentSource;
     std::unique_ptr<Session> m_activeSession;
-    // The next track, decoded up to its first frame for a gapless handoff.
-    std::unique_ptr<Session> m_preWarmedSession;
-    bool m_awaitingLateHandoff = false;
+    std::optional<NextTrack> m_next;
+    std::shared_ptr<DragonMediaBackend::DragonCompletion> m_startCompletion;
 
     std::jthread m_preWarmThread;
-
-    std::shared_ptr<DragonMediaBackend::DragonCompletion> m_pendingInitCompletion;
-
-    std::shared_ptr<DragonMediaBackend::DragonCompletion> m_pendingGaplessCompletion;
 };

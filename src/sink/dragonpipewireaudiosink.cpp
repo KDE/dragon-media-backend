@@ -386,19 +386,6 @@ void DragonPipeWireAudioSink::clearStream()
     }
 }
 
-void DragonPipeWireAudioSink::resetDrainState()
-{
-    if (!m_drain.startNewEpoch()) {
-        return;
-    }
-
-    if (m_paused.load(std::memory_order_acquire) || !m_open.load(std::memory_order_acquire) || !m_pw->loop || !m_pw->stream) {
-        return;
-    }
-    qCDebug(dragonMediaBackendAudio) << "PipeWire resetDrainState() reactivating drained stream";
-    PwThreadLoopLock lock(m_pw->loop.get());
-    pw_stream_set_active(m_pw->stream.get(), true);
-}
 
 void DragonPipeWireAudioSink::setChannelVolumes(float linearGain)
 {
@@ -533,15 +520,13 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
 
     auto *dst = static_cast<float *>(spaBuf->datas[0].data);
 
-    if (pcm.empty() && self->m_drain.tryClaimDrain()) {
-        if (self->m_drain.claimIsCurrent()) {
-            spaBuf->datas[0].chunk->size = 0;
-            spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
-            pwBuf->size = 0;
-            pw_stream_queue_buffer(stream, pwBuf);
-            pw_stream_flush(stream, true);
-            return;
-        }
+    if (pcm.empty() && self->tryClaimDrained()) {
+        spaBuf->datas[0].chunk->size = 0;
+        spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
+        pwBuf->size = 0;
+        pw_stream_queue_buffer(stream, pwBuf);
+        pw_stream_flush(stream, true);
+        return;
     }
 
     if (pcm.empty()) {
@@ -652,10 +637,9 @@ void DragonPipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const 
 void DragonPipeWireAudioSink::onDrained(void *userdata)
 {
     auto *self = static_cast<DragonPipeWireAudioSink *>(userdata);
-    if (!self->m_drain.claimIsCurrent()) {
+    if (!self->takeDrainedEmission()) {
         return;
     }
-    self->m_drain.consumeEmission();
     Q_EMIT self->drained();
 }
 

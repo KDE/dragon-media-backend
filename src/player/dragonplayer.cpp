@@ -91,55 +91,104 @@ void DragonPlayerPrivate::reportDeviceOpenFailure()
     }
 }
 
-void DragonPlayerPrivate::onGaplessTransition(const QUrl &newSource, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration)
+void DragonPlayerPrivate::onSinkTrackStarted(std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration)
 {
-    qCDebug(dragonMediaBackendPlayer) << "onGaplessTransition newSource=" << newSource.toString() << "sr=" << sampleRate << "ch=" << channels
-                                      << "duration=" << duration.value_or(-1ms).count();
+    qCDebug(dragonMediaBackendPlayer) << "onSinkTrackStarted trackId=" << trackId << "duration=" << duration.value_or(-1ms).count();
 
-    if (newSource != nextSource) {
-        qCDebug(dragonMediaBackendPlayer) << "ignoring stale onGaplessTransition (source mismatch)";
-        return;
+    PendingTrack pending;
+    {
+        std::scoped_lock lock(m_pendingTracksMutex);
+        const auto it = m_pendingTracks.find(trackId);
+        if (it == m_pendingTracks.end()) {
+            qCDebug(dragonMediaBackendPlayer) << "onSinkTrackStarted: no pending track for id, ignoring (stale)";
+            return;
+        }
+        pending = it.value();
+        m_pendingTracks.erase(it);
     }
+    Q_UNUSED(duration);
 
-    if (nextSource.isEmpty()) {
-        qCDebug(dragonMediaBackendPlayer) << "onGaplessTransition nextSource was cleared, aborting";
-        return;
-    }
-
-    currentSource = nextSource;
+    currentSource = pending.url;
     aboutToFinishEmitted = false;
-    qCDebug(dragonMediaBackendPlayer) << "onGaplessTransition: reset aboutToFinishEmitted for" << currentSource.toString();
+    qCDebug(dragonMediaBackendPlayer) << "onSinkTrackStarted: reset aboutToFinishEmitted for" << currentSource.toString();
     currentIsLocal = DragonStreamFactory::isLocalSource(currentSource);
     currentSeekable = currentIsLocal;
     if (!currentIsLocal && decodePipeline.streamIsSeekable()) {
         currentSeekable = true;
     }
-    currentDuration = duration;
-    currentSampleRate = sampleRate;
-    currentChannels = channels;
+    currentDuration = pending.duration;
+    currentSampleRate = pending.sampleRate;
+    currentChannels = pending.channels;
 
     audioOutput->sink()->setStreamName(QString());
-    // If the previous track had already finished decoding (late nextSource),
-    // the sink may have started draining it; the new track's audio follows
-    // in the same stream, so start a fresh drain epoch.
-    audioOutput->sink()->resetDrainState();
 
     decodePipeline.setCurrentSource(currentSource);
 
-    audioOutput->sink()->setPositionOffset(0ms, DragonAudioSink::PositionResetMode::GaplessTransition);
-    positionEstimator->trackChanged(duration);
+    positionEstimator->trackChanged(currentDuration);
+
+    if (nextSource == currentSource) {
+        nextSource.clear();
+    }
+    Q_EMIT q->nextSourceChanged();
 
     Q_EMIT q->trackChanged();
-    nextSource.clear();
     Q_EMIT q->sourceChanged();
-    Q_EMIT q->nextSourceChanged();
     Q_EMIT q->seekableChanged(currentSeekable);
 
     if (currentDuration) {
         Q_EMIT q->durationChanged(*currentDuration);
     }
+}
 
-    inGaplessSetSource = true;
+void DragonPlayerPrivate::onSinkFormatChangeRequired(int sampleRate, int channels)
+{
+    qCDebug(dragonMediaBackendPlayer) << "onSinkFormatChangeRequired sr=" << sampleRate << "ch=" << channels;
+
+    auto *sink = audioOutput ? audioOutput->sink() : nullptr;
+    if (!sink) {
+        return;
+    }
+    sink->close();
+    sink->open(sampleRate, channels);
+    if (!sink->isDeviceOpen()) {
+        reportDeviceOpenFailure();
+        return;
+    }
+    sink->setQueueReady(true);
+}
+
+bool DragonPlayerPrivate::onPipelineBoundary(const DragonDecodePipeline::BoundaryEvent &event)
+{
+    DragonAudioSink *sink = audioOutput ? audioOutput->sink() : nullptr;
+
+    switch (event.kind) {
+    case DragonDecodePipeline::BoundaryEvent::Kind::TrackStart: {
+        if (!sink) {
+            return true;
+        }
+        if (!sink->retractEndOfStream()) {
+            qCDebug(dragonMediaBackendPlayer) << "boundary: sink already drained, refusing gapless handoff of" << event.url.toString();
+            return false;
+        }
+        const auto trackId = m_trackSerial.fetch_add(1, std::memory_order_relaxed) + 1;
+        {
+            std::scoped_lock lock(m_pendingTracksMutex);
+            m_pendingTracks.insert(trackId, PendingTrack{event.url, event.sampleRate, event.channels, event.duration});
+        }
+        if (!sink->boundaryTrackStart(trackId, event.sampleRate, event.channels, event.duration)) {
+            std::scoped_lock lock(m_pendingTracksMutex);
+            m_pendingTracks.remove(trackId);
+            qCWarning(dragonMediaBackendPlayer) << "boundary ring full; the track switch of" << event.url.toString() << "will not be reported at play time";
+        }
+        return true;
+    }
+    case DragonDecodePipeline::BoundaryEvent::Kind::EndOfStream:
+        if (sink) {
+            sink->boundaryEndOfStream();
+        }
+        return true;
+    }
+    return false;
 }
 
 void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalError)
@@ -192,7 +241,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
             Q_EMIT q->aboutToFinish();
         }
     }
-    audioOutput->sink()->notifyDecodeFinished();
+
     qCDebug(dragonMediaBackendPlayer) << "onDecodeFinished media ended, deferring StoppedState until drain";
 }
 
@@ -262,9 +311,15 @@ void DragonPlayerPrivate::writeToQueues(std::span<const float> pcm, const std::s
     }
 
     const uint64_t generation = contentGeneration.load(std::memory_order_acquire);
-    audioPipe.producer().write(pcm, st, [this, generation]() {
+    DragonAudioSink *sink = audioOutput ? audioOutput->sink() : nullptr;
+    const std::uint64_t streamEpoch = sink ? sink->streamEpoch() : 0;
+    const size_t written = audioPipe.producer().write(pcm, st, [this, generation]() {
         return contentGeneration.load(std::memory_order_acquire) != generation;
     });
+
+    if (written > 0 && sink) {
+        sink->samplesProduced(streamEpoch, written);
+    }
 }
 
 void DragonPlayerPrivate::invalidateQueuedContent()
@@ -415,15 +470,21 @@ void DragonPlayerPrivate::init()
         setPlaybackState(DragonPlayer::PlaybackState::StoppedState);
     });
 
+    connect(audioOutput->sink(), &DragonAudioSink::trackStarted, this, &DragonPlayerPrivate::onSinkTrackStarted, Qt::QueuedConnection);
+
+    connect(audioOutput->sink(), &DragonAudioSink::formatChangeRequired, this, &DragonPlayerPrivate::onSinkFormatChangeRequired, Qt::QueuedConnection);
+
     decodePipeline.setSamplesCallback([this](auto samples, const std::stop_token &st) {
         writeToQueues(samples, st);
+    });
+
+    decodePipeline.setBoundaryCallback([this](const DragonDecodePipeline::BoundaryEvent &event) {
+        return onPipelineBoundary(event);
     });
 
     connect(&decodePipeline, &DragonDecodePipeline::sessionError, this, &DragonPlayerPrivate::onDecodeError, Qt::QueuedConnection);
 
     connect(&decodePipeline, &DragonDecodePipeline::sessionFinished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
-
-    connect(&decodePipeline, &DragonDecodePipeline::gaplessTransition, this, &DragonPlayerPrivate::onGaplessTransition, Qt::QueuedConnection);
 
     connect(&decodePipeline, &DragonDecodePipeline::streamStalled, this, &DragonPlayerPrivate::onStreamStalled, Qt::QueuedConnection);
     connect(&decodePipeline, &DragonDecodePipeline::streamBuffering, this, &DragonPlayerPrivate::onStreamBuffering, Qt::QueuedConnection);
@@ -616,17 +677,18 @@ void DragonPlayer::setSource(const QUrl &source)
     if (d->audioOutput) {
         d->invalidateQueuedContent();
         d->audioOutput->sink()->setQueueReady(false);
-        d->audioOutput->sink()->resetDrainState();
         d->audioOutput->sink()->setPositionOffset(0ms, DragonAudioSink::PositionResetMode::NormalTrackChange);
         if (d->currentSource != source) {
             d->audioOutput->sink()->setStreamName(QString());
         }
     }
 
-    d->decodePipeline.stopSession();
+    {
+        std::scoped_lock lock(d->m_pendingTracksMutex);
+        d->m_pendingTracks.clear();
+    }
 
-    const bool isGapless = d->inGaplessSetSource;
-    d->inGaplessSetSource = false;
+    d->decodePipeline.stopSession();
 
     const bool wasPlayingOrPaused = d->currentPlaybackState == PlaybackState::PlayingState || d->currentPlaybackState == PlaybackState::PausedState;
 
@@ -640,7 +702,7 @@ void DragonPlayer::setSource(const QUrl &source)
     d->currentSampleRate = 0;
     d->currentChannels = 0;
 
-    if (!isGapless && !playRequestedReload) {
+    if (!playRequestedReload) {
         d->requestedPlaybackState = PlaybackState::StoppedState;
         if (wasPlayingOrPaused) {
             d->setPlaybackState(PlaybackState::StoppedState);
@@ -871,13 +933,17 @@ void DragonPlayer::stop()
         d->decodePipeline.setNextSource(QUrl());
     }
 
+    {
+        std::scoped_lock lock(d->m_pendingTracksMutex);
+        d->m_pendingTracks.clear();
+    }
+
     if (d->currentStatus == MediaStatus::LoadingMedia) {
         // stop()s playback but must not interrupt an in-flight load nor change media status
         qCDebug(dragonMediaBackendPlayer) << "stop() during LoadingMedia, letting in-flight load continue";
         if (d->audioOutput) {
             d->audioOutput->sink()->close();
             d->audioOutput->sink()->reset();
-            d->audioOutput->sink()->resetDrainState();
         }
         d->setPlaybackState(PlaybackState::StoppedState);
         if (d->positionEstimator->position() != 0ms) {
@@ -891,7 +957,6 @@ void DragonPlayer::stop()
     if (d->audioOutput) {
         d->audioOutput->sink()->close();
         d->audioOutput->sink()->reset();
-        d->audioOutput->sink()->resetDrainState();
     }
 
     d->setPlaybackState(PlaybackState::StoppedState);

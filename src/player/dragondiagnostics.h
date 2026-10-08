@@ -33,6 +33,8 @@ public:
 
     [[nodiscard]] std::size_t decodeQueueSize() const;
 
+    [[nodiscard]] qint64 audioSamplesRead() const;
+
     [[nodiscard]] std::size_t fftQueueSize() const;
 
     [[nodiscard]] bool decodeLoopActive() const;

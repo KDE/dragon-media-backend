@@ -5,12 +5,12 @@
 
 #pragma once
 
-#include "dragondrainstate.h"
 #include "dragonmediabackend_export.h"
 
 #include <QObject>
 #include <QString>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
@@ -96,6 +96,11 @@ public:
     [[nodiscard]] qint64 totalSamplesWritten() const;
     void resetPositionTracking();
 
+    [[nodiscard]] qint64 streamSamplesRead() const
+    {
+        return static_cast<qint64>(m_streamSamplesRead.load(std::memory_order_relaxed));
+    }
+
     [[nodiscard]] std::chrono::milliseconds position() const;
 
     virtual void clearStream() = 0;
@@ -105,19 +110,53 @@ public:
         m_totalSamplesWritten.store(0, std::memory_order_relaxed);
     }
 
-    virtual void notifyDecodeFinished();
-    virtual void resetDrainState();
+    struct StreamBoundary {
+        enum class Kind : std::uint8_t {
+            TrackStart,
+        };
+        Kind kind;
+        std::uint64_t epoch = 0;
+        std::uint64_t streamSample = 0;
+        std::uint32_t trackId = 0;
+        int sampleRate = 0;
+        int channels = 0;
+        std::chrono::milliseconds startOffset{};
+        std::optional<std::chrono::milliseconds> duration;
+    };
 
-    [[nodiscard]] std::uint64_t drainEpoch() const
+    bool boundaryTrackStart(std::uint32_t trackId, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration);
+
+    bool boundaryEndOfStream();
+
+    bool retractEndOfStream();
+
+    void samplesProduced(std::uint64_t epochTag, std::size_t count);
+
+    [[nodiscard]] std::uint64_t streamEpoch() const
     {
-        return m_drain.epoch();
+        return m_boundaryEpoch.load(std::memory_order_acquire);
     }
+
+    [[nodiscard]] bool endOfStreamPending() const;
+
+    [[nodiscard]] bool endOfStreamArmed() const
+    {
+        return m_eosState.load(std::memory_order_acquire) != static_cast<std::int8_t>(EosState::None);
+    }
+
+    [[nodiscard]] bool tryClaimDrained();
+
+    [[nodiscard]] bool takeDrainedEmission();
 
 Q_SIGNALS:
     void errorOccurred(const QString &message);
     void volumeChanged();
     void mutedChanged(bool muted);
     void drained();
+
+    void trackStarted(std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration);
+
+    void formatChangeRequired(int sampleRate, int channels);
 
 protected Q_SLOTS:
     void onExternalVolumeChanged(float linearGain);
@@ -147,6 +186,47 @@ private:
     DragonPipe<float> *audioPipe() const;
     DragonPipe<DragonPcmBlock> *fftPipe() const;
 
+    class BoundaryRing
+    {
+    public:
+        static constexpr std::size_t kCapacity = 8;
+
+        bool push(const StreamBoundary &boundary)
+        {
+            const auto head = m_head.load(std::memory_order_relaxed);
+            const auto tail = m_tail.load(std::memory_order_acquire);
+            if (head - tail >= kCapacity) {
+                return false;
+            }
+            m_storage[head & kMask] = boundary;
+            m_head.store(head + 1, std::memory_order_release);
+            return true;
+        }
+
+        [[nodiscard]] const StreamBoundary *peek() const
+        {
+            const auto tail = m_tail.load(std::memory_order_relaxed);
+            if (m_head.load(std::memory_order_acquire) == tail) {
+                return nullptr;
+            }
+            return &m_storage[tail & kMask];
+        }
+
+        void pop()
+        {
+            m_tail.fetch_add(1, std::memory_order_release);
+        }
+
+    private:
+        static constexpr std::size_t kMask = kCapacity - 1;
+
+        std::array<StreamBoundary, kCapacity> m_storage{};
+        std::atomic<std::uint64_t> m_head{0};
+        std::atomic<std::uint64_t> m_tail{0};
+    };
+
+    void processStreamFlush();
+
     std::atomic<DragonPipe<float> *> m_audioPipe{nullptr};
     std::atomic<DragonPipe<DragonPcmBlock> *> m_fftPipe{nullptr};
 
@@ -165,7 +245,21 @@ private:
     std::atomic<bool> m_positionResetPending{false};
     std::atomic<bool> m_queueReady{true};
 
+    BoundaryRing m_boundaries; // producer: decode thread; consumer: callback
+    std::atomic<std::uint64_t> m_boundaryEpoch{1}; // bumped on flush
+    std::atomic<std::uint64_t> m_producerSamples{0}; // decode thread (+ flush reset)
+    std::atomic<std::uint64_t> m_streamSamplesRead{0}; // audio callback
+
+    enum class EosState : std::int8_t {
+        None,
+        Pending,
+        Claimed,
+        Emitted,
+    };
+    std::atomic<std::int8_t> m_eosState{static_cast<std::int8_t>(EosState::None)};
+    std::atomic<std::uint64_t> m_eosSample{0};
+    std::atomic<bool> m_formatChangePending{false};
+
 protected:
-    DragonDrainState m_drain;
     std::atomic<int> m_underrunCount{0};
 };

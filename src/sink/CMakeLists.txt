@@ -6,7 +6,6 @@ add_library(dragon_sink_objs OBJECT
     dragonaudiosink.cpp
     dragonaudiosinkfactory.cpp
     dragonnullaudiosink.cpp
-    dragondrainstate.h
 )
 
 target_include_directories(dragon_sink_objs PRIVATE

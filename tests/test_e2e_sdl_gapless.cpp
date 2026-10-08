@@ -20,6 +20,7 @@
 #include "test_utils.h"
 
 #include "player/dragondiagnostics.h"
+#include "sink/dragonaudiosink.h"
 #include <DragonPlayer>
 
 #include <cmath>
@@ -63,6 +64,8 @@ private Q_SLOTS:
 
     void testGaplessSameFormat();
     void testGaplessFormatChangeStateMachine();
+    void testTrackChangeAtAudibleBoundary();
+    void testFormatChangePlaysAtNativeRate();
     void testSingleTrackIntegrity();
     void testTrackStartNotWiped();
 
@@ -157,6 +160,102 @@ void TestSdlGapless::testGaplessFormatChangeStateMachine()
     QVERIFY(runGaplessPlayback(player, helper, diagnostics, fixtureA, fixtureB, nullptr, 15000, 2000));
 
     QVERIFY2(trackSpy.count() >= 1, "At least one trackChanged signal expected");
+}
+
+void TestSdlGapless::testTrackChangeAtAudibleBoundary()
+{
+    using namespace FixtureGenerator;
+
+    auto fixtureA = makeEndMarkerFixture(kSampleRate, kDefaultChannels, kDurationFrames);
+    auto fixtureB = makeStartMarkerFixture(kSampleRate, kDefaultChannels, kDurationFrames);
+    FixtureGuard guardA{fixtureA.filePath};
+    FixtureGuard guardB{fixtureB.filePath};
+
+    EnvGuard driverEnv{
+        {"SDL_AUDIODRIVER", QByteArray("dummy")},
+        {"SDL_AUDIO_DISK_OUTPUT_FILE", QByteArray()},
+        {"SDL_AUDIO_DISK_TIMESCALE", QByteArray()},
+    };
+
+    DragonPlayer player;
+    DragonDiagnostics diagnostics(&player);
+    PlayerHelper helper(&player);
+
+    qint64 samplesReadAtTrackChange = -1;
+    QObject::connect(&player, &DragonPlayer::trackChanged, &player, [&]() {
+        if (samplesReadAtTrackChange < 0) {
+            samplesReadAtTrackChange = diagnostics.audioSamplesRead();
+        }
+    });
+
+    QVERIFY2(helper.setSourceAndWait(QUrl::fromLocalFile(fixtureA.filePath)), "Track 1 failed to load");
+    player.setNextSource(QUrl::fromLocalFile(fixtureB.filePath));
+    QVERIFY2(helper.playAndWait(), "Track 1 failed to start playing");
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&]() {
+                     return samplesReadAtTrackChange >= 0;
+                 },
+                 60000),
+             "Gapless transition did not happen");
+
+    const qint64 trackATotalSamples = qint64(fixtureA.totalFrames) * kDefaultChannels;
+    const qint64 tolerance = 4096;
+    const qint64 unreadTail = trackATotalSamples - samplesReadAtTrackChange;
+    qDebug() << "samplesReadAtTrackChange=" << samplesReadAtTrackChange << "trackATotalSamples=" << trackATotalSamples << "unreadTailSamples=" << unreadTail;
+    QVERIFY2(unreadTail <= tolerance,
+             qPrintable(u"trackChanged fired while %1 samples (~%2ms) of track A were still unread: the signal is early"_s.arg(unreadTail)
+                            .arg(unreadTail * 1000 / (kSampleRate * kDefaultChannels))));
+}
+
+void TestSdlGapless::testFormatChangePlaysAtNativeRate()
+{
+    using namespace FixtureGenerator;
+
+    constexpr int trackBFrames = kSampleRate * 5; // 5s
+
+    auto fixtureA = makeEndMarkerFixture(kSampleRate, kDefaultChannels, kDurationFrames);
+    auto fixtureB = makeStartMarkerFixture(kSampleRate, 1, trackBFrames);
+    FixtureGuard guardA{fixtureA.filePath};
+    FixtureGuard guardB{fixtureB.filePath};
+
+    EnvGuard driverEnv{
+        {"SDL_AUDIODRIVER", QByteArray("dummy")},
+        {"SDL_AUDIO_DISK_OUTPUT_FILE", QByteArray()},
+        {"SDL_AUDIO_DISK_TIMESCALE", QByteArray()},
+    };
+
+    DragonPlayer player;
+    DragonDiagnostics diagnostics(&player);
+    PlayerHelper helper(&player);
+
+    QElapsedTimer timer;
+    qint64 msAtTrackChange = -1;
+    timer.start();
+    QObject::connect(&player, &DragonPlayer::trackChanged, &player, [&]() {
+        if (msAtTrackChange < 0) {
+            msAtTrackChange = timer.elapsed();
+        }
+    });
+
+    QVERIFY2(helper.setSourceAndWait(QUrl::fromLocalFile(fixtureA.filePath)), "Track 1 failed to load");
+    player.setNextSource(QUrl::fromLocalFile(fixtureB.filePath));
+    QVERIFY2(helper.playAndWait(), "Track 1 failed to start playing");
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&]() {
+                     return msAtTrackChange >= 0;
+                 },
+                 60000),
+             "Gapless transition did not happen");
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::StoppedState, 30000);
+
+    const qint64 elapsedMs = timer.elapsed() - msAtTrackChange;
+    const qint64 expectedMs = qint64(trackBFrames) * 1000 / kSampleRate;
+    qDebug() << "trackB audible span=" << elapsedMs << "ms, expected ~" << expectedMs << "ms";
+    QVERIFY2(elapsedMs >= expectedMs * 9 / 10,
+             qPrintable(u"Track B (mono, %1ms) audibly ended after only %2ms: it was played at track A's stereo device rate"_s.arg(expectedMs).arg(elapsedMs)));
 }
 
 void TestSdlGapless::testSingleTrackIntegrity()

@@ -17,6 +17,7 @@
 #include <QUrl>
 
 #include <QCoroTask>
+#include <QHash>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -59,7 +60,8 @@ private Q_SLOTS:
     void onDecodeFinished(const QUrl &source, bool hadFatalError);
     void onDecodeError(const QString &message);
 
-    void onGaplessTransition(const QUrl &newSource, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration);
+    void onSinkTrackStarted(std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration);
+    void onSinkFormatChangeRequired(int sampleRate, int channels);
 
     void onStreamStalled();
     void onStreamBuffering();
@@ -73,6 +75,18 @@ private:
     void reportDeviceOpenFailure();
 
     void writeToQueues(std::span<const float> pcm, const std::stop_token &st);
+
+    bool onPipelineBoundary(const DragonDecodePipeline::BoundaryEvent &event);
+
+    struct PendingTrack {
+        QUrl url;
+        int sampleRate = 0;
+        int channels = 0;
+        std::optional<std::chrono::milliseconds> duration;
+    };
+    QHash<std::uint32_t, PendingTrack> m_pendingTracks;
+    mutable std::mutex m_pendingTracksMutex;
+    std::atomic<std::uint32_t> m_trackSerial{0};
 
     void invalidateQueuedContent();
 
@@ -118,5 +132,4 @@ private:
 
     std::chrono::milliseconds prefinishMark{2000ms};
     bool aboutToFinishEmitted = false;
-    bool inGaplessSetSource = false;
 };

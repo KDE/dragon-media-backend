@@ -113,103 +113,105 @@ DragonDecodePipeline::DragonDecodePipeline(DragonPlayer *player)
     startDecodeThread();
 }
 
+DragonDecodePipeline::~DragonDecodePipeline()
+{
+    stop();
+}
+
 void DragonDecodePipeline::startDecodeThread()
 {
     qCDebug(dragonMediaBackendDecode) << "startDecodeThread() creating new decode thread";
     m_decodeThread = std::jthread([this](std::stop_token st) {
         DragonThreadName::set("dragon-decode");
         qCDebug(dragonMediaBackendDecode) << "decode thread started";
-
-        while (!st.stop_requested()) {
-            if (!waitForDecoderAssignment(st)) {
-                break;
-            }
-
-            auto [wasStopped, hadFatalError] = executeDecodeSession();
-            if (wasStopped) {
-                qCDebug(dragonMediaBackendDecode) << "decode thread session was stopped, continue to wait for new decoder";
-                continue;
-            }
-
-            if (hadFatalError) {
-                QUrl errorSource;
-                {
-                    std::scoped_lock lock(m_decoderMutex);
-                    errorSource = m_currentSource;
-                }
-                qCDebug(dragonMediaBackendDecode) << "decode thread fatal error, emitting sessionFinished for" << errorSource.toString();
-                Q_EMIT sessionFinished(errorSource, true);
-                continue;
-            }
-
-            if (st.stop_requested()) {
-                qCDebug(dragonMediaBackendDecode) << "decode thread outer stop after loop, breaking";
-                break;
-            }
-
-            processDecodeCompletion();
-        }
-
-        qCDebug(dragonMediaBackendDecode) << "decode thread exiting outer loop";
+        decodeThreadMain(st);
+        qCDebug(dragonMediaBackendDecode) << "decode thread exiting";
     });
 }
 
-DragonDecodePipeline::~DragonDecodePipeline()
-{
-    stop();
-}
-
-bool DragonDecodePipeline::waitForDecoderAssignment(std::stop_token st)
+void DragonDecodePipeline::decodeThreadMain(std::stop_token st)
 {
     std::unique_lock lock(m_decoderMutex);
-    qCDebug(dragonMediaBackendDecode) << "decode thread waiting for decoder... activeDecoder=" << hasActiveDecoder();
+    while (!st.stop_requested()) {
+        Action action = Action::Wait;
+        if (!m_stateChanged.wait(lock, st, [&action, this, &st]() {
+                return st.stop_requested() || (action = nextAction()) != Action::Wait;
+            })) {
+            break;
+        }
+        if (st.stop_requested()) {
+            break;
+        }
 
-    m_decoderAssignedCv.wait(lock, st, [this]() {
-        return hasActiveDecoder() || hasLateHandoff();
-    });
-
-    qCDebug(dragonMediaBackendDecode) << "decode thread woke up activeDecoder=" << hasActiveDecoder() << " outerStopRequested=" << st.stop_requested();
-
-    if (st.stop_requested()) {
-        qCDebug(dragonMediaBackendDecode) << "decode thread outer loop stop requested, breaking";
-        return false;
-    }
-
-    if (hasLateHandoff()) {
-        lock.unlock();
-        qCDebug(dragonMediaBackendDecode) << "decode thread promoting late pre-warmed decoder";
-        promotePreWarmedDecoder();
-    }
-
-    return true;
-}
-
-std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
-{
-    DragonDecoder *decoder = nullptr;
-    std::shared_ptr<DragonCompletion> completion;
-    {
-        std::scoped_lock lock(m_decoderMutex);
-        m_decodeLoopActive = true;
-        decoder = hasActiveDecoder() ? m_activeSession->decoder.get() : nullptr;
-        completion = m_pendingInitCompletion;
-        if (!decoder) {
-            m_decodeLoopActive = false;
+        switch (action) {
+        case Action::Decode:
+            runCurrentSession(lock);
+            break;
+        case Action::Promote:
+            promoteNext(lock);
+            break;
+        case Action::Wait:
+            break;
         }
     }
+}
+
+DragonDecodePipeline::Action DragonDecodePipeline::nextAction() const
+{
+    switch (m_phase) {
+    case Phase::Starting:
+        return Action::Decode;
+    case Phase::Finished:
+        return (m_next && m_next->ready()) ? Action::Promote : Action::Wait;
+    case Phase::Idle:
+    case Phase::Decoding:
+    case Phase::Stopped:
+        return Action::Wait;
+    }
+    return Action::Wait;
+}
+
+void DragonDecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
+{
+    // lock is held here.
+    DragonDecoder *decoder = nullptr;
+    std::shared_ptr<DragonCompletion> completion;
+    bool preInitialized = false;
+    FormatReady preWarmFormat{};
+    {
+        m_decodeLoopActive = true;
+        decoder = m_activeSession ? m_activeSession->decoder.get() : nullptr;
+        preInitialized = m_activeSession ? m_activeSession->preInitialized : false;
+        if (m_activeSession && m_activeSession->format) {
+            preWarmFormat = *m_activeSession->format;
+        }
+        completion = std::exchange(m_startCompletion, nullptr);
+        if (decoder != nullptr) {
+            m_phase = Phase::Decoding;
+        }
+    }
+    lock.unlock();
 
     if (!decoder) {
-        qCDebug(dragonMediaBackendDecode) << "decode thread decoder became null before decodeLoop, treating as stopped";
-        m_decodeLoopFinishedCv.notify_all();
-        return {true, false};
+        qCDebug(dragonMediaBackendDecode) << "decode thread session retired before decodeLoop, treating as stopped";
+        {
+            std::scoped_lock relock(m_decoderMutex);
+            m_decodeLoopActive = false;
+        }
+        m_stateChanged.notify_all();
+        lock.lock();
+        return;
     }
 
-    qCDebug(dragonMediaBackendDecode) << "decode thread initializing decoder" << decoder;
+    qCDebug(dragonMediaBackendDecode) << "decode thread running session, preInitialized=" << preInitialized;
 
-    InitResult initResult = decoder->initialize();
-    initResult.isGapless = false;
+    InitResult initResult = preInitialized ? makeSuccessResult(preWarmFormat) : [&]() {
+        auto result = decoder->initialize();
+        result.isGapless = false;
+        return result;
+    }();
 
-    if (completion) {
+    if (completion && !preInitialized) {
         completion->setResult(initResult);
     }
 
@@ -231,7 +233,7 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
                                   [&](const SamplesChunk &sc) {
                                       SamplesCallback callback;
                                       {
-                                          std::scoped_lock lock(m_samplesCallbackMutex);
+                                          std::scoped_lock callbackLock(m_samplesCallbackMutex);
                                           callback = m_samplesCallback;
                                       }
                                       if (callback && !sc.data.empty()) {
@@ -260,71 +262,116 @@ std::pair<bool, bool> DragonDecodePipeline::executeDecodeSession()
 
     qCDebug(dragonMediaBackendDecode) << "decode thread decodeLoop finished";
     const bool decoderHadFatalError = decoder->hasFatalError();
-    bool wasStopped;
+    const bool wasStopped = m_sessionStopSource.get_token().stop_requested();
+    const bool fatal = hadFatalError || decoderHadFatalError;
+    QUrl finishedSource;
     {
-        std::scoped_lock lock(m_decoderMutex);
+        std::scoped_lock relock(m_decoderMutex);
         m_decodeLoopActive = false;
 
-        wasStopped = m_sessionStopSource.stop_requested();
-        qCDebug(dragonMediaBackendDecode) << "decode thread loopInactive, wasStopped=" << wasStopped << " hadFatalError=" << hadFatalError;
+        finishedSource = m_currentSource;
+        qCDebug(dragonMediaBackendDecode) << "decode thread loopInactive, wasStopped=" << wasStopped << " fatal=" << fatal;
 
+        if (m_phase == Phase::Decoding) {
+            m_phase = (wasStopped || fatal) ? Phase::Stopped : Phase::Finished;
+        }
         if (m_activeSession) {
             m_activeSession->decoder.reset();
         }
     }
-    m_decodeLoopFinishedCv.notify_all();
+    m_stateChanged.notify_all();
 
-    return {wasStopped, hadFatalError || decoderHadFatalError};
-}
-
-void DragonDecodePipeline::processDecodeCompletion()
-{
-    qCDebug(dragonMediaBackendDecode) << "processDecodeCompletion() called";
-
-    if (promotePreWarmedDecoder()) {
+    if (fatal) {
+        qCDebug(dragonMediaBackendDecode) << "decode thread fatal error, emitting sessionFinished for" << finishedSource.toString();
+        Q_EMIT sessionFinished(finishedSource, true);
+        lock.lock();
+        return;
+    }
+    if (wasStopped) {
+        qCDebug(dragonMediaBackendDecode) << "decode thread session was stopped, no completion event";
+        lock.lock();
         return;
     }
 
-    std::unique_lock plock(m_decoderMutex);
-    const QUrl finishedSource = m_currentSource;
-    m_awaitingLateHandoff = !hasActiveDecoder() && !m_sessionStopSource.stop_requested();
-    plock.unlock();
+    BoundaryCallback boundaryCallback;
+    {
+        std::scoped_lock callbackLock(m_boundaryCallbackMutex);
+        boundaryCallback = m_boundaryCallback;
+    }
+    if (boundaryCallback) {
+        BoundaryEvent event;
+        event.kind = BoundaryEvent::Kind::EndOfStream;
+        boundaryCallback(event);
+    }
 
-    qCDebug(dragonMediaBackendDecode) << "decode thread no pre-warmed decoder, emitting sessionFinished for" << finishedSource.toString();
-    Q_EMIT sessionFinished(finishedSource, false);
+    bool nothingQueued = false;
+    {
+        std::scoped_lock relock(m_decoderMutex);
+        nothingQueued = !m_next;
+    }
+
+    if (nothingQueued) {
+        qCDebug(dragonMediaBackendDecode) << "decode thread EOF with nothing queued, emitting sessionFinished for" << finishedSource.toString();
+        Q_EMIT sessionFinished(finishedSource, false);
+    } else {
+        qCDebug(dragonMediaBackendDecode) << "decode thread EOF with next track pending/ready, no sessionFinished";
+    }
+
+    lock.lock();
 }
 
-bool DragonDecodePipeline::promotePreWarmedDecoder()
+bool DragonDecodePipeline::promoteNext(std::unique_lock<std::mutex> &lock)
 {
-    std::unique_lock plock(m_decoderMutex);
-    if (!m_preWarmedSession || hasActiveDecoder()) {
-        return false;
+    // lock is held here; phase is Finished and m_next is ready.
+    const QUrl newSource = m_next->url;
+    const FormatReady format = *m_next->format;
+    lock.unlock();
+
+    BoundaryCallback boundaryCallback;
+    {
+        std::scoped_lock callbackLock(m_boundaryCallbackMutex);
+        boundaryCallback = m_boundaryCallback;
     }
+    BoundaryEvent boundaryEvent;
+    boundaryEvent.kind = BoundaryEvent::Kind::TrackStart;
+    boundaryEvent.url = newSource;
+    boundaryEvent.sampleRate = format.sampleRate;
+    boundaryEvent.channels = format.channels;
+    boundaryEvent.duration = format.duration;
+    const bool handoff = !boundaryCallback || boundaryCallback(boundaryEvent);
 
-    std::unique_ptr<Session> retired = std::exchange(m_activeSession, std::move(m_preWarmedSession));
-    m_awaitingLateHandoff = false;
-    const QUrl newSource = m_nextSource;
-    m_currentSource = newSource;
-    m_nextSource.clear();
-
-    int sampleRate = 0;
-    int channels = 0;
-    std::optional<std::chrono::milliseconds> duration{};
-    if (m_pendingGaplessCompletion && m_pendingGaplessCompletion->isReady()) {
-        const auto result = m_pendingGaplessCompletion->result();
-        sampleRate = result.sampleRate;
-        channels = result.channels;
-        duration = result.duration;
+    std::unique_ptr<Session> retired;
+    bool promoted = false;
+    lock.lock();
+    if (handoff && m_phase == Phase::Finished && m_next && m_next->ready()) {
+        retired = std::exchange(m_activeSession, std::move(m_next->session));
+        m_currentSource = newSource;
+        m_next.reset();
+        m_phase = Phase::Starting;
+        promoted = true;
+    } else {
+        if (m_next) {
+            retired = std::move(m_next->session);
+            m_next.reset();
+        }
     }
-
-    plock.unlock();
+    lock.unlock();
 
     // Stops the finished track's stream (closing its device, if any).
     retired.reset();
 
-    qCDebug(dragonMediaBackendDecode) << "gapless transition, decoder swapped for" << newSource.toString() << "sr=" << sampleRate << "ch=" << channels
-                                      << "duration=" << duration.value_or(std::chrono::milliseconds{-1}).count() << "ms";
-    Q_EMIT gaplessTransition(newSource, sampleRate, channels, duration);
+    if (!promoted) {
+        qCDebug(dragonMediaBackendDecode) << "promotion of" << newSource.toString() << "discarded (rejected or superseded)";
+        lock.lock();
+        return false;
+    }
+
+    qCDebug(dragonMediaBackendDecode) << "gapless promotion to" << newSource.toString() << "sr=" << format.sampleRate << "ch=" << format.channels
+                                      << "duration=" << format.duration.value_or(std::chrono::milliseconds{-1}).count() << "ms";
+    Q_EMIT gaplessTransition(newSource, format.sampleRate, format.channels, format.duration);
+
+    // The action loop expects the lock held again on return.
+    lock.lock();
     return true;
 }
 
@@ -340,7 +387,7 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
         startDecodeThread();
     }
 
-    cancelPreWarm(QStringLiteral("New session started"));
+    cancelPreWarm();
 
     qCDebug(dragonMediaBackendDecode) << "initializeSession requesting decode session stop";
     m_sessionStopSource.request_stop();
@@ -349,8 +396,8 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
     {
         std::unique_lock lock(m_decoderMutex);
         qCDebug(dragonMediaBackendDecode) << "initializeSession waiting for decodeLoopActive=false (current=" << m_decodeLoopActive.load() << ")";
-        m_decodeLoopFinishedCv.wait(lock, [this]() {
-            return !m_decodeLoopActive;
+        m_stateChanged.wait(lock, [this]() {
+            return !m_decodeLoopActive.load();
         });
         qCDebug(dragonMediaBackendDecode) << "initializeSession decode loop inactive, retiring active session";
         retired = std::move(m_activeSession);
@@ -368,16 +415,17 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
 
     {
         std::scoped_lock lock(m_decoderMutex);
-        m_pendingInitCompletion = completion;
+        m_startCompletion = completion;
         m_currentSource = source;
-        m_awaitingLateHandoff = false;
         m_activeSession = std::move(session);
+        m_next.reset();
+        m_phase = Phase::Starting;
         m_sessionStopSource = std::stop_source{};
     }
 
-    qCDebug(dragonMediaBackendDecode) << "initializeSession new decoder installed, creating fresh stop source and notifying";
+    qCDebug(dragonMediaBackendDecode) << "initializeSession new session installed (phase=Starting), notifying";
 
-    m_decoderAssignedCv.notify_one();
+    m_stateChanged.notify_all();
 
     co_return co_await *completion;
 }
@@ -386,8 +434,9 @@ void DragonDecodePipeline::stopSession()
 {
     {
         std::scoped_lock lock(m_decoderMutex);
-        m_awaitingLateHandoff = false;
+        m_phase = Phase::Stopped;
     }
+
     bool stoppable = m_sessionStopSource.request_stop();
     qCDebug(dragonMediaBackendDecode) << "stopSession() called requesting decode session stop" << stoppable;
 
@@ -395,18 +444,7 @@ void DragonDecodePipeline::stopSession()
         std::shared_ptr<DragonCompletion> pending;
         {
             std::scoped_lock lock(m_decoderMutex);
-            pending = m_pendingInitCompletion;
-        }
-        if (pending) {
-            pending->cancel(QStringLiteral("Session stopped"));
-        }
-    }
-
-    {
-        std::shared_ptr<DragonCompletion> pending;
-        {
-            std::scoped_lock lock(m_decoderMutex);
-            pending = m_pendingGaplessCompletion;
+            pending = m_startCompletion;
         }
         if (pending) {
             pending->cancel(QStringLiteral("Session stopped"));
@@ -421,8 +459,8 @@ void DragonDecodePipeline::stopSession()
     {
         std::unique_lock lock(m_decoderMutex);
         qCDebug(dragonMediaBackendDecode) << "stopSession() waiting for decodeLoopActive=false (current=" << m_decodeLoopActive.load() << ")";
-        m_decodeLoopFinishedCv.wait(lock, [this]() {
-            return !m_decodeLoopActive;
+        m_stateChanged.wait(lock, [this]() {
+            return !m_decodeLoopActive.load();
         });
         qCDebug(dragonMediaBackendDecode) << "stopSession() decode loop finished";
         if (m_activeSession) {
@@ -447,18 +485,7 @@ void DragonDecodePipeline::stop()
         std::shared_ptr<DragonCompletion> pending;
         {
             std::scoped_lock lock(m_decoderMutex);
-            pending = m_pendingInitCompletion;
-        }
-        if (pending) {
-            pending->cancel(QStringLiteral("Full stop"));
-        }
-    }
-
-    {
-        std::shared_ptr<DragonCompletion> pending;
-        {
-            std::scoped_lock lock(m_decoderMutex);
-            pending = m_pendingGaplessCompletion;
+            pending = m_startCompletion;
         }
         if (pending) {
             pending->cancel(QStringLiteral("Full stop"));
@@ -469,7 +496,7 @@ void DragonDecodePipeline::stop()
         m_preWarmThread.request_stop();
     }
 
-    m_decoderAssignedCv.notify_all();
+    m_stateChanged.notify_all();
 
     if (m_decodeThread.joinable()) {
         qCDebug(dragonMediaBackendDecode) << "stop() joining decode thread";
@@ -481,107 +508,88 @@ void DragonDecodePipeline::stop()
     }
 
     std::unique_ptr<Session> activeSession;
-    std::unique_ptr<Session> preWarmedSession;
+    std::unique_ptr<Session> nextSession;
     {
         std::scoped_lock lock(m_decoderMutex);
         activeSession = std::move(m_activeSession);
-        preWarmedSession = std::move(m_preWarmedSession);
-        m_awaitingLateHandoff = false;
+        if (m_next) {
+            nextSession = std::move(m_next->session);
+            m_next.reset();
+        }
+        m_phase = Phase::Idle;
         m_decodeLoopActive = false;
     }
     activeSession.reset();
-    preWarmedSession.reset();
+    nextSession.reset();
     qCDebug(dragonMediaBackendDecode) << "stop() full teardown complete";
 }
 
 void DragonDecodePipeline::setNextSource(const QUrl &next)
 {
+    cancelPreWarm();
+
     {
         std::scoped_lock lock(m_decoderMutex);
-        m_nextSource = next;
+        m_next = NextTrack{};
+        m_next->url = next;
     }
 
-    cancelPreWarm(QStringLiteral("New pre-warm started"));
-
     if (next.isEmpty() || !DragonStreamFactory::supportsGaplessPreWarm(next)) {
+        std::scoped_lock lock(m_decoderMutex);
+        m_next.reset();
         return;
     }
 
-    auto completion = std::make_shared<DragonCompletion>();
-    {
-        std::scoped_lock lock(m_decoderMutex);
-        m_pendingGaplessCompletion = completion;
-    }
-
-    m_preWarmThread = std::jthread([this, next, completion](std::stop_token st) {
+    m_preWarmThread = std::jthread([this, next](std::stop_token st) {
         DragonThreadName::set("dragon-prewarm");
         auto session = createSession(next, true);
-        if (st.stop_requested()) {
-            if (completion) {
-                completion->cancel(QStringLiteral("Pre-warm stopped"));
-            }
-            return;
-        }
-        if (!session) {
-            if (completion) {
-                completion->setResult(makeErrorResult(i18n("Failed to create decoder"), true));
+        if (st.stop_requested() || !session) {
+            if (!session) {
+                qCWarning(dragonMediaBackendDecode) << "pre-warm failed to create a session for" << next.toString();
             }
             return;
         }
 
-        InitResult result = session->decoder->initialize();
-        result.isGapless = true;
+        const InitResult result = session->decoder->initialize();
+        if (st.stop_requested() || !result.success) {
+            qCDebug(dragonMediaBackendDecode) << "pre-warm of" << next.toString() << "cancelled or failed";
+            return;
+        }
 
-        if (st.stop_requested()) {
-            result = makeCancelledResult(QStringLiteral("Pre-warm cancelled"), true);
-        } else if (result.success) {
-            {
-                std::scoped_lock lock(m_decoderMutex);
-                if (!st.stop_requested()) {
-                    m_preWarmedSession = std::move(session);
-                } else {
-                    result = makeCancelledResult(QStringLiteral("Pre-warm cancelled"), true);
-                }
+        session->preInitialized = true;
+        session->format = FormatReady{result.sampleRate, result.channels, result.duration};
+
+        {
+            std::scoped_lock lock(m_decoderMutex);
+            if (!st.stop_requested() && m_next && m_next->url == next && !m_next->ready()) {
+                m_next->session = std::move(session);
+                m_next->format = *m_next->session->format;
+                qCDebug(dragonMediaBackendDecode) << "pre-warm of" << next.toString() << "ready (sr=" << result.sampleRate << "ch=" << result.channels << ")";
+            } else {
+                qCDebug(dragonMediaBackendDecode) << "pre-warm of" << next.toString() << "superseded, discarding";
             }
         }
 
-        if (completion) {
-            completion->setResult(result);
-        }
-
-        if (result.success) {
-            m_decoderAssignedCv.notify_all();
-        }
+        m_stateChanged.notify_all();
     });
-}
-
-bool DragonDecodePipeline::hasActiveDecoder() const
-{
-    return m_activeSession && m_activeSession->decoder;
-}
-
-bool DragonDecodePipeline::hasLateHandoff() const
-{
-    // The completion carries the format that promotion reports.
-    return m_awaitingLateHandoff && m_preWarmedSession && !hasActiveDecoder() && m_pendingGaplessCompletion && m_pendingGaplessCompletion->isReady();
 }
 
 bool DragonDecodePipeline::isActive() const
 {
     std::scoped_lock lock(m_decoderMutex);
-    return hasActiveDecoder();
+    return m_activeSession && m_activeSession->decoder;
 }
 
 bool DragonDecodePipeline::hasFatalError() const
 {
     std::scoped_lock lock(m_decoderMutex);
-    return hasActiveDecoder() && m_activeSession->decoder->hasFatalError();
+    return m_activeSession && m_activeSession->decoder && m_activeSession->decoder->hasFatalError();
 }
 
 void DragonDecodePipeline::requestSeek(std::chrono::milliseconds position)
 {
     std::scoped_lock lock(m_decoderMutex);
-    if (hasActiveDecoder()) {
+    if (m_activeSession && m_activeSession->decoder) {
         m_activeSession->decoder->requestSeek(position);
     }
 }
@@ -662,24 +670,21 @@ std::unique_ptr<DragonDecodePipeline::Session> DragonDecodePipeline::createSessi
     return session;
 }
 
-void DragonDecodePipeline::cancelPreWarm(const QString &reason)
+void DragonDecodePipeline::cancelPreWarm()
 {
-    std::shared_ptr<DragonCompletion> pending;
-    std::unique_ptr<Session> preWarmedSession;
-    {
-        std::scoped_lock lock(m_decoderMutex);
-        preWarmedSession = std::move(m_preWarmedSession);
-        pending = m_pendingGaplessCompletion;
-        m_pendingGaplessCompletion.reset();
-    }
-    if (pending) {
-        pending->cancel(reason);
-    }
     if (m_preWarmThread.joinable()) {
         m_preWarmThread.request_stop();
         m_preWarmThread.join();
     }
-    preWarmedSession.reset();
+    std::unique_ptr<Session> retired;
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        if (m_next) {
+            retired = std::move(m_next->session);
+            m_next->format.reset();
+        }
+    }
+    retired.reset();
 }
 
 void DragonDecodePipeline::setCurrentSource(const QUrl &source)
@@ -716,6 +721,12 @@ void DragonDecodePipeline::setSamplesCallback(SamplesCallback callback)
 {
     std::scoped_lock lock(m_samplesCallbackMutex);
     m_samplesCallback = std::move(callback);
+}
+
+void DragonDecodePipeline::setBoundaryCallback(BoundaryCallback callback)
+{
+    std::scoped_lock lock(m_boundaryCallbackMutex);
+    m_boundaryCallback = std::move(callback);
 }
 
 InitResult DragonDecodePipeline::makeSuccessResult(const FormatReady &fr, bool isGapless)

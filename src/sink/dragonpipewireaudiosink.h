@@ -36,7 +36,6 @@ public:
     void setMuted(bool muted) override;
     void setStreamName(const QString &name) override;
     void clearStream() override;
-    void resetDrainState() override;
     [[nodiscard]] qint64 deviceQueuedSamples() const override;
 
     [[nodiscard]] int audioBufferFrames() const override;

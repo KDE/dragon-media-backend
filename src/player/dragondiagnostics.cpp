@@ -63,6 +63,15 @@ std::size_t DragonDiagnostics::decodeQueueSize() const
     return priv->audioPipe.consumer().ready();
 }
 
+qint64 DragonDiagnostics::audioSamplesRead() const
+{
+    DragonPlayerPrivate *priv = d->m_player->d.get();
+    if (!priv || !priv->audioOutput) {
+        return -1;
+    }
+    return priv->audioOutput->sink()->streamSamplesRead();
+}
+
 std::size_t DragonDiagnostics::fftQueueSize() const
 {
     if (!d->m_analyzer) {

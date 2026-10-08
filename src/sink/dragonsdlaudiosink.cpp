@@ -336,21 +336,20 @@ void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioSt
         return;
     }
 
-    if (self->m_drain.decodeFinished()) {
+    if (self->endOfStreamPending()) {
         SDL_FlushAudioStream(stream);
         if (SDL_GetAudioStreamQueued(stream) > 0 || SDL_GetAudioStreamAvailable(stream) > 0) {
             return;
         }
     }
 
-    if (self->m_drain.tryClaimDrain() && self->m_drain.claimIsCurrent()) {
+    if (self->tryClaimDrained()) {
         QMetaObject::invokeMethod(
             self,
             [self]() {
-                if (!self->m_drain.claimIsCurrent()) {
+                if (!self->takeDrainedEmission()) {
                     return;
                 }
-                self->m_drain.consumeEmission();
                 qCDebug(dragonMediaBackendAudio) << "drain complete, all decoded audio played out";
                 Q_EMIT self->drained();
             },
