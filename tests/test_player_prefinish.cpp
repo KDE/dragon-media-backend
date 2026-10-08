@@ -42,6 +42,10 @@ private Q_SLOTS:
     void testStopDuringArmedWindowDisarms();
     void testDisarmMidWindow();
 
+    void testSetNextSourceDuringHandoff();
+    void testSeekDuringGaplessTail();
+    void testPrewarmFailureEmitsEos();
+
 private:
     bool waitForPlaybackStart(DragonPlayer &player, int timeoutMs = 5000)
     {
@@ -359,6 +363,67 @@ void TestPlayerPrefinish::testDisarmMidWindow()
     QVERIFY2(helper.waitForEndOfMedia(15000), "Track should reach EndOfMedia after the arm was cleared");
     QCOMPARE(trackChangedSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    player.stop();
+}
+
+void TestPlayerPrefinish::testSetNextSourceDuringHandoff()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+    player.setPrefinishMark(2500ms);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
+    QVERIFY(helper.playAndWait());
+
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+    connect(&player, &DragonPlayer::trackChanged, &player, [&player]() {
+        player.setNextSource(QUrl());
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() == 1, 10000);
+
+    QVERIFY2(helper.waitForEndOfMedia(15000), "Second track must reach EndOfMedia even if nextSource is cleared during handoff");
+
+    player.stop();
+}
+
+void TestPlayerPrefinish::testSeekDuringGaplessTail()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+    player.setPrefinishMark(2500ms);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
+    QVERIFY(helper.playAndWait());
+
+    QSignalSpy aboutToFinishSpy(&player, &DragonPlayer::aboutToFinish);
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+
+    QTRY_VERIFY_WITH_TIMEOUT(aboutToFinishSpy.count() == 1, 10000);
+    QCOMPARE(trackChangedSpy.count(), 0);
+
+    player.setPosition(1000ms);
+
+    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() == 1, 10000);
+    QVERIFY2(helper.waitForEndOfMedia(15000), "Second track must reach EndOfMedia after a seek during the gapless tail");
+
+    player.stop();
+}
+
+void TestPlayerPrefinish::testPrewarmFailureEmitsEos()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+    player.setPrefinishMark(2500ms);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    player.setNextSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"does-not-exist.mp3"_s)));
+    QVERIFY(helper.playAndWait());
+
+    QVERIFY2(helper.waitForEndOfMedia(15000), "First track must reach EndOfMedia if the gapless next source fails to load");
 
     player.stop();
 }

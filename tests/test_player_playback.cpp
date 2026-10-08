@@ -83,6 +83,8 @@ private Q_SLOTS:
     void testSetSourceThenPlayFirstTrack();
     void testPlayNextTrackAfterStop();
     void testPlayRapidNextNext();
+
+    void testSeekWhilePausedReachesEos();
 };
 
 void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
@@ -764,6 +766,32 @@ void TestPlayerPlayback::testPlayRapidNextNext()
     player.play();
     QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
     QVERIFY2(diag.isAudioActive(), "Audio should be active during third track (aac)");
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testSeekWhilePausedReachesEos()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+
+    QTest::qWait(300);
+
+    QVERIFY(helper.pauseAndWait());
+
+    const std::chrono::milliseconds duration = player.duration().value_or(0ms);
+    QVERIFY(duration > 2000ms);
+
+    player.setPosition(duration - 500ms);
+
+    QTest::qWait(300);
+
+    QVERIFY(helper.playAndWait());
+
+    QVERIFY2(helper.waitForEndOfMedia(5000), "Track must reach EndOfMedia after a seek while paused");
 
     player.stop();
 }
