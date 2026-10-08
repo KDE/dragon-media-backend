@@ -698,6 +698,7 @@ void DragonPlayer::setSource(const QUrl &source)
     d->positionEstimator->setDuration({});
     d->aboutToFinishEmitted = false;
     qCDebug(dragonMediaBackendPlayer) << "setSource: reset aboutToFinishEmitted for" << d->currentSource.toString();
+    d->decodePipeline.clearNextSource();
     d->nextSource.clear();
     d->currentSampleRate = 0;
     d->currentChannels = 0;

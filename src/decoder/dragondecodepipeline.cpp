@@ -387,8 +387,6 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
         startDecodeThread();
     }
 
-    cancelPreWarm();
-
     qCDebug(dragonMediaBackendDecode) << "initializeSession requesting decode session stop";
     m_sessionStopSource.request_stop();
 
@@ -418,7 +416,6 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
         m_startCompletion = completion;
         m_currentSource = source;
         m_activeSession = std::move(session);
-        m_next.reset();
         m_phase = Phase::Starting;
         m_sessionStopSource = std::stop_source{};
     }
@@ -428,6 +425,13 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
     m_stateChanged.notify_all();
 
     co_return co_await *completion;
+}
+
+void DragonDecodePipeline::clearNextSource()
+{
+    cancelPreWarm();
+    std::scoped_lock lock(m_decoderMutex);
+    m_next.reset();
 }
 
 void DragonDecodePipeline::stopSession()

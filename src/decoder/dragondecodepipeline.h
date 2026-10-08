@@ -39,6 +39,8 @@ public:
     QCoro::Task<DragonMediaBackend::InitResult> initializeSession(QUrl source, bool isGapless = false);
     void setNextSource(const QUrl &next);
 
+    void clearNextSource();
+
     void stopSession();
 
     void stop();

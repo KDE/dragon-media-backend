@@ -62,6 +62,9 @@ set(_dragon_audio_tests
     test_player_streamname_sdl
     test_player_streamname_pulseaudio
     test_player_streamname_pipewire
+    test_e2e_gapless_data_streams_sdl
+    test_e2e_gapless_data_streams_pulseaudio
+    test_e2e_gapless_data_streams_pipewire
 )
 
 if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
@@ -192,6 +195,33 @@ dragon_add_test(test_e2e_sdl_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC)
 set_property(TEST test_e2e_sdl_gapless APPEND PROPERTY ENVIRONMENT
     "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
 )
+
+dragon_add_test(test_e2e_gapless_data_streams LIBRARIES ${_player_libs} PkgConfig::FLAC)
+set_tests_properties(test_e2e_gapless_data_streams PROPERTIES DISABLED TRUE)
+add_test(NAME test_e2e_gapless_data_streams_sdl COMMAND test_e2e_gapless_data_streams)
+set_property(TEST test_e2e_gapless_data_streams_sdl APPEND PROPERTY ENVIRONMENT
+    "QT_QPA_PLATFORM=offscreen"
+    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
+    "QT_PLUGIN_PATH=${_qt_plugin_path}"
+)
+if(PULSEAUDIO_FOUND)
+    add_test(NAME test_e2e_gapless_data_streams_pulseaudio COMMAND test_e2e_gapless_data_streams)
+    set_property(TEST test_e2e_gapless_data_streams_pulseaudio APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
+        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
+        "PULSE_SINK=dragon-test-sink"
+        "QT_PLUGIN_PATH=${_qt_plugin_path}"
+    )
+endif()
+if(PIPEWIRE_FOUND)
+    add_test(NAME test_e2e_gapless_data_streams_pipewire COMMAND test_e2e_gapless_data_streams)
+    set_property(TEST test_e2e_gapless_data_streams_pipewire APPEND PROPERTY ENVIRONMENT
+        "QT_QPA_PLATFORM=offscreen"
+        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
+        "DRAGON_PW_TEST_SINK_NAME=dragon-test-sink"
+        "QT_PLUGIN_PATH=${_qt_plugin_path}"
+    )
+endif()
 
 # PipeWire gapless tests requires PipeWire + WirePlumber with dragon-test-sink (monitor ports)
 if(PIPEWIRE_FOUND)
