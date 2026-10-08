@@ -80,7 +80,6 @@ public:
 
     enum class PositionResetMode {
         Seek,
-        GaplessTransition,
         NormalTrackChange
     };
 
@@ -111,16 +110,11 @@ public:
     }
 
     struct StreamBoundary {
-        enum class Kind : std::uint8_t {
-            TrackStart,
-        };
-        Kind kind;
-        std::uint64_t epoch = 0;
-        std::uint64_t streamSample = 0;
+        std::uint64_t epoch = 0; // stream epoch the entry was recorded in
+        std::uint64_t streamSample = 0; // absolute sample index the boundary applies after
         std::uint32_t trackId = 0;
         int sampleRate = 0;
         int channels = 0;
-        std::chrono::milliseconds startOffset{};
         std::optional<std::chrono::milliseconds> duration;
     };
 

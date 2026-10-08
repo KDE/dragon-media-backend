@@ -272,6 +272,14 @@ ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     DEFAULT_SEVERITY Info
 )
 
+ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
+    HEADER "dragonmediabackend_audio_logging.h"
+    IDENTIFIER "dragonMediaBackendAudio"
+    CATEGORY_NAME "org.kde.dragonmediabackend.audio"
+    DESCRIPTION "DragonMediaBackend (audio output)"
+    DEFAULT_SEVERITY Info
+)
+
 ecm_qt_declare_logging_category(dragonsdlaudiosink_SOURCES
     HEADER "dragonmediabackend_audio_logging.h"
     IDENTIFIER "dragonMediaBackendAudio"

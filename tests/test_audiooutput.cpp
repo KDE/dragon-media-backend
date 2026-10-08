@@ -71,8 +71,6 @@ private Q_SLOTS:
     void testQueueReadyApi();
     void testFlushOpensGate();
 
-    void testGaplessTransition();
-
     void testStartPaused();
 
     void testPauseResumeCycle();
@@ -772,39 +770,6 @@ void TestAudioOutput::testFlushOpensGate()
 
     output->close();
     QVERIFY(!output->isDeviceOpen());
-}
-
-void TestAudioOutput::testGaplessTransition()
-{
-    auto output = createAudioSink();
-    QVERIFY(output);
-
-    DragonPipe<float> pipe(65536);
-    output->setAudioPipe(&pipe);
-
-    output->open(44100, 2);
-    QVERIFY(output->isDeviceOpen());
-
-    fillQueue(&pipe, std::vector<float>(65536, 0.5f));
-    QTest::qWait(300);
-
-    const qint64 samplesBefore = output->totalSamplesWritten();
-    QVERIFY2(samplesBefore > 10000, "Counter should have grown large after 300ms of playback");
-    const size_t queueSizeBefore = pipe.consumer().ready();
-    QVERIFY2(queueSizeBefore > 0, "Queue should still have items");
-
-    output->setPositionOffset(0ms, DragonAudioSink::PositionResetMode::GaplessTransition);
-
-    QTest::qWait(100);
-
-    const size_t queueSizeAfter = pipe.consumer().ready();
-    QVERIFY2(queueSizeAfter > 0, "Queue should not be drained during GaplessTransition");
-
-    output->close();
-    QVERIFY(!output->isDeviceOpen());
-
-    const qint64 samplesAfter = output->totalSamplesWritten();
-    QVERIFY2(samplesAfter < 20000, "totalSamplesWritten should be small after GaplessTransition reset");
 }
 
 void TestAudioOutput::testStartPaused()

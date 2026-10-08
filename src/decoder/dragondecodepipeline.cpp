@@ -203,6 +203,7 @@ void DragonDecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
         {
             std::scoped_lock relock(m_decoderMutex);
             m_decodeLoopActive = false;
+            m_phase = Phase::Stopped;
         }
         m_stateChanged.notify_all();
         lock.lock();
@@ -382,7 +383,6 @@ bool DragonDecodePipeline::promoteNext(std::unique_lock<std::mutex> &lock)
 
     qCDebug(dragonMediaBackendDecode) << "gapless promotion to" << newSource.toString() << "sr=" << format.sampleRate << "ch=" << format.channels
                                       << "duration=" << format.duration.value_or(std::chrono::milliseconds{-1}).count() << "ms";
-    Q_EMIT gaplessTransition(newSource, format.sampleRate, format.channels, format.duration);
 
     // The action loop expects the lock held again on return.
     lock.lock();

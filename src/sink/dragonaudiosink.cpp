@@ -7,6 +7,8 @@
 #include "fft/dragonpcmblock.h"
 #include "player/dragonpipe.h"
 
+#include "dragonmediabackend_audio_logging.h"
+
 #include <QGuiApplication>
 #include <QIcon>
 #include <QMetaObject>
@@ -84,15 +86,11 @@ void DragonAudioSink::setPositionOffset(std::chrono::milliseconds offset, Positi
     m_positionOffset.store(offset.count(), std::memory_order_relaxed);
 
     if (isPaused()) {
-        if (mode == PositionResetMode::Seek || mode == PositionResetMode::NormalTrackChange) {
-            m_queueReady.store(false, std::memory_order_release); // gate the producer during the flush
-            close();
-            m_flushPending.store(false, std::memory_order_release);
-            m_positionResetPending.store(false, std::memory_order_release);
-            processStreamFlush();
-        } else {
-            m_totalSamplesWritten.store(0, std::memory_order_relaxed);
-        }
+        m_queueReady.store(false, std::memory_order_release); // gate the producer during the flush
+        close();
+        m_flushPending.store(false, std::memory_order_release);
+        m_positionResetPending.store(false, std::memory_order_release);
+        processStreamFlush();
         return;
     }
 
@@ -101,9 +99,6 @@ void DragonAudioSink::setPositionOffset(std::chrono::milliseconds offset, Positi
     case PositionResetMode::NormalTrackChange:
         m_queueReady.store(false, std::memory_order_release);
         m_flushPending.store(true, std::memory_order_release);
-        m_positionResetPending.store(true, std::memory_order_release);
-        break;
-    case PositionResetMode::GaplessTransition:
         m_positionResetPending.store(true, std::memory_order_release);
         break;
     }
@@ -216,7 +211,6 @@ void DragonAudioSink::resetPositionTracking()
 bool DragonAudioSink::boundaryTrackStart(std::uint32_t trackId, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration)
 {
     StreamBoundary boundary;
-    boundary.kind = StreamBoundary::Kind::TrackStart;
     boundary.epoch = m_boundaryEpoch.load(std::memory_order_acquire);
     boundary.streamSample = m_producerSamples.load(std::memory_order_relaxed);
     boundary.trackId = trackId;
@@ -225,7 +219,7 @@ bool DragonAudioSink::boundaryTrackStart(std::uint32_t trackId, int sampleRate, 
     boundary.duration = duration;
 
     if (!m_boundaries.push(boundary)) {
-        qWarning("boundary ring full; dropping track boundary (seek/flush the stream first)");
+        qCWarning(dragonMediaBackendAudio) << "boundary ring full; dropping track boundary (seek/flush the stream first)";
         return false;
     }
     return true;
@@ -344,7 +338,7 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
         m_boundaries.pop();
         m_formatChangePending.store(false, std::memory_order_relaxed);
         m_totalSamplesWritten.store(0, std::memory_order_relaxed);
-        m_positionOffset.store(boundary->startOffset.count(), std::memory_order_relaxed);
+        m_positionOffset.store(0, std::memory_order_relaxed);
         const std::uint32_t trackId = boundary->trackId;
         const std::optional<std::chrono::milliseconds> duration = boundary->duration;
         QMetaObject::invokeMethod(
@@ -395,7 +389,7 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
 
         m_boundaries.pop();
         m_formatChangePending.store(false, std::memory_order_relaxed);
-        m_positionOffset.store(boundary->startOffset.count(), std::memory_order_relaxed);
+        m_positionOffset.store(0, std::memory_order_relaxed);
         m_totalSamplesWritten.store(static_cast<qint64>(m_streamSamplesRead.load(std::memory_order_relaxed) - boundary->streamSample),
                                     std::memory_order_relaxed);
         const std::uint32_t trackId = boundary->trackId;

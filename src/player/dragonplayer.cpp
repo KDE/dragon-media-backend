@@ -106,7 +106,6 @@ void DragonPlayerPrivate::onSinkTrackStarted(std::uint32_t trackId, std::optiona
         pending = it.value();
         m_pendingTracks.erase(it);
     }
-    Q_UNUSED(duration);
 
     currentSource = pending.url;
     aboutToFinishEmitted = false;
@@ -128,8 +127,8 @@ void DragonPlayerPrivate::onSinkTrackStarted(std::uint32_t trackId, std::optiona
 
     if (nextSource == currentSource) {
         nextSource.clear();
+        Q_EMIT q->nextSourceChanged();
     }
-    Q_EMIT q->nextSourceChanged();
 
     Q_EMIT q->trackChanged();
     Q_EMIT q->sourceChanged();
@@ -183,8 +182,8 @@ bool DragonPlayerPrivate::onPipelineBoundary(const DragonDecodePipeline::Boundar
         return true;
     }
     case DragonDecodePipeline::BoundaryEvent::Kind::EndOfStream:
-        if (sink) {
-            sink->boundaryEndOfStream();
+        if (sink && !sink->boundaryEndOfStream()) {
+            qCWarning(dragonMediaBackendPlayer) << "boundary: could not arm end of stream (one is already armed or claimed)";
         }
         return true;
     }

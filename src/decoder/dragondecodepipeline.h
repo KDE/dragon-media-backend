@@ -85,7 +85,6 @@ Q_SIGNALS:
 
     void sessionFinished(const QUrl &source, bool hadFatalError);
 
-    void gaplessTransition(const QUrl &newSource, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration);
 
     void bufferProgressChanged(qreal progress);
 
