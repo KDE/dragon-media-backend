@@ -171,6 +171,7 @@ DragonDecodePipeline::Action DragonDecodePipeline::nextAction() const
         return (!m_next && !m_endReported) ? Action::Finalize : Action::Wait;
     case Phase::Idle:
     case Phase::Decoding:
+    case Phase::Promoting:
     case Phase::Stopped:
         return Action::Wait;
     }
@@ -336,9 +337,16 @@ void DragonDecodePipeline::finalizeSession(std::unique_lock<std::mutex> &lock)
 
 bool DragonDecodePipeline::promoteNext(std::unique_lock<std::mutex> &lock)
 {
-    // lock is held here; phase is Finished and m_next is ready.
+    // lock is held here; phase is Finished and m_next is ready (nextAction()).
+    if (!m_next || !m_next->ready()) {
+        return false;
+    }
+
     const QUrl newSource = m_next->url;
     const FormatReady format = *m_next->format;
+    std::unique_ptr<Session> claimed = std::move(m_next->session);
+    m_next.reset();
+    m_phase = Phase::Promoting;
     lock.unlock();
 
     BoundaryCallback boundaryCallback;
@@ -357,17 +365,16 @@ bool DragonDecodePipeline::promoteNext(std::unique_lock<std::mutex> &lock)
     std::unique_ptr<Session> retired;
     bool promoted = false;
     lock.lock();
-    if (handoff && m_phase == Phase::Finished && m_next && m_next->ready()) {
-        retired = std::exchange(m_activeSession, std::move(m_next->session));
+    if (handoff && m_phase == Phase::Promoting) {
+        retired = std::exchange(m_activeSession, std::move(claimed));
         m_currentSource = newSource;
-        m_next.reset();
         m_phase = Phase::Starting;
         m_endReported = false;
         promoted = true;
     } else {
-        if (m_next) {
-            retired = std::move(m_next->session);
-            m_next.reset();
+        retired = std::move(claimed);
+        if (m_phase == Phase::Promoting) {
+            m_phase = Phase::Finished;
         }
     }
     lock.unlock();

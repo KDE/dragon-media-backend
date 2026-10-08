@@ -125,6 +125,10 @@ dragon_add_test(test_player_setsource LIBRARIES ${_player_libs})
 dragon_add_test(test_player_prefinish LIBRARIES ${_player_libs})
 dragon_add_test(test_player_fft       LIBRARIES ${_player_libs})
 
+# Decode-pipeline gapless promotion race (no audio device needed: the
+# pipeline is driven directly, without a sink).
+dragon_add_test(test_decodepipeline_promotion LIBRARIES ${_player_libs} QCoro6::Core)
+
 # Integration tests
 dragon_add_test(test_e2e              LIBRARIES Qt6::Network PkgConfig::FFmpeg)
 set_tests_properties(test_e2e PROPERTIES DISABLED TRUE)

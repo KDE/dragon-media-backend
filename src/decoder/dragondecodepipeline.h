@@ -6,6 +6,7 @@
 #pragma once
 
 #include "dragoncompletion.h"
+#include "dragonmediabackend_export.h"
 #include "player/dragonevent.h"
 
 #include <QCoroTask>
@@ -24,8 +25,7 @@
 class DragonPlayer;
 class DragonDecoder;
 class DragonStream;
-
-class DragonDecodePipeline : public QObject
+class DRAGONMEDIABACKEND_EXPORT DragonDecodePipeline : public QObject
 {
     Q_OBJECT
 public:
@@ -123,6 +123,7 @@ private:
         Starting,
         Decoding,
         Finished,
+        Promoting,
         Stopped,
     };
 
