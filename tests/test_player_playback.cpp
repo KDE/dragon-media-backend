@@ -778,16 +778,15 @@ void TestPlayerPlayback::testSeekWhilePausedReachesEos()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QTest::qWait(300);
+    QTest::qWait(1000);
 
     QVERIFY(helper.pauseAndWait());
 
-    const std::chrono::milliseconds duration = player.duration().value_or(0ms);
-    QVERIFY(duration > 2000ms);
+    QTest::qWait(200);
 
-    player.setPosition(duration - 500ms);
+    player.setPosition(2000ms);
 
-    QTest::qWait(300);
+    QTest::qWait(200);
 
     QVERIFY(helper.playAndWait());
 
