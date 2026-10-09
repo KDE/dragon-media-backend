@@ -236,10 +236,13 @@ bool DragonAudioSink::boundaryTrackStart(std::uint32_t trackId,
 bool DragonAudioSink::boundaryEndOfStream()
 {
     auto expected = static_cast<std::int8_t>(EosState::None);
-    if (!m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Pending), std::memory_order_acq_rel, std::memory_order_acquire)) {
+    if (m_eosState.load(std::memory_order_relaxed) != expected) {
         return false;
     }
     m_eosSample.store(m_producerState.samples(), std::memory_order_release);
+    if (!m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Pending), std::memory_order_acq_rel, std::memory_order_acquire)) {
+        return false;
+    }
     return true;
 }
 
@@ -288,6 +291,7 @@ void DragonAudioSink::processStreamFlush()
     while (m_boundaries.peek() != nullptr) {
         m_boundaries.pop();
     }
+    m_eosSample.store(0, std::memory_order_relaxed);
     m_eosState.store(static_cast<std::int8_t>(EosState::None), std::memory_order_release);
     m_formatChangePending.store(false, std::memory_order_relaxed);
 

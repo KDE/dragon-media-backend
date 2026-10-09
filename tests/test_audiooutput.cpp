@@ -93,6 +93,7 @@ private Q_SLOTS:
     void testProducerStateUnit();
     void testSamplesProducedStaleEpochDiscarded();
     void testSamplesProducedConcurrentFlushRace();
+    void testEosPublicationOrderRace();
 
 private:
     void fillQueue(DragonPipe<float> *pipe, const std::vector<float> &data);
@@ -1363,6 +1364,95 @@ void TestAudioOutput::testSamplesProducedConcurrentFlushRace()
     // sample count must be exactly 0, and state must remain consistent.
     state.bumpEpoch();
     QCOMPARE(state.samples(), 0);
+}
+
+void TestAudioOutput::testEosPublicationOrderRace()
+{
+    class TestSink : public DragonAudioSink
+    {
+    public:
+        using DragonAudioSink::processAudioCallback;
+        bool probe() override
+        {
+            return true;
+        }
+        void open(int, int) override
+        {
+        }
+        void close() override
+        {
+        }
+        void pause() override
+        {
+        }
+        void resume() override
+        {
+        }
+        void setGain(float) override
+        {
+        }
+        qint64 deviceQueuedSamples() const override
+        {
+            return 0;
+        }
+        bool isDeviceOpen() const override
+        {
+            return true;
+        }
+        bool isPaused() const override
+        {
+            return false;
+        }
+        void clearStream() override
+        {
+        }
+    };
+
+    TestSink sink;
+    DragonPipe<float> pipe(65536);
+    sink.setAudioPipe(&pipe);
+
+    std::atomic<bool> stop{false};
+    std::atomic<int> staleEosObserved{0};
+
+    std::jthread consumerThread([&]() {
+        while (!stop.load(std::memory_order_relaxed)) {
+            if (sink.endOfStreamPending() && sink.producerSamples() == 10000 && sink.streamSamplesRead() == 100) {
+                staleEosObserved.fetch_add(1, std::memory_order_relaxed);
+            }
+        }
+    });
+
+    for (int i = 0; i < 20000; ++i) {
+        // Stream 1: arm with 50 samples so m_eosSample becomes 50
+        sink.samplesProduced(sink.streamEpoch(), 50);
+        sink.boundaryEndOfStream();
+
+        // Flush resets counters and m_eosState to None, but leaves m_eosSample = 50
+        sink.setPositionOffset(0ms, DragonAudioSink::PositionResetMode::Seek);
+        sink.processAudioCallback(0, 0us);
+
+        // Stream 2: consumer reads 100 samples
+        fillQueue(&pipe, std::vector<float>(100, 0.5f));
+        sink.processAudioCallback(100, 0us);
+
+        // Producer writes 10,000 samples
+        sink.samplesProduced(sink.streamEpoch(), 10000);
+
+        // Arm EOS for stream 2: before updating m_eosSample, buggy code exposes Pending with m_eosSample = 50
+        sink.boundaryEndOfStream();
+        sink.retractEndOfStream();
+
+        // Flush for next iteration
+        sink.setPositionOffset(0ms, DragonAudioSink::PositionResetMode::Seek);
+        sink.processAudioCallback(0, 0us);
+    }
+
+    stop.store(true, std::memory_order_relaxed);
+    consumerThread.join();
+
+    qDebug() << "staleEosObserved count:" << staleEosObserved.load();
+    QCOMPARE(staleEosObserved.load(), 0);
 }
 
 void TestAudioOutput::testVolumeChangeWhilePlaying()
