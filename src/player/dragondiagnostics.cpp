@@ -126,3 +126,30 @@ std::chrono::milliseconds DragonDiagnostics::audioPosition() const
     }
     return priv->audioOutput->sink()->position();
 }
+
+bool DragonDiagnostics::isQueueReady() const
+{
+    DragonPlayerPrivate *priv = d->m_player->d.get();
+    if (!priv || !priv->audioOutput || !priv->audioOutput->sink()) {
+        return false;
+    }
+    return priv->audioOutput->sink()->isQueueReady();
+}
+
+bool DragonDiagnostics::isFlushPending() const
+{
+    DragonPlayerPrivate *priv = d->m_player->d.get();
+    if (!priv || !priv->audioOutput || !priv->audioOutput->sink()) {
+        return false;
+    }
+    return priv->audioOutput->sink()->isFlushPending();
+}
+
+DragonAudioSink *DragonDiagnostics::audioSink() const
+{
+    DragonPlayerPrivate *priv = d->m_player->d.get();
+    if (!priv || !priv->audioOutput) {
+        return nullptr;
+    }
+    return priv->audioOutput->sink();
+}

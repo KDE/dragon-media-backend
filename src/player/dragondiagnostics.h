@@ -16,6 +16,7 @@
 
 class DragonPlayer;
 class DragonSpectrumAnalyzer;
+class DragonAudioSink;
 
 class DragonDiagnosticsPrivate;
 
@@ -46,6 +47,12 @@ public:
     [[nodiscard]] int audioUnderrunCount() const;
 
     [[nodiscard]] std::chrono::milliseconds audioPosition() const;
+
+    [[nodiscard]] bool isQueueReady() const;
+
+    [[nodiscard]] bool isFlushPending() const;
+
+    [[nodiscard]] DragonAudioSink *audioSink() const;
 
 private:
     std::unique_ptr<DragonDiagnosticsPrivate> d;

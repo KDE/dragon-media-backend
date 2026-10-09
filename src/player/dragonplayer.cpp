@@ -153,7 +153,7 @@ void DragonPlayerPrivate::onSinkFormatChangeRequired(int sampleRate, int channel
         reportDeviceOpenFailure();
         return;
     }
-    sink->setQueueReady(true);
+    sink->setQueueReady(!sink->isFlushPending());
 }
 
 bool DragonPlayerPrivate::onPipelineBoundary(const DragonDecodePipeline::BoundaryEvent &event)
