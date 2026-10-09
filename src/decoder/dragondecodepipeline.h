@@ -48,6 +48,10 @@ public:
     bool isActive() const;
     bool hasFatalError() const;
 
+    // Seeks the active session's decoder to the given position. Waits for an
+    // in-flight gapless promotion to resolve first, so the seek applies to
+    // the session that ends up current (the promoted track's decoder, not
+    // the outgoing track's, which is already destroyed at EOF).
     void requestSeek(std::chrono::milliseconds position);
 
     using SamplesCallback = std::function<void(std::span<const float> samples, const std::stop_token &st)>;
@@ -160,6 +164,14 @@ private:
     mutable std::mutex m_decoderMutex;
     std::condition_variable_any m_stateChanged;
     // Written on the decode thread, read from the main thread (diagnostics).
+    // True while the decode thread executes any action that touches session
+    // state: the decode loop (runCurrentSession), a gapless promotion
+    // (promoteNext, including its unlocked boundary-recording window) and
+    // the end-of-track finalization (finalizeSession). stopSession() and
+    // initializeSession() wait for it to become false, so their teardown is
+    // ordered after in-flight promotions/finalizations. Nothing that waits
+    // on it may be called from the boundary callback (the decode thread
+    // holds it there).
     std::atomic<bool> m_decodeLoopActive{false};
 
     Phase m_phase = Phase::Idle;

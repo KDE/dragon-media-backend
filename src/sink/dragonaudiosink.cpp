@@ -208,10 +208,18 @@ void DragonAudioSink::resetPositionTracking()
     m_positionOffset.store(0, std::memory_order_relaxed);
 }
 
-bool DragonAudioSink::boundaryTrackStart(std::uint32_t trackId, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration)
+bool DragonAudioSink::boundaryTrackStart(std::uint32_t trackId,
+                                         int sampleRate,
+                                         int channels,
+                                         std::optional<std::chrono::milliseconds> duration,
+                                         std::uint64_t epochTag)
 {
     StreamBoundary boundary;
-    boundary.epoch = m_boundaryEpoch.load(std::memory_order_acquire);
+    // Stamped with the epoch the producer observed before the write/promotion
+    // this boundary belongs to (not the current one): if a flush superseded
+    // the stream in between, the consumer's epoch check discards the boundary
+    // instead of letting it fire in the new stream (a ghost boundary).
+    boundary.epoch = epochTag;
     boundary.streamSample = m_producerSamples.load(std::memory_order_relaxed);
     boundary.trackId = trackId;
     boundary.sampleRate = sampleRate;

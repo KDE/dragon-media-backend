@@ -148,10 +148,22 @@ void DragonDecodePipeline::decodeThreadMain(std::stop_token st)
             runCurrentSession(lock);
             break;
         case Action::Promote:
+            // The decode-loop-active flag covers the promotion's unlocked
+            // boundary-recording window: stopSession()/initializeSession()
+            // (which wait for it) cannot tear the session down while a
+            // promotion is in flight.
+            m_decodeLoopActive = true;
             promoteNext(lock);
+            m_decodeLoopActive = false;
+            m_stateChanged.notify_all();
             break;
         case Action::Finalize:
+            // Same for finalizeSession()'s unlocked sessionFinished
+            // emission.
+            m_decodeLoopActive = true;
             finalizeSession(lock);
+            m_decodeLoopActive = false;
+            m_stateChanged.notify_all();
             break;
         case Action::Wait:
             break;
@@ -621,7 +633,16 @@ bool DragonDecodePipeline::hasFatalError() const
 
 void DragonDecodePipeline::requestSeek(std::chrono::milliseconds position)
 {
-    std::scoped_lock lock(m_decoderMutex);
+    std::unique_lock lock(m_decoderMutex);
+    // A seek must target the session that ends up current: a gapless
+    // promotion may be in flight (recording its boundary), and seeking the
+    // outgoing track's decoder would be a no-op (its decoder is already
+    // destroyed at EOF). Wait for the promotion to resolve first; the wait
+    // is bounded because the promotion's boundary callback is
+    // non-blocking.
+    m_stateChanged.wait(lock, [this]() {
+        return m_phase != Phase::Promoting;
+    });
     if (m_activeSession && m_activeSession->decoder) {
         m_activeSession->decoder->requestSeek(position);
     }

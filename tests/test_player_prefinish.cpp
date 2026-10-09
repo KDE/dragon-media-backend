@@ -45,6 +45,7 @@ private Q_SLOTS:
     void testSetNextSourceDuringHandoff();
     void testSeekDuringGaplessTail();
     void testPrewarmFailureEmitsEos();
+    void testSeekAfterPromotionBeforeTrackStarted();
 
 private:
     bool waitForPlaybackStart(DragonPlayer &player, int timeoutMs = 5000)
@@ -424,6 +425,50 @@ void TestPlayerPrefinish::testPrewarmFailureEmitsEos()
     QVERIFY(helper.playAndWait());
 
     QVERIFY2(helper.waitForEndOfMedia(15000), "First track must reach EndOfMedia if the gapless next source fails to load");
+
+    player.stop();
+}
+
+void TestPlayerPrefinish::testSeekAfterPromotionBeforeTrackStarted()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+    player.setPrefinishMark(2500ms);
+
+    DragonDiagnostics diagnostics(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QVERIFY2(waitForPlaybackStart(player), "Playback should start producing audio");
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&diagnostics]() {
+                     return !diagnostics.hasActiveDecoder();
+                 },
+                 10000),
+             "Track 1 should decode to EOF while its tail is still playing");
+
+    const QUrl url2 = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
+    player.setNextSource(url2);
+    QVERIFY2(QTest::qWaitFor(
+                 [&diagnostics]() {
+                     return diagnostics.hasActiveDecoder();
+                 },
+                 10000),
+             "The promoted track's decoder should be active after the gapless handoff");
+
+    QSignalSpy trackSpy(&player, &DragonPlayer::trackChanged);
+    QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
+    QCOMPARE(trackSpy.count(), 0);
+
+    player.setPosition(1000ms);
+
+    QCOMPARE(trackSpy.count(), 1);
+    QCOMPARE(sourceSpy.count(), 1);
+    QCOMPARE(player.source(), url2);
+
+    QVERIFY2(helper.waitForEndOfMedia(15000), "Track 2 must reach EndOfMedia after a seek in the promotion window");
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     player.stop();
 }

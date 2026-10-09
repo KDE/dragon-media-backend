@@ -107,9 +107,14 @@ void DragonPlayerPrivate::onSinkTrackStarted(std::uint32_t trackId, std::optiona
         m_pendingTracks.erase(it);
     }
 
+    applyPendingTrack(pending);
+}
+
+void DragonPlayerPrivate::applyPendingTrack(const PendingTrack &pending)
+{
     currentSource = pending.url;
     aboutToFinishEmitted = false;
-    qCDebug(dragonMediaBackendPlayer) << "onSinkTrackStarted: reset aboutToFinishEmitted for" << currentSource.toString();
+    qCDebug(dragonMediaBackendPlayer) << "applyPendingTrack: reset aboutToFinishEmitted for" << currentSource.toString();
     currentIsLocal = DragonStreamFactory::isLocalSource(currentSource);
     currentSeekable = currentIsLocal;
     if (!currentIsLocal && decodePipeline.streamIsSeekable()) {
@@ -165,8 +170,21 @@ bool DragonPlayerPrivate::onPipelineBoundary(const DragonDecodePipeline::Boundar
         if (!sink) {
             return true;
         }
+        // The epoch the producer observed before its last write: the boundary
+        // is stamped with it, so a stream superseded by a flush (seek or track
+        // change racing the promotion) yields a boundary the sink discards
+        // instead of a ghost boundary firing in the new stream.
+        const std::uint64_t producerEpoch = m_producerStreamEpoch.load(std::memory_order_acquire);
+        // A provisional end of stream (armed when the current track hit EOF)
+        // is retracted as long as the sink has not played past it. If it has,
+        // the audio really ended: the next source starts as a regular track
+        // from the drained() handler instead.
         if (!sink->retractEndOfStream()) {
             qCDebug(dragonMediaBackendPlayer) << "boundary: sink already drained, refusing gapless handoff of" << event.url.toString();
+            return false;
+        }
+        if (sink->streamEpoch() != producerEpoch) {
+            qCDebug(dragonMediaBackendPlayer) << "boundary: stream superseded by a flush, refusing gapless handoff of" << event.url.toString();
             return false;
         }
         const auto trackId = m_trackSerial.fetch_add(1, std::memory_order_relaxed) + 1;
@@ -174,7 +192,7 @@ bool DragonPlayerPrivate::onPipelineBoundary(const DragonDecodePipeline::Boundar
             std::scoped_lock lock(m_pendingTracksMutex);
             m_pendingTracks.insert(trackId, PendingTrack{event.url, event.sampleRate, event.channels, event.duration});
         }
-        if (!sink->boundaryTrackStart(trackId, event.sampleRate, event.channels, event.duration)) {
+        if (!sink->boundaryTrackStart(trackId, event.sampleRate, event.channels, event.duration, producerEpoch)) {
             std::scoped_lock lock(m_pendingTracksMutex);
             m_pendingTracks.remove(trackId);
             qCWarning(dragonMediaBackendPlayer) << "boundary ring full; the track switch of" << event.url.toString() << "will not be reported at play time";
@@ -299,6 +317,11 @@ void DragonPlayerPrivate::writeToQueues(std::span<const float> pcm, const std::s
     const uint64_t generation = contentGeneration.load(std::memory_order_acquire);
     DragonAudioSink *sink = audioOutput ? audioOutput->sink() : nullptr;
     const std::uint64_t streamEpoch = sink ? sink->streamEpoch() : 0;
+    if (sink) {
+        // The epoch the producer last observed; TrackStart boundaries are
+        // stamped with it (see onPipelineBoundary()).
+        m_producerStreamEpoch.store(streamEpoch, std::memory_order_release);
+    }
     const size_t written = audioPipe.producer().write(pcm, st, [this, generation]() {
         return contentGeneration.load(std::memory_order_acquire) != generation;
     });
@@ -770,16 +793,64 @@ void DragonPlayer::setStreamName(const QString &name)
     }
 }
 
+void DragonPlayerPrivate::resolvePendingTrackForSeek()
+{
+    // A promoted track is queued but not yet audible: the decoder is already
+    // on it while the player still reports the old track. The seek's flush
+    // drops the pending TrackStart boundary (trackStarted would never fire),
+    // so resolve the switch here: the player reports the track the decoder
+    // is actually on, and the seek applies within it.
+    std::optional<PendingTrack> resolved;
+    {
+        std::scoped_lock lock(m_pendingTracksMutex);
+        if (m_pendingTracks.isEmpty()) {
+            return;
+        }
+        // Entries are inserted in promotion order (increasing trackId); the
+        // highest one is the track the decoder is on. The audible tail is
+        // flushed by the seek anyway, so intermediate switches are skipped.
+        std::uint32_t lastId = 0;
+        for (auto it = m_pendingTracks.cbegin(); it != m_pendingTracks.cend(); ++it) {
+            lastId = std::max(lastId, it.key());
+        }
+        resolved = m_pendingTracks.value(lastId);
+        m_pendingTracks.clear();
+    }
+    qCDebug(dragonMediaBackendPlayer) << "resolving pending track switch at seek time:" << resolved->url.toString();
+    applyPendingTrack(*resolved);
+}
+
 void DragonPlayer::setPosition(std::chrono::milliseconds position)
 {
     qCDebug(dragonMediaBackendPlayer) << "setPosition(" << position << ")";
-    const std::chrono::milliseconds upperBound = d->currentDuration ? std::max(*d->currentDuration, 0ms) : 0ms;
+    std::chrono::milliseconds upperBound = d->currentDuration ? std::max(*d->currentDuration, 0ms) : 0ms;
     position = std::clamp(position, 0ms, upperBound);
 
     d->invalidateQueuedContent();
+    // requestSeek() waits out an in-flight gapless promotion, so by the time
+    // it returns the promoted track's boundary and pending entry (if any)
+    // exist and the seek targets the session that ends up current.
     d->decodePipeline.requestSeek(position);
 
+    d->resolvePendingTrackForSeek();
+
+    // The pending switch may have changed the reported track (and with it
+    // the duration the position must be clamped against).
+    upperBound = d->currentDuration ? std::max(*d->currentDuration, 0ms) : 0ms;
+    position = std::clamp(position, 0ms, upperBound);
+
     if (d->audioOutput) {
+        // The promoted track may need a different device format than the
+        // track it replaces; without a reopen the new samples would play at
+        // the old rate/channel count. Mirrors onSinkFormatChangeRequired.
+        if (!d->audioOutput->sink()->hasFormat(d->currentSampleRate, d->currentChannels) && d->currentSampleRate > 0) {
+            d->audioOutput->sink()->close();
+            d->audioOutput->sink()->open(d->currentSampleRate, d->currentChannels);
+            if (!d->audioOutput->sink()->isDeviceOpen()) {
+                d->reportDeviceOpenFailure();
+                return;
+            }
+        }
         d->audioOutput->sink()->setPositionOffset(position, DragonAudioSink::PositionResetMode::Seek);
         d->audioOutput->sink()->clearStream();
     }

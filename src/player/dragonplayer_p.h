@@ -88,6 +88,27 @@ private:
     mutable std::mutex m_pendingTracksMutex;
     std::atomic<std::uint32_t> m_trackSerial{0};
 
+    // Applies a pending track switch to the player's reported state (source,
+    // duration, seekability, format). Used both at play time (the sink
+    // crossed a TrackStart boundary) and at seek time (the seek's flush
+    // would drop the boundary, so the switch is resolved eagerly).
+    void applyPendingTrack(const PendingTrack &pending);
+
+    // Resolves the pending track switch, if any, from within setPosition():
+    // the decoder is already on the promoted track while the player still
+    // reports the old one, and the seek's flush drops the pending boundary.
+    // Must run after requestSeek() (which waits out an in-flight promotion
+    // and thereby guarantees the pending entry exists) and before the flush
+    // is armed.
+    void resolvePendingTrackForSeek();
+
+    // The stream epoch the decode thread's producer last observed before a
+    // write (see DragonAudioSink::streamEpoch()). Decode-thread confined
+    // writer; read on the decode thread when recording boundaries. A
+    // TrackStart boundary is stamped with it so boundaries of a superseded
+    // stream are discarded instead of firing in the new one.
+    std::atomic<std::uint64_t> m_producerStreamEpoch{0};
+
     void invalidateQueuedContent();
 
     QCoro::Task<void> startLoad(QUrl source, uint64_t generation);

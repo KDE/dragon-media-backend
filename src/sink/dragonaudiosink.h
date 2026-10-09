@@ -118,7 +118,17 @@ public:
         std::optional<std::chrono::milliseconds> duration;
     };
 
-    bool boundaryTrackStart(std::uint32_t trackId, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration);
+    // Producer side: called from the decode thread (the same thread that
+    // produces samples into the pipe), between two sample chunks.
+    // Returns false when the boundary ring is full (logged; extremely unlikely,
+    // boundaries are rare and always drained by the callback).
+    //
+    // epochTag must be the stream epoch the producer observed before the
+    // write/promotion this boundary belongs to, mirroring samplesProduced()'s
+    // epochTag contract: a boundary stamped with an epoch that a flush
+    // superseded is discarded by the consumer instead of firing in the new
+    // stream.
+    bool boundaryTrackStart(std::uint32_t trackId, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration, std::uint64_t epochTag);
 
     bool boundaryEndOfStream();
 

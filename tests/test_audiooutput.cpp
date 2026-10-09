@@ -88,6 +88,7 @@ private Q_SLOTS:
 
     void testDrainCallback();
     void testDrainRepeatCycles();
+    void testBoundaryStaleEpochTagDiscarded();
 
 private:
     void fillQueue(DragonPipe<float> *pipe, const std::vector<float> &data);
@@ -1207,6 +1208,47 @@ void TestAudioOutput::testDrainRepeatCycles()
         output->setPositionOffset(std::chrono::milliseconds{0}, DragonAudioSink::PositionResetMode::NormalTrackChange);
         output->resume();
     }
+
+    output->close();
+}
+
+void TestAudioOutput::testBoundaryStaleEpochTagDiscarded()
+{
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    DragonPipe<float> pipe(65536);
+    output->setAudioPipe(&pipe);
+
+    QSignalSpy trackSpy(output.get(), &DragonAudioSink::trackStarted);
+    QCOMPARE(trackSpy.count(), 0);
+
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    const std::uint64_t epoch = output->streamEpoch();
+    fillQueue(&pipe, std::vector<float>(8820, 0.5f));
+    output->samplesProduced(epoch, 8820);
+    QVERIFY(output->boundaryTrackStart(7, 44100, 2, {}, epoch));
+
+    QTRY_COMPARE_WITH_TIMEOUT(trackSpy.count(), 1, 5000);
+
+    output->setPositionOffset(std::chrono::milliseconds{0}, DragonAudioSink::PositionResetMode::Seek);
+    QTRY_VERIFY2(output->streamEpoch() > epoch, "flush should bump the stream epoch");
+
+    fillQueue(&pipe, std::vector<float>(8820, 0.5f));
+    output->samplesProduced(epoch, 8820); // superseded epoch: dropped
+    QVERIFY(output->boundaryTrackStart(8, 44100, 2, {}, epoch)); // stamped with the stale epoch
+
+    const bool consumed = QTest::qWaitFor(
+        [&]() {
+            return pipe.consumer().ready() == 0;
+        },
+        3000);
+    QVERIFY2(consumed, "Audio callback should consume the flushed stream's data");
+
+    QTest::qWait(300);
+    QCOMPARE(trackSpy.count(), 1);
 
     output->close();
 }
