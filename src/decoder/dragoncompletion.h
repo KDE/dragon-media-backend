@@ -126,7 +126,8 @@ Q_SIGNALS:
     void finished(const InitResult &result);
 
 private:
-    std::atomic<bool> m_ready{false};
+    std::atomic<bool> m_settled{false};
+    std::atomic<bool> m_resultPublished{false};
     std::optional<InitResult> m_buffered;
 };
 

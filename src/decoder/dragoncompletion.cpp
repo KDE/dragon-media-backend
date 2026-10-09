@@ -25,20 +25,21 @@ DragonCompletion::~DragonCompletion()
     // by the awaiter's atomic `resumed` flag), so the coroutine runs its
     // normal cleanup instead of being forcibly destroyed out from under
     // QCoro's ref-counting.
-    if (!m_ready.exchange(true, std::memory_order_acq_rel)) {
+    if (!m_settled.exchange(true, std::memory_order_acq_rel)) {
         qDebug() << "DragonCompletion::~DragonCompletion() resuming suspended awaiter with cancelled result, this:" << this;
         InitResult result;
         result.cancelled = true;
         result.success = false;
         result.errorMessage = QStringLiteral("Completion destroyed");
         m_buffered = std::move(result);
+        m_resultPublished.store(true, std::memory_order_release);
         Q_EMIT finished(*m_buffered);
     }
 }
 
 bool DragonCompletion::isReady() const
 {
-    return m_ready.load(std::memory_order_acquire);
+    return m_resultPublished.load(std::memory_order_acquire);
 }
 
 InitResult DragonCompletion::result() const
@@ -48,11 +49,12 @@ InitResult DragonCompletion::result() const
 
 bool DragonCompletion::setResult(InitResult result)
 {
-    if (m_ready.exchange(true, std::memory_order_acq_rel)) {
+    if (m_settled.exchange(true, std::memory_order_acq_rel)) {
         qDebug() << "DragonCompletion::setResult() already completed, skipping, this:" << this;
         return false;
     }
     m_buffered = std::move(result);
+    m_resultPublished.store(true, std::memory_order_release);
     qDebug() << "DragonCompletion::setResult() emitting finished, this:" << this << "success:" << m_buffered->success;
     Q_EMIT finished(*m_buffered);
     return true;
@@ -60,7 +62,7 @@ bool DragonCompletion::setResult(InitResult result)
 
 bool DragonCompletion::cancel(const QString &reason)
 {
-    if (m_ready.exchange(true, std::memory_order_acq_rel)) {
+    if (m_settled.exchange(true, std::memory_order_acq_rel)) {
         qDebug() << "DragonCompletion::cancel() already completed, skipping, this:" << this;
         return false;
     }
@@ -69,6 +71,7 @@ bool DragonCompletion::cancel(const QString &reason)
     result.success = false;
     result.errorMessage = reason;
     m_buffered = std::move(result);
+    m_resultPublished.store(true, std::memory_order_release);
     qDebug() << "DragonCompletion::cancel() emitting finished, this:" << this << "reason:" << reason;
     Q_EMIT finished(*m_buffered);
     return true;
