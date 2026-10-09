@@ -212,6 +212,7 @@ private Q_SLOTS:
     void testChangedImageReopensDisc();
     void testGaplessPlayerTransition();
     void testLateNextSourceGaplessTransition();
+    void testGaplessCdTrackFollowedByLocalTrackPreservesSeekable();
 
 private:
     QString m_cuePath;
@@ -756,6 +757,81 @@ void TestCdStream::testLateNextSourceGaplessTransition()
                  30000),
              "Track 2 did not start producing audio");
     QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::PlayingState);
+}
+
+void TestCdStream::testGaplessCdTrackFollowedByLocalTrackPreservesSeekable()
+{
+    QVERIFY(TestFixture::verifyExists(u"sample-3s.mp3"_s));
+    CdImage image(50);
+    image.addAudioTrack();
+    image.addAudioTrack();
+    const QString cuePath = image.finish();
+    QVERIFY(!cuePath.isEmpty());
+
+    DragonPlayer player;
+    if (player.audioOutput()->backend() == DragonAudioOutput::Backend::Null) {
+        QSKIP("No audio sink available");
+    }
+    PlayerHelper helper(&player);
+    player.setPrefinishMark(200ms);
+
+    DragonDiagnostics diagnostics(&player);
+
+    const QUrl track1 = cdTrackUrl(u"Track 01.wav"_s, cuePath);
+    const QUrl track2 = cdTrackUrl(u"Track 02.wav"_s, cuePath);
+    const QUrl track3 = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+
+    QList<QUrl> sourcesSeen;
+    QList<bool> seekableSeen;
+    connect(&player, &DragonPlayer::trackChanged, &player, [&]() {
+        sourcesSeen.append(player.source());
+        seekableSeen.append(player.seekable());
+        qDebug() << "trackChanged: source=" << player.source() << "seekable=" << player.seekable();
+    });
+
+    QVERIFY2(helper.setSourceAndWait(track1), "Track 1 failed to load");
+    QVERIFY2(helper.playAndWait(), "Track 1 failed to start playing");
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&diagnostics]() {
+                     return !diagnostics.hasActiveDecoder();
+                 },
+                 10000),
+             "Track 1 should decode to EOF while its tail is still playing");
+
+    player.setNextSource(track2);
+    QVERIFY2(QTest::qWaitFor(
+                 [&diagnostics]() {
+                     return diagnostics.hasActiveDecoder();
+                 },
+                 10000),
+             "Track 2 decoder should be active after promotion");
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&diagnostics]() {
+                     return !diagnostics.hasActiveDecoder();
+                 },
+                 10000),
+             "Track 2 should decode to EOF while track 1 is still playing");
+
+    player.setNextSource(track3);
+    QVERIFY2(QTest::qWaitFor(
+                 [&diagnostics]() {
+                     return diagnostics.hasActiveDecoder();
+                 },
+                 10000),
+             "Track 3 decoder should be active after promotion");
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&sourcesSeen, &track2]() {
+                     return sourcesSeen.contains(track2);
+                 },
+                 10000),
+             "The sink should reach track 2's boundary and emit trackChanged");
+
+    const int track2Index = sourcesSeen.indexOf(track2);
+    QVERIFY(track2Index >= 0);
+    QVERIFY2(seekableSeen.at(track2Index), "Track 2 (CD track) must remain seekable after track 3 is promoted");
 }
 
 QTEST_MAIN(TestCdStream)

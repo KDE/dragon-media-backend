@@ -83,6 +83,7 @@ private:
         int sampleRate = 0;
         int channels = 0;
         std::optional<std::chrono::milliseconds> duration;
+        bool seekable = false;
     };
     QHash<std::uint32_t, PendingTrack> m_pendingTracks;
     mutable std::mutex m_pendingTracksMutex;

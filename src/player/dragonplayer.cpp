@@ -116,17 +116,12 @@ void DragonPlayerPrivate::applyPendingTrack(const PendingTrack &pending)
     aboutToFinishEmitted = false;
     qCDebug(dragonMediaBackendPlayer) << "applyPendingTrack: reset aboutToFinishEmitted for" << currentSource.toString();
     currentIsLocal = DragonStreamFactory::isLocalSource(currentSource);
-    currentSeekable = currentIsLocal;
-    if (!currentIsLocal && decodePipeline.streamIsSeekable()) {
-        currentSeekable = true;
-    }
+    currentSeekable = pending.seekable;
     currentDuration = pending.duration;
     currentSampleRate = pending.sampleRate;
     currentChannels = pending.channels;
 
     audioOutput->sink()->setStreamName(QString());
-
-    decodePipeline.setCurrentSource(currentSource);
 
     positionEstimator->trackChanged(currentDuration);
 
@@ -190,7 +185,7 @@ bool DragonPlayerPrivate::onPipelineBoundary(const DragonDecodePipeline::Boundar
         const auto trackId = m_trackSerial.fetch_add(1, std::memory_order_relaxed) + 1;
         {
             std::scoped_lock lock(m_pendingTracksMutex);
-            m_pendingTracks.insert(trackId, PendingTrack{event.url, event.sampleRate, event.channels, event.duration});
+            m_pendingTracks.insert(trackId, PendingTrack{event.url, event.sampleRate, event.channels, event.duration, event.seekable});
         }
         if (!sink->boundaryTrackStart(trackId, event.sampleRate, event.channels, event.duration, producerEpoch)) {
             std::scoped_lock lock(m_pendingTracksMutex);

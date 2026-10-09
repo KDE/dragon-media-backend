@@ -372,6 +372,8 @@ bool DragonDecodePipeline::promoteNext(std::unique_lock<std::mutex> &lock)
     boundaryEvent.sampleRate = format.sampleRate;
     boundaryEvent.channels = format.channels;
     boundaryEvent.duration = format.duration;
+    const bool isLocal = DragonStreamFactory::isLocalSource(newSource);
+    boundaryEvent.seekable = isLocal || (claimed && claimed->stream && claimed->stream->isSeekable());
     const bool handoff = !boundaryCallback || boundaryCallback(boundaryEvent);
 
     std::unique_ptr<Session> retired;
@@ -750,12 +752,6 @@ void DragonDecodePipeline::dropFailedPreWarm(const QUrl &next)
         }
     }
     m_stateChanged.notify_all();
-}
-
-void DragonDecodePipeline::setCurrentSource(const QUrl &source)
-{
-    std::scoped_lock lock(m_decoderMutex);
-    m_currentSource = source;
 }
 
 qint64 DragonDecodePipeline::streamSize() const

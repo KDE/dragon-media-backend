@@ -68,6 +68,7 @@ public:
         int sampleRate = 0; // TrackStart only
         int channels = 0; // TrackStart only
         std::optional<std::chrono::milliseconds> duration; // TrackStart only
+        bool seekable = false; // TrackStart only
     };
     using BoundaryCallback = std::function<bool(const BoundaryEvent &)>;
     void setBoundaryCallback(BoundaryCallback callback);
@@ -77,8 +78,6 @@ public:
     static DragonMediaBackend::InitResult makeCancelledResult(const QString &message, bool isGapless = false);
 
     bool decodeLoopActive() const;
-
-    void setCurrentSource(const QUrl &source);
 
     qint64 streamSize() const;
 
