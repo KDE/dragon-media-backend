@@ -39,6 +39,17 @@
       }
     },
     {
+      "name": "tsan",
+      "displayName": "Build with Tsan support.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-tsan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ECM_ENABLE_SANITIZERS": "thread",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
       "name": "dev-clang",
       "displayName": "dev-clang",
       "generator": "Ninja",
@@ -219,6 +230,10 @@
       "configurePreset": "asan"
     },
     {
+      "name": "tsan",
+      "configurePreset": "tsan"
+    },
+    {
       "name": "unity",
       "configurePreset": "unity"
     },
@@ -271,6 +286,20 @@
       },
       "environment": {
         "ASAN_OPTIONS": "halt_on_error=0"
+      }
+    },
+    {
+      "name": "tsan",
+      "configurePreset": "tsan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error",
+        "stopOnFailure": false
+      },
+      "environment": {
+        "TSAN_OPTIONS": "halt_on_error=0:suppressions=${sourceDir}/tests/tsan-suppressions.txt"
       }
     },
     {
@@ -351,6 +380,25 @@
         {
           "type": "test",
           "name": "asan"
+        }
+      ]
+    },
+    {
+      "name": "tsan-test",
+      "displayName": "TSan build and test workflow",
+      "description": "Configure, build, and run tests with ThreadSanitizer enabled",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "tsan"
+        },
+        {
+          "type": "build",
+          "name": "tsan"
+        },
+        {
+          "type": "test",
+          "name": "tsan"
         }
       ]
     },

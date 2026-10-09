@@ -1,0 +1,41 @@
+# Qt testlib (known Qt races, test-only impact)
+# Main thread stops logging while a test thread is still emitting results.
+race:QPlainTestLogger::stopLogging
+# QThread-based workers (QtTest watchdog, KIO, DBus) not joined at exit.
+thread:QThread::start
+
+# Qt DBus (known Qt races)
+race:QDBusConnectionManager
+race:QMetaCallEvent::Data::~Data
+race:QCoreApplicationPrivate::sendPostedEvents
+mutex:_dbus_connection_new_for_transport
+deadlock:dbus-connection.c
+race:QDBusConnectionManager::instance
+
+# Qt QML / binding internals (known Qt races)
+race:setStatusAndClearList
+race:addObjectWithPendingBindingStatusChange
+
+# Qt Network internals
+race:QHttpHeadersPrivate
+
+# GLib / GDBus internals (known upstream races)
+race:g_free
+race:g_free_sized
+race:g_wakeup_signal
+race:g_wakeup_free
+race:g_str_equal
+race:schedule_callbacks
+
+# PulseAudio internals
+race:pa_mutex_lock
+race:pa_close
+race:pa_xfree
+
+# PipeWire / SPA internals (black boxes, no symbols in plugins)
+# lock-order-inversion (spa support loop vs SDL playback mutex).
+deadlock:libspa-support
+# unlock-of-unlocked-mutex inside the SPA support library.
+mutex:libspa-support
+# audioconvert plugin races have no symbols; match by library.
+called_from_lib:libspa-audioconvert
