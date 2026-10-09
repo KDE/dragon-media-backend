@@ -14,6 +14,7 @@
 #include "player/dragonpipe.h"
 #include "sink/dragonaudiosink.h"
 #include "sink/dragonaudiosinkfactory.h"
+#include "sink/dragonproducerstate.h"
 
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -89,6 +90,9 @@ private Q_SLOTS:
     void testDrainCallback();
     void testDrainRepeatCycles();
     void testBoundaryStaleEpochTagDiscarded();
+    void testProducerStateUnit();
+    void testSamplesProducedStaleEpochDiscarded();
+    void testSamplesProducedConcurrentFlushRace();
 
 private:
     void fillQueue(DragonPipe<float> *pipe, const std::vector<float> &data);
@@ -1251,6 +1255,114 @@ void TestAudioOutput::testBoundaryStaleEpochTagDiscarded()
     QCOMPARE(trackSpy.count(), 1);
 
     output->close();
+}
+
+void TestAudioOutput::testProducerStateUnit()
+{
+    DragonProducerState state{1};
+    QCOMPARE(state.epoch(), 1);
+    QCOMPARE(state.samples(), 0);
+
+    // Matching epoch adds samples
+    QVERIFY(state.addSamples(1, 100));
+    QCOMPARE(state.samples(), 100);
+    QVERIFY(state.addSamples(1, 200));
+    QCOMPARE(state.samples(), 300);
+
+    // Mismatched / stale epoch is rejected and does not alter sample count
+    QVERIFY(!state.addSamples(2, 50));
+    QVERIFY(!state.addSamples(0, 50));
+    QCOMPARE(state.samples(), 300);
+    QCOMPARE(state.epoch(), 1);
+
+    // Bumping epoch increments epoch and resets sample count to 0 atomically
+    const auto newEpoch = state.bumpEpoch();
+    QCOMPARE(newEpoch, 2);
+    QCOMPARE(state.epoch(), 2);
+    QCOMPARE(state.samples(), 0);
+
+    // Adding samples with the old epoch (1) is rejected
+    QVERIFY(!state.addSamples(1, 50));
+    QCOMPARE(state.samples(), 0);
+
+    // Adding samples with the new epoch (2) succeeds
+    QVERIFY(state.addSamples(2, 400));
+    QCOMPARE(state.samples(), 400);
+
+    // Test epoch wrap-around at kEpochMask: wraps to 1 (never 0)
+    state.reset(DragonProducerState::kEpochMask, 1000);
+    QCOMPARE(state.epoch(), DragonProducerState::kEpochMask);
+    QCOMPARE(state.samples(), 1000);
+    const auto wrappedEpoch = state.bumpEpoch();
+    QCOMPARE(wrappedEpoch, 1);
+    QCOMPARE(state.epoch(), 1);
+    QCOMPARE(state.samples(), 0);
+}
+
+void TestAudioOutput::testSamplesProducedStaleEpochDiscarded()
+{
+    auto output = createAudioSink();
+    QVERIFY(output);
+
+    DragonPipe<float> pipe(65536);
+    output->setAudioPipe(&pipe);
+
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    const std::uint64_t initialEpoch = output->streamEpoch();
+    QCOMPARE(output->producerSamples(), 0);
+
+    // Producing samples in current epoch advances producerSamples
+    output->samplesProduced(initialEpoch, 1000);
+    QCOMPARE(output->producerSamples(), 1000);
+
+    // Flush supersedes the epoch and resets producerSamples to 0
+    output->setPositionOffset(std::chrono::milliseconds{0}, DragonAudioSink::PositionResetMode::Seek);
+    QTRY_VERIFY2(output->streamEpoch() > initialEpoch, "flush should bump the stream epoch");
+    QCOMPARE(output->producerSamples(), 0);
+
+    // Samples produced with the stale initialEpoch must be discarded and NOT pollute the new epoch
+    output->samplesProduced(initialEpoch, 2000);
+    QCOMPARE(output->producerSamples(), 0);
+
+    // Samples produced with the current epoch must be accounted
+    const std::uint64_t currentEpoch = output->streamEpoch();
+    output->samplesProduced(currentEpoch, 500);
+    QCOMPARE(output->producerSamples(), 500);
+
+    output->close();
+}
+
+void TestAudioOutput::testSamplesProducedConcurrentFlushRace()
+{
+    DragonProducerState state{1};
+    std::atomic<bool> stop{false};
+
+    // Thread A: repeatedly loads epoch and calls addSamples
+    std::jthread producerThread([&]() {
+        while (!stop.load(std::memory_order_relaxed)) {
+            const auto ep = state.epoch();
+            state.addSamples(ep, 10);
+        }
+    });
+
+    // Thread B: repeatedly flushes / bumps epoch
+    std::jthread flushThread([&]() {
+        for (int i = 0; i < 500; ++i) {
+            state.bumpEpoch();
+            std::this_thread::yield();
+        }
+    });
+
+    flushThread.join();
+    stop.store(true, std::memory_order_relaxed);
+    producerThread.join();
+
+    // After stopping producer and performing one final flush,
+    // sample count must be exactly 0, and state must remain consistent.
+    state.bumpEpoch();
+    QCOMPARE(state.samples(), 0);
 }
 
 void TestAudioOutput::testVolumeChangeWhilePlaying()

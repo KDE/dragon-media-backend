@@ -6,6 +6,7 @@
 #pragma once
 
 #include "dragonmediabackend_export.h"
+#include "dragonproducerstate.h"
 
 #include <QObject>
 #include <QString>
@@ -100,6 +101,11 @@ public:
         return static_cast<qint64>(m_streamSamplesRead.load(std::memory_order_relaxed));
     }
 
+    [[nodiscard]] qint64 producerSamples() const
+    {
+        return static_cast<qint64>(m_producerState.samples());
+    }
+
     [[nodiscard]] std::chrono::milliseconds position() const;
 
     virtual void clearStream() = 0;
@@ -138,7 +144,7 @@ public:
 
     [[nodiscard]] std::uint64_t streamEpoch() const
     {
-        return m_boundaryEpoch.load(std::memory_order_acquire);
+        return m_producerState.epoch();
     }
 
     [[nodiscard]] bool endOfStreamPending() const;
@@ -250,8 +256,7 @@ private:
     std::atomic<bool> m_queueReady{true};
 
     BoundaryRing m_boundaries; // producer: decode thread; consumer: callback
-    std::atomic<std::uint64_t> m_boundaryEpoch{1}; // bumped on flush
-    std::atomic<std::uint64_t> m_producerSamples{0}; // decode thread (+ flush reset)
+    DragonProducerState m_producerState{1};
     std::atomic<std::uint64_t> m_streamSamplesRead{0}; // audio callback
 
     enum class EosState : std::int8_t {

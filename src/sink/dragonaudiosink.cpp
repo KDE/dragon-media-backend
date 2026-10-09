@@ -220,7 +220,7 @@ bool DragonAudioSink::boundaryTrackStart(std::uint32_t trackId,
     // the stream in between, the consumer's epoch check discards the boundary
     // instead of letting it fire in the new stream (a ghost boundary).
     boundary.epoch = epochTag;
-    boundary.streamSample = m_producerSamples.load(std::memory_order_relaxed);
+    boundary.streamSample = m_producerState.samples();
     boundary.trackId = trackId;
     boundary.sampleRate = sampleRate;
     boundary.channels = channels;
@@ -239,7 +239,7 @@ bool DragonAudioSink::boundaryEndOfStream()
     if (!m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Pending), std::memory_order_acq_rel, std::memory_order_acquire)) {
         return false;
     }
-    m_eosSample.store(m_producerSamples.load(std::memory_order_relaxed), std::memory_order_release);
+    m_eosSample.store(m_producerState.samples(), std::memory_order_release);
     return true;
 }
 
@@ -251,13 +251,7 @@ bool DragonAudioSink::retractEndOfStream()
 
 void DragonAudioSink::samplesProduced(std::uint64_t epochTag, std::size_t count)
 {
-    if (count == 0) {
-        return;
-    }
-    if (epochTag != m_boundaryEpoch.load(std::memory_order_acquire)) {
-        return;
-    }
-    m_producerSamples.fetch_add(count, std::memory_order_relaxed);
+    m_producerState.addSamples(epochTag, count);
 }
 
 bool DragonAudioSink::endOfStreamPending() const
@@ -283,14 +277,13 @@ bool DragonAudioSink::takeDrainedEmission()
 
 void DragonAudioSink::processStreamFlush()
 {
-    m_boundaryEpoch.fetch_add(1, std::memory_order_acq_rel);
+    m_producerState.bumpEpoch();
 
     if (auto *ap = m_audioPipe.load(std::memory_order_acquire)) {
         ap->consumer().drain();
     }
     m_totalSamplesWritten.store(0, std::memory_order_relaxed);
 
-    m_producerSamples.store(0, std::memory_order_relaxed);
     m_streamSamplesRead.store(0, std::memory_order_relaxed);
     while (m_boundaries.peek() != nullptr) {
         m_boundaries.pop();
@@ -318,7 +311,7 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
 
     size_t budget = maxSamples;
     while (const StreamBoundary *boundary = m_boundaries.peek()) {
-        if (boundary->epoch != m_boundaryEpoch.load(std::memory_order_acquire)) {
+        if (boundary->epoch != streamEpoch()) {
             m_boundaries.pop();
             continue;
         }
@@ -384,7 +377,7 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
 
     bool crossedBoundary = false;
     while (const StreamBoundary *boundary = m_boundaries.peek()) {
-        if (boundary->epoch != m_boundaryEpoch.load(std::memory_order_acquire)) {
+        if (boundary->epoch != streamEpoch()) {
             m_boundaries.pop();
             continue;
         }
