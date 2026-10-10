@@ -295,21 +295,30 @@ void DragonPipeWireAudioSink::close()
     m_open.store(false, std::memory_order_release);
     m_paused.store(false, std::memory_order_release);
 
-    // pw_stream_destroy must be called under the thread loop lock.
     if (m_pw->loop && m_pw->stream) {
-        PwThreadLoopLock lock(m_pw->loop.get());
-        m_pw->stream.reset();
+        {
+            PwThreadLoopLock lock(m_pw->loop.get());
+            pw_stream_set_active(m_pw->stream.get(), false);
+            pw_stream_disconnect(m_pw->stream.get());
+        }
+
+        {
+            std::unique_lock lock(m_callbackDoneMutex);
+            const bool drained = m_callbackDoneCv.wait_for(lock, std::chrono::milliseconds(500), [this]() {
+                return m_activeCallbacks.load(std::memory_order_acquire) == 0;
+            });
+            if (!drained) {
+                qCWarning(dragonMediaBackendAudio) << "PipeWire close(): callbacks did not quiesce within 500ms, continuing teardown";
+            }
+        }
+
+        {
+            PwThreadLoopLock lock(m_pw->loop.get());
+            m_pw->stream.reset();
+        }
     }
 
     m_pw->loop.reset();
-
-    // Wait for in-flight callbacks to finish before fully returning.
-    {
-        std::unique_lock lock(m_callbackDoneMutex);
-        m_callbackDoneCv.wait_for(lock, std::chrono::milliseconds(500), [this]() {
-            return m_activeCallbacks.load(std::memory_order_acquire) == 0;
-        });
-    }
 
     qCDebug(dragonMediaBackendAudio) << "PipeWire close() complete";
 }
@@ -444,7 +453,7 @@ bool DragonPipeWireAudioSink::isPaused() const
 void DragonPipeWireAudioSink::onProcess(void *userdata)
 {
     auto *self = static_cast<DragonPipeWireAudioSink *>(userdata);
-    if (!self || !self->m_open.load(std::memory_order_acquire)) {
+    if (!self) {
         return;
     }
 
@@ -453,6 +462,10 @@ void DragonPipeWireAudioSink::onProcess(void *userdata)
         self->m_activeCallbacks.fetch_sub(1, std::memory_order_relaxed);
         self->m_callbackDoneCv.notify_one();
     });
+
+    if (!self->m_open.load(std::memory_order_acquire)) {
+        return;
+    }
 
     thread_local bool audioThreadNamed = false;
     if (!audioThreadNamed) {
