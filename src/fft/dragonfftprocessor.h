@@ -66,7 +66,7 @@ public:
 
 private:
     DragonPipe<DragonPcmBlock>::Consumer m_consumer;
-    int m_channelCount = 2;
+    std::atomic<int> m_channelCount{2};
     std::atomic<int> m_sampleRate{44100};
     std::atomic<FftMode> m_fftMode{FftMode::Off};
     std::atomic<int> m_fftRate{60};

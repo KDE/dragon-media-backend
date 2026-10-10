@@ -59,7 +59,7 @@ void DragonFftProcessor::setConsumer(DragonPipe<DragonPcmBlock>::Consumer consum
 
 void DragonFftProcessor::setChannelCount(int channels)
 {
-    m_channelCount = std::max(1, channels);
+    m_channelCount.store(std::max(1, channels), std::memory_order_relaxed);
 }
 
 void DragonFftProcessor::setSampleRate(int sampleRate)
@@ -184,7 +184,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
 bool DragonFftProcessor::drainPipeToHistory(std::stop_token st)
 {
     bool gotAny = false;
-    const int ch = m_channelCount;
+    const int ch = m_channelCount.load(std::memory_order_relaxed);
 
     while (m_consumer.ready() && !st.stop_requested()) {
         m_consumer.readSomeWith(m_consumer.ready(), [&](std::span<const DragonPcmBlock> b1, std::span<const DragonPcmBlock> b2) {
