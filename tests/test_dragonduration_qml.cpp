@@ -28,6 +28,7 @@ class TestDragonDurationQml : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void initTestCase();
     void testSubPropertyReads();
     void testFormattedInvokable();
     void testDurationInvalidForUnknownDuration();
@@ -35,6 +36,9 @@ private Q_SLOTS:
 
 private:
     [[nodiscard]] static std::unique_ptr<QObject> createObject(QQmlEngine &engine, DragonPlayer &player, const QByteArray &qml);
+
+    DragonPlayer m_player;
+    QQmlEngine m_engine;
 };
 
 std::unique_ptr<QObject> TestDragonDurationQml::createObject(QQmlEngine &engine, DragonPlayer &player, const QByteArray &qml)
@@ -49,10 +53,14 @@ std::unique_ptr<QObject> TestDragonDurationQml::createObject(QQmlEngine &engine,
     return std::unique_ptr<QObject>(component.create());
 }
 
+void TestDragonDurationQml::initTestCase()
+{
+}
+
 void TestDragonDurationQml::testSubPropertyReads()
 {
-    DragonPlayer player;
-    QQmlEngine engine;
+    DragonPlayer &player = m_player;
+    QQmlEngine &engine = m_engine;
     const auto object = createObject(engine, player, QByteArrayLiteral(R"QML(
         import QtQml
         QtObject {
@@ -73,9 +81,9 @@ void TestDragonDurationQml::testSubPropertyReads()
 
 void TestDragonDurationQml::testFormattedInvokable()
 {
-    DragonPlayer player;
+    DragonPlayer &player = m_player;
     player.setPrefinishMark(221'000ms);
-    QQmlEngine engine;
+    QQmlEngine &engine = m_engine;
     const auto object = createObject(engine, player, QByteArrayLiteral(R"QML(
         import QtQml
         QtObject {
@@ -91,8 +99,8 @@ void TestDragonDurationQml::testFormattedInvokable()
 
 void TestDragonDurationQml::testDurationInvalidForUnknownDuration()
 {
-    DragonPlayer player;
-    QQmlEngine engine;
+    DragonPlayer &player = m_player;
+    QQmlEngine &engine = m_engine;
     const auto object = createObject(engine, player, QByteArrayLiteral(R"QML(
         import QtQml
         QtObject {
@@ -108,8 +116,8 @@ void TestDragonDurationQml::testDurationInvalidForUnknownDuration()
 
 void TestDragonDurationQml::testWriteBackThroughSubProperty()
 {
-    DragonPlayer player;
-    QQmlEngine engine;
+    DragonPlayer &player = m_player;
+    QQmlEngine &engine = m_engine;
     const auto object = createObject(engine, player, QByteArrayLiteral(R"QML(
         import QtQml
         QtObject {

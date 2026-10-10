@@ -24,16 +24,18 @@ class TestQmlModule : public QObject
     Q_OBJECT
 
 private Q_SLOTS:
+    void initTestCase();
     void moduleCreatesPlayer();
     void playerSurfaceVisibleInQml();
 
 private:
     [[nodiscard]] static std::unique_ptr<QObject> createObject(QQmlEngine &engine, const QByteArray &qml);
+
+    QQmlEngine m_engine;
 };
 
 std::unique_ptr<QObject> TestQmlModule::createObject(QQmlEngine &engine, const QByteArray &qml)
 {
-    engine.addImportPath(QStringLiteral(DRAGON_QML_IMPORT_PATH));
     QQmlComponent component(&engine);
     component.setData(qml, QUrl());
     if (component.status() != QQmlComponent::Ready) {
@@ -43,9 +45,14 @@ std::unique_ptr<QObject> TestQmlModule::createObject(QQmlEngine &engine, const Q
     return std::unique_ptr<QObject>(component.create());
 }
 
+void TestQmlModule::initTestCase()
+{
+    m_engine.addImportPath(QStringLiteral(DRAGON_QML_IMPORT_PATH));
+}
+
 void TestQmlModule::moduleCreatesPlayer()
 {
-    QQmlEngine engine;
+    QQmlEngine &engine = m_engine;
     const auto object = createObject(engine, QByteArrayLiteral(R"QML(
         import QtQml
         import org.kde.dragonmediabackend
@@ -62,7 +69,7 @@ void TestQmlModule::moduleCreatesPlayer()
 
 void TestQmlModule::playerSurfaceVisibleInQml()
 {
-    QQmlEngine engine;
+    QQmlEngine &engine = m_engine;
     const auto object = createObject(engine, QByteArrayLiteral(R"QML(
         import QtQml
         import org.kde.dragonmediabackend
