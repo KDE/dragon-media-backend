@@ -237,6 +237,13 @@ private:
 
     void processStreamFlush();
 
+    enum class BoundaryAdvance {
+        NoneCrossed,
+        Crossed,
+        FormatStall,
+    };
+    BoundaryAdvance advanceBoundaries(bool afterRead, size_t *budget);
+
     std::atomic<DragonPipe<float> *> m_audioPipe{nullptr};
     std::atomic<DragonPipe<DragonPcmBlock> *> m_fftPipe{nullptr};
 

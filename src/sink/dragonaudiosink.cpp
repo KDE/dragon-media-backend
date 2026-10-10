@@ -298,6 +298,58 @@ void DragonAudioSink::processStreamFlush()
     m_queueReady.store(true, std::memory_order_release);
 }
 
+DragonAudioSink::BoundaryAdvance DragonAudioSink::advanceBoundaries(bool afterRead, size_t *budget)
+{
+    BoundaryAdvance result = BoundaryAdvance::NoneCrossed;
+    while (const StreamBoundary *boundary = m_boundaries.peek()) {
+        if (boundary->epoch != streamEpoch()) {
+            m_boundaries.pop();
+            continue;
+        }
+        const std::uint64_t samplesRead = m_streamSamplesRead.load(std::memory_order_relaxed);
+        if (samplesRead < boundary->streamSample) {
+            if (!afterRead && budget != nullptr && (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels())) {
+                *budget = std::min<size_t>(*budget, boundary->streamSample - samplesRead);
+            }
+            break;
+        }
+
+        if (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels()) {
+            if (afterRead) {
+                break;
+            }
+            if (!m_formatChangePending.exchange(true, std::memory_order_acq_rel)) {
+                const int sampleRate = boundary->sampleRate;
+                const int channels = boundary->channels;
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, sampleRate, channels]() {
+                        Q_EMIT formatChangeRequired(sampleRate, channels);
+                    },
+                    Qt::QueuedConnection);
+            }
+            return BoundaryAdvance::FormatStall;
+        }
+
+        m_boundaries.pop();
+        m_formatChangePending.store(false, std::memory_order_relaxed);
+        m_positionOffset.store(0, std::memory_order_relaxed);
+        m_totalSamplesWritten.store(afterRead ? static_cast<qint64>(samplesRead - boundary->streamSample) : static_cast<qint64>(0), std::memory_order_relaxed);
+        const std::uint32_t trackId = boundary->trackId;
+        const std::optional<std::chrono::milliseconds> duration = boundary->duration;
+        QMetaObject::invokeMethod(
+            this,
+            [this, trackId, duration]() {
+                Q_EMIT trackStarted(trackId, duration);
+            },
+            Qt::QueuedConnection);
+        if (afterRead) {
+            result = BoundaryAdvance::Crossed;
+        }
+    }
+    return result;
+}
+
 std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts)
 {
     if (m_positionResetPending.exchange(false, std::memory_order_acq_rel)) {
@@ -314,44 +366,8 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
     }
 
     size_t budget = maxSamples;
-    while (const StreamBoundary *boundary = m_boundaries.peek()) {
-        if (boundary->epoch != streamEpoch()) {
-            m_boundaries.pop();
-            continue;
-        }
-        if (m_streamSamplesRead.load(std::memory_order_relaxed) < boundary->streamSample) {
-            if (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels()) {
-                budget = std::min<size_t>(budget, boundary->streamSample - m_streamSamplesRead.load(std::memory_order_relaxed));
-            }
-            break;
-        }
-
-        if (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels()) {
-            if (!m_formatChangePending.exchange(true, std::memory_order_acq_rel)) {
-                const int sampleRate = boundary->sampleRate;
-                const int channels = boundary->channels;
-                QMetaObject::invokeMethod(
-                    this,
-                    [this, sampleRate, channels]() {
-                        Q_EMIT formatChangeRequired(sampleRate, channels);
-                    },
-                    Qt::QueuedConnection);
-            }
-            return {};
-        }
-
-        m_boundaries.pop();
-        m_formatChangePending.store(false, std::memory_order_relaxed);
-        m_totalSamplesWritten.store(0, std::memory_order_relaxed);
-        m_positionOffset.store(0, std::memory_order_relaxed);
-        const std::uint32_t trackId = boundary->trackId;
-        const std::optional<std::chrono::milliseconds> duration = boundary->duration;
-        QMetaObject::invokeMethod(
-            this,
-            [this, trackId, duration]() {
-                Q_EMIT trackStarted(trackId, duration);
-            },
-            Qt::QueuedConnection);
+    if (advanceBoundaries(false, &budget) == BoundaryAdvance::FormatStall) {
+        return {};
     }
 
     if (m_callbackBuffer.size() < budget) {
@@ -379,34 +395,7 @@ std::span<const float> DragonAudioSink::processAudioCallback(size_t maxSamples, 
 
     m_streamSamplesRead.fetch_add(totalRead, std::memory_order_relaxed);
 
-    bool crossedBoundary = false;
-    while (const StreamBoundary *boundary = m_boundaries.peek()) {
-        if (boundary->epoch != streamEpoch()) {
-            m_boundaries.pop();
-            continue;
-        }
-        if (m_streamSamplesRead.load(std::memory_order_relaxed) < boundary->streamSample) {
-            break;
-        }
-        if (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels()) {
-            break;
-        }
-
-        m_boundaries.pop();
-        m_formatChangePending.store(false, std::memory_order_relaxed);
-        m_positionOffset.store(0, std::memory_order_relaxed);
-        m_totalSamplesWritten.store(static_cast<qint64>(m_streamSamplesRead.load(std::memory_order_relaxed) - boundary->streamSample),
-                                    std::memory_order_relaxed);
-        const std::uint32_t trackId = boundary->trackId;
-        const std::optional<std::chrono::milliseconds> duration = boundary->duration;
-        QMetaObject::invokeMethod(
-            this,
-            [this, trackId, duration]() {
-                Q_EMIT trackStarted(trackId, duration);
-            },
-            Qt::QueuedConnection);
-        crossedBoundary = true;
-    }
+    const bool crossedBoundary = advanceBoundaries(true, nullptr) == BoundaryAdvance::Crossed;
 
     if (!crossedBoundary) {
         m_totalSamplesWritten.fetch_add(static_cast<qint64>(totalRead), std::memory_order_relaxed);
