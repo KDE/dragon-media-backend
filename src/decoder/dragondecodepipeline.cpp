@@ -94,16 +94,18 @@ DragonDecodePipeline::Session::~Session()
     QObject::disconnect(stream.get(), nullptr, owner, nullptr);
     QObject::disconnect(stream.get(), nullptr, owner->m_player, nullptr);
     QObject::disconnect(stream->bufferProgress(), nullptr, owner, nullptr);
-    stream->stop();
 
-    if (QThread::currentThread() != stream->thread()) {
-        QMetaObject::invokeMethod(
-            owner,
-            [retired = stream]() {
-                Q_UNUSED(retired);
-            },
-            Qt::QueuedConnection);
+    if (QThread::currentThread() == stream->thread()) {
+        stream->stop();
+        return;
     }
+
+    QMetaObject::invokeMethod(
+        owner,
+        [retired = stream]() {
+            retired->stop();
+        },
+        Qt::QueuedConnection);
 }
 
 DragonDecodePipeline::DragonDecodePipeline(DragonPlayer *player)
@@ -393,7 +395,6 @@ bool DragonDecodePipeline::promoteNext(std::unique_lock<std::mutex> &lock)
     }
     lock.unlock();
 
-    // Stops the finished track's stream (closing its device, if any).
     retired.reset();
 
     if (!promoted) {
