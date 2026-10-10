@@ -475,8 +475,11 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
 void DragonDecodePipeline::clearNextSource()
 {
     cancelPreWarm();
-    std::scoped_lock lock(m_decoderMutex);
-    m_next.reset();
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        m_next.reset();
+    }
+    m_stateChanged.notify_all();
 }
 
 void DragonDecodePipeline::stopSession()

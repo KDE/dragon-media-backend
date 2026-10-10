@@ -173,7 +173,7 @@ void DragonSdlAudioSink::close()
 
     {
         std::unique_lock lock(m_callbackDoneMutex);
-        m_callbackDoneCv.wait_for(lock, std::chrono::milliseconds(500), [this]() {
+        m_callbackDoneCv.wait(lock, [this]() {
             return m_activeCallbacks.load(std::memory_order_acquire) == 0;
         });
     }
