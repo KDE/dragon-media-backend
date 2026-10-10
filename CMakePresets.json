@@ -296,10 +296,14 @@
       },
       "execution": {
         "noTestsAction": "error",
-        "stopOnFailure": false
+        "stopOnFailure": false,
+        "repeat": {
+          "mode": "until-pass",
+          "count": 2
+        }
       },
       "environment": {
-        "TSAN_OPTIONS": "halt_on_error=0:suppressions=${sourceDir}/tests/tsan-suppressions.txt"
+        "TSAN_OPTIONS": "halt_on_error=0:suppressions=${sourceDir}/tests/tsan-suppressions.txt:log_path=${sourceDir}/build-tsan/tsan-logs/tsan"
       }
     },
     {

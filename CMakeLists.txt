@@ -18,6 +18,8 @@ else()
     message(STATUS "ccache not found")
 endif()
 
+file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/tsan-logs")
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
