@@ -115,10 +115,9 @@ private:
     struct NextTrack {
         QUrl url;
         std::unique_ptr<Session> session;
-        std::optional<DragonMediaBackend::FormatReady> format;
         [[nodiscard]] bool ready() const
         {
-            return session && format;
+            return session && session->format;
         }
     };
 
@@ -147,7 +146,7 @@ private:
     void runCurrentSession(std::unique_lock<std::mutex> &lock);
     bool promoteNext(std::unique_lock<std::mutex> &lock);
     void finalizeSession(std::unique_lock<std::mutex> &lock);
-    void startDecodeThread();
+    void cancelPendingStart(const QString &reason);
 
     SamplesCallback m_samplesCallback;
     // Guards m_samplesCallback, which is installed from the main thread and
