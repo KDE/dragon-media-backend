@@ -109,6 +109,7 @@ private:
         std::unique_ptr<DragonDecoder> decoder;
         bool preInitialized = false;
         std::optional<DragonMediaBackend::FormatReady> format;
+        std::stop_source stopSource;
     };
 
     struct NextTrack {
@@ -159,7 +160,6 @@ private:
     DragonPlayer *m_player = nullptr;
 
     std::jthread m_decodeThread;
-    std::stop_source m_sessionStopSource;
     mutable std::mutex m_decoderMutex;
     std::condition_variable_any m_stateChanged;
     // Written on the decode thread, read from the main thread (diagnostics).

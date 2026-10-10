@@ -199,10 +199,14 @@ void DragonDecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
     std::shared_ptr<DragonCompletion> completion;
     bool preInitialized = false;
     FormatReady preWarmFormat{};
+    std::stop_token sessionToken;
     {
         m_decodeLoopActive = true;
         decoder = m_activeSession ? m_activeSession->decoder.get() : nullptr;
         preInitialized = m_activeSession ? m_activeSession->preInitialized : false;
+        if (m_activeSession) {
+            sessionToken = m_activeSession->stopSource.get_token();
+        }
         if (m_activeSession && m_activeSession->format) {
             preWarmFormat = *m_activeSession->format;
         }
@@ -242,8 +246,8 @@ void DragonDecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
     if (initResult.success) {
         qCDebug(dragonMediaBackendDecode) << "decode thread starting decodeLoop for decoder" << decoder;
 
-        for (auto event : decoder->decodeLoop(m_sessionStopSource.get_token())) {
-            if (m_sessionStopSource.get_token().stop_requested()) {
+        for (auto event : decoder->decodeLoop(sessionToken)) {
+            if (sessionToken.stop_requested()) {
                 qCDebug(dragonMediaBackendDecode) << "decode thread stop requested during iteration";
                 break;
             }
@@ -259,7 +263,7 @@ void DragonDecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
                                           callback = m_samplesCallback;
                                       }
                                       if (callback && !sc.data.empty()) {
-                                          callback(sc.data, m_sessionStopSource.get_token());
+                                          callback(sc.data, sessionToken);
                                       }
                                   },
 
@@ -284,7 +288,7 @@ void DragonDecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
 
     qCDebug(dragonMediaBackendDecode) << "decode thread decodeLoop finished";
     const bool decoderHadFatalError = decoder->hasFatalError();
-    const bool wasStopped = m_sessionStopSource.get_token().stop_requested();
+    const bool wasStopped = sessionToken.stop_requested();
     const bool fatal = hadFatalError || decoderHadFatalError;
     QUrl finishedSource;
     {
@@ -424,11 +428,16 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
     }
 
     qCDebug(dragonMediaBackendDecode) << "initializeSession requesting decode session stop";
-    m_sessionStopSource.request_stop();
 
     std::unique_ptr<Session> retired;
     {
         std::unique_lock lock(m_decoderMutex);
+        if (m_activeSession) {
+            m_activeSession->stopSource.request_stop();
+        }
+        if (m_next && m_next->session) {
+            m_next->session->stopSource.request_stop();
+        }
         qCDebug(dragonMediaBackendDecode) << "initializeSession waiting for decodeLoopActive=false (current=" << m_decodeLoopActive.load() << ")";
         m_stateChanged.wait(lock, [this]() {
             return !m_decodeLoopActive.load();
@@ -454,7 +463,6 @@ QCoro::Task<InitResult> DragonDecodePipeline::initializeSession(QUrl source, boo
         m_activeSession = std::move(session);
         m_phase = Phase::Starting;
         m_endReported = false;
-        m_sessionStopSource = std::stop_source{};
     }
 
     qCDebug(dragonMediaBackendDecode) << "initializeSession new session installed (phase=Starting), notifying";
@@ -476,10 +484,14 @@ void DragonDecodePipeline::stopSession()
     {
         std::scoped_lock lock(m_decoderMutex);
         m_phase = Phase::Stopped;
+        if (m_activeSession) {
+            m_activeSession->stopSource.request_stop();
+        }
+        if (m_next && m_next->session) {
+            m_next->session->stopSource.request_stop();
+        }
     }
-
-    bool stoppable = m_sessionStopSource.request_stop();
-    qCDebug(dragonMediaBackendDecode) << "stopSession() called requesting decode session stop" << stoppable;
+    qCDebug(dragonMediaBackendDecode) << "stopSession() called requesting decode session stop";
 
     {
         std::shared_ptr<DragonCompletion> pending;
@@ -493,7 +505,7 @@ void DragonDecodePipeline::stopSession()
     }
 
     if (m_preWarmThread.joinable()) {
-        stoppable = m_preWarmThread.request_stop();
+        const bool stoppable = m_preWarmThread.request_stop();
         qCDebug(dragonMediaBackendDecode) << "stopSession() cancelling pre-warm thread" << stoppable;
     }
 
@@ -519,7 +531,15 @@ void DragonDecodePipeline::stopSession()
 void DragonDecodePipeline::stop()
 {
     qCDebug(dragonMediaBackendDecode) << "stop() called FULL teardown";
-    m_sessionStopSource.request_stop();
+    {
+        std::scoped_lock lock(m_decoderMutex);
+        if (m_activeSession) {
+            m_activeSession->stopSource.request_stop();
+        }
+        if (m_next && m_next->session) {
+            m_next->session->stopSource.request_stop();
+        }
+    }
     m_decodeThread.request_stop();
 
     {
@@ -685,12 +705,12 @@ std::unique_ptr<DragonDecodePipeline::Session> DragonDecodePipeline::createSessi
 
         stream->start();
 
-        readCb = [stream, this](const std::span<uint8_t> buf) -> int {
-            return stream->read(buf, m_sessionStopSource.get_token());
+        readCb = [stream, stopSource = session->stopSource](const std::span<uint8_t> buf) -> int {
+            return stream->read(buf, stopSource.get_token());
         };
 
-        seekCb = [stream, this](qint64 offset, DragonDecoder::SeekWhence whence) -> qint64 {
-            auto result = invokeStoppable<qint64>(stream.get(), m_sessionStopSource.get_token(), [stream, offset, whence]() {
+        seekCb = [stream, stopSource = session->stopSource](qint64 offset, DragonDecoder::SeekWhence whence) -> qint64 {
+            auto result = invokeStoppable<qint64>(stream.get(), stopSource.get_token(), [stream, offset, whence]() {
                 if (whence == DragonDecoder::SeekWhence::Set) {
                     return stream->seek(offset);
                 } else if (whence == DragonDecoder::SeekWhence::Cur) {
