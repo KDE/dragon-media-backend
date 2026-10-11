@@ -4,6 +4,17 @@
 
 find_package(Qt6 REQUIRED COMPONENTS Core Qml Test)
 
+get_directory_property(_ecm_link_libraries LINK_LIBRARIES)
+set_directory_properties(PROPERTIES LINK_LIBRARIES "")
+add_library(tsan_clockjoin_shim MODULE tsan_clockjoin_shim.cpp)
+set_directory_properties(PROPERTIES LINK_LIBRARIES "${_ecm_link_libraries}")
+set_target_properties(tsan_clockjoin_shim PROPERTIES
+    PREFIX ""
+    LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
+)
+target_compile_options(tsan_clockjoin_shim PRIVATE -fvisibility=default -fno-sanitize=all)
+target_link_options(tsan_clockjoin_shim PRIVATE -fno-sanitize=all)
+
 # FLAC is a test-only dependency: libFLAC generates the deterministic
 # fixtures used by the gapless tests. It is never checked or linked when
 # tests are disabled.

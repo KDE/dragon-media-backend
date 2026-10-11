@@ -840,6 +840,7 @@ void TestFftProcessor::testFrameCountForThreeSecondsStereo()
     // A fixed qWait(500) is flaky under CPU contention: the processor thread
     // may not drain all 259 blocks in time when prior tests have loaded the
     // scheduler. Polling for quiescence makes the test deterministic.
+    QTRY_VERIFY_WITH_TIMEOUT(frameCount.load(std::memory_order_relaxed) > 0, 5000);
     const int count = quiescencePolling(frameCount);
 
     stopSource.request_stop();
@@ -884,6 +885,7 @@ void TestFftProcessor::testConfigurableRate()
     const auto written = writeBlocks(pipe.producer(), audio);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
+    QTRY_VERIFY_WITH_TIMEOUT(frameCount.load(std::memory_order_relaxed) > 0, 5000);
     quiescencePolling(frameCount);
 
     stopSource.request_stop();

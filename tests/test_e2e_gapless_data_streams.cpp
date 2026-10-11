@@ -165,8 +165,8 @@ void TestGaplessDataStreams::testPositionAndFftSurviveGaplessTransition()
     QVERIFY2(helper.playAndWait(), "Track 1 failed to start playing");
     QVERIFY2(diagnostics.isAudioActive(), "Audio should be active after play");
 
+    QTRY_VERIFY2_WITH_TIMEOUT(!frameTimes.empty(), "FFT frames must be emitted during track 1", 15000);
     QTest::qWait(500);
-    QVERIFY2(!frameTimes.empty(), "FFT frames must be emitted during track 1");
     QVERIFY2(player.position() > 0ms, "Position must advance during track 1");
 
     // First audible boundary: track 1 -> track 2.
