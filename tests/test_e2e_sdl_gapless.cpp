@@ -162,7 +162,6 @@ void TestSdlGapless::testGaplessFormatChangeStateMachine()
     QVERIFY2(trackSpy.count() >= 1, "At least one trackChanged signal expected");
 }
 
-
 void TestSdlGapless::testTrackChangeAtAudibleBoundary()
 {
     using namespace FixtureGenerator;
@@ -208,7 +207,6 @@ void TestSdlGapless::testTrackChangeAtAudibleBoundary()
              qPrintable(u"trackChanged fired while %1 samples (~%2ms) of track A were still unread: the signal is early"_s.arg(unreadTail)
                             .arg(unreadTail * 1000 / (kSampleRate * kDefaultChannels))));
 }
-
 
 void TestSdlGapless::testFormatChangePlaysAtNativeRate()
 {
