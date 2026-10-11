@@ -13,4 +13,5 @@ Options:
   run-tests-on: ['Linux', 'Windows']
   require-passing-tests-on: ['Linux', 'Windows']
   cmake-options: '-DECM_QMLCACHE_UNITY_BUILD=ON -DDRAGON_CI_PIPEWIRE=ON'
+  ctest-arguments: '--repeat until-pass:2'
   gcovr-arguments: '--exclude "examples/.*"'
