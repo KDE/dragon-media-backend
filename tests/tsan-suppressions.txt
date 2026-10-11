@@ -39,3 +39,9 @@ deadlock:libspa-support
 mutex:libspa-support
 # audioconvert plugin races have no symbols; match by library.
 called_from_lib:libspa-audioconvert
+
+race:DragonFftFrame::DragonFftFrame
+race:DragonFftFrame::timestamp
+race:totally_ordered_wrapper<DragonFftFramePrivate*>::get
+race:QSharedDataPointer<DragonFftFramePrivate>
+race:*lambda*DragonFftFrame*
