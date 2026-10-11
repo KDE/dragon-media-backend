@@ -142,10 +142,9 @@ int DragonRadioStream::read(std::span<uint8_t> buf, std::stop_token st)
             Q_EMIT streamBuffering();
         }
         // If we were holding back due to a full buffer, there is space now.
-        // Hop to the reply's thread to drain whatever accumulated.
-        if (newDepth < MAX_BUFFER_BYTES && m_reply) {
+        if (newDepth < MAX_BUFFER_BYTES) {
             QMetaObject::invokeMethod(
-                m_reply,
+                this,
                 [this]() {
                     drainReply();
                 },

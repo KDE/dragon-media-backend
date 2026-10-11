@@ -158,10 +158,13 @@ qint64 DragonKioStream::seek(qint64 offset)
 {
     stop();
 
-    m_abort = false;
-    m_error = false;
-    m_finished = false;
-    m_bufferOffset = 0;
+    {
+        std::scoped_lock lock(m_bufferMutex);
+        m_abort = false;
+        m_error = false;
+        m_finished = false;
+        m_bufferOffset = 0;
+    }
     m_streamPosition = offset;
 
     m_job = KIO::get(m_url, KIO::NoReload, KIO::HideProgressInfo);

@@ -47,6 +47,7 @@ private Q_SLOTS:
     void testHttpKioSeekDoesNotCorruptStream();
     void testHttpKioRapidSeek();
     void testHttpKioSeekWhileReading();
+    void testHttpKioSeekWhileReaderBlockedNoSpuriousEof();
 
     void testBackpressureCapsBuffer();
     void testBackpressureResumesAfterDrain();
@@ -730,6 +731,60 @@ void TestKioStream::testBackpressureNoDataLoss()
 
     stream.stop();
     server.stop();
+}
+
+void TestKioStream::testHttpKioSeekWhileReaderBlockedNoSpuriousEof()
+{
+    ThrottledHttpServer server;
+    server.setPayload(QByteArray("0123456789").repeated(6400), 512, 10);
+    QVERIFY(server.start());
+
+    QUrl url;
+    url.setScheme(u"http"_s);
+    url.setHost(u"localhost"_s);
+    url.setPort(server.port());
+    url.setPath(u"/big.dat"_s);
+
+    DragonKioStream stream;
+    stream.setUrl(url);
+    stream.start();
+
+    std::stop_source stopSource;
+    std::vector<uint8_t> buffer(4096);
+    std::atomic<int> dataReads{0};
+    std::atomic<int> spuriousEof{0};
+
+    std::thread reader([&]() {
+        while (!stopSource.stop_requested()) {
+            const int n = stream.read(buffer, stopSource.get_token());
+            if (n == 0) {
+                spuriousEof++;
+                break;
+            }
+            if (n > 0) {
+                dataReads++;
+            }
+            // n < 0: aborted by a concurrent seek()/stop(); loop and read
+            // again from the new position.
+        }
+    });
+
+    // Repeatedly seek while the reader is blocked waiting for the next
+    // dribbled chunk: every stop()/reset cycle crosses the reader's wake.
+    for (int i = 0; i < 20; ++i) {
+        QTest::qWait(50);
+        stream.seek((i + 1) * 1024);
+        QCoreApplication::processEvents();
+    }
+
+    QTest::qWait(100);
+    stopSource.request_stop();
+    stream.stop();
+    reader.join();
+    server.stop();
+
+    QVERIFY2(dataReads.load() > 0, "Reader never received data; seek race window not exercised");
+    QVERIFY2(spuriousEof.load() == 0, qPrintable(u"Reader saw a spurious EOF (%1 time(s)) while data remained"_s.arg(spuriousEof.load())));
 }
 
 QTEST_MAIN(TestKioStream)
