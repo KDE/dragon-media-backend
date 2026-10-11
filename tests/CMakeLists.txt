@@ -346,14 +346,3 @@ if(NOT WIN32 AND ECM_ENABLE_SANITIZERS MATCHES "thread")
         endif()
     endforeach()
 endif()
-
-if(ECM_ENABLE_SANITIZERS MATCHES "address")
-    get_directory_property(_all_tests TESTS)
-    foreach(_test ${_all_tests})
-        if(NOT _test STREQUAL "pipewire_setup" AND NOT _test STREQUAL "pipewire_cleanup")
-            set_property(TEST ${_test} APPEND PROPERTY ENVIRONMENT
-                "ASAN_OPTIONS=halt_on_error=0:detect_leaks=0:new_delete_type_mismatch=0:detect_odr_violation=0:stack-use-after-scope=0:alloc_dealloc_mismatch=0"
-            )
-        endif()
-    endforeach()
-endif()
