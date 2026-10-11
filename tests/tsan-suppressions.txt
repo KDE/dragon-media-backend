@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+# SPDX-License-Identifier: CC0-1.0
+
+
 # Qt testlib (known Qt races, test-only impact)
 # Main thread stops logging while a test thread is still emitting results.
 race:QPlainTestLogger::stopLogging

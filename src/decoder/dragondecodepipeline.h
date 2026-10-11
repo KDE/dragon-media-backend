@@ -88,7 +88,6 @@ Q_SIGNALS:
 
     void sessionFinished(const QUrl &source, bool hadFatalError);
 
-
     void bufferProgressChanged(qreal progress);
 
     void streamStalled();

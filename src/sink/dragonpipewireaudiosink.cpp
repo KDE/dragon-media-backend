@@ -395,7 +395,6 @@ void DragonPipeWireAudioSink::clearStream()
     }
 }
 
-
 void DragonPipeWireAudioSink::setChannelVolumes(float linearGain)
 {
     const auto ch = static_cast<uint32_t>(currentChannels());
