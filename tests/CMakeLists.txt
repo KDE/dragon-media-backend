@@ -76,6 +76,7 @@ set(_dragon_audio_tests
     test_e2e_gapless_data_streams_sdl
     test_e2e_gapless_data_streams_pulseaudio
     test_e2e_gapless_data_streams_pipewire
+    test_cdstream
 )
 
 if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
