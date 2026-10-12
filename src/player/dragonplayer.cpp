@@ -12,10 +12,14 @@
 #include <dragonfftframe.h>
 #include <dragonplayer.h>
 
+#if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
+#endif
 #include <QCoroTask>
+#if defined(__GNUC__) || defined(__clang__)
 #pragma GCC diagnostic pop
+#endif
 #include <KLocalizedString>
 #include <QMetaObject>
 #include <QTimer>

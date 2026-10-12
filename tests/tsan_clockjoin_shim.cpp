@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  */
 
+#ifndef _WIN32
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
 #endif
@@ -27,3 +28,4 @@ extern "C" int pthread_clockjoin_np(pthread_t thread, void **retval, clockid_t c
         nanosleep(&pause, nullptr);
     }
 }
+#endif
