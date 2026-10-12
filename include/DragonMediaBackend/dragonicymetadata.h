@@ -25,7 +25,7 @@ class DragonIcyMetadataPrivate;
  * While an internet radio stream is played, the stream interleaves ICY
  * metadata blocks with the audio. Dragon Media Backend extracts them and
  * reports the currently playing track through
- * \l DragonPlayer::currentPlayingForRadiosChanged().
+ * \l [cpp] DragonPlayer::currentPlayingForRadiosChanged().
  *
  * The well-known fields streamTitle and streamUrl are exposed directly,
  * all other fields are available through customFields(). The class is

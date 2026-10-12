@@ -115,6 +115,10 @@ dragon_add_test(test_kiostream LIBRARIES Qt6::Network KF6::KIOCore)
 # bincue driver, so no CD hardware is required.
 if(LIBCDIO_FOUND)
     dragon_add_test(test_cdstream LIBRARIES ${_player_libs} KF6::KIOCore)
+    dragon_add_test(test_cd_toc LIBRARIES ${_player_libs} Qt6::Qml)
+    target_compile_definitions(test_cd_toc PRIVATE
+        DRAGON_QML_IMPORT_PATH="${PROJECT_BINARY_DIR}/bin"
+    )
 endif()
 
 # Player tests

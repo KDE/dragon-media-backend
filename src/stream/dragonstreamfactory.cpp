@@ -6,7 +6,7 @@
 #include "dragonstreamfactory.h"
 
 #ifdef DRAGON_HAVE_LIBCDIO
-#include "dragoncdstream.h"
+#include "cd/dragoncdstream.h"
 #endif
 
 #include "dragonkiostream.h"

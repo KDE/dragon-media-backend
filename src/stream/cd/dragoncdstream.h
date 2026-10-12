@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include "dragonstream.h"
+#include "stream/dragonstream.h"
 
 #include "dragonmediabackend_export.h"
 
@@ -14,6 +14,7 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <expected>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -30,8 +31,6 @@ class DRAGONMEDIABACKEND_EXPORT DragonCdStream : public DragonStream
 
 public:
     static constexpr qsizetype WAV_HEADER_SIZE = 44;
-    static constexpr qsizetype SECTOR_SIZE = 2352;
-    static constexpr int READ_BLOCK_SECTORS = 25;
 
     explicit DragonCdStream(QObject *parent = nullptr);
     ~DragonCdStream() override;
@@ -55,14 +54,30 @@ public:
 
     [[nodiscard]] DragonBufferProgress *bufferProgress() const override;
 
-    [[nodiscard]] static std::optional<int> trackNumberFromName(const QString &fileName, int firstTrackNum, int lastTrackNum);
-
     /*! Builds the 44-byte RIFF/WAVE header for PCM 2ch 44100 16-bit data. */
     [[nodiscard]] static std::array<uint8_t, 44> makeWavHeader(uint32_t dataSize);
 
 private:
-    bool fillCache(int64_t lsn);
+    /*! Fills the read-ahead cache from the disc starting at \a
+     * startLogicalSector. Returns the failure message on error. Callers run
+     * under m_ioMutex and relay the message out of the locked section
+     * instead of emitting errorOccurred there, so a directly connected slot
+     * may reenter stop()/seek()/read().
+     */
+    std::expected<void, QString> fillCache(qint64 startLogicalSector);
+
+    /*! Sets the error state (and drops the disc handle) under the I/O mutex.
+     * Does not emit errorOccurred: callers emit once the lock is released,
+     * so a directly connected slot may reenter stop()/seek()/read().
+     */
     void fail(const QString &message);
+
+    /*! read() body, called with m_ioMutex held. Returns the failure message
+     * instead of emitting; read() emits after unlocking. A returned value of
+     * -1 signals a stop or an error state without a message, 0 the end of the
+     * stream.
+     */
+    std::expected<int, QString> readLocked(std::span<uint8_t> buf, std::stop_token st);
 
     QUrl m_url;
     DragonBufferProgress *m_bufferProgress = nullptr;
@@ -71,11 +86,11 @@ private:
     std::shared_ptr<DragonCdDisc> m_disc;
 
     std::vector<uint8_t> m_blockCache;
-    int64_t m_cacheStartLsn = -1;
+    qint64 m_cacheStartLogicalSector = -1;
     int32_t m_cacheSectors = 0;
     std::array<uint8_t, 44> m_wavHeader{};
-    int64_t m_firstLsn = 0;
-    int64_t m_lastLsn = -1;
+    qint64 m_firstLogicalSector = 0;
+    qint64 m_lastLogicalSector = -1;
 
     std::atomic<bool> m_abort{false};
     std::atomic<bool> m_error{false};

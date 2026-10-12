@@ -7,6 +7,8 @@
 
 #include "dragonmediabackend_export.h"
 
+#include <dragoncdtoc.h>
+
 #include <QDateTime>
 #include <QString>
 
@@ -16,9 +18,9 @@
 #include <memory>
 #include <mutex>
 #include <span>
-#include <vector>
+#include <utility>
 
-class CdioDevice;
+class CdIoHandle;
 
 class DRAGONMEDIABACKEND_EXPORT DragonCdDisc
 {
@@ -26,57 +28,28 @@ public:
     static constexpr int SECTOR_SIZE = 2352;
     static constexpr int READ_BLOCK_SECTORS = 25;
 
-    struct Track {
-        int number = 0;
-        bool isAudio = false;
-        int64_t firstLsn = 0;
-        int64_t lastLsn = -1;
-    };
-
-    /*!
-     * Identity of the inserted disc: the same inputs as a MusicBrainz/freedb
-     * disc ID (track range, every track start and the lead-out), plus the
-     * size and modification time when the device is an image file.
-     */
-    struct Fingerprint {
-        int firstTrack = 0;
-        int lastTrack = -1;
-        std::vector<int64_t> trackStarts;
-        int64_t leadOut = -1;
-        qint64 fileSize = -1;
-        QDateTime fileModified;
-
-        bool operator==(const Fingerprint &) const = default;
-    };
-
     [[nodiscard]] static std::expected<std::shared_ptr<DragonCdDisc>, QString> acquire(const QString &device);
 
     ~DragonCdDisc();
     DragonCdDisc(const DragonCdDisc &) = delete;
     DragonCdDisc &operator=(const DragonCdDisc &) = delete;
 
-    [[nodiscard]] int firstTrack() const
+    [[nodiscard]] const DragonCdToc &toc() const
     {
-        return m_fingerprint.firstTrack;
+        return m_toc;
     }
-    [[nodiscard]] int lastTrack() const
-    {
-        return m_fingerprint.lastTrack;
-    }
-    [[nodiscard]] const Track *track(int number) const;
 
-    [[nodiscard]] const Fingerprint &fingerprint() const
-    {
-        return m_fingerprint;
-    }
+    [[nodiscard]] int firstTrack() const;
+    [[nodiscard]] int lastTrack() const;
+    [[nodiscard]] bool isAudioTrack(int number) const;
+    [[nodiscard]] std::pair<int64_t, int64_t> trackLogicalSectorRange(int number) const;
     [[nodiscard]] const QString &cacheKey() const
     {
         return m_cacheKey;
     }
 
-    [[nodiscard]] uint32_t readAudioSectors(std::span<uint8_t> buf, int64_t lsn, uint32_t sectors);
+    [[nodiscard]] uint32_t readAudioSectors(std::span<uint8_t> buf, int64_t startLogicalSector, uint32_t sectors);
 
-    /*! Marks the disc unusable (e.g. after a fatal read error). */
     void invalidate();
     [[nodiscard]] bool isValid() const
     {
@@ -86,15 +59,17 @@ public:
 private:
     DragonCdDisc() = default;
 
+    static std::expected<DragonCdToc, QString> readToc(CdIoHandle &cdio, const QString &device);
     static std::expected<std::shared_ptr<DragonCdDisc>, QString> open(const QString &cacheKey, const QString &device);
     bool stillCurrent(const QString &device);
 
     QString m_cacheKey;
-    Fingerprint m_fingerprint;
-    std::vector<Track> m_tracks;
+    DragonCdToc m_toc;
+    qint64 m_fileSize = -1;
+    QDateTime m_fileModified;
 
     mutable std::mutex m_ioMutex;
-    std::unique_ptr<CdioDevice> m_device;
+    std::unique_ptr<CdIoHandle> m_device;
     int32_t m_readSectorsLimit = READ_BLOCK_SECTORS;
 
     std::atomic<bool> m_invalid{false};

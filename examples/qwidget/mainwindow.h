@@ -7,10 +7,16 @@
 
 #include <DragonFftFrame>
 #include <DragonIcyMetadata>
+#include <QHash>
 #include <QMainWindow>
+#include <QUrl>
 
 #include <chrono>
 
+#include <QCoroTask>
+
+class DragonCdToc;
+class DragonCdTocReader;
 class DragonPlayer;
 class DragonPlaylist;
 class DragonVisualizer;
@@ -50,6 +56,7 @@ private Q_SLOTS:
     void setVolumeFromSlider(int value);
     void updateStatus();
     void updatePlaylistCurrentIndex(int index);
+    void updateEntryMetadata(int index);
     void updateFftFrame(const DragonFftFrame &frame);
     void updateIcyMetadata(const DragonIcyMetadata &metadata);
     void changeAudioSink(int index);
@@ -58,7 +65,9 @@ private:
     void setupUi();
     void connectPlayer();
 
-    void startCdTrackListing(const QUrl &driveRoot);
+    void startCddbLookup(const DragonCdToc &toc);
+
+    [[nodiscard]] QString entryLabel(int index) const;
 
     bool eventFilter(QObject *obj, QEvent *event) override;
 
@@ -107,4 +116,10 @@ private:
     QList<QMetaObject::Connection> m_playerConnections;
     DragonDiagnostics *m_diagnostics = nullptr;
     DragonSpectrumAnalyzer *m_spectrumAnalyzer = nullptr;
+
+    DragonCdTocReader *m_cdTocReader = nullptr;
+    QHash<QUrl, int> m_cdTrackNumberByUrl;
+    QThread *m_cddbThread = nullptr;
+    QCoro::Task<void> m_cddbTask;
+    QCoro::Task<void> runCddbLookup(const QList<quint32> &offsets);
 };

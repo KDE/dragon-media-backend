@@ -10,11 +10,13 @@
 #include <QtCore>
 #include <QtTest>
 
+#include "helpers/cdimage.h"
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include "stream/dragoncddisc.h"
-#include "stream/dragoncdstream.h"
+#include "stream/cd/dragoncddisc.h"
+#include "stream/cd/dragoncdstream.h"
+#include "stream/cd/dragoncdurl.h"
 #include "stream/dragonkiostream.h"
 #include "stream/dragonstreamfactory.h"
 
@@ -27,119 +29,16 @@
 #include <QUrl>
 #include <QUrlQuery>
 
-#include <cmath>
 #include <stop_token>
 #include <vector>
 
 using namespace Qt::StringLiterals;
 using namespace std::chrono_literals;
+using CdImage = CdImageTestUtil::CdImage;
+using CdImageTestUtil::generateSectorPcm;
 
 namespace
 {
-
-constexpr qsizetype kSectorSize = 2352;
-constexpr int kSamplesPerSector = 1176; // 16-bit stereo
-
-QByteArray generateSectorPcm(int sectorIndex)
-{
-    // Smooth stereo sine wave, distinct per sector so offset errors are
-    // detectable: left channel 440 Hz, right channel 660 Hz.
-    QByteArray pcm(kSectorSize, Qt::Uninitialized);
-    auto *samples = reinterpret_cast<int16_t *>(pcm.data());
-    const double timeOffset = double(sectorIndex) * kSamplesPerSector / 2.0 / 44100.0;
-    for (int i = 0; i < kSamplesPerSector; i += 2) {
-        const double t = timeOffset + double(i / 2) / 44100.0;
-        samples[i] = int16_t(11000.0 * std::sin(2.0 * M_PI * 440.0 * t));
-        samples[i + 1] = int16_t(9000.0 * std::sin(2.0 * M_PI * 660.0 * t));
-    }
-    return pcm;
-}
-
-class CdImage
-{
-public:
-    explicit CdImage(int sectorsPerTrack = 300)
-        : m_sectorsPerTrack(sectorsPerTrack)
-    {
-    }
-
-    // Appends an audio track and returns its PCM (little-endian).
-    QByteArray addAudioTrack()
-    {
-        QByteArray trackPcm;
-        for (int i = 0; i < m_sectorsPerTrack; ++i) {
-            const QByteArray pcm = generateSectorPcm(m_sectorsWritten + i);
-            trackPcm.append(pcm);
-            m_bin.append(pcm);
-        }
-        ++m_trackCount;
-        m_sectorsWritten += m_sectorsPerTrack;
-        m_trackTypes.append(u"AUDIO"_s);
-        return trackPcm;
-    }
-
-    // Appends a data track (raw 2352-byte sectors declared as MODE1/2352).
-    void addDataTrack()
-    {
-        m_bin.append(QByteArray(kSectorSize * m_sectorsPerTrack, 0));
-        ++m_trackCount;
-        m_sectorsWritten += m_sectorsPerTrack;
-        m_trackTypes.append(u"MODE1/2352"_s);
-    }
-
-    QString finish()
-    {
-        const QString dir = m_tempDir.path();
-        m_binPath = dir + u"/disc.bin";
-        m_cuePath = dir + u"/disc.cue";
-
-        QFile binFile(m_binPath);
-        if (!binFile.open(QIODevice::WriteOnly)) {
-            return {};
-        }
-        binFile.write(m_bin);
-        binFile.close();
-
-        QString cue = u"FILE \"disc.bin\" BINARY\n"_s;
-        const int framesPerTrack = m_sectorsPerTrack; // 75 sectors per second
-        for (int t = 0; t < m_trackCount; ++t) {
-            cue += u"  TRACK %1 %2\n"_s.arg(t + 1, 2, 10, QChar(u'0')).arg(m_trackTypes.at(t));
-            const int frame = t * framesPerTrack;
-            cue += u"    INDEX 01 %1:%2:%3\n"_s.arg(frame / (75 * 60), 2, 10, QChar(u'0'))
-                       .arg((frame / 75) % 60, 2, 10, QChar(u'0'))
-                       .arg(frame % 75, 2, 10, QChar(u'0'));
-        }
-
-        QFile cueFile(m_cuePath);
-        if (!cueFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-            return {};
-        }
-        cueFile.write(cue.toUtf8());
-        cueFile.close();
-
-        return m_cuePath;
-    }
-
-    [[nodiscard]] QString cuePath() const
-    {
-        return m_cuePath;
-    }
-
-    [[nodiscard]] int sectorsPerTrack() const
-    {
-        return m_sectorsPerTrack;
-    }
-
-private:
-    QTemporaryDir m_tempDir;
-    const int m_sectorsPerTrack;
-    int m_trackCount = 0;
-    int m_sectorsWritten = 0;
-    QByteArray m_bin;
-    QStringList m_trackTypes;
-    QString m_binPath;
-    QString m_cuePath;
-};
 
 QUrl cdTrackUrl(const QString &fileName, const QString &device, const QString &extraQueryItem = {})
 {
@@ -187,6 +86,7 @@ private Q_SLOTS:
     void testSeek();
     void testSmallAndLargeReadsAreConsistent();
     void testStopCancelsReads();
+    void testErrorSlotCanStopStream();
     void testDirectoryUrlFails();
     void testMissingDeviceFails();
     void testDataTrackFails();
@@ -236,16 +136,16 @@ void TestCdStream::testTrackNumberFromName()
     const int first = 1;
     const int last = 15;
 
-    QCOMPARE(DragonCdStream::trackNumberFromName(u"Track 01.wav"_s, first, last).value_or(-1), 1);
-    QCOMPARE(DragonCdStream::trackNumberFromName(u"Track 1.wav"_s, first, last).value_or(-1), 1);
-    QCOMPARE(DragonCdStream::trackNumberFromName(u"Track 1.cda"_s, first, last).value_or(-1), 1);
-    QCOMPARE(DragonCdStream::trackNumberFromName(u"Artist - 03 - Title.flac"_s, first, last).value_or(-1), 3);
-    QCOMPARE(DragonCdStream::trackNumberFromName(u"U2 - 01 - Beautiful Day.wav"_s, first, last).value_or(-1), 1);
-    QCOMPARE(DragonCdStream::trackNumberFromName(u"16_-_Some_Title.ogg"_s, first, last).value_or(-1), -1); // out of range
-    QCOMPARE(DragonCdStream::trackNumberFromName(u"NoDigitsHere.wav"_s, first, last).value_or(-1), -1);
-    QCOMPARE(DragonCdStream::trackNumberFromName(u"Track 99.wav"_s, first, last).value_or(-1), -1);
+    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 01.wav"_s, first, last).value_or(-1), 1);
+    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 1.wav"_s, first, last).value_or(-1), 1);
+    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 1.cda"_s, first, last).value_or(-1), 1);
+    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Artist - 03 - Title.flac"_s, first, last).value_or(-1), 3);
+    QCOMPARE(DragonCdUrl::trackNumberFromName(u"U2 - 01 - Beautiful Day.wav"_s, first, last).value_or(-1), 1);
+    QCOMPARE(DragonCdUrl::trackNumberFromName(u"16_-_Some_Title.ogg"_s, first, last).value_or(-1), -1); // out of range
+    QCOMPARE(DragonCdUrl::trackNumberFromName(u"NoDigitsHere.wav"_s, first, last).value_or(-1), -1);
+    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 99.wav"_s, first, last).value_or(-1), -1);
     // First valid run wins when there is no zero-padded two-digit run.
-    QCOMPARE(DragonCdStream::trackNumberFromName(u"Track 3.wav"_s, first, last).value_or(-1), 3);
+    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 3.wav"_s, first, last).value_or(-1), 3);
 }
 
 void TestCdStream::createTwoTrackImage()
@@ -405,6 +305,55 @@ void TestCdStream::testStopCancelsReads()
     QCOMPARE(stoppedStream.read(buffer, fresh.get_token()), -1);
 }
 
+void TestCdStream::testErrorSlotCanStopStream()
+{
+    CdImage image;
+    image.addAudioTrack();
+    image.addDataTrack();
+    const QString cue = image.finish();
+    QVERIFY(!cue.isEmpty());
+
+    // A directly connected errorOccurred slot may reenter the stream API:
+    // emission must happen with the I/O mutex released, or this deadlocks.
+    DragonCdStream stream;
+    QObject::connect(
+        &stream,
+        &DragonCdStream::errorOccurred,
+        &stream,
+        [&stream]() {
+            stream.stop();
+        },
+        Qt::DirectConnection);
+    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
+    stream.setUrl(cdTrackUrl(u"Track 02.wav"_s, cue));
+    stream.start();
+    QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() > 0, 5000);
+    QCOMPARE(stream.size(), qint64(-1));
+
+    // The same contract holds for errors surfaced by read().
+    createTwoTrackImage();
+
+    DragonCdStream reading;
+    QObject::connect(
+        &reading,
+        &DragonCdStream::errorOccurred,
+        &reading,
+        [&reading]() {
+            reading.stop();
+        },
+        Qt::DirectConnection);
+    QSignalSpy readErrorSpy(&reading, &DragonCdStream::errorOccurred);
+    reading.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
+    reading.start();
+    QVERIFY(reading.m_disc);
+
+    reading.m_disc->invalidate();
+    std::vector<uint8_t> buffer(64 * 1024);
+    std::stop_source stopSource;
+    QCOMPARE(reading.read(buffer, stopSource.get_token()), -1);
+    QCOMPARE(readErrorSpy.count(), 1);
+}
+
 void TestCdStream::testDirectoryUrlFails()
 {
     createTwoTrackImage();
@@ -552,9 +501,8 @@ void TestCdStream::testReadErrorInvalidatesDisc()
     stale->invalidate();
     std::vector<uint8_t> buffer(64 * 1024);
     std::stop_source stopSource;
-    QCOMPARE(current.read(buffer, stopSource.get_token()), int(DragonCdStream::WAV_HEADER_SIZE));
-    QCOMPARE(errorSpy.count(), 1);
     QCOMPARE(current.read(buffer, stopSource.get_token()), -1);
+    QCOMPARE(errorSpy.count(), 1);
 
     DragonCdStream next;
     QSignalSpy nextErrorSpy(&next, &DragonCdStream::errorOccurred);

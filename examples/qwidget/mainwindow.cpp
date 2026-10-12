@@ -10,6 +10,9 @@
 
 #include "player/dragondiagnostics.h"
 #include <DragonAudioOutput>
+#include <DragonCdToc>
+#include <DragonCdTocReader>
+#include <DragonCdTrack>
 #include <DragonFftFrame>
 #include <DragonPlayer>
 #include <DragonSpectrumAnalyzer>
@@ -36,6 +39,7 @@
 #include <QSlider>
 #include <QStatusBar>
 #include <QStyle>
+#include <QThread>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -43,8 +47,11 @@
 
 #include <memory>
 
-#include <KIO/ListJob>
-#include <KIO/UDSEntry>
+#include <KCDDB/CDInfo>
+#include <KCDDB/Client>
+#include <KCDDB/KCDDB>
+#include <QCoroSignal>
+#include <QCoroTask>
 
 using namespace Qt::StringLiterals;
 
@@ -60,7 +67,16 @@ MainWindow::MainWindow(QWidget *parent)
     connectPlayer();
 }
 
-MainWindow::~MainWindow() = default;
+MainWindow::~MainWindow()
+{
+    if (m_cdTocReader) {
+        m_cdTocReader->deleteLater();
+    }
+    if (m_cddbThread) {
+        m_cddbThread->quit();
+        m_cddbThread->wait(2000);
+    }
+}
 
 void MainWindow::setupUi()
 {
@@ -276,14 +292,12 @@ void MainWindow::connectPlayer()
 
     m_playerConnections << connect(m_playlist, &DragonPlaylist::tracksChanged, this, [this]() {
         m_playlistWidget->clear();
-        for (const QUrl &url : m_playlist->tracks()) {
-            QString name = url.fileName();
-            if (name.isEmpty()) {
-                name = url.toString();
-            }
-            m_playlistWidget->addItem(name);
+        for (int i = 0; i < m_playlist->count(); ++i) {
+            m_playlistWidget->addItem(entryLabel(i));
         }
     });
+
+    m_playerConnections << connect(m_playlist, &DragonPlaylist::entryMetadataChanged, this, &MainWindow::updateEntryMetadata);
 
     m_playerConnections << connect(m_playlist, &DragonPlaylist::currentIndexChanged, this, &MainWindow::updatePlaylistCurrentIndex);
 
@@ -459,69 +473,159 @@ void MainWindow::playLandSong()
 
 void MainWindow::playCd()
 {
-    m_statusLabel->setText(i18n("Looking for a CD drive…"));
+    if (m_cdTocReader) {
+        return;
+    }
 
-    const auto driveRoot = std::make_shared<QUrl>();
-    auto *baseJob = KIO::listDir(QUrl(u"audiocd:/"_s), KIO::HideProgressInfo);
-    connect(baseJob, &KIO::ListJob::entries, this, [driveRoot](KIO::Job *, const KIO::UDSEntryList &entries) {
-        if (!driveRoot->isEmpty()) {
-            return;
-        }
-        for (const KIO::UDSEntry &entry : entries) {
-            const QString target = entry.stringValue(KIO::UDSEntry::UDS_TARGET_URL);
-            if (!target.isEmpty()) {
-                *driveRoot = QUrl(target);
-                break;
-            }
-        }
-    });
-    connect(baseJob, &KJob::result, this, [this, baseJob, driveRoot]() {
-        baseJob->deleteLater();
-        if (baseJob->error() != KJob::NoError) {
-            m_statusLabel->setText(baseJob->errorString());
-            return;
-        }
-        if (driveRoot->isEmpty()) {
-            m_statusLabel->setText(i18n("No CD drive found."));
-            return;
-        }
-        startCdTrackListing(*driveRoot);
-    });
-}
+    m_playCdButton->setEnabled(false);
+    m_statusLabel->setText(i18n("Reading the disc…"));
 
-void MainWindow::startCdTrackListing(const QUrl &driveRoot)
-{
-    m_statusLabel->setText(i18n("Reading the CD…"));
+    m_cdTocReader = new DragonCdTocReader(this);
+    connect(m_cdTocReader, &DragonCdTocReader::tocReady, this, [this](const DragonCdToc &toc) {
+        m_cdTocReader->deleteLater();
+        m_cdTocReader = nullptr;
+        m_playCdButton->setEnabled(true);
 
-    const auto trackUrls = std::make_shared<QList<QUrl>>();
-    auto *trackJob = KIO::listDir(driveRoot, KIO::HideProgressInfo);
-    connect(trackJob, &KIO::ListJob::entries, this, [trackUrls, driveRoot](KIO::Job *, const KIO::UDSEntryList &entries) {
-        for (const KIO::UDSEntry &entry : entries) {
-            if (entry.isDir()) {
+        // Playback starts from purely local TOC information, before any
+        // network activity: placeholder titles plus each track's URL and
+        // duration.
+        QList<DragonPlaylist::Entry> entries;
+        m_cdTrackNumberByUrl.clear();
+        for (const DragonCdTrack &track : toc.tracks()) {
+            if (!track.isAudio()) {
                 continue;
             }
-            if (!entry.stringValue(KIO::UDSEntry::UDS_MIME_TYPE).startsWith(u"audio/"_s)) {
-                continue;
-            }
-            QUrl trackUrl = driveRoot;
-            trackUrl.setPath(driveRoot.path() + u'/' + entry.stringValue(KIO::UDSEntry::UDS_NAME));
-            trackUrls->append(trackUrl);
+            DragonPlaylist::Entry entry;
+            entry.url = track.url();
+            entry.title = i18n("Track %1", track.number());
+            entry.duration = track.duration();
+            entries.append(entry);
+            m_cdTrackNumberByUrl.insert(track.url(), track.number());
         }
-    });
-    connect(trackJob, &KJob::result, this, [this, trackJob, trackUrls]() {
-        trackJob->deleteLater();
-        if (trackJob->error() != KJob::NoError) {
-            m_statusLabel->setText(trackJob->errorString());
-            return;
-        }
-        if (trackUrls->isEmpty()) {
+        if (entries.isEmpty()) {
             m_statusLabel->setText(i18n("No audio tracks found on the CD."));
             return;
         }
+
         m_playlist->clear();
-        m_playlist->addTracks(*trackUrls);
-        m_statusLabel->setText(i18np("Playing %1 CD track…", "Playing %1 CD tracks…", trackUrls->size()));
+        m_playlist->addEntries(entries);
+        m_statusLabel->setText(i18np("Playing %1 CD track…", "Playing %1 CD tracks…", entries.size()));
+
+        // The metadata lookup runs concurrently with the playback that
+        // has already started.
+        startCddbLookup(toc);
     });
+    connect(m_cdTocReader, &DragonCdTocReader::failed, this, [this](const QString &errorMessage) {
+        m_cdTocReader->deleteLater();
+        m_cdTocReader = nullptr;
+        m_playCdButton->setEnabled(true);
+        m_statusLabel->setText(errorMessage);
+    });
+    m_cdTocReader->requestToc();
+}
+
+// The metadata the CDDB lookup produces, keyed by CD track number; the
+// playlist entries are matched back through the DragonCdTrack data they
+// were built from.
+struct CddbTitles {
+    bool success = false;
+    QMap<int, QString> trackTitles;
+    QMap<int, QString> trackArtists;
+};
+
+Q_DECLARE_METATYPE(CddbTitles)
+
+namespace
+{
+
+// KCDDB::Client::lookup() is a blocking network call; this worker runs
+// it on its own thread and delivers the result through a queued signal.
+class CddbLookupWorker : public QObject
+{
+    Q_OBJECT
+
+public:
+    explicit CddbLookupWorker(KCDDB::TrackOffsetList offsets)
+        : m_offsets(std::move(offsets))
+    {
+    }
+
+public Q_SLOTS:
+    void start()
+    {
+        CddbTitles titles;
+
+        KCDDB::Client client;
+        const KCDDB::Result result = client.lookup(m_offsets);
+        if (result == KCDDB::Success) {
+            const QList<KCDDB::CDInfo> response = client.lookupResponse();
+            if (!response.isEmpty()) {
+                // The first entry is the best match, like the audiocd
+                // KIO worker takes it.
+                const KCDDB::CDInfo &info = response.first();
+                titles.success = true;
+                const int trackCount = info.numberOfTracks();
+                for (int i = 0; i < trackCount; ++i) {
+                    const KCDDB::TrackInfo track = info.track(i);
+                    titles.trackTitles.insert(i + 1, track.get(KCDDB::Title).toString());
+                    titles.trackArtists.insert(i + 1, track.get(KCDDB::Artist).toString());
+                }
+            }
+        }
+
+        Q_EMIT finished(titles);
+        deleteLater();
+    }
+
+Q_SIGNALS:
+    void finished(const CddbTitles &titles);
+
+private:
+    KCDDB::TrackOffsetList m_offsets;
+};
+
+}
+
+QCoro::Task<void> MainWindow::runCddbLookup(const QList<quint32> &offsets)
+{
+    qRegisterMetaType<CddbTitles>();
+
+    auto *worker = new CddbLookupWorker(offsets);
+    m_cddbThread = new QThread(this);
+    worker->moveToThread(m_cddbThread);
+    connect(worker, &CddbLookupWorker::finished, m_cddbThread, &QThread::quit);
+    m_cddbThread->start();
+
+    QMetaObject::invokeMethod(worker, &CddbLookupWorker::start, Qt::QueuedConnection);
+    const CddbTitles titles = co_await qCoro(worker, &CddbLookupWorker::finished);
+
+    if (!titles.success) {
+        // Nothing about playback is affected; the placeholder titles stay.
+        m_statusLabel->setText(i18n("Playing (CDDB lookup failed)"));
+        co_return;
+    }
+
+    // Deliberately crude: match each playlist entry to a CDDB track by
+    // the DragonCdTrack it was built from (its URL maps back to its
+    // number), then rewrite the entry's title and artist in place.
+    for (int i = 0; i < m_playlist->count(); ++i) {
+        const QUrl url = m_playlist->trackAt(i);
+        const int trackNumber = m_cdTrackNumberByUrl.value(url, -1);
+        if (trackNumber < 0 || !titles.trackTitles.contains(trackNumber)) {
+            continue;
+        }
+        QString title = titles.trackTitles.value(trackNumber);
+        if (title.isEmpty()) {
+            title = i18n("Track %1", trackNumber);
+        }
+        m_playlist->setEntryMetadata(i, title, titles.trackArtists.value(trackNumber));
+    }
+    m_statusLabel->setText(i18n("Playing (titles updated from CDDB)"));
+}
+
+void MainWindow::startCddbLookup(const DragonCdToc &toc)
+{
+    m_cddbTask = runCddbLookup(toc.cddbTrackOffsetList());
 }
 
 void MainWindow::playPlaylistItem(int index)
@@ -652,6 +756,28 @@ void MainWindow::updatePlaylistCurrentIndex(int index)
     m_prevButton->setEnabled(index > 0);
 }
 
+void MainWindow::updateEntryMetadata(int index)
+{
+    if (auto *item = m_playlistWidget->item(index)) {
+        item->setText(entryLabel(index));
+    }
+}
+
+QString MainWindow::entryLabel(int index) const
+{
+    const DragonPlaylist::Entry entry = m_playlist->entryAt(index);
+
+    QString label = u"%1. "_s.arg(index + 1, 2, 10, QLatin1Char(u'0'));
+    if (!entry.artist.isEmpty()) {
+        label += entry.artist + u" - "_s;
+    }
+    label += entry.title.isEmpty() ? entry.url.toString() : entry.title;
+    if (entry.duration > std::chrono::milliseconds{0}) {
+        label += u" ("_s + formatTime(entry.duration) + u')';
+    }
+    return label;
+}
+
 QString MainWindow::formatTime(std::chrono::milliseconds position)
 {
     if (position < std::chrono::milliseconds{0})
@@ -686,3 +812,5 @@ void MainWindow::updateIcyMetadata(const DragonIcyMetadata &metadata)
         m_statusLabel->setText(i18n("Playing: %1").arg(metadata.streamTitle()));
     }
 }
+
+#include "mainwindow.moc"

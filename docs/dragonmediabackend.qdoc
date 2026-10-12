@@ -22,4 +22,8 @@
     together with \l DragonAudioOutput for output controls, \l DragonSpectrumAnalyzer
     for FFT outputs for visualization. Supporting value classes include \l DragonFftFrame
     and \l DragonIcyMetadata.
+
+    The \l DragonCdTocReader class provides the entry point to playing audio CDs. Use it
+    to obtain the \l DragonCdToc of a disc, which has a list of \l DragonCdTrack. It has a url
+    property you can use to play a track using \l DragonPlayer.
 */

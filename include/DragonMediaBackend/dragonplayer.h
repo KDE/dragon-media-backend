@@ -190,7 +190,9 @@ public:
      * Local files, http(s) radio streams, KIO URLs, and audio CD tracks are
      * supported. CD tracks use the same \c audiocd:/ URLs that Dolphin and
      * the audiocd KIO worker produce, for example
-     * \c {audiocd:/Track 03.wav?device=/dev/sr0}.
+     * \c {audiocd:/Track 03.wav?device=/dev/sr0}; \l DragonCdTrack::url()
+     * builds them, and \l DragonCdTocReader reads the disc's track list
+     * before playback starts.
      */
     Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
 

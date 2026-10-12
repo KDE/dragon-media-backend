@@ -9,10 +9,14 @@ set(_dragon_stream_sources
     dragonkiostream.cpp
     dragonbufferprogress.cpp
     dragonicymetadata.cpp
+    cd/dragoncdtrack.cpp
+    cd/dragoncdtoc.cpp
+    cd/dragoncdtocreader.cpp
+    cd/dragoncdurl.cpp
 )
 
 if(LIBCDIO_FOUND)
-    list(APPEND _dragon_stream_sources dragoncddisc.cpp dragoncdstream.cpp)
+    list(APPEND _dragon_stream_sources cd/dragoncddisc.cpp cd/dragoncdstream.cpp)
 endif()
 
 add_library(dragon_stream_objs OBJECT ${_dragon_stream_sources})
@@ -36,7 +40,6 @@ target_link_libraries(dragon_stream_objs PRIVATE
 if(LIBCDIO_FOUND)
     target_link_libraries(dragon_stream_objs PRIVATE PkgConfig::LIBCDIO)
     target_compile_definitions(dragon_stream_objs PRIVATE DRAGON_HAVE_LIBCDIO)
-    kde_source_files_enable_exceptions(dragoncddisc.cpp)
 endif()
 
 set_target_properties(dragon_stream_objs PROPERTIES POSITION_INDEPENDENT_CODE ON)

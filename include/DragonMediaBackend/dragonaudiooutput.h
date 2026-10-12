@@ -26,7 +26,7 @@ class DragonAudioOutputPrivate;
  * DragonAudioOutput exposes volume and mute controls for the audio
  * pipeline, together with the backend that was selected at runtime. It
  * is created by \l DragonPlayer and accessed through
- * \l DragonPlayer::audioOutput.
+ * \l [cpp] DragonPlayer::audioOutput.
  *
  * volume() takes a perceptual volume value in the range 0.0 to 1.0. It
  * is mapped logarithmically to the linear gain applied by the audio

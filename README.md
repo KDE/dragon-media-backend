@@ -19,6 +19,7 @@ available.
     - SDL 
  - Calculates FFTs for audio visualizations
  - Can play music over KDE's KIO system
+ - Can play audio CDs and provide basic audio CD track information
  - Supports ICY metadata for radio streams
  - Volume API keeps in sync with Linux desktop application volume
  - A QWidget-based desktop example app and a QML-based Android example app
@@ -45,6 +46,9 @@ And the optional but recommended audio sinks:
  - PipeWire
  - PulseAudio
 
+And for CD playing support:
+ - GNU libcdio*
+ 
 [*] Fetched automatically by CMake if not found on the system.
 
 ## Tech Stack

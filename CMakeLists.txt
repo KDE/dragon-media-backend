@@ -152,7 +152,7 @@ if(PULSEAUDIO_FOUND)
     set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND PULSEAUDIO)
 endif()
 
-pkg_check_modules(LIBCDIO IMPORTED_TARGET libcdio libcdio++)
+pkg_check_modules(LIBCDIO IMPORTED_TARGET libcdio)
 if(LIBCDIO_FOUND)
     set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND LIBCDIO)
 endif()
@@ -171,7 +171,7 @@ set_package_properties(PULSEAUDIO PROPERTIES
 )
 set_package_properties(LIBCDIO PROPERTIES
     TYPE OPTIONAL
-    DESCRIPTION "libcdio CD-DA access library with a C++ interface"
+    DESCRIPTION "libcdio CD-DA access library"
     PURPOSE "Playing audio CDs through audiocd:/ URLs"
     URL "https://www.gnu.org/software/libcdio/"
 )
@@ -370,6 +370,9 @@ ecm_generate_export_header(DragonMediaBackend
 ecm_generate_headers(DragonMediaBackend_CamelCase_HEADERS
     HEADER_NAMES
         DragonAudioOutput
+        DragonCdToc
+        DragonCdTocReader
+        DragonCdTrack
         DragonFftFrame
         DragonIcyMetadata
         DragonPlayer
@@ -395,6 +398,9 @@ set(DragonMediaBackend_PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtrack.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtoc.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtocreader.h
     ${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_export.h
     ${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_version.h
 )

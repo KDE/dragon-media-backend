@@ -40,29 +40,31 @@ DragonPlaylist::DragonPlaylist(DragonPlayer *player, QObject *parent)
 
 void DragonPlaylist::addTrack(const QUrl &url)
 {
-    m_tracks.append(url);
-    if (m_currentIndex < 0) {
-        m_currentIndex = 0;
-        m_player->setSource(url);
-        m_player->play();
-        Q_EMIT currentIndexChanged(0);
-    }
-    updatePlayerQueue();
-    Q_EMIT tracksChanged();
+    addEntries({Entry{url, url.fileName(), {}, {}}});
 }
 
 void DragonPlaylist::addTracks(const QList<QUrl> &urls)
 {
-    if (urls.isEmpty()) {
+    QList<Entry> entries;
+    entries.reserve(urls.size());
+    for (const QUrl &url : urls) {
+        entries.append(Entry{url, url.fileName(), {}, {}});
+    }
+    addEntries(entries);
+}
+
+void DragonPlaylist::addEntries(const QList<Entry> &entries)
+{
+    if (entries.isEmpty()) {
         return;
     }
 
     const bool wasEmpty = m_tracks.isEmpty();
-    m_tracks.append(urls);
+    m_tracks.append(entries);
 
     if (wasEmpty) {
         m_currentIndex = 0;
-        m_player->setSource(m_tracks.first());
+        m_player->setSource(m_tracks.first().url);
         m_player->play();
         Q_EMIT currentIndexChanged(0);
     }
@@ -95,7 +97,7 @@ void DragonPlaylist::removeTrack(int index)
         m_player->setNextSource(QUrl{});
     } else if (index == m_currentIndex) {
         m_currentIndex = qMin(index, m_tracks.size() - 1);
-        m_player->setSource(m_tracks[m_currentIndex]);
+        m_player->setSource(m_tracks[m_currentIndex].url);
     } else if (index < m_currentIndex) {
         m_currentIndex--;
     }
@@ -105,9 +107,33 @@ void DragonPlaylist::removeTrack(int index)
     Q_EMIT tracksChanged();
 }
 
+void DragonPlaylist::setEntryMetadata(int index, const QString &title, const QString &artist)
+{
+    if (index < 0 || index >= m_tracks.size()) {
+        return;
+    }
+
+    m_tracks[index].title = title;
+    m_tracks[index].artist = artist;
+    Q_EMIT entryMetadataChanged(index);
+}
+
 QList<QUrl> DragonPlaylist::tracks() const
 {
-    return m_tracks;
+    QList<QUrl> urls;
+    urls.reserve(m_tracks.size());
+    for (const Entry &entry : m_tracks) {
+        urls.append(entry.url);
+    }
+    return urls;
+}
+
+DragonPlaylist::Entry DragonPlaylist::entryAt(int index) const
+{
+    if (index < 0 || index >= m_tracks.size()) {
+        return {};
+    }
+    return m_tracks.at(index);
 }
 
 int DragonPlaylist::currentIndex() const
@@ -125,7 +151,7 @@ QUrl DragonPlaylist::trackAt(int index) const
     if (index < 0 || index >= m_tracks.size()) {
         return {};
     }
-    return m_tracks.at(index);
+    return m_tracks.at(index).url;
 }
 
 void DragonPlaylist::playNext()
@@ -134,7 +160,7 @@ void DragonPlaylist::playNext()
         return;
     }
     m_currentIndex++;
-    m_player->setSource(m_tracks[m_currentIndex]);
+    m_player->setSource(m_tracks[m_currentIndex].url);
     m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
     updatePlayerQueue();
@@ -146,7 +172,7 @@ void DragonPlaylist::playPrevious()
         return;
     }
     m_currentIndex--;
-    m_player->setSource(m_tracks[m_currentIndex]);
+    m_player->setSource(m_tracks[m_currentIndex].url);
     m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
     updatePlayerQueue();
@@ -158,7 +184,7 @@ void DragonPlaylist::setCurrentIndex(int index)
         return;
     }
     m_currentIndex = index;
-    m_player->setSource(m_tracks[m_currentIndex]);
+    m_player->setSource(m_tracks[m_currentIndex].url);
     m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
     updatePlayerQueue();
@@ -181,8 +207,8 @@ void DragonPlaylist::setGaplessEnabled(bool enabled)
 void DragonPlaylist::updatePlayerQueue()
 {
     if (m_gaplessEnabled && m_currentIndex >= 0 && m_currentIndex < m_tracks.size() - 1) {
-        m_player->setNextSource(m_tracks[m_currentIndex + 1]);
-        qDebug() << "PLAYLIST: queued next track" << m_tracks[m_currentIndex + 1].toString();
+        m_player->setNextSource(m_tracks[m_currentIndex + 1].url);
+        qDebug() << "PLAYLIST: queued next track" << m_tracks[m_currentIndex + 1].url.toString();
     } else {
         m_player->setNextSource(QUrl{});
         if (m_gaplessEnabled) {
@@ -198,7 +224,7 @@ void DragonPlaylist::syncIndexFromPlayer()
     QUrl current = m_player->source();
     int idx = -1;
     for (int i = 0; i < m_tracks.size(); ++i) {
-        if (m_tracks[i] == current) {
+        if (m_tracks[i].url == current) {
             idx = i;
             break;
         }

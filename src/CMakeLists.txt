@@ -20,6 +20,9 @@ qt_add_library(DragonMediaBackend SHARED
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtrack.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtoc.h
+    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtocreader.h
 )
 
 add_library(DragonMediaBackend::DragonMediaBackend ALIAS DragonMediaBackend)

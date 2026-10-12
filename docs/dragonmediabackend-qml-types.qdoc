@@ -10,7 +10,7 @@
     \brief QML types for audio playback, output control, and visualization.
 
     The \c {org.kde.dragonmediabackend} QML module is provided by the
-    DragonMediaBackend library. Import it with:
+    Dragon Media Backend library. Import it with:
 
     \qml
     import org.kde.dragonmediabackend
