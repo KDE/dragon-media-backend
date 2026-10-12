@@ -55,18 +55,6 @@ QByteArray generateSectorPcm(int sectorIndex)
     return pcm;
 }
 
-QByteArray byteSwap16(const QByteArray &data)
-{
-    QByteArray swapped(data);
-    auto *samples = reinterpret_cast<uint16_t *>(swapped.data());
-    const qsizetype count = swapped.size() / 2;
-    for (qsizetype i = 0; i < count; ++i) {
-        const uint16_t v = samples[i];
-        samples[i] = uint16_t((v >> 8) | (v << 8));
-    }
-    return swapped;
-}
-
 class CdImage
 {
 public:
@@ -76,14 +64,13 @@ public:
     }
 
     // Appends an audio track and returns its PCM (little-endian).
-    QByteArray addAudioTrack(bool swapEndian = false)
+    QByteArray addAudioTrack()
     {
         QByteArray trackPcm;
         for (int i = 0; i < m_sectorsPerTrack; ++i) {
-            const int sectorIndex = m_sectorsWritten + i;
-            const QByteArray pcm = generateSectorPcm(sectorIndex);
-            trackPcm.append(swapEndian ? byteSwap16(pcm) : pcm);
-            m_bin.append(swapEndian ? byteSwap16(pcm) : pcm);
+            const QByteArray pcm = generateSectorPcm(m_sectorsWritten + i);
+            trackPcm.append(pcm);
+            m_bin.append(pcm);
         }
         ++m_trackCount;
         m_sectorsWritten += m_sectorsPerTrack;
@@ -205,7 +192,6 @@ private Q_SLOTS:
     void testDataTrackFails();
     void testDataOnlyDiscFails();
     void testTrackQueryItemOverride();
-    void testEndiannessSwap();
     void testFactoryRouting();
     void testStreamsShareDisc();
     void testReadErrorInvalidatesDisc();
@@ -494,31 +480,6 @@ void TestCdStream::testTrackQueryItemOverride()
     stream.stop();
 }
 
-void TestCdStream::testEndiannessSwap()
-{
-    // A byte-swapped (big-endian) track must be transparently converted back
-    // to little-endian by the drive endianness heuristic.
-    CdImage image;
-    const QByteArray swappedPcm = image.addAudioTrack(true);
-    image.addAudioTrack(false);
-    const QString cue = image.finish();
-    QVERIFY(!cue.isEmpty());
-
-    DragonCdStream stream;
-    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
-    stream.setUrl(cdTrackUrl(u"Track 01.wav"_s, cue));
-    stream.start();
-    QTRY_COMPARE_WITH_TIMEOUT(errorSpy.count(), 0, 0);
-
-    const auto data = readAllFromStream(stream, stream.size());
-    QCOMPARE(qint64(data.size()), stream.size());
-    const QByteArray pcm(reinterpret_cast<const char *>(data.data() + 44), qsizetype(data.size()) - 44);
-    QVERIFY(pcm != swappedPcm); // the image data is byte-swapped...
-    QCOMPARE(pcm, byteSwap16(swappedPcm)); // ...and comes out as proper LE PCM
-
-    stream.stop();
-}
-
 void TestCdStream::testFactoryRouting()
 {
     createTwoTrackImage();
@@ -557,14 +518,12 @@ void TestCdStream::testStreamsShareDisc()
         current.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
         current.start();
         QVERIFY(current.m_disc);
-        QVERIFY(current.m_disc->swapLeBe().has_value());
 
         DragonCdStream next;
         next.setUrl(cdTrackUrl(u"Track 02.wav"_s, linkPath));
         next.start();
         QVERIFY(next.m_disc);
         QCOMPARE(next.m_disc.get(), current.m_disc.get());
-        QCOMPARE(next.m_swapLeBe, *current.m_disc->swapLeBe());
 
         const auto data = readAllFromStream(current, current.size());
         const QByteArray pcm(reinterpret_cast<const char *>(data.data() + 44), qsizetype(data.size()) - 44);

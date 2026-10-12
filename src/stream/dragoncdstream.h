@@ -62,7 +62,6 @@ public:
 
 private:
     bool fillCache(int64_t lsn);
-    [[nodiscard]] std::optional<bool> detectEndianness() const;
     void fail(const QString &message);
 
     QUrl m_url;
@@ -77,7 +76,6 @@ private:
     std::array<uint8_t, 44> m_wavHeader{};
     int64_t m_firstLsn = 0;
     int64_t m_lastLsn = -1;
-    bool m_swapLeBe = false;
 
     std::atomic<bool> m_abort{false};
     std::atomic<bool> m_error{false};

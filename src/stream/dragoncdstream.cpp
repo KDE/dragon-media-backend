@@ -13,8 +13,6 @@
 #include <QUrlQuery>
 
 #include <algorithm>
-#include <bit>
-#include <cmath>
 #include <ranges>
 #include <span>
 
@@ -23,8 +21,6 @@ using namespace Qt::StringLiterals;
 namespace
 {
 
-constexpr int SAMPLES_PER_SECTOR = DragonCdStream::SECTOR_SIZE / 2; // 16-bit samples
-constexpr int ENDIANNESS_PROBE_SECTORS = 10;
 static_assert(DragonCdStream::SECTOR_SIZE == DragonCdDisc::SECTOR_SIZE);
 static_assert(DragonCdStream::READ_BLOCK_SECTORS == DragonCdDisc::READ_BLOCK_SECTORS);
 
@@ -47,15 +43,6 @@ struct WavHeader {
 #pragma pack(pop)
 static_assert(sizeof(WavHeader) == DragonCdStream::WAV_HEADER_SIZE);
 static_assert(std::is_trivially_copyable_v<WavHeader>);
-
-void swapLeBe16(std::span<uint8_t> data)
-{
-    auto samples = std::span{reinterpret_cast<uint16_t *>(data.data()), data.size() / 2};
-    for (auto &sample : samples) {
-        sample = std::byteswap(sample);
-    }
-}
-
 }
 
 DragonCdStream::DragonCdStream(QObject *parent)
@@ -144,7 +131,6 @@ void DragonCdStream::start()
     m_totalSize = -1;
     m_cacheSectors = 0;
     m_cacheStartLsn = -1;
-    m_swapLeBe = false;
     m_disc.reset();
     m_bufferProgress->reset();
 
@@ -203,17 +189,9 @@ void DragonCdStream::start()
 
     m_wavHeader = makeWavHeader(uint32_t(dataBytes));
 
-    if (const auto knownSwap = m_disc->swapLeBe()) {
-        m_swapLeBe = *knownSwap;
-    } else if (const auto probedSwap = detectEndianness()) {
-        m_swapLeBe = *probedSwap;
-        m_disc->setSwapLeBe(*probedSwap);
-    }
-
     m_totalSize = WAV_HEADER_SIZE + dataBytes;
 
-    qCDebug(dragonMediaBackendNetwork) << "DragonCdStream track" << trackNum << "lsn" << m_firstLsn << "to" << m_lastLsn << "bytes" << dataBytes << "swapLeBe"
-                                       << m_swapLeBe;
+    qCDebug(dragonMediaBackendNetwork) << "DragonCdStream track" << trackNum << "lsn" << m_firstLsn << "to" << m_lastLsn << "bytes" << dataBytes;
 
     Q_EMIT seekableChanged(true);
     m_bufferProgress->setDecoderReady(true);
@@ -311,68 +289,9 @@ bool DragonCdStream::fillCache(int64_t lsn)
         return false;
     }
 
-    if (m_swapLeBe) {
-        swapLeBe16(std::span{m_blockCache}.subspan(0, static_cast<size_t>(sectors) * SECTOR_SIZE));
-    }
-
     m_cacheStartLsn = lsn;
     m_cacheSectors = int32_t(sectors);
     return true;
-}
-
-std::optional<bool> DragonCdStream::detectEndianness() const
-{
-    const int64_t trackSectors = m_lastLsn - m_firstLsn + 1;
-    if (trackSectors < 2) {
-        return std::nullopt;
-    }
-
-    std::vector<uint8_t> sector(SECTOR_SIZE);
-    constexpr double positions[] = {0.5, 0.25, 0.75};
-    for (const double fraction : positions) {
-        int64_t from = m_firstLsn + int64_t(double(trackSectors) * fraction);
-        int64_t to = std::min<int64_t>(from + ENDIANNESS_PROBE_SECTORS, m_lastLsn + 1);
-        from = std::max<int64_t>(from, m_firstLsn);
-        if (from >= to) {
-            continue;
-        }
-
-        double nativeSum0 = 0.0, nativeSum1 = 0.0;
-        double swappedSum0 = 0.0, swappedSum1 = 0.0;
-
-        for (int64_t lsn = from; lsn < to; ++lsn) {
-            if (m_disc->readAudioSectors(sector, lsn, 1) == 0) {
-                return std::nullopt;
-            }
-            const auto pcm = std::span{reinterpret_cast<const uint16_t *>(sector.data()), static_cast<size_t>(SAMPLES_PER_SECTOR)};
-            uint16_t lastNative = 0, lastSwapped = 0;
-            for (const uint16_t native : pcm | std::views::stride(2)) {
-                const uint16_t swapped = std::byteswap(native);
-                nativeSum0 += std::abs(static_cast<int16_t>(native));
-                nativeSum1 += std::abs(static_cast<int16_t>(native) - static_cast<int16_t>(lastNative));
-                lastNative = native;
-                swappedSum0 += std::abs(static_cast<int16_t>(swapped));
-                swappedSum1 += std::abs(static_cast<int16_t>(swapped) - static_cast<int16_t>(lastSwapped));
-                lastSwapped = swapped;
-            }
-        }
-
-        if (nativeSum0 <= 0.0 || swappedSum0 <= 0.0) {
-            continue; // silence, inconclusive
-        }
-        const double nativeFactor = nativeSum1 / nativeSum0;
-        const double swappedFactor = swappedSum1 / swappedSum0;
-        const double diff = nativeFactor - swappedFactor;
-        if (diff > 0.5) {
-            qCDebug(dragonMediaBackendNetwork) << "Drive produces CD samples in other endianness; swapping";
-            return true;
-        }
-        if (diff < -0.5) {
-            qCDebug(dragonMediaBackendNetwork) << "Drive produces CD samples in host endianness";
-            return false;
-        }
-    }
-    return std::nullopt;
 }
 
 qint64 DragonCdStream::seek(qint64 offset)

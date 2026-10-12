@@ -240,18 +240,6 @@ uint32_t DragonCdDisc::readAudioSectors(std::span<uint8_t> buf, int64_t lsn, uin
     }
 }
 
-std::optional<bool> DragonCdDisc::swapLeBe() const
-{
-    std::scoped_lock lock(m_ioMutex);
-    return m_swapLeBe;
-}
-
-void DragonCdDisc::setSwapLeBe(bool swap)
-{
-    std::scoped_lock lock(m_ioMutex);
-    m_swapLeBe = swap;
-}
-
 void DragonCdDisc::invalidate()
 {
     m_invalid = true;

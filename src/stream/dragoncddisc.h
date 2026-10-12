@@ -15,7 +15,6 @@
 #include <expected>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <span>
 #include <vector>
 
@@ -77,9 +76,6 @@ public:
 
     [[nodiscard]] uint32_t readAudioSectors(std::span<uint8_t> buf, int64_t lsn, uint32_t sectors);
 
-    [[nodiscard]] std::optional<bool> swapLeBe() const;
-    void setSwapLeBe(bool swap);
-
     /*! Marks the disc unusable (e.g. after a fatal read error). */
     void invalidate();
     [[nodiscard]] bool isValid() const
@@ -100,7 +96,6 @@ private:
     mutable std::mutex m_ioMutex;
     std::unique_ptr<CdioDevice> m_device;
     int32_t m_readSectorsLimit = READ_BLOCK_SECTORS;
-    std::optional<bool> m_swapLeBe;
 
     std::atomic<bool> m_invalid{false};
 
