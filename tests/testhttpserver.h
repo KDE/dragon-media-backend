@@ -191,26 +191,26 @@ private:
         const int chunk = m_throttleChunkBytes;
         auto *timer = new QTimer(socket);
         timer->setInterval(m_throttleIntervalMs);
-        qint64 sent = 0;
 
-        QObject::connect(timer, &QTimer::timeout, socket, [socket, timer, content, sendOffset, sendLength, chunk, sent]() mutable {
-            const qint64 remaining = sendLength - sent;
+        const qint64 first = qMin<qint64>(chunk, sendLength);
+        const auto sent = std::make_shared<qint64>(first);
+        if (first > 0) {
+            socket->write(content.mid(sendOffset, first));
+        }
+
+        QObject::connect(timer, &QTimer::timeout, socket, [socket, timer, content, sendOffset, sendLength, chunk, sent]() {
+            const qint64 remaining = sendLength - *sent;
             const qint64 now = qMin<qint64>(chunk, remaining);
-            socket->write(content.mid(sendOffset + sent, now));
-            sent += now;
-            if (sent >= sendLength) {
+            socket->write(content.mid(sendOffset + *sent, now));
+            *sent += now;
+            if (*sent >= sendLength) {
                 timer->stop();
                 socket->flush();
                 socket->disconnectFromHost();
             }
         });
 
-        const qint64 first = qMin<qint64>(chunk, sendLength);
-        if (first > 0) {
-            socket->write(content.mid(sendOffset, first));
-            sent = first;
-        }
-        if (sent < sendLength) {
+        if (*sent < sendLength) {
             timer->start();
         } else {
             socket->flush();

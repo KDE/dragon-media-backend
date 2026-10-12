@@ -446,46 +446,75 @@ void TestKioStream::testHttpKioRapidSeek()
 void TestKioStream::testHttpKioSeekWhileReading()
 {
     m_httpServer->serveFile(m_bigFilePath);
+    m_httpServer->setThrottle(512, 10);
+    const auto throttleGuard = qScopeGuard([this]() {
+        m_httpServer->clearThrottle();
+    });
 
     DragonKioStream stream;
     stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
     stream.start();
 
-    std::vector<uint8_t> buffer(1024);
-    std::stop_source stopSource;
-    std::stop_token st = stopSource.get_token();
+    std::vector<uint8_t> buffer(4096);
+    std::atomic<int> dataReads{0};
+    std::atomic<int> spuriousEof{0};
+    std::atomic<int> contentMismatches{0};
+    std::atomic<qint64> firstMismatchAt{-1};
+    std::atomic<int> firstMismatchExpected{-1};
+    std::atomic<int> firstMismatchGot{-1};
+    std::atomic<qint64> verifiedPostSeekBytes{0};
+    std::atomic<bool> seekDone{false};
 
-    std::atomic<int> firstRead{-2};
-    std::jthread readThread([&]() {
-        firstRead = stream.read(buffer, st);
+    std::jthread reader([&](std::stop_token st) {
+        while (!st.stop_requested()) {
+            const bool verify = seekDone.load();
+            const qint64 before = verify ? stream.position() : 0;
+            const int n = stream.read(buffer, st);
+            if (n == 0) {
+                spuriousEof.fetch_add(1);
+                break;
+            }
+            if (n < 0) {
+                continue;
+            }
+            dataReads.fetch_add(1);
+            if (!verify) {
+                continue;
+            }
+            for (int i = 0; i < n; ++i) {
+                const int expected = '0' + static_cast<int>((before + i) % 10);
+                const int got = static_cast<int>(buffer[static_cast<size_t>(i)]);
+                if (got != expected && contentMismatches.fetch_add(1) == 0) {
+                    firstMismatchAt.store(before + i);
+                    firstMismatchExpected.store(expected);
+                    firstMismatchGot.store(got);
+                }
+            }
+            verifiedPostSeekBytes.fetch_add(n);
+        }
     });
 
-    QTest::qWait(100);
+    QTRY_VERIFY_WITH_TIMEOUT(dataReads.load() > 0, 10000);
 
     stream.seek(1024);
+    QCOMPARE(stream.position(), 1024);
+    seekDone.store(true);
 
-    QTRY_VERIFY_WITH_TIMEOUT(firstRead.load() != -2, 5000);
-    QVERIFY2(firstRead.load() >= 0, qPrintable(u"First read should have succeeded before seek, got %1"_s.arg(firstRead.load())));
+    QTRY_VERIFY2_WITH_TIMEOUT(verifiedPostSeekBytes.load() >= 1024,
+                              qPrintable(u"Stream unusable after seek-while-reading: only %1 verified bytes"_s.arg(verifiedPostSeekBytes.load())),
+                              10000);
 
-    std::atomic<int> secondRead{-2};
-    {
-        std::jthread readThread2([&]() {
-            secondRead = stream.read(buffer, st);
-        });
-        QTRY_VERIFY_WITH_TIMEOUT(secondRead.load() != -2, 5000);
-    }
+    stream.stop();
 
-    QVERIFY2(secondRead.load() > 0, qPrintable(u"Stream unusable after seek-while-reading second read returned %1"_s.arg(secondRead.load())));
-
-    const int seekOffset = 1024;
-    for (int i = 0; i < secondRead.load(); ++i) {
-        char expected = '0' + ((seekOffset + i) % 10);
-        QVERIFY2(static_cast<char>(buffer[static_cast<size_t>(i)]) == expected,
-                 qPrintable(u"Content mismatch at offset %1 (byte %2): expected '%3', got '%4'"_s.arg(seekOffset + i)
-                                .arg(i)
-                                .arg(expected)
-                                .arg(static_cast<char>(buffer[static_cast<size_t>(i)]))));
-    }
+    QVERIFY2(dataReads.load() > 0, "Reader never received data");
+    QVERIFY2(spuriousEof.load() == 0, qPrintable(u"Reader saw a spurious EOF (%1 time(s)) while data remained"_s.arg(spuriousEof.load())));
+    const QString mismatchMessage = contentMismatches.load() > 0
+        ? u"%1 content mismatch(es) after seek, first at offset %2: expected '%3', got '%4'"_s.arg(contentMismatches.load())
+              .arg(firstMismatchAt.load())
+              .arg(QChar(firstMismatchExpected.load()))
+              .arg(QChar(firstMismatchGot.load()))
+        : QString();
+    QVERIFY2(contentMismatches.load() == 0, qPrintable(mismatchMessage));
 }
 
 /*
@@ -749,14 +778,13 @@ void TestKioStream::testHttpKioSeekWhileReaderBlockedNoSpuriousEof()
     stream.setUrl(url);
     stream.start();
 
-    std::stop_source stopSource;
     std::vector<uint8_t> buffer(4096);
     std::atomic<int> dataReads{0};
     std::atomic<int> spuriousEof{0};
 
-    std::thread reader([&]() {
-        while (!stopSource.stop_requested()) {
-            const int n = stream.read(buffer, stopSource.get_token());
+    std::jthread reader([&](std::stop_token st) {
+        while (!st.stop_requested()) {
+            const int n = stream.read(buffer, st);
             if (n == 0) {
                 spuriousEof++;
                 break;
@@ -769,18 +797,21 @@ void TestKioStream::testHttpKioSeekWhileReaderBlockedNoSpuriousEof()
         }
     });
 
-    // Repeatedly seek while the reader is blocked waiting for the next
-    // dribbled chunk: every stop()/reset cycle crosses the reader's wake.
-    for (int i = 0; i < 20; ++i) {
-        QTest::qWait(50);
-        stream.seek((i + 1) * 1024);
-        QCoreApplication::processEvents();
+    {
+        for (int i = 0; i < 20; ++i) {
+            const int readsBeforeSeek = dataReads.load();
+            QTRY_VERIFY2_WITH_TIMEOUT(dataReads.load() > readsBeforeSeek,
+                                      qPrintable(u"Seek cycle %1: reader received no data before the next seek"_s.arg(i)),
+                                      10000);
+            stream.seek((i + 1) * 1024);
+            QCoreApplication::processEvents();
+        }
+
+        const int readsBeforeStop = dataReads.load();
+        QTRY_VERIFY2_WITH_TIMEOUT(dataReads.load() > readsBeforeStop, "Final seek delivered no data to the reader", 10000);
     }
 
-    QTest::qWait(100);
-    stopSource.request_stop();
     stream.stop();
-    reader.join();
     server.stop();
 
     QVERIFY2(dataReads.load() > 0, "Reader never received data; seek race window not exercised");
