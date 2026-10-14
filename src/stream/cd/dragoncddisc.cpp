@@ -60,7 +60,7 @@ private:
 namespace
 {
 
-std::mutex s_cacheMutex;
+std::mutex s_acquireMutex;
 std::map<QString, std::weak_ptr<DragonCdDisc>> s_cache;
 
 QString resolveDevice(const QString &device)
@@ -147,48 +147,27 @@ std::expected<std::shared_ptr<DragonCdDisc>, QString> DragonCdDisc::acquire(cons
 {
     const QString key = resolveDevice(device);
 
-    std::shared_ptr<DragonCdDisc> cached;
-    {
-        std::scoped_lock lock(s_cacheMutex);
-        std::erase_if(s_cache, [](const auto &entry) {
-            return entry.second.expired();
-        });
+    std::scoped_lock lock(s_acquireMutex);
 
-        if (auto it = s_cache.find(key); it != s_cache.end()) {
-            cached = it->second.lock();
-            if (!cached) {
-                s_cache.erase(it);
+    std::erase_if(s_cache, [](const auto &entry) {
+        return entry.second.expired();
+    });
+
+    if (auto it = s_cache.find(key); it != s_cache.end()) {
+        if (const std::shared_ptr<DragonCdDisc> disc = it->second.lock()) {
+            if (disc->stillCurrent(key)) {
+                return disc;
             }
         }
+        s_cache.erase(it);
     }
 
-    // stillCurrent() may probe or reopen the device: keep it off the cache
-    // mutex so concurrent acquire() calls do not serialize behind it.
-    if (cached && cached->stillCurrent(key)) {
-        return cached;
-    }
-
-    // Opening the device spins up the drive, which can take seconds: run
-    // without the cache mutex held.
     auto opened = open(key, key.isEmpty() ? device : key);
     if (!opened) {
         return opened;
     }
 
-    {
-        std::scoped_lock lock(s_cacheMutex);
-
-        // Another thread may have opened the same drive meanwhile; prefer
-        // its live entry and let ours be destroyed (the weak_ptr cache keeps
-        // that safe).
-        if (auto it = s_cache.find(key); it != s_cache.end()) {
-            if (auto disc = it->second.lock(); disc && disc->stillCurrent(key)) {
-                return disc;
-            }
-        }
-
-        s_cache[key] = *opened;
-    }
+    s_cache[key] = *opened;
     return opened;
 }
 

@@ -29,7 +29,9 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include <barrier>
 #include <stop_token>
+#include <thread>
 #include <vector>
 
 using namespace Qt::StringLiterals;
@@ -94,6 +96,7 @@ private Q_SLOTS:
     void testTrackQueryItemOverride();
     void testFactoryRouting();
     void testStreamsShareDisc();
+    void testConcurrentAcquireOpensDiscOnce();
     void testReadErrorInvalidatesDisc();
     void testChangedImageReopensDisc();
     void testGaplessPlayerTransition();
@@ -485,6 +488,52 @@ void TestCdStream::testStreamsShareDisc()
         next.stop();
     }
     QVERIFY(weakDisc.expired());
+}
+
+void TestCdStream::testConcurrentAcquireOpensDiscOnce()
+{
+    createTwoTrackImage();
+
+    QTemporaryDir linkDir;
+    const QString linkPath = linkDir.filePath(u"link.cue"_s);
+    QVERIFY(QFile::link(m_cuePath, linkPath));
+
+    static int tocBuiltCount = 0;
+    tocBuiltCount = 0;
+    const QtMessageHandler previousHandler = qInstallMessageHandler([](QtMsgType, const QMessageLogContext &, const QString &message) {
+        if (message.contains(u"DragonCdToc built"_s)) {
+            ++tocBuiltCount;
+        }
+    });
+    QLoggingCategory::setFilterRules(u"org.kde.dragonmediabackend.*.debug=true"_s);
+
+    constexpr int kThreads = 8;
+    std::barrier sync(kThreads);
+    std::vector<std::thread> threads;
+    std::vector<std::shared_ptr<DragonCdDisc>> discs{size_t(kThreads)};
+    for (int i = 0; i < kThreads; ++i) {
+        threads.emplace_back([this, i, &sync, &discs, &linkPath]() {
+            sync.arrive_and_wait();
+            auto disc = DragonCdDisc::acquire((i % 2) ? linkPath : m_cuePath);
+            if (disc) {
+                discs[size_t(i)] = *disc;
+            }
+        });
+    }
+    for (auto &thread : threads) {
+        thread.join();
+    }
+
+    QLoggingCategory::setFilterRules(QString{});
+    qInstallMessageHandler(previousHandler);
+
+    for (const auto &disc : discs) {
+        QVERIFY(disc != nullptr);
+    }
+    for (size_t i = 1; i < discs.size(); ++i) {
+        QCOMPARE(discs[i].get(), discs.front().get());
+    }
+    QCOMPARE(tocBuiltCount, 1);
 }
 
 void TestCdStream::testReadErrorInvalidatesDisc()
