@@ -466,7 +466,7 @@ kde_clang_format(${ALL_CLANG_FORMAT_SOURCE_FILES})
 kde_configure_git_pre_commit_hook(CHECKS CLANG_FORMAT)
 
 option(BUILD_EXAMPLES "Build examples" ON)
-if(BUILD_EXAMPLES AND Qt6Widgets_FOUND)
+if(BUILD_EXAMPLES AND Qt6Widgets_FOUND AND NOT ANDROID)
     add_subdirectory(examples/qwidget)
 endif()
 
