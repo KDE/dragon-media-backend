@@ -16,6 +16,7 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <limits>
 
 namespace
 {
@@ -291,8 +292,10 @@ void DragonAudioSink::processStreamFlush()
     while (m_boundaries.peek() != nullptr) {
         m_boundaries.pop();
     }
-    m_eosSample.store(0, std::memory_order_relaxed);
+
     m_eosState.store(static_cast<std::int8_t>(EosState::None), std::memory_order_release);
+    // just make sure nothing happens until pending:
+    m_eosSample.store(std::numeric_limits<std::uint64_t>::max(), std::memory_order_relaxed);
     m_formatChangePending.store(false, std::memory_order_relaxed);
 
     m_queueReady.store(true, std::memory_order_release);
