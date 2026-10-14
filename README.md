@@ -48,7 +48,7 @@ And the optional but recommended audio sinks:
 
 And for CD playing support:
  - GNU libcdio*
- 
+
 [*] Fetched automatically by CMake if not found on the system.
 
 ## Tech Stack
