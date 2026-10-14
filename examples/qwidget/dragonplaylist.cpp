@@ -33,6 +33,19 @@ DragonPlaylist::DragonPlaylist(DragonPlayer *player, QObject *parent)
         }
     });
 
+    QObject::connect(player, &DragonPlayer::aboutToFinish, this, [this]() {
+        if (!m_gaplessEnabled) {
+            return;
+        }
+        const int next = m_currentIndex + 1;
+        if (next >= 0 && next < m_tracks.size()) {
+            qDebug() << "PLAYLIST: about to finish, queueing next track" << m_tracks[next].url.toString();
+            m_player->setNextSource(m_tracks[next].url);
+        } else {
+            m_player->setNextSource(QUrl{});
+        }
+    });
+
     QObject::connect(player, &DragonPlayer::sourceChanged, this, [this]() {
         syncIndexFromPlayer();
     });
@@ -207,15 +220,16 @@ void DragonPlaylist::setGaplessEnabled(bool enabled)
 void DragonPlaylist::updatePlayerQueue()
 {
     if (m_gaplessEnabled && m_currentIndex >= 0 && m_currentIndex < m_tracks.size() - 1) {
-        m_player->setNextSource(m_tracks[m_currentIndex + 1].url);
-        qDebug() << "PLAYLIST: queued next track" << m_tracks[m_currentIndex + 1].url.toString();
+        // The next track is queued from aboutToFinish, not at track start:
+        // queueing early would start the pre-warm decoder while the current
+        // track is still loading, and both contend for the same CD drive.
+        return;
+    }
+    m_player->setNextSource(QUrl{});
+    if (m_gaplessEnabled) {
+        qDebug() << "PLAYLIST: no next track to queue";
     } else {
-        m_player->setNextSource(QUrl{});
-        if (m_gaplessEnabled) {
-            qDebug() << "PLAYLIST: no next track to queue";
-        } else {
-            qDebug() << "PLAYLIST: gapless disabled, not queuing next track";
-        }
+        qDebug() << "PLAYLIST: gapless disabled, not queuing next track";
     }
 }
 
