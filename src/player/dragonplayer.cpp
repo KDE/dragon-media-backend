@@ -943,6 +943,7 @@ void DragonPlayer::play()
         return;
     }
     if (d->audioOutput) {
+        d->audioOutput->sink()->resume(); // pipewire needs a kick here
         d->audioOutput->sink()->setQueueReady(!d->audioOutput->sink()->isFlushPending());
     }
     d->setPlaybackState(PlaybackState::PlayingState);

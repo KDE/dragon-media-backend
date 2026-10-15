@@ -85,6 +85,8 @@ private Q_SLOTS:
     void testPlayRapidNextNext();
 
     void testSeekWhilePausedReachesEos();
+
+    void testSeekNearEndThenElisaStyleAdvancePlays();
 };
 
 void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
@@ -791,6 +793,50 @@ void TestPlayerPlayback::testSeekWhilePausedReachesEos()
     QVERIFY(helper.playAndWait());
 
     QVERIFY2(helper.waitForEndOfMedia(5000), "Track must reach EndOfMedia after a seek while paused");
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testSeekNearEndThenElisaStyleAdvancePlays()
+{
+    DragonPlayer player;
+    DragonDiagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QVERIFY(diag.isAudioActive());
+
+    const std::chrono::milliseconds duration = player.duration().value_or(0ms);
+    QVERIFY2(duration > 2000ms, qPrintable(u"Fixture must be longer than 2s, got %1ms"_s.arg(duration.count())));
+
+    QTest::qWait(200);
+    // Dragging the progress slider to its very end seeks exactly to duration.
+    player.setPosition(duration);
+
+    QVERIFY2(helper.waitForEndOfMedia(10000), "Seeking near the end must still reach EndOfMedia");
+    QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    // Elisa-style advance: set the next track as the new source, then play().
+    // Elisa's play() arrives through several queued singleshots after the
+    // track loaded (triggerPlay on LoadedMedia), so defer the call the same
+    // way; calling play() during LoadingMedia would take a different path.
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QTimer::singleShot(0, &player, [&player]() {
+        player.play();
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
+
+    const bool advanced = QTest::qWaitFor(
+        [&diag]() {
+            return diag.audioPosition() > 500ms;
+        },
+        5000);
+    QVERIFY2(advanced,
+             qPrintable(u"Next track must actually play: position=%1ms audioPosition=%2ms"_s.arg(player.position().count()).arg(diag.audioPosition().count())));
+    QVERIFY2(diag.isAudioActive(), "Audio must be active on the track after an Elisa-style advance");
 
     player.stop();
 }

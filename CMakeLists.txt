@@ -123,7 +123,7 @@ if(NOT TARGET SDL3::SDL3)
     set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
     set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
     set(SDL_RENDER OFF CACHE BOOL "" FORCE)
-    set(SDL_UNIX_CONSOLE_BUILD ON FORCE)
+    set(SDL_UNIX_CONSOLE_BUILD ON CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(SDL3)
     # Disable PCH on MSVC it fails on virtiofs/network drives with C1083
     if(TARGET SDL3-shared)
