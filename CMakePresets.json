@@ -9,7 +9,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "BUILD_EXAMPLES": "ON"
+        "BUILD_EXAMPLES": "ON",
+        "Fetch": "ON"
       }
     },
     {
@@ -21,7 +22,8 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
         "CMAKE_INSTALL_PREFIX": "$env{HOME}/kde",
-        "BUILD_EXAMPLES": "ON"
+        "BUILD_EXAMPLES": "ON",
+        "Fetch": "ON"
       },
       "environment": {
         "CMAKE_PREFIX_PATH": "$env{HOME}/kde/lib64:$env{HOME}/kde/usr"
@@ -35,7 +37,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ECM_ENABLE_SANITIZERS": "'address;undefined'",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "Fetch": "ON"
       }
     },
     {
@@ -46,7 +49,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ECM_ENABLE_SANITIZERS": "thread",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "Fetch": "ON"
       }
     },
     {
@@ -56,7 +60,8 @@
       "binaryDir": "${sourceDir}/build-clang",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "Fetch": "ON"
       },
       "environment": {
         "CXX": "clang++",
@@ -71,7 +76,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_UNITY_BUILD": "ON",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "Fetch": "ON"
       }
     },
     {
@@ -80,7 +86,8 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build-release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "Fetch": "ON"
       }
     },
     {
@@ -90,7 +97,8 @@
       "binaryDir": "${sourceDir}/build-profile",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "Fetch": "ON"
       }
     },
     {
@@ -99,7 +107,8 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build-clazy",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "Fetch": "ON"
       },
       "environment": {
         "CXX": "clazy",

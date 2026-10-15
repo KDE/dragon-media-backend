@@ -49,7 +49,7 @@ And the optional but recommended audio sinks:
 And for CD playing support:
  - GNU libcdio*
 
-[*] Fetched automatically by CMake if not found on the system.
+[*] Fetched automatically by CMake if not found on the system, with the -DFetch=ON option.
 
 ## Tech Stack
 Its tech stack relies on Qt, modern C++ jthreads and ffmpeg for decoding audio files. It primarily targets the Linux

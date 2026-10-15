@@ -14,19 +14,28 @@ if(NOT TARGET QCoro6::Core)
 endif()
 
 find_package(KCddb6 QUIET)
+set_package_properties(KCddb6 PROPERTIES
+    TYPE REQUIRED
+    DESCRIPTION "KDE CDDB client library"
+    PURPOSE "CD metadata lookup for the qwidget example"
+    URL "https://invent.kde.org/multimedia/libkcddb"
+)
 if(NOT KCddb6_FOUND)
-    message(STATUS "KCddb6 not found, downloading via FetchContent...")
-    include(FetchContent)
+    if(Fetch OR DEFINED FETCHCONTENT_SOURCE_DIR OR DEFINED FETCHCONTENT_SOURCE_DIR_KCDBB)
+        message(STATUS "KCddb6 not found, downloading via FetchContent...")
+        include(FetchContent)
 
-    FetchContent_Declare(
-        kcddb
-        GIT_REPOSITORY https://invent.kde.org/multimedia/libkcddb.git
-        GIT_TAG 13d4b2322038bdc2d492eb37fb512822907aaa88
-        EXCLUDE_FROM_ALL
-    )
-    set(BUILD_DOC OFF)
-    set(BUILD_TESTING OFF)
-    FetchContent_MakeAvailable(kcddb)
+        FetchContent_Declare(
+            kcddb
+            GIT_REPOSITORY https://invent.kde.org/multimedia/libkcddb.git
+            GIT_TAG 13d4b2322038bdc2d492eb37fb512822907aaa88
+            EXCLUDE_FROM_ALL
+        )
+        set(BUILD_DOC OFF)
+        set(BUILD_TESTING OFF)
+        dragon_feature_summary_mark_found(KCddb6)
+        FetchContent_MakeAvailable(kcddb)
+    endif()
 endif()
 
 add_executable(DragonMediaBackend-qwidget-example

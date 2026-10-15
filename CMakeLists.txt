@@ -60,6 +60,15 @@ endif()
 
 include(FetchContent)
 
+option(Fetch "Allow CMake FetchContent to download dependencies that are not found" OFF)
+
+function(dragon_feature_summary_mark_found package)
+    set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND ${package})
+    get_property(_dragon_missing GLOBAL PROPERTY PACKAGES_NOT_FOUND)
+    list(REMOVE_ITEM _dragon_missing ${package})
+    set_property(GLOBAL PROPERTY PACKAGES_NOT_FOUND "${_dragon_missing}")
+endfunction()
+
 # Allow CI to provide local source clones instead of downloading
 if(EXISTS "${CMAKE_SOURCE_DIR}/kissfft-src" AND NOT DEFINED FETCHCONTENT_SOURCE_DIR_KISSFFT)
     set(FETCHCONTENT_SOURCE_DIR_KISSFFT "${CMAKE_SOURCE_DIR}/kissfft-src")
@@ -103,34 +112,43 @@ if(ANDROID)
 endif()
 
 find_package(SDL3 QUIET)
+set_package_properties(SDL3 PROPERTIES
+    TYPE REQUIRED
+    DESCRIPTION "Simple DirectMedia Layer"
+    PURPOSE "SDL3 audio output sink"
+    URL "https://www.libsdl.org"
+)
 if(NOT TARGET SDL3::SDL3)
-    message(STATUS "SDL3 not found via find_package, trying FetchContent...")
-    FetchContent_Declare(
-        SDL3
-        GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG release-3.4.12
-    )
-    set(SDL_SHARED ON CACHE BOOL "" FORCE)
-    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
-    set(SDL_TEST OFF CACHE BOOL "" FORCE)
-    # Only build the audio subsystem dragon-media-backend only uses SDL for audio output
-    set(SDL_VIDEO OFF CACHE BOOL "" FORCE)
-    set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
-    set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
-    set(SDL_SENSOR OFF CACHE BOOL "" FORCE)
-    set(SDL_POWER OFF CACHE BOOL "" FORCE)
-    set(SDL_GPU OFF CACHE BOOL "" FORCE)
-    set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
-    set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
-    set(SDL_RENDER OFF CACHE BOOL "" FORCE)
-    set(SDL_UNIX_CONSOLE_BUILD ON CACHE BOOL "" FORCE)
-    FetchContent_MakeAvailable(SDL3)
-    # Disable PCH on MSVC it fails on virtiofs/network drives with C1083
-    if(TARGET SDL3-shared)
-        set_target_properties(SDL3-shared PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
-    endif()
-    if(NOT TARGET SDL3::SDL3 AND TARGET SDL3-shared)
-        add_library(SDL3::SDL3 ALIAS SDL3-shared)
+    if(Fetch OR DEFINED FETCHCONTENT_SOURCE_DIR OR DEFINED FETCHCONTENT_SOURCE_DIR_SDL3)
+        message(STATUS "SDL3 not found via find_package, trying FetchContent...")
+        FetchContent_Declare(
+            SDL3
+            GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
+            GIT_TAG release-3.4.12
+        )
+        set(SDL_SHARED ON CACHE BOOL "" FORCE)
+        set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+        set(SDL_TEST OFF CACHE BOOL "" FORCE)
+        # Only build the audio subsystem dragon-media-backend only uses SDL for audio output
+        set(SDL_VIDEO OFF CACHE BOOL "" FORCE)
+        set(SDL_JOYSTICK OFF CACHE BOOL "" FORCE)
+        set(SDL_HAPTIC OFF CACHE BOOL "" FORCE)
+        set(SDL_SENSOR OFF CACHE BOOL "" FORCE)
+        set(SDL_POWER OFF CACHE BOOL "" FORCE)
+        set(SDL_GPU OFF CACHE BOOL "" FORCE)
+        set(SDL_CAMERA OFF CACHE BOOL "" FORCE)
+        set(SDL_DIALOG OFF CACHE BOOL "" FORCE)
+        set(SDL_RENDER OFF CACHE BOOL "" FORCE)
+        set(SDL_UNIX_CONSOLE_BUILD ON CACHE BOOL "" FORCE)
+        FetchContent_MakeAvailable(SDL3)
+        # Disable PCH on MSVC it fails on virtiofs/network drives with C1083
+        if(TARGET SDL3-shared)
+            set_target_properties(SDL3-shared PROPERTIES DISABLE_PRECOMPILE_HEADERS ON)
+        endif()
+        if(NOT TARGET SDL3::SDL3 AND TARGET SDL3-shared)
+            add_library(SDL3::SDL3 ALIAS SDL3-shared)
+        endif()
+        dragon_feature_summary_mark_found(SDL3)
     endif()
 endif()
 find_package(PkgConfig REQUIRED)
@@ -188,62 +206,83 @@ endif()
 pkg_check_modules(KISSFFT_PC IMPORTED_TARGET kissfft-float)
 if(KISSFFT_PC_FOUND)
     message(STATUS "Found kissfft via pkg-config")
+    dragon_feature_summary_mark_found(kissfft)
     if(NOT TARGET kissfft::kissfft)
         add_library(kissfft::kissfft ALIAS PkgConfig::KISSFFT_PC)
     endif()
 else()
     find_package(kissfft CONFIG COMPONENTS float QUIET)
     if(NOT TARGET kissfft::kissfft)
-        message(STATUS "kissfft not found, downloading...")
-        FetchContent_Declare(
-            kissfft
-            GIT_REPOSITORY https://github.com/mborgerding/kissfft.git
-            GIT_TAG 131.2.0
-        )
-        set(KISSFFT_FLOAT ON CACHE BOOL "Use float for kissfft datatype" FORCE)
-        set(KISSFFT_TEST OFF CACHE BOOL "Disable kissfft tests" FORCE)
-        set(KISSFFT_TOOLS OFF CACHE BOOL "Disable kissfft tools" FORCE)
-        set(KISSFFT_STATIC OFF CACHE BOOL "Disable kissfft static build" FORCE)
-        set(KISSFFT_PKGCONFIG OFF CACHE BOOL "Disable kissfft pkgconfig" FORCE)
-        FetchContent_MakeAvailable(kissfft)
-        if(NOT TARGET kissfft::kissfft AND TARGET kissfft)
-            add_library(kissfft::kissfft ALIAS kissfft)
+        if(Fetch OR DEFINED FETCHCONTENT_SOURCE_DIR OR DEFINED FETCHCONTENT_SOURCE_DIR_KISSFFT)
+            message(STATUS "kissfft not found, downloading...")
+            FetchContent_Declare(
+                kissfft
+                GIT_REPOSITORY https://github.com/mborgerding/kissfft.git
+                GIT_TAG 131.2.0
+            )
+            set(KISSFFT_FLOAT ON CACHE BOOL "Use float for kissfft datatype" FORCE)
+            set(KISSFFT_TEST OFF CACHE BOOL "Disable kissfft tests" FORCE)
+            set(KISSFFT_TOOLS OFF CACHE BOOL "Disable kissfft tools" FORCE)
+            set(KISSFFT_STATIC OFF CACHE BOOL "Disable kissfft static build" FORCE)
+            set(KISSFFT_PKGCONFIG OFF CACHE BOOL "Disable kissfft pkgconfig" FORCE)
+            FetchContent_MakeAvailable(kissfft)
+            if(NOT TARGET kissfft::kissfft AND TARGET kissfft)
+                add_library(kissfft::kissfft ALIAS kissfft)
+            endif()
+            dragon_feature_summary_mark_found(kissfft)
         endif()
     endif()
 endif()
 
+set_package_properties(kissfft PROPERTIES
+    TYPE REQUIRED
+    DESCRIPTION "Fast Fourier transform library"
+    PURPOSE "Spectrum analysis for the visualization pipeline"
+    URL "https://github.com/mborgerding/kissfft"
+)
+
 find_package(QCoro6 QUIET COMPONENTS Core Network)
 if(NOT QCoro6_FOUND)
-    message(STATUS "QCoro6 not found, downloading via FetchContent...")
-    FetchContent_Declare(
-        QCoro
-        GIT_REPOSITORY https://github.com/qcoro/qcoro.git
-        GIT_TAG v0.13.0
-        PATCH_COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patch-qcoro.sh" "<SOURCE_DIR>"
-    )
-    block()
-        set(QCORO_BUILD_EXAMPLES OFF CACHE BOOL "Disable QCoro examples" FORCE)
-        set(QCORO_ENABLE_WARNINGS_AS_ERRORS OFF CACHE BOOL "Disable warnings as errors for QCoro" FORCE)
-        set(QCORO_WITH_QTDBUS OFF CACHE BOOL "Disable QCoro QtDBus support" FORCE)
-        set(QCORO_WITH_QTNETWORK ON CACHE BOOL "Enable QCoro QtNetwork support" FORCE)
-        set(QCORO_WITH_QTSQL OFF CACHE BOOL "Disable QCoro QtSql support" FORCE)
-        set(QCORO_WITH_QTWIDGETS OFF CACHE BOOL "Disable QCoro QtWidgets support" FORCE)
-        set(QCORO_WITH_QTQUICK OFF CACHE BOOL "Disable QCoro QtQuick support" FORCE)
-        set(QCORO_WITH_QTWEBSOCKETS OFF CACHE BOOL "Disable QCoro QtWebSockets support" FORCE)
-        set(QCORO_WITH_QML OFF CACHE BOOL "Disable QCoro QML support" FORCE)
-        set(BUILD_SHARED_LIBS ON CACHE BOOL "Build QCoro as shared" FORCE)
-        set(QCORO_BUILD_TESTING OFF CACHE BOOL "Disable QCoro tests" FORCE)
-        set(BUILD_TESTING OFF)
-        FetchContent_MakeAvailable(QCoro)
-    endblock()
-    
-    foreach(_qcoro_target IN ITEMS QCoro6Core QCoro6Network)
-        if(TARGET ${_qcoro_target})
-            target_compile_options(${_qcoro_target} PRIVATE -fexceptions)
-            target_compile_options(${_qcoro_target} PRIVATE -Wno-error)
-        endif()
-    endforeach()
+    if(Fetch OR DEFINED FETCHCONTENT_SOURCE_DIR OR DEFINED FETCHCONTENT_SOURCE_DIR_QCORO)
+        message(STATUS "QCoro6 not found, downloading via FetchContent...")
+        FetchContent_Declare(
+            QCoro
+            GIT_REPOSITORY https://github.com/qcoro/qcoro.git
+            GIT_TAG v0.13.0
+            PATCH_COMMAND bash "${CMAKE_CURRENT_SOURCE_DIR}/cmake/patch-qcoro.sh" "<SOURCE_DIR>"
+        )
+        block()
+            set(QCORO_BUILD_EXAMPLES OFF CACHE BOOL "Disable QCoro examples" FORCE)
+            set(QCORO_ENABLE_WARNINGS_AS_ERRORS OFF CACHE BOOL "Disable warnings as errors for QCoro" FORCE)
+            set(QCORO_WITH_QTDBUS OFF CACHE BOOL "Disable QCoro QtDBus support" FORCE)
+            set(QCORO_WITH_QTNETWORK ON CACHE BOOL "Enable QCoro QtNetwork support" FORCE)
+            set(QCORO_WITH_QTSQL OFF CACHE BOOL "Disable QCoro QtSql support" FORCE)
+            set(QCORO_WITH_QTWIDGETS OFF CACHE BOOL "Disable QCoro QtWidgets support" FORCE)
+            set(QCORO_WITH_QTQUICK OFF CACHE BOOL "Disable QCoro QtQuick support" FORCE)
+            set(QCORO_WITH_QTWEBSOCKETS OFF CACHE BOOL "Disable QCoro QtWebSockets support" FORCE)
+            set(QCORO_WITH_QML OFF CACHE BOOL "Disable QCoro QML support" FORCE)
+            set(BUILD_SHARED_LIBS ON CACHE BOOL "Build QCoro as shared" FORCE)
+            set(QCORO_BUILD_TESTING OFF CACHE BOOL "Disable QCoro tests" FORCE)
+            set(BUILD_TESTING OFF)
+            FetchContent_MakeAvailable(QCoro)
+        endblock()
+
+        foreach(_qcoro_target IN ITEMS QCoro6Core QCoro6Network)
+            if(TARGET ${_qcoro_target})
+                target_compile_options(${_qcoro_target} PRIVATE -fexceptions)
+                target_compile_options(${_qcoro_target} PRIVATE -Wno-error)
+            endif()
+        endforeach()
+        dragon_feature_summary_mark_found(QCoro6)
+    endif()
 endif()
+
+set_package_properties(QCoro6 PROPERTIES
+    TYPE REQUIRED
+    DESCRIPTION "Coroutines for Qt6"
+    PURPOSE "Asynchronous stream handling"
+    URL "https://github.com/qcoro/qcoro"
+)
 
 include(CheckCXXSourceCompiles)
 set(CMAKE_REQUIRED_FLAGS "-std=c++23")
@@ -253,7 +292,6 @@ target_include_directories(spsc_queue INTERFACE
 )
 
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOMOC_RELY_ON_EXPORTS ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
@@ -353,7 +391,6 @@ ecm_qt_install_logging_categories(
 )
 
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_AUTOMOC_RELY_ON_EXPORTS ON)
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 add_subdirectory(src)
