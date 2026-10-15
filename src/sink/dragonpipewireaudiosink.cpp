@@ -3,6 +3,12 @@
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  */
 
+#include <pipewire/pipewire.h>
+#include <spa/param/audio/format-utils.h>
+#include <spa/param/props.h>
+#include <spa/pod/iter.h>
+#include <spa/utils/dict.h>
+
 #include "dragonpipewireaudiosink.h"
 
 #include "dragonmediabackend_audio_logging.h"
@@ -14,12 +20,6 @@ K_PLUGIN_CLASS_WITH_JSON(DragonPipeWireAudioSink, "pipewire_sink.json")
 
 #include <QGuiApplication>
 #include <QScopeGuard>
-
-#include <pipewire/pipewire.h>
-#include <spa/param/audio/format-utils.h>
-#include <spa/param/props.h>
-#include <spa/pod/iter.h>
-#include <spa/utils/dict.h>
 
 #include "dragonthreadname.h"
 #include <algorithm>
