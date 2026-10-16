@@ -330,7 +330,7 @@ void MainWindow::connectPlayer()
             m_volumeSlider->setValue(vol);
     });
 
-    m_playerConnections << connect(m_player, &DragonPlayer::stateChanged, this, [this](DragonPlayer::PlaybackState, DragonPlayer::PlaybackState) {
+    m_playerConnections << connect(m_player, &DragonPlayer::playbackStateChanged, this, [this](DragonPlayer::PlaybackState, DragonPlayer::PlaybackState) {
         updatePlaybackState();
     });
     m_playerConnections << connect(m_player, &DragonPlayer::statusChanged, this, &MainWindow::updateStatus);
@@ -645,14 +645,14 @@ void MainWindow::updatePlaybackState()
 
     switch (state) {
     case DragonPlayer::PlaybackState::PlayingState:
-        if (m_lastIcyMetadata.hasStreamTitle()) {
+        if (!m_lastIcyMetadata.streamTitle().isEmpty()) {
             m_statusLabel->setText(i18n("Playing: %1").arg(m_lastIcyMetadata.streamTitle()));
         } else {
             m_statusLabel->setText(i18n("Playing"));
         }
         break;
     case DragonPlayer::PlaybackState::PausedState:
-        if (m_lastIcyMetadata.hasStreamTitle()) {
+        if (!m_lastIcyMetadata.streamTitle().isEmpty()) {
             m_statusLabel->setText(i18n("Paused: %1").arg(m_lastIcyMetadata.streamTitle()));
         } else {
             m_statusLabel->setText(i18n("Paused"));
@@ -808,7 +808,7 @@ void MainWindow::updateFftFrame(const DragonFftFrame &frame)
 void MainWindow::updateIcyMetadata(const DragonIcyMetadata &metadata)
 {
     m_lastIcyMetadata = metadata;
-    if (metadata.hasStreamTitle()) {
+    if (!metadata.streamTitle().isEmpty()) {
         m_statusLabel->setText(i18n("Playing: %1").arg(metadata.streamTitle()));
     }
 }

@@ -95,7 +95,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonAudioOutput : public QObject
      *
      * Whether audio output is muted. Muting is independent of volume().
      */
-    Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY mutedChanged FINAL)
+    Q_PROPERTY(bool muted READ isMuted WRITE setMuted NOTIFY mutedChanged FINAL)
 
     /*!
      * \qmlproperty enumeration org.kde.dragonmediabackend::DragonAudioOutput::backend
@@ -147,7 +147,13 @@ public:
     /*!
      * Returns \c true if audio output is muted.
      */
-    [[nodiscard]] bool muted() const;
+    [[nodiscard]] bool isMuted() const;
+
+    /*!
+     * Returns \c true if audio output is muted.
+     * \deprecated Use isMuted() instead.
+     */
+    [[deprecated("Use isMuted() instead")]] [[nodiscard]] bool muted() const;
 
     /*!
      * Returns the audio backend in use. If Auto was requested, this is
@@ -170,9 +176,10 @@ public Q_SLOTS:
 
 Q_SIGNALS:
     /*!
-     * Emitted when the output volume changes.
+     * Emitted when the output volume changes, with the new volume in
+     * \a volume.
      */
-    void volumeChanged();
+    void volumeChanged(qreal volume);
 
     /*!
      * Emitted when the output is muted or unmuted, with the new state in

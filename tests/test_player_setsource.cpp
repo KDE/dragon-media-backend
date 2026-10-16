@@ -39,7 +39,7 @@ void TestPlayerSetSource::testSetSourceFromFreshPlayerNoForceEmit()
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
@@ -66,7 +66,8 @@ void TestPlayerSetSource::testSetSourceSignalOrderFromFreshPlayer()
 
     QVERIFY2(loadingIdx < sourceIdx, "statusChanged(LoadingMedia) must precede sourceChanged (QM order)");
 
-    QVERIFY2(!tracker.containsPrefix(u"stateChanged(StoppedState"_s), "setSource from StoppedState must NOT force-emit stateChanged(StoppedState)");
+    QVERIFY2(!tracker.containsPrefix(u"playbackStateChanged(StoppedState"_s),
+             "setSource from StoppedState must NOT force-emit playbackStateChanged(StoppedState)");
 }
 
 void TestPlayerSetSource::testSetSourceSignalOrderFromPlaying()
@@ -86,13 +87,13 @@ void TestPlayerSetSource::testSetSourceSignalOrderFromPlaying()
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
 
     QVERIFY2(tracker.containsTransition(DragonPlayer::PlaybackState::StoppedState, DragonPlayer::PlaybackState::PlayingState),
-             "setSource while playing must emit stateChanged(StoppedState, PlayingState)");
+             "setSource while playing must emit playbackStateChanged(StoppedState, PlayingState)");
     QVERIFY2(tracker.contains(u"statusChanged(LoadedMedia)"_s), "setSource while playing must emit LoadedMedia from implicit stop");
     QVERIFY2(tracker.contains(u"statusChanged(LoadingMedia)"_s), "setSource must emit LoadingMedia for the new source");
     QVERIFY2(tracker.contains(u"sourceChanged()"_s), "setSource must emit sourceChanged");
 
-    QVERIFY2(tracker.verifyOrder(u"stateChanged(StoppedState, PlayingState)"_s, u"sourceChanged()"_s),
-             "stateChanged(StoppedState, PlayingState) must precede sourceChanged");
+    QVERIFY2(tracker.verifyOrder(u"playbackStateChanged(StoppedState, PlayingState)"_s, u"sourceChanged()"_s),
+             "playbackStateChanged(StoppedState, PlayingState) must precede sourceChanged");
     QVERIFY2(tracker.verifyOrder(u"statusChanged(LoadingMedia)"_s, u"statusChanged(LoadedMedia)"_s),
              "source swap while playing must go LoadingMedia -> LoadedMedia from the real load (no synthetic LoadedMedia from the implicit stop)");
     QVERIFY2(tracker.verifyOrder(u"statusChanged(LoadingMedia)"_s, u"sourceChanged()"_s), "statusChanged(LoadingMedia) must precede sourceChanged");

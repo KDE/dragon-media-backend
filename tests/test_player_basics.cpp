@@ -88,7 +88,7 @@ void TestPlayerBasics::testInitialState()
 {
     DragonPlayer player;
 
-    QVERIFY(!player.audioOutput()->muted());
+    QVERIFY(!player.audioOutput()->isMuted());
     QVERIFY(qAbs(player.audioOutput()->volume() - 1.0) < 0.01);
     QVERIFY(!player.source().isValid());
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
@@ -96,7 +96,7 @@ void TestPlayerBasics::testInitialState()
     QCOMPARE(player.error(), DragonPlayer::Error::NoError);
     QCOMPARE(player.duration(), std::nullopt);
     QCOMPARE(player.position(), 0ms);
-    QVERIFY(!player.seekable());
+    QVERIFY(!player.isSeekable());
     QCOMPARE(player.streamName(), QString());
 }
 
@@ -147,13 +147,13 @@ void TestPlayerBasics::testPropertiesAreFinal()
 void TestPlayerBasics::testMutedProperty()
 {
     DragonPlayer player;
-    QVERIFY(!player.audioOutput()->muted());
+    QVERIFY(!player.audioOutput()->isMuted());
 
     player.audioOutput()->setMuted(true);
-    QVERIFY(player.audioOutput()->muted());
+    QVERIFY(player.audioOutput()->isMuted());
 
     player.audioOutput()->setMuted(false);
-    QVERIFY(!player.audioOutput()->muted());
+    QVERIFY(!player.audioOutput()->isMuted());
 }
 
 void TestPlayerBasics::testVolumeProperty()
@@ -256,7 +256,7 @@ void TestPlayerBasics::testPause()
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.pause();
     QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
@@ -275,12 +275,12 @@ void TestPlayerBasics::testSetMuted()
     QSignalSpy spy(player.audioOutput(), &DragonAudioOutput::mutedChanged);
 
     player.audioOutput()->setMuted(true);
-    QVERIFY(player.audioOutput()->muted());
+    QVERIFY(player.audioOutput()->isMuted());
     QVERIFY(spy.count() > 0);
 
     spy.clear();
     player.audioOutput()->setMuted(false);
-    QVERIFY(!player.audioOutput()->muted());
+    QVERIFY(!player.audioOutput()->isMuted());
     QVERIFY(spy.count() > 0);
 
     spy.clear();
@@ -296,6 +296,7 @@ void TestPlayerBasics::testSetVolume()
     player.audioOutput()->setVolume(0.5);
     QVERIFY(qAbs(player.audioOutput()->volume() - 0.5) < 0.01);
     QVERIFY(spy.count() > 0);
+    QCOMPARE(spy.at(0).at(0).toReal(), 0.5);
 
     spy.clear();
     player.audioOutput()->setVolume(0.5);
@@ -328,6 +329,7 @@ void TestPlayerBasics::testVolumeChangedSignal()
 
     player.audioOutput()->setVolume(0.8);
     QTRY_VERIFY(spy.count() > 0);
+    QVERIFY(qAbs(spy.at(0).at(0).toReal() - 0.8) < 0.01);
 }
 
 void TestPlayerBasics::testSourceChangedSignal()
@@ -345,7 +347,7 @@ void TestPlayerBasics::testSourceChangedSignal()
 void TestPlayerBasics::testNoPlayingStateOnInvalidSource()
 {
     DragonPlayer player;
-    QSignalSpy spy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy spy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile("/nonexistent.mp3"_L1));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() != DragonPlayer::MediaStatus::LoadingMedia, 5000);
@@ -445,7 +447,7 @@ void TestPlayerBasics::testStateMachineSequence()
 void TestPlayerBasics::testPlayPauseStopSequence()
 {
     DragonPlayer player;
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
@@ -495,7 +497,7 @@ void TestPlayerBasics::testPauseWhileStoppedWithLoadedMedia()
     QTest::qWait(100);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.pause();
     QCOMPARE(stateSpy.count(), 0);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
@@ -532,20 +534,20 @@ void TestPlayerBasics::testMuteAndVolumeInteraction()
     QVERIFY(qAbs(player.audioOutput()->volume() - 0.5) < 0.01);
 
     player.audioOutput()->setMuted(true);
-    QVERIFY(player.audioOutput()->muted());
+    QVERIFY(player.audioOutput()->isMuted());
     QVERIFY(qAbs(player.audioOutput()->volume() - 0.5) < 0.01);
 
     player.audioOutput()->setMuted(false);
-    QVERIFY(!player.audioOutput()->muted());
+    QVERIFY(!player.audioOutput()->isMuted());
     QVERIFY(qAbs(player.audioOutput()->volume() - 0.5) < 0.01);
 
     player.audioOutput()->setVolume(0.0);
     player.audioOutput()->setMuted(true);
-    QVERIFY(player.audioOutput()->muted());
+    QVERIFY(player.audioOutput()->isMuted());
     QVERIFY(qAbs(player.audioOutput()->volume()) < 0.01);
 
     player.audioOutput()->setMuted(false);
-    QVERIFY(!player.audioOutput()->muted());
+    QVERIFY(!player.audioOutput()->isMuted());
     QVERIFY(qAbs(player.audioOutput()->volume()) < 0.01);
 }
 
@@ -620,7 +622,7 @@ void TestPlayerBasics::testSeekBehaviorWithValidMedia()
     PlayerHelper helper(&player);
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY2(player.duration().value_or(0ms) > 0ms, "Duration must be known");
-    QVERIFY(player.seekable());
+    QVERIFY(player.isSeekable());
 
     QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
 
@@ -672,7 +674,7 @@ void TestPlayerBasics::testSignalEmissionPresence()
 
     QVERIFY(player.source().isValid());
     QVERIFY2(seekableSpy.count() >= 1, "seekableChanged must be emitted after loading valid media");
-    QVERIFY(player.seekable());
+    QVERIFY(player.isSeekable());
 }
 
 void TestPlayerBasics::testCurrentPlayingForRadiosSignal()
@@ -706,7 +708,7 @@ void TestPlayerBasics::testSetPositionEmitsDefaultWithoutMedia()
 void TestPlayerBasics::testInvalidMediaStaysStopped()
 {
     DragonPlayer player;
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
 
     player.setSource(QUrl::fromLocalFile("/nonexistent/file.mp3"_L1));

@@ -266,12 +266,12 @@ void TestRadioStream::testMetadataParsing()
         const auto emitted = qvariant_cast<DragonIcyMetadata>(metadataSpy.takeFirst().at(0));
 
         if (expectedFields.contains("StreamTitle"_L1)) {
-            QVERIFY2(emitted.hasStreamTitle(), "Expected StreamTitle to be set");
+            QVERIFY2(!emitted.streamTitle().isEmpty(), "Expected StreamTitle to be set");
             QCOMPARE(emitted.streamTitle(), expectedFields.value("StreamTitle"_L1));
         }
 
         if (expectedFields.contains("StreamUrl"_L1)) {
-            QVERIFY2(emitted.hasStreamUrl(), "Expected StreamUrl to be set");
+            QVERIFY2(!emitted.streamUrl().isEmpty(), "Expected StreamUrl to be set");
             QCOMPARE(emitted.streamUrl(), expectedFields.value("StreamUrl"_L1));
         }
 

@@ -74,7 +74,7 @@ DragonSpectrumAnalyzer::DragonSpectrumAnalyzer(DragonPlayer *player, QObject *pa
         }
     });
 
-    connect(player, &DragonPlayer::stateChanged, this, [this](DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState) {
+    connect(player, &DragonPlayer::playbackStateChanged, this, [this](DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState) {
         if (newState == DragonPlayer::PlaybackState::StoppedState && d->currentMode != DragonSpectrumAnalyzer::Mode::Off) {
             d->fftPipeline.stop();
             Q_EMIT activeChanged(false);

@@ -31,7 +31,9 @@ DragonAudioOutput::DragonAudioOutput(Backend requested, DragonPlayer *parent)
     d->sink = createAudioSink(requested, &d->selectedBackend);
 
     if (d->sink) {
-        connect(d->sink.get(), &DragonAudioSink::volumeChanged, this, &DragonAudioOutput::volumeChanged);
+        connect(d->sink.get(), &DragonAudioSink::volumeChanged, this, [this]() {
+            Q_EMIT volumeChanged(volume());
+        });
         connect(d->sink.get(), &DragonAudioSink::mutedChanged, this, &DragonAudioOutput::mutedChanged);
     }
 }
@@ -48,9 +50,14 @@ qreal DragonAudioOutput::volume() const
     return d->sink ? d->sink->volume() : 1.0;
 }
 
-bool DragonAudioOutput::muted() const
+bool DragonAudioOutput::isMuted() const
 {
     return d->sink ? d->sink->muted() : false;
+}
+
+bool DragonAudioOutput::muted() const
+{
+    return isMuted();
 }
 
 DragonAudioOutput::Backend DragonAudioOutput::backend() const

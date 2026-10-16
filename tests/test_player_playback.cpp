@@ -297,7 +297,7 @@ void TestPlayerPlayback::testSetSourceDoesNotEmitPlayingState()
     DragonDiagnostics diag(&player);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
@@ -315,7 +315,7 @@ void TestPlayerPlayback::testSetSourceWhilePlayingEmitsStoppedState()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
@@ -333,7 +333,7 @@ void TestPlayerPlayback::testSetSourceWhilePlayingEmitsStoppedState()
 void TestPlayerPlayback::testPlayWithNoSourceIsNoOp()
 {
     DragonPlayer player;
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.play();
     QCOMPARE(stateSpy.count(), 0);
@@ -343,7 +343,7 @@ void TestPlayerPlayback::testPlayWithNoSourceIsNoOp()
 void TestPlayerPlayback::testPlayDuringLoadingDefers()
 {
     DragonPlayer player;
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QCOMPARE(stateSpy.count(), 0);
@@ -362,7 +362,7 @@ void TestPlayerPlayback::testPlayDuringLoadingDefers()
 void TestPlayerPlayback::testPauseDuringLoadingDefers()
 {
     DragonPlayer player;
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QCOMPARE(stateSpy.count(), 0);
@@ -382,7 +382,7 @@ void TestPlayerPlayback::testStopDuringLoadingDefers()
 {
     DragonPlayer player;
     DragonDiagnostics diag(&player);
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QCOMPARE(stateSpy.count(), 0);
@@ -420,7 +420,7 @@ void TestPlayerPlayback::testPauseFromPlayingState()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.pause();
 
     QCOMPARE(stateSpy.count(), 1);
@@ -440,7 +440,7 @@ void TestPlayerPlayback::testStopFromPlayingStateDoesNotEmitLoadedMedia()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     player.stop();
@@ -467,7 +467,7 @@ void TestPlayerPlayback::testPlayFromPausedStateResumes()
     QVERIFY(helper.pauseAndWait());
     QTest::qWait(200);
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.play();
 
     QCOMPARE(stateSpy.count(), 1);
@@ -486,7 +486,7 @@ void TestPlayerPlayback::testMultiplePlayCallsIdempotent()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.play();
     player.play();
     player.play();
@@ -505,7 +505,7 @@ void TestPlayerPlayback::testPlayAfterStopRestartsDecoder()
     QVERIFY(helper.playAndWait());
     QTest::qWait(300);
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.stop();
     QTRY_VERIFY_WITH_TIMEOUT(stateSpy.count() >= 1, 3000);
     QVERIFY(player.playbackState() == DragonPlayer::PlaybackState::StoppedState);
@@ -530,14 +530,14 @@ void TestPlayerPlayback::testSetSourceWhilePlayingStopsOldTrack()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QTRY_VERIFY_WITH_TIMEOUT(stateSpy.count() >= 1, 5000);
 
     QVERIFY2(SignalSpyHelper::containsTransition(stateSpy, DragonPlayer::PlaybackState::StoppedState, DragonPlayer::PlaybackState::PlayingState),
-             "setSource() while playing must emit stateChanged(StoppedState, PlayingState)");
+             "setSource() while playing must emit playbackStateChanged(StoppedState, PlayingState)");
 
     QVERIFY2(!SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadedMedia),
              "setSource(sameUrl) while playing must NOT emit LoadedMedia from implicit stop (dedup)");
@@ -555,13 +555,13 @@ void TestPlayerPlayback::testEndOfMediaTransitionsToStoppedState()
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 10000);
 
     QVERIFY2(SignalSpyHelper::containsTransition(stateSpy, DragonPlayer::PlaybackState::StoppedState, DragonPlayer::PlaybackState::PlayingState),
-             "End of media must emit stateChanged(StoppedState, PlayingState)");
+             "End of media must emit playbackStateChanged(StoppedState, PlayingState)");
     QVERIFY2(SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::EndOfMedia), "End of media must emit EndOfMedia status");
 
     QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
@@ -578,7 +578,7 @@ void TestPlayerPlayback::testPlayAtEndOfMediaRestarts()
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 15000);
     QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     player.play();
 
     QTRY_VERIFY(stateSpy.count() >= 1);
@@ -692,7 +692,7 @@ void TestPlayerPlayback::testSignalPresenceOnStop()
     QTRY_VERIFY(tracker.events().count() >= 1);
 
     QVERIFY2(tracker.containsTransition(DragonPlayer::PlaybackState::StoppedState, DragonPlayer::PlaybackState::PlayingState),
-             "stop() must emit stateChanged(StoppedState, PlayingState)");
+             "stop() must emit playbackStateChanged(StoppedState, PlayingState)");
     QVERIFY2(!tracker.contains(u"statusChanged(LoadedMedia)"_s), "stop() must NOT emit LoadedMedia (dedup)");
 }
 

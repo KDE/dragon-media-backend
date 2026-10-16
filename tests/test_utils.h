@@ -219,7 +219,7 @@ public:
     bool playAndWait(int timeoutMs = 5000)
     {
         const auto stateBefore = m_player->playbackState();
-        QSignalSpy stateSpy(m_player, &DragonPlayer::stateChanged);
+        QSignalSpy stateSpy(m_player, &DragonPlayer::playbackStateChanged);
 
         m_player->play();
 
@@ -356,7 +356,7 @@ public:
     }
     static QSignalSpy stateSpy(DragonPlayer *player)
     {
-        return QSignalSpy(player, &DragonPlayer::stateChanged);
+        return QSignalSpy(player, &DragonPlayer::playbackStateChanged);
     }
 
     static QSignalSpy sourceSpy(DragonPlayer *player)
@@ -465,7 +465,7 @@ public:
     {
         auto conn = QObject::connect(
             m_player,
-            &DragonPlayer::stateChanged,
+            &DragonPlayer::playbackStateChanged,
             m_player,
             [this](DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState oldState) {
                 const auto stateName = [](DragonPlayer::PlaybackState s) -> QString {
@@ -479,7 +479,7 @@ public:
                     }
                     return u"Unknown"_s;
                 };
-                m_events.append(u"stateChanged("_s + stateName(newState) + u", "_s + stateName(oldState) + u")"_s);
+                m_events.append(u"playbackStateChanged("_s + stateName(newState) + u", "_s + stateName(oldState) + u")"_s);
             },
             Qt::DirectConnection);
         m_connections.append(conn);
@@ -601,7 +601,7 @@ public:
             }
             return u"Unknown"_s;
         };
-        return m_events.contains(u"stateChanged("_s + stateName(newState) + u", "_s + stateName(oldState) + u")"_s);
+        return m_events.contains(u"playbackStateChanged("_s + stateName(newState) + u", "_s + stateName(oldState) + u")"_s);
     }
 
     bool containsPrefix(const QString &prefix) const

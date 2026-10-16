@@ -87,7 +87,7 @@ void TestNetworkPlayback::testPlayLocalWmaFileOverHttp()
     QSignalSpy sourceSpy(&player, &DragonPlayer::sourceChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
     QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy durationSpy(&player, &DragonPlayer::durationChanged);
 
     player.setSource(url);
@@ -242,7 +242,7 @@ void TestNetworkPlayback::testSeekHttpFile()
 
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia || player.status() == DragonPlayer::MediaStatus::BufferedMedia, 10000);
 
-    QVERIFY2(player.seekable(), "HTTP file should be seekable");
+    QVERIFY2(player.isSeekable(), "HTTP file should be seekable");
     QTRY_VERIFY2_WITH_TIMEOUT(player.duration().value_or(0ms) > 0ms, "Duration should be known", 5000);
 
     player.play();
@@ -323,7 +323,7 @@ void TestNetworkPlayback::testSeekableDependsOnServerCapability()
     m_server->serveFile(wmaPath);
 
     player.setSource(url);
-    QTRY_VERIFY_WITH_TIMEOUT(player.seekable(), 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.isSeekable(), 10000);
     QVERIFY(seekableSpy.contains(QList<QVariant>{true}));
 
     m_server->setAcceptRanges(false);
@@ -336,10 +336,10 @@ void TestNetworkPlayback::testSeekableDependsOnServerCapability()
 
     QVERIFY(!QTest::qWaitFor(
         [&]() {
-            return player.seekable() || seekableSpy.contains(QList<QVariant>{true});
+            return player.isSeekable() || seekableSpy.contains(QList<QVariant>{true});
         },
         500));
-    QVERIFY2(!player.seekable(), "seekable() must stay false when the server does not advertise Accept-Ranges");
+    QVERIFY2(!player.isSeekable(), "seekable() must stay false when the server does not advertise Accept-Ranges");
     QVERIFY(!seekableSpy.contains(QList<QVariant>{true}));
 
     m_server->setAcceptRanges(true);

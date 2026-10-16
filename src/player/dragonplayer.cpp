@@ -357,6 +357,7 @@ void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
 
     currentPlaybackState = state;
 
+    Q_EMIT q->playbackStateChanged(state, oldState);
     Q_EMIT q->stateChanged(state, oldState);
 }
 
@@ -527,7 +528,7 @@ DragonPlayer::DragonPlayer(QObject *parent)
     d = std::make_unique<DragonPlayerPrivate>(this, DragonAudioOutput::Backend::Auto);
     d->init();
 
-    connect(this, &DragonPlayer::stateChanged, this, [](PlaybackState newState, PlaybackState oldState) {
+    connect(this, &DragonPlayer::playbackStateChanged, this, [](PlaybackState newState, PlaybackState oldState) {
         qCDebug(dragonMediaBackendPlayer) << "playbackState changed from" << oldState << "to" << newState;
     });
     connect(this, &DragonPlayer::statusChanged, this, [](MediaStatus status) {
@@ -543,7 +544,7 @@ DragonPlayer::DragonPlayer(DragonAudioOutput::Backend requestedBackend, QObject 
     d = std::make_unique<DragonPlayerPrivate>(this, requestedBackend);
     d->init();
 
-    connect(this, &DragonPlayer::stateChanged, this, [](PlaybackState newState, PlaybackState oldState) {
+    connect(this, &DragonPlayer::playbackStateChanged, this, [](PlaybackState newState, PlaybackState oldState) {
         qCDebug(dragonMediaBackendPlayer) << "playbackState changed from" << oldState << "to" << newState;
     });
     connect(this, &DragonPlayer::statusChanged, this, [](MediaStatus status) {
@@ -604,9 +605,13 @@ std::chrono::milliseconds DragonPlayer::position() const
 {
     return d->positionEstimator->position();
 }
-bool DragonPlayer::seekable() const
+bool DragonPlayer::isSeekable() const
 {
     return d->currentSeekable;
+}
+bool DragonPlayer::seekable() const
+{
+    return isSeekable();
 }
 qreal DragonPlayer::bufferProgress() const
 {

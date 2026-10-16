@@ -122,7 +122,7 @@ int main(int argc, char *argv[])
         player.play();
         if (autoplaySeekMs >= 0) {
             QTimer::singleShot(1500, &player, [seekMs = autoplaySeekMs, &player]() {
-                qDebug() << "autoplay: seek to" << seekMs << "ms (seekable:" << player.seekable() << ")";
+                qDebug() << "autoplay: seek to" << seekMs << "ms (seekable:" << player.isSeekable() << ")";
                 player.setPosition(std::chrono::milliseconds{seekMs});
             });
         }

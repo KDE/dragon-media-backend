@@ -229,7 +229,7 @@ public:
      *
      * The current playback state.
      */
-    Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY stateChanged FINAL)
+    Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY playbackStateChanged FINAL)
 
     /*!
      * \qmlproperty enumeration org.kde.dragonmediabackend::DragonPlayer::status
@@ -320,7 +320,7 @@ public:
      * Whether the playback position of the current source can be
      * changed. Radio streams are typically not seekable.
      */
-    Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged FINAL)
+    Q_PROPERTY(bool seekable READ isSeekable NOTIFY seekableChanged FINAL)
 
     /*!
      * \qmlproperty real org.kde.dragonmediabackend::DragonPlayer::bufferProgress
@@ -443,7 +443,13 @@ public:
     /*!
      * Returns whether the current source is seekable.
      */
-    [[nodiscard]] bool seekable() const;
+    [[nodiscard]] bool isSeekable() const;
+
+    /*!
+     * Returns whether the current source is seekable.
+     * \deprecated Use isSeekable() instead.
+     */
+    [[deprecated("Use isSeekable() instead")]] [[nodiscard]] bool seekable() const;
 
     /*!
      * Returns how much of a network stream has been buffered, from 0.0
@@ -484,19 +490,26 @@ Q_SIGNALS:
     void trackChanged();
 
     /*!
-     * \qmlsignal void org.kde.dragonmediabackend::DragonPlayer::stateChanged(enumeration newState, enumeration oldState)
+     * \qmlsignal void org.kde.dragonmediabackend::DragonPlayer::playbackStateChanged(enumeration newState, enumeration oldState)
      *
      * Emitted when the playback state changes to \a newState, with the
      * previous state in \a oldState.
      *
-     * The corresponding handler is \c onStateChanged.
+     * The corresponding handler is \c onPlaybackStateChanged.
      */
 
     /*!
      * Emitted when the playback state changes to \a newState, with the
      * previous state in \a oldState.
      */
-    void stateChanged(PlaybackState newState, PlaybackState oldState);
+    void playbackStateChanged(PlaybackState newState, PlaybackState oldState);
+
+    /*!
+     * Emitted when the playback state changes to \a newState, with the
+     * previous state in \a oldState.
+     * \deprecated Use playbackStateChanged instead.
+     */
+    [[deprecated("Use playbackStateChanged instead")]] void stateChanged(PlaybackState newState, PlaybackState oldState);
 
     /*!
      * Emitted when the media status changes to \a status.

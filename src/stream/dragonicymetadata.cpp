@@ -36,11 +36,6 @@ QString DragonIcyMetadata::streamTitle() const
     return d->streamTitle;
 }
 
-bool DragonIcyMetadata::hasStreamTitle() const
-{
-    return !d->streamTitle.isEmpty();
-}
-
 void DragonIcyMetadata::setStreamTitle(const QString &title)
 {
     d->streamTitle = title;
@@ -49,11 +44,6 @@ void DragonIcyMetadata::setStreamTitle(const QString &title)
 QString DragonIcyMetadata::streamUrl() const
 {
     return d->streamUrl;
-}
-
-bool DragonIcyMetadata::hasStreamUrl() const
-{
-    return !d->streamUrl.isEmpty();
 }
 
 void DragonIcyMetadata::setStreamUrl(const QString &url)

@@ -63,19 +63,19 @@ class DRAGONMEDIABACKEND_EXPORT DragonCdTrack
     Q_PROPERTY(int number READ number CONSTANT FINAL)
 
     /*!
-     * \qmlproperty bool org.kde.dragonmediabackend::dragonCdTrack::isAudio
+     * \qmlproperty bool org.kde.dragonmediabackend::dragonCdTrack::audio
      *
      * Whether this track holds audio. \c false for the data track of a
      * mixed-mode disc.
      */
 
     /*!
-     * \property DragonCdTrack::isAudio
+     * \property DragonCdTrack::audio
      *
      * Whether this track holds audio, \c false for the data track of a
      * mixed-mode disc.
      */
-    Q_PROPERTY(bool isAudio READ isAudio CONSTANT FINAL)
+    Q_PROPERTY(bool audio READ isAudio CONSTANT FINAL)
 
     /*!
      * \qmlproperty int org.kde.dragonmediabackend::dragonCdTrack::startFrame

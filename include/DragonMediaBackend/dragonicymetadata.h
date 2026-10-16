@@ -69,7 +69,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonIcyMetadata
      *
      * The ICY stream title, typically the artist and track name of the
      * song currently playing. Empty when the stream did not provide
-     * one; use hasStreamTitle() to distinguish that case.
+     * one.
      */
 
     /*!
@@ -77,7 +77,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonIcyMetadata
      *
      * The ICY stream title, typically the artist and track name of the
      * song currently playing. Empty when the stream did not provide
-     * one; use hasStreamTitle() to distinguish that case.
+     * one.
      */
     Q_PROPERTY(QString streamTitle READ streamTitle WRITE setStreamTitle FINAL)
 
@@ -85,18 +85,31 @@ class DRAGONMEDIABACKEND_EXPORT DragonIcyMetadata
      * \qmlproperty string org.kde.dragonmediabackend::dragonIcyMetadata::streamUrl
      *
      * The ICY stream URL, usually the stream's home page. Empty when
-     * the stream did not provide one; use hasStreamUrl() to
-     * distinguish that case.
+     * the stream did not provide one.
      */
 
     /*!
      * \property DragonIcyMetadata::streamUrl
      *
      * The ICY stream URL, usually the stream's home page. Empty when
-     * the stream did not provide one; use hasStreamUrl() to
-     * distinguish that case.
+     * the stream did not provide one.
      */
     Q_PROPERTY(QString streamUrl READ streamUrl WRITE setStreamUrl FINAL)
+
+    /*!
+     * \qmlproperty QHash<QString, QString> org.kde.dragonmediabackend::dragonIcyMetadata::customFields
+     *
+     * All custom ICY fields the stream provided, as a mapping of
+     * field name to value.
+     */
+
+    /*!
+     * \property DragonIcyMetadata::customFields
+     *
+     * All custom ICY fields the stream provided, as a mapping of
+     * field name to value.
+     */
+    Q_PROPERTY(QHash<QString, QString> customFields READ customFields WRITE setCustomFields FINAL)
 
     /*!
      * \qmlproperty bool org.kde.dragonmediabackend::dragonIcyMetadata::isNull
@@ -135,15 +148,9 @@ public:
      * Returns the ICY stream title, typically the artist and track name
      * of the song currently playing.
      *
-     * Returns an empty string if the stream did not provide a title;
-     * use hasStreamTitle() to distinguish that case.
+     * Returns an empty string if the stream did not provide a title.
      */
     [[nodiscard]] QString streamTitle() const;
-
-    /*!
-     * Returns \c true if the stream provided a stream title.
-     */
-    [[nodiscard]] bool hasStreamTitle() const;
 
     /*!
      * Sets the ICY stream title to \a title.
@@ -153,15 +160,9 @@ public:
     /*!
      * Returns the ICY stream URL, usually the stream's home page.
      *
-     * Returns an empty string if the stream did not provide a URL;
-     * use hasStreamUrl() to distinguish that case.
+     * Returns an empty string if the stream did not provide a URL.
      */
     [[nodiscard]] QString streamUrl() const;
-
-    /*!
-     * Returns \c true if the stream provided a stream URL.
-     */
-    [[nodiscard]] bool hasStreamUrl() const;
 
     /*!
      * Sets the ICY stream URL to \a url.

@@ -64,7 +64,7 @@ void TestE2E::testPlayerWithMp3File()
 
     QVERIFY2(durationSpy.count() >= 1, "durationChanged must be emitted after loading media");
     QVERIFY2(player.duration().value_or(0ms) > 0ms, "Duration should be positive after loading media");
-    QVERIFY2(player.seekable(), "Player should be seekable after loading media");
+    QVERIFY2(player.isSeekable(), "Player should be seekable after loading media");
 
     QVERIFY2(helper.playAndWait(), "Playback should start successfully");
     VERIFY_AUDIO_ACTIVE(diagnostics);
@@ -80,7 +80,7 @@ void TestE2E::testPlayerWithOggFile()
     DragonDiagnostics diagnostics(&player);
     PlayerHelper helper(&player);
     QVERIFY(helper.setSourceAndWait(u"gs-3s-2c-44100hz.ogg"_s));
-    QVERIFY(player.seekable());
+    QVERIFY(player.isSeekable());
     QVERIFY2(player.duration().value_or(0ms) > 0ms, "Duration should be positive after loading OGG media");
 
     QVERIFY2(helper.playAndWait(), "Playback should start successfully for OGG");

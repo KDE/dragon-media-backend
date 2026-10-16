@@ -121,10 +121,10 @@ DragonAndroidMediaSessionController::DragonAndroidMediaSessionController(DragonP
     pushIntMethod("onStateChanged", "(I)V", jint(player->playbackState()));
     pushIntMethod("onStatusChanged", "(I)V", jint(player->status()));
     pushLongMethod("onDurationChanged", "(J)V", jlong(player->duration().value_or(std::chrono::milliseconds{0}).count()));
-    pushBoolMethod("onSeekableChanged", "(Z)V", jboolean(player->seekable()));
+    pushBoolMethod("onSeekableChanged", "(Z)V", jboolean(player->isSeekable()));
     pushError(player->error(), player->errorString());
 
-    connect(player, &DragonPlayer::stateChanged, this, [this](DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState) {
+    connect(player, &DragonPlayer::playbackStateChanged, this, [this](DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState) {
         pushIntMethod("onStateChanged", "(I)V", jint(newState));
         if (newState == DragonPlayer::PlaybackState::PlayingState) {
             m_serviceStopPending = false;

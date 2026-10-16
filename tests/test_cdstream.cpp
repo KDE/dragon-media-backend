@@ -622,7 +622,7 @@ void TestCdStream::testGaplessPlayerTransition()
     const auto duration1 = player.duration();
     QVERIFY(duration1.has_value());
     QVERIFY(*duration1 > 1500ms);
-    QVERIFY(player.seekable());
+    QVERIFY(player.isSeekable());
     player.setNextSource(track2);
 
     QVERIFY2(helper.playAndWait(), "Track 1 failed to start playing");
@@ -648,7 +648,7 @@ void TestCdStream::testGaplessPlayerTransition()
     }
 
     QTRY_COMPARE_WITH_TIMEOUT(player.duration().value_or(0ms), std::chrono::milliseconds(m_sectorsPerTrack * 1000 / 75), 5000);
-    QVERIFY(player.seekable());
+    QVERIFY(player.isSeekable());
 
     QVERIFY2(QTest::qWaitFor(
                  [&]() {
@@ -704,7 +704,7 @@ void TestCdStream::testLateNextSourceGaplessTransition()
         QVERIFY2(status != DragonPlayer::MediaStatus::LoadingMedia, "Track 2 was reloaded instead of handed off gaplessly");
     }
 
-    QVERIFY(player.seekable());
+    QVERIFY(player.isSeekable());
 
     QVERIFY2(QTest::qWaitFor(
                  [&]() {
@@ -741,8 +741,8 @@ void TestCdStream::testGaplessCdTrackFollowedByLocalTrackPreservesSeekable()
     QList<bool> seekableSeen;
     connect(&player, &DragonPlayer::trackChanged, &player, [&]() {
         sourcesSeen.append(player.source());
-        seekableSeen.append(player.seekable());
-        qDebug() << "trackChanged: source=" << player.source() << "seekable=" << player.seekable();
+        seekableSeen.append(player.isSeekable());
+        qDebug() << "trackChanged: source=" << player.source() << "seekable=" << player.isSeekable();
     });
 
     QVERIFY2(helper.setSourceAndWait(track1), "Track 1 failed to load");

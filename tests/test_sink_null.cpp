@@ -167,7 +167,7 @@ void TestSinkNull::testPlayerWithNullSinkState()
     // but the sink's open() fails by contract (isDeviceOpen() stays false),
     // so the player must refuse to enter PlayingState and keep reporting the
     // resource error instead of silently pretending to play.
-    QSignalSpy stateSpy(&player, &DragonPlayer::stateChanged);
+    QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
     QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
 
     player.setSource(QUrl::fromLocalFile(QString::fromUtf8(DRAGON_SDL_TESTS_FIXTURES_DIR) + u"/sample-3s.mp3"_s));
