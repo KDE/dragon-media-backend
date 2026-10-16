@@ -93,8 +93,14 @@ endif()
 # The installed plugin lives in <prefix>/<qmldir>/org/kde/dragonmediabackend
 # while libDragonMediaBackend.so is installed into <prefix>/<libdir>; give
 # the plugin an $ORIGIN-relative rpath so it finds the library.
+
+# Absolute system library directories (e.g. /usr/lib64) are already searched
+# by the dynamic linker and distro packaging rejects them as redundant rpaths.
+set(_dragon_qml_plugin_install_rpath "")
 if(IS_ABSOLUTE "${KDE_INSTALL_QMLDIR}" OR IS_ABSOLUTE "${KDE_INSTALL_LIBDIR}")
-    set(_dragon_qml_plugin_install_rpath "${KDE_INSTALL_FULL_LIBDIR}")
+    if(NOT KDE_INSTALL_FULL_LIBDIR IN_LIST CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES)
+        set(_dragon_qml_plugin_install_rpath "${KDE_INSTALL_FULL_LIBDIR}")
+    endif()
 else()
     cmake_path(SET _dragon_qml_plugin_libdir "/${KDE_INSTALL_LIBDIR}")
     cmake_path(RELATIVE_PATH _dragon_qml_plugin_libdir
