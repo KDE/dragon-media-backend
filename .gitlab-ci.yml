@@ -13,30 +13,26 @@ include:
       - /gitlab-templates/freebsd-qt6.yml
       - /gitlab-templates/android-qt6.yml
 
-suse_tumbleweed_qt611:
+.ci-checkout:
   before_script:
     - git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
     - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
     - git clone https://github.com/mborgerding/kissfft.git --depth=1 --branch 131.2.0 kissfft-src
 
+suse_tumbleweed_qt611:
+  before_script: !reference [.ci-checkout, before_script]
+
 suse_tumbleweed_qt613:
-  before_script:
-    - git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
-    - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
-    - git clone https://github.com/mborgerding/kissfft.git --depth=1 --branch 131.2.0 kissfft-src
+  before_script: !reference [.ci-checkout, before_script]
 
 windows_qt611:
   before_script:
-    - git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
-    - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
-    - git clone https://github.com/mborgerding/kissfft.git --depth=1 --branch 131.2.0 kissfft-src
+    - !reference [.ci-checkout, before_script]
     - git clone https://github.com/libsdl-org/SDL.git --depth=1 --branch release-3.4.12 sdl3-src
 
 freebsd150_qt611:
   before_script:
-    - git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
-    - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
-    - git clone https://github.com/mborgerding/kissfft.git --depth=1 --branch 131.2.0 kissfft-src
+    - !reference [.ci-checkout, before_script]
     - git clone https://github.com/libsdl-org/SDL.git --depth=1 --branch release-3.4.12 sdl3-src
 
 android_qt611:

@@ -47,17 +47,33 @@ target_include_directories(dragonqml_example PRIVATE
 )
 
 if(ANDROID)
-    set(_dragon_deps_root "$ENV{DRAGON_ANDROID_DEPS_ROOT}")
-    if(_dragon_deps_root STREQUAL "")
-        set(_dragon_deps_root "$ENV{HOME}/Android/deps")
+    if(ANDROID_ABI STREQUAL "arm64-v8a")
+        set(_dragon_android_prefix "$ENV{DRAGON_QT_ANDROID_ARM64}")
+    else()
+        set(_dragon_android_prefix "$ENV{DRAGON_QT_ANDROID_X86_64}")
     endif()
-    set(_dragon_sdl3_jar "${_dragon_deps_root}/sdl3/SDL3-current.jar")
-    if(NOT EXISTS "${_dragon_sdl3_jar}")
+    if(_dragon_android_prefix STREQUAL "")
         message(FATAL_ERROR
-            "No SDL3 java glue jar at ${_dragon_sdl3_jar} — "
-            "run scripts/build-android-sdl3.sh <abi> first (it builds the jar "
-            "from the same research/SDL checkout as libSDL3.so).")
+            "DRAGON_QT_ANDROID_ARM64 / DRAGON_QT_ANDROID_X86_64 must point at the "
+            "Qt-for-Android craft prefix that provides Qt, FFmpeg and SDL3 "
+            "(see ci/craft-android-deps.sh).")
     endif()
+
+    # craft's android build names the library after the ABI
+    set(_dragon_sdl3_lib "${_dragon_android_prefix}/lib/libSDL3_${ANDROID_ABI}.so")
+    if(NOT EXISTS "${_dragon_sdl3_lib}")
+        set(_dragon_sdl3_lib "${_dragon_android_prefix}/lib/libSDL3.so")
+    endif()
+    set(_dragon_sdl3_jar "${_dragon_android_prefix}/jar/SDL3-qtactivity-qt.jar")
+    foreach(_dragon_android_artifact IN ITEMS "${_dragon_sdl3_lib}" "${_dragon_sdl3_jar}")
+        if(NOT EXISTS "${_dragon_android_artifact}")
+            message(FATAL_ERROR
+                "Expected ${_dragon_android_artifact} — the craft prefix is missing "
+                "the SDL3 artifacts. The jar is built by "
+                "scripts/build-sdl3-qtactivity-jar.sh from the SDL3 sources Craft "
+                "unpacked; libSDL3.so comes from the libs/libsdl3 blueprint.")
+        endif()
+    endforeach()
 
     set(_dragon_android_pkg_dir ${CMAKE_CURRENT_BINARY_DIR}/android-package)
     file(REMOVE_RECURSE ${_dragon_android_pkg_dir})
@@ -80,11 +96,6 @@ if(ANDROID)
     endfunction()
     cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL dragonqml_android_pkg_sync_hook)
 
-    if(ANDROID_ABI STREQUAL arm64-v8a)
-        set(_dragon_sdl3_lib "${_dragon_deps_root}/sdl3/arm64-v8a/lib/libSDL3.so")
-    else()
-        set(_dragon_sdl3_lib "${_dragon_deps_root}/sdl3/x86_64/lib/libSDL3.so")
-    endif()
     set(_dragon_sink_lib ${CMAKE_BINARY_DIR}/lib/DragonMediaBackend/AudioSink/libplugins_DragonMediaBackend_AudioSink_dragonsdlaudiosink.so)
     set_target_properties(dragonqml_example PROPERTIES
         QT_ANDROID_PACKAGE_NAME org.kde.dragonqmlexample

@@ -21,11 +21,24 @@ repositories {
 }
 
 apply plugin: qtGradlePluginType
+configurations.all {
+    resolutionStrategy {
+        // The newest androidx.media3 artifacts require a newer compileSdk
+        // than the one Qt generates for the project (android-35 at the
+        // moment) — pin the last SDK-35-compatible versions
+        force 'androidx.core:core:1.16.0'
+        eachDependency { details ->
+            if (details.requested.group == 'androidx.media3') {
+                details.useVersion '1.9.1'
+            }
+        }
+    }
+}
 dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar', '*.aar'])
-    implementation 'androidx.core:core:1.17.0'
-    implementation 'androidx.media3:media3-session:1.11.0'
-    implementation 'androidx.media3:media3-common:1.11.0'
+    implementation 'androidx.core:core:1.16.0'
+    implementation 'androidx.media3:media3-session:1.9.1'
+    implementation 'androidx.media3:media3-common:1.9.1'
 }
 
 android {

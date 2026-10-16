@@ -1,6 +1,6 @@
-diff --git a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
---- a/org/libsdl/app/SDLActivity.java
-+++ b/org/libsdl/app/SDLActivity.java
+diff -ru a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
+--- a/org/libsdl/app/SDLActivity.java	2026-10-15 14:40:51.650584474 -0700
++++ b/org/libsdl/app/SDLActivity.java	2026-10-15 14:40:51.651584523 -0700
 @@ -1,6 +1,5 @@
  package org.libsdl.app;
  
@@ -8,7 +8,7 @@ diff --git a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
  import android.app.AlertDialog;
  import android.app.Dialog;
  import android.app.UiModeManager;
-@@ -63,7 +62,10 @@ import java.util.Locale;
+@@ -57,7 +56,10 @@
  /**
      SDL Activity
  */
@@ -19,8 +19,8 @@ diff --git a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
 +public class SDLActivity extends QtActivity implements View.OnSystemUiVisibilityChangeListener {
      private static final String TAG = "SDL";
      private static final int SDL_MAJOR_VERSION = 3;
-     private static final int SDL_MINOR_VERSION = 5;
-@@ -314,12 +316,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
+     private static final int SDL_MINOR_VERSION = 4;
+@@ -294,12 +296,7 @@
       */
      protected String[] getLibraries() {
          return new String[] {
@@ -34,23 +34,14 @@ diff --git a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
          };
      }
  
-@@ -351,7 +348,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
-      * @return mask of SDL.SDL_INIT_* values.
-      */
-     protected int getInitSubsystems() {
--        return SDL.SDL_INIT_EVERYTHING;
-+        return SDL.SDL_INIT_AUDIO;
-     }
- 
-     public static void initialize() {
-@@ -376,8 +373,14 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
+@@ -342,8 +339,14 @@
      }
  
      // Setup
 +    static {
 +        System.loadLibrary("SDL3");
-+        SDL.setupJNI(SDL.SDL_INIT_AUDIO);
-+        SDL.initialize(SDL.SDL_INIT_AUDIO);
++        SDL.setupJNI();
++        SDL.initialize();
 +    }
 +
      @Override
@@ -59,12 +50,12 @@ diff --git a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
          Log.v(TAG, "Manufacturer: " + Build.MANUFACTURER);
          Log.v(TAG, "Device: " + Build.DEVICE);
          Log.v(TAG, "Model: " + Build.MODEL);
-@@ -477,12 +480,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
+@@ -440,12 +443,6 @@
              }
          }
  
 -        // Set up JNI
--        SDL.setupJNI(getInitSubsystems());
+-        SDL.setupJNI();
 -
 -        // Initialize state
 -        SDL.initialize();
@@ -72,19 +63,17 @@ diff --git a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
          // So we can call stuff from static callbacks
          mSingleton = this;
          SDL.setContext(this);
-@@ -964,21 +961,7 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
-             boolean readyToRun = (mSurface == null) ? mIsResumedCalled
-                     : (mSurface.mIsSurfaceReady && (mHasFocus || mHasMultiWindow) && mIsResumedCalled);
-             if (readyToRun) {
+@@ -856,19 +853,7 @@
+         // Try a transition to resumed state
+         if (mNextNativeState == NativeState.RESUMED) {
+             if (mSurface.mIsSurfaceReady && (mHasFocus || mHasMultiWindow) && mIsResumedCalled) {
 -                if (mSDLThread == null) {
 -                    // This is the entry point to the C app.
 -                    // Start up the C app thread and enable sensor input for the first time
 -                    // FIXME: Why aren't we enabling sensor input at start?
 -
 -                    mSDLThread = new Thread(new SDLMain(), "SDLThread");
--                    if (mSurface != null) {
--                        mSurface.enableSensor(Sensor.TYPE_ACCELEROMETER, true);
--                    }
+-                    mSurface.enableSensor(Sensor.TYPE_ACCELEROMETER, true);
 -                    mSDLThread.start();
 -
 -                    // No nativeResume(), don't signal Android_ResumeSem
@@ -92,13 +81,16 @@ diff --git a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
 -                    nativeResume();
 -                }
 +                nativeResume();
-                 if (mSurface != null) {
-                     mSurface.handleResume();
-                 }
-@@ -2432,31 +2415,6 @@ public class SDLActivity extends Activity implements View.OnSystemUiVisibilityCh
- /**
-     Simple runnable to start the SDL application
- */
+                 mSurface.handleResume();
+ 
+                 mCurrentNativeState = mNextNativeState;
+@@ -2156,33 +2141,6 @@
+     }
+ }
+ 
+-/**
+-    Simple runnable to start the SDL application
+-*/
 -class SDLMain implements Runnable {
 -    @Override
 -    public void run() {
@@ -123,7 +115,6 @@ diff --git a/org/libsdl/app/SDLActivity.java b/org/libsdl/app/SDLActivity.java
 -
 -    }
 -}
--
+ 
  class SDLClipboardHandler implements
      ClipboardManager.OnPrimaryClipChangedListener {
- 

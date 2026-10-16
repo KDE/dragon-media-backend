@@ -160,19 +160,21 @@ pkg_check_modules(FFmpeg IMPORTED_TARGET REQUIRED
     libavutil>=58
 )
 
-pkg_check_modules(PIPEWIRE IMPORTED_TARGET libpipewire-0.3)
-if(PIPEWIRE_FOUND)
-    set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND PIPEWIRE)
-endif()
+if(NOT ANDROID)
+    pkg_check_modules(PIPEWIRE IMPORTED_TARGET libpipewire-0.3)
+    if(PIPEWIRE_FOUND)
+        set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND PIPEWIRE)
+    endif()
 
-pkg_check_modules(PULSEAUDIO IMPORTED_TARGET libpulse)
-if(PULSEAUDIO_FOUND)
-    set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND PULSEAUDIO)
-endif()
+    pkg_check_modules(PULSEAUDIO IMPORTED_TARGET libpulse)
+    if(PULSEAUDIO_FOUND)
+        set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND PULSEAUDIO)
+    endif()
 
-pkg_check_modules(LIBCDIO IMPORTED_TARGET libcdio)
-if(LIBCDIO_FOUND)
-    set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND LIBCDIO)
+    pkg_check_modules(LIBCDIO IMPORTED_TARGET libcdio)
+    if(LIBCDIO_FOUND)
+        set_property(GLOBAL APPEND PROPERTY PACKAGES_FOUND LIBCDIO)
+    endif()
 endif()
 
 set_package_properties(PIPEWIRE PROPERTIES
