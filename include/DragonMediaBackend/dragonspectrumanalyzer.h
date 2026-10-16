@@ -48,7 +48,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonSpectrumAnalyzer : public QObject
      * Which parts of the frame data are computed and delivered. Setting
      * the mode to Off deactivates the analyzer.
      */
-    Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged)
+    Q_PROPERTY(Mode mode READ mode WRITE setMode NOTIFY modeChanged FINAL)
 
     /*!
      * \property DragonSpectrumAnalyzer::frameRate
@@ -56,7 +56,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonSpectrumAnalyzer : public QObject
      * The target number of frames delivered per second. Clamped to the
      * range supported by the pipeline.
      */
-    Q_PROPERTY(int frameRate READ frameRate WRITE setFrameRate NOTIFY frameRateChanged)
+    Q_PROPERTY(int frameRate READ frameRate WRITE setFrameRate NOTIFY frameRateChanged FINAL)
 
     /*!
      * \property DragonSpectrumAnalyzer::active
@@ -64,7 +64,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonSpectrumAnalyzer : public QObject
      * Whether frames are currently being emitted. This is \c true when
      * the mode is not Off and the player pipeline is running.
      */
-    Q_PROPERTY(bool active READ isActive NOTIFY activeChanged)
+    Q_PROPERTY(bool active READ isActive NOTIFY activeChanged FINAL)
 
 public:
     /*!

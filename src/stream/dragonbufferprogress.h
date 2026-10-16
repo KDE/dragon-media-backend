@@ -12,7 +12,7 @@
 class DRAGONMEDIABACKEND_EXPORT DragonBufferProgress : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(qreal progress READ progress NOTIFY progressChanged)
+    Q_PROPERTY(qreal progress READ progress NOTIFY progressChanged FINAL)
 
 public:
     explicit DragonBufferProgress(QObject *parent = nullptr);

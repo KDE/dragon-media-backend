@@ -82,7 +82,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonAudioOutput : public QObject
      * Mapped logarithmically to the linear gain applied by the audio
      * backend.
      */
-    Q_PROPERTY(qreal volume READ volume WRITE setVolume NOTIFY volumeChanged)
+    Q_PROPERTY(qreal volume READ volume WRITE setVolume NOTIFY volumeChanged FINAL)
 
     /*!
      * \qmlproperty bool org.kde.dragonmediabackend::DragonAudioOutput::muted
@@ -95,7 +95,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonAudioOutput : public QObject
      *
      * Whether audio output is muted. Muting is independent of volume().
      */
-    Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY mutedChanged)
+    Q_PROPERTY(bool muted READ muted WRITE setMuted NOTIFY mutedChanged FINAL)
 
     /*!
      * \qmlproperty enumeration org.kde.dragonmediabackend::DragonAudioOutput::backend
@@ -111,7 +111,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonAudioOutput : public QObject
      *
      * The audio backend this output uses. This property is constant.
      */
-    Q_PROPERTY(Backend backend READ backend CONSTANT)
+    Q_PROPERTY(Backend backend READ backend CONSTANT FINAL)
 
 public:
     /*!

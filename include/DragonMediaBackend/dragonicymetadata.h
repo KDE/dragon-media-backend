@@ -79,7 +79,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonIcyMetadata
      * song currently playing. Empty when the stream did not provide
      * one; use hasStreamTitle() to distinguish that case.
      */
-    Q_PROPERTY(QString streamTitle READ streamTitle WRITE setStreamTitle)
+    Q_PROPERTY(QString streamTitle READ streamTitle WRITE setStreamTitle FINAL)
 
     /*!
      * \qmlproperty string org.kde.dragonmediabackend::dragonIcyMetadata::streamUrl
@@ -96,7 +96,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonIcyMetadata
      * the stream did not provide one; use hasStreamUrl() to
      * distinguish that case.
      */
-    Q_PROPERTY(QString streamUrl READ streamUrl WRITE setStreamUrl)
+    Q_PROPERTY(QString streamUrl READ streamUrl WRITE setStreamUrl FINAL)
 
     /*!
      * \qmlproperty bool org.kde.dragonmediabackend::dragonIcyMetadata::isNull
@@ -110,7 +110,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonIcyMetadata
      * Whether the object was default-constructed and no metadata was
      * set.
      */
-    Q_PROPERTY(bool isNull READ isNull CONSTANT)
+    Q_PROPERTY(bool isNull READ isNull CONSTANT FINAL)
 
 public:
     /*!

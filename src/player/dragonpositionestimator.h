@@ -18,7 +18,7 @@
 class DRAGONMEDIABACKEND_EXPORT DragonPositionEstimator : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(std::chrono::milliseconds position READ position NOTIFY positionChanged)
+    Q_PROPERTY(std::chrono::milliseconds position READ position NOTIFY positionChanged FINAL)
 
 public:
     using DevicePositionCallback = std::function<std::optional<std::chrono::milliseconds>()>;

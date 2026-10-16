@@ -92,6 +92,10 @@ public:
     virtual void setMuted(bool muted);
 
     virtual void setStreamName(const QString &name);
+    [[nodiscard]] QString streamName() const
+    {
+        return m_streamName;
+    }
     [[nodiscard]] bool hasFormat(int sampleRate, int channels) const;
     [[nodiscard]] qint64 totalSamplesWritten() const;
     void resetPositionTracking();

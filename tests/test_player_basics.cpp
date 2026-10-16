@@ -33,6 +33,8 @@ private Q_SLOTS:
 
     void testMutedProperty();
     void testVolumeProperty();
+    void testStreamNameProperty();
+    void testPropertiesAreFinal();
     void testSourceProperty();
     void testPlaybackStateNoSourceStaysStopped();
     void testErrorProperty();
@@ -95,6 +97,51 @@ void TestPlayerBasics::testInitialState()
     QCOMPARE(player.duration(), std::nullopt);
     QCOMPARE(player.position(), 0ms);
     QVERIFY(!player.seekable());
+    QCOMPARE(player.streamName(), QString());
+}
+
+void TestPlayerBasics::testStreamNameProperty()
+{
+    DragonPlayer player;
+    QCOMPARE(player.streamName(), QString());
+
+    QSignalSpy spy(&player, &DragonPlayer::streamNameChanged);
+
+    player.setStreamName(u"My Stream"_s);
+    QCOMPARE(player.streamName(), u"My Stream"_s);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toString(), u"My Stream"_s);
+
+    // Setting same name should not re-emit
+    player.setStreamName(u"My Stream"_s);
+    QCOMPARE(spy.count(), 1);
+
+    // QMetaProperty read/write
+    const int propIndex = player.metaObject()->indexOfProperty("streamName");
+    QVERIFY(propIndex != -1);
+    const QMetaProperty prop = player.metaObject()->property(propIndex);
+    QVERIFY(prop.isFinal());
+    QCOMPARE(prop.read(&player).toString(), u"My Stream"_s);
+
+    QVERIFY(prop.write(&player, u"Another Name"_s));
+    QCOMPARE(player.streamName(), u"Another Name"_s);
+    QCOMPARE(spy.count(), 2);
+}
+
+void TestPlayerBasics::testPropertiesAreFinal()
+{
+    DragonPlayer player;
+    const auto *mo = player.metaObject();
+    for (int i = mo->propertyOffset(); i < mo->propertyCount(); ++i) {
+        const auto prop = mo->property(i);
+        QVERIFY2(prop.isFinal(), qPrintable(u"DragonPlayer property '%1' must be FINAL"_s.arg(QString::fromUtf8(prop.name()))));
+    }
+
+    const auto *outputMo = player.audioOutput()->metaObject();
+    for (int i = outputMo->propertyOffset(); i < outputMo->propertyCount(); ++i) {
+        const auto prop = outputMo->property(i);
+        QVERIFY2(prop.isFinal(), qPrintable(u"DragonAudioOutput property '%1' must be FINAL"_s.arg(QString::fromUtf8(prop.name()))));
+    }
 }
 
 void TestPlayerBasics::testMutedProperty()

@@ -125,7 +125,11 @@ void DragonPlayerPrivate::applyPendingTrack(const PendingTrack &pending)
     currentSampleRate = pending.sampleRate;
     currentChannels = pending.channels;
 
+    const QString priorStreamName = audioOutput->sink()->streamName();
     audioOutput->sink()->setStreamName(QString());
+    if (!priorStreamName.isEmpty()) {
+        Q_EMIT q->streamNameChanged(QString());
+    }
 
     positionEstimator->trackChanged(currentDuration);
 
@@ -560,6 +564,14 @@ DragonAudioOutput *DragonPlayer::audioOutput() const
     return d->audioOutput;
 }
 
+QString DragonPlayer::streamName() const
+{
+    if (const auto *sink = d->audioSink()) {
+        return sink->streamName();
+    }
+    return {};
+}
+
 QUrl DragonPlayer::source() const
 {
     return d->currentSource;
@@ -690,7 +702,11 @@ void DragonPlayer::setSource(const QUrl &source)
         d->audioOutput->sink()->setQueueReady(false);
         d->audioOutput->sink()->setPositionOffset(0ms, DragonAudioSink::PositionResetMode::NormalTrackChange);
         if (d->currentSource != source) {
+            const QString priorStreamName = d->audioOutput->sink()->streamName();
             d->audioOutput->sink()->setStreamName(QString());
+            if (!priorStreamName.isEmpty()) {
+                Q_EMIT streamNameChanged(QString());
+            }
         }
     }
 
@@ -788,7 +804,11 @@ void DragonPlayer::setStreamName(const QString &name)
     qCDebug(dragonMediaBackendPlayer) << "setStreamName(" << name << ")";
 
     if (auto *sink = d->audioSink()) {
+        if (sink->streamName() == name) {
+            return;
+        }
         sink->setStreamName(name);
+        Q_EMIT streamNameChanged(name);
     }
 }
 

@@ -83,7 +83,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonCdToc
      *
      * The device this TOC was read from.
      */
-    Q_PROPERTY(QString device READ device CONSTANT)
+    Q_PROPERTY(QString device READ device CONSTANT FINAL)
 
     /*!
      * \qmlproperty int org.kde.dragonmediabackend::dragonCdToc::leadOutFrame
@@ -104,7 +104,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonCdToc
      *
      * Learn more at the \l {https://en.wikipedia.org/wiki/Track_(optical_disc)}{Wikipedia article on optical disc tracks}.
      */
-    Q_PROPERTY(int leadOutFrame READ leadOutFrame CONSTANT)
+    Q_PROPERTY(int leadOutFrame READ leadOutFrame CONSTANT FINAL)
 
     /*!
      * \qmlproperty dragonDuration org.kde.dragonmediabackend::dragonCdToc::discDuration
@@ -117,7 +117,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonCdToc
      *
      * The total playable duration of the disc.
      */
-    Q_PROPERTY(DragonDuration discDuration READ discDuration CONSTANT)
+    Q_PROPERTY(DragonDuration discDuration READ discDuration CONSTANT FINAL)
 
     /*!
      * \qmlproperty list<dragonCdTrack> org.kde.dragonmediabackend::dragonCdToc::tracks
@@ -130,7 +130,7 @@ class DRAGONMEDIABACKEND_EXPORT DragonCdToc
      *
      * All tracks of the disc in TOC order.
      */
-    Q_PROPERTY(QList<DragonCdTrack> tracks READ tracks CONSTANT)
+    Q_PROPERTY(QList<DragonCdTrack> tracks READ tracks CONSTANT FINAL)
 
 public:
     /*!

@@ -194,7 +194,7 @@ public:
      * builds them, and \l DragonCdTocReader reads the disc's track list
      * before playback starts.
      */
-    Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
+    Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged FINAL)
 
     /*!
      * \qmlproperty url org.kde.dragonmediabackend::DragonPlayer::nextSource
@@ -215,7 +215,7 @@ public:
      *
      * \sa aboutToFinish()
      */
-    Q_PROPERTY(QUrl nextSource READ nextSource WRITE setNextSource NOTIFY nextSourceChanged)
+    Q_PROPERTY(QUrl nextSource READ nextSource WRITE setNextSource NOTIFY nextSourceChanged FINAL)
 
     /*!
      * \qmlproperty enumeration org.kde.dragonmediabackend::DragonPlayer::playbackState
@@ -229,7 +229,7 @@ public:
      *
      * The current playback state.
      */
-    Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY stateChanged)
+    Q_PROPERTY(PlaybackState playbackState READ playbackState NOTIFY stateChanged FINAL)
 
     /*!
      * \qmlproperty enumeration org.kde.dragonmediabackend::DragonPlayer::status
@@ -246,7 +246,7 @@ public:
      *
      * The status of the loaded media.
      */
-    Q_PROPERTY(MediaStatus status READ status NOTIFY statusChanged)
+    Q_PROPERTY(MediaStatus status READ status NOTIFY statusChanged FINAL)
 
     /*!
      * \qmlproperty enumeration org.kde.dragonmediabackend::DragonPlayer::error
@@ -260,7 +260,7 @@ public:
      *
      * The error state of the player, NoError when there is no error.
      */
-    Q_PROPERTY(Error error READ error NOTIFY errorChanged)
+    Q_PROPERTY(Error error READ error NOTIFY errorChanged FINAL)
 
     /*!
      * \qmlproperty string org.kde.dragonmediabackend::DragonPlayer::errorString
@@ -273,7 +273,7 @@ public:
      *
      * A human-readable description of the current error, if any.
      */
-    Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged)
+    Q_PROPERTY(QString errorString READ errorString NOTIFY errorChanged FINAL)
 
     /*!
      * \qmlproperty dragonDuration org.kde.dragonmediabackend::DragonPlayer::duration
@@ -290,7 +290,7 @@ public:
      * duration. C++ code should use duration(), which reports unknown
      * durations as an empty std::optional.
      */
-    Q_PROPERTY(DragonDuration duration READ duration NOTIFY durationChanged)
+    Q_PROPERTY(DragonDuration duration READ duration NOTIFY durationChanged FINAL)
 
     /*!
      * \qmlproperty dragonDuration org.kde.dragonmediabackend::DragonPlayer::position
@@ -305,7 +305,7 @@ public:
      * source is loaded seeks playback. C++ code should use position()
      * and setPosition() with std::chrono::milliseconds.
      */
-    Q_PROPERTY(DragonDuration position READ position WRITE setPosition NOTIFY positionChanged)
+    Q_PROPERTY(DragonDuration position READ position WRITE setPosition NOTIFY positionChanged FINAL)
 
     /*!
      * \qmlproperty bool org.kde.dragonmediabackend::DragonPlayer::seekable
@@ -320,7 +320,7 @@ public:
      * Whether the playback position of the current source can be
      * changed. Radio streams are typically not seekable.
      */
-    Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged)
+    Q_PROPERTY(bool seekable READ seekable NOTIFY seekableChanged FINAL)
 
     /*!
      * \qmlproperty real org.kde.dragonmediabackend::DragonPlayer::bufferProgress
@@ -335,7 +335,7 @@ public:
      * How much of a network stream has been buffered, from 0.0 to 1.0.
      * Always 1.0 for fully buffered local files.
      */
-    Q_PROPERTY(qreal bufferProgress READ bufferProgress NOTIFY bufferProgressChanged)
+    Q_PROPERTY(qreal bufferProgress READ bufferProgress NOTIFY bufferProgressChanged FINAL)
 
     /*!
      * \qmlproperty dragonDuration org.kde.dragonmediabackend::DragonPlayer::prefinishMark
@@ -353,7 +353,7 @@ public:
      *
      * \sa aboutToFinish()
      */
-    Q_PROPERTY(DragonDuration prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged)
+    Q_PROPERTY(DragonDuration prefinishMark READ prefinishMark WRITE setPrefinishMark NOTIFY prefinishMarkChanged FINAL)
 
     /*!
      * \qmlproperty DragonAudioOutput org.kde.dragonmediabackend::DragonPlayer::audioOutput
@@ -369,13 +369,34 @@ public:
      * this player. The instance is owned by the player and constant for
      * its lifetime.
      */
-    Q_PROPERTY(DragonAudioOutput *audioOutput READ audioOutput CONSTANT)
+    Q_PROPERTY(DragonAudioOutput *audioOutput READ audioOutput CONSTANT FINAL)
+
+    /*!
+     * \qmlproperty string org.kde.dragonmediabackend::DragonPlayer::streamName
+     *
+     * The display name of the audio stream as shown by the audio server
+     * (for example PipeWire's \c media.name or PulseAudio's \c media.name).
+     */
+
+    /*!
+     * \property DragonPlayer::streamName
+     *
+     * The display name of the audio stream as shown by the audio server
+     * (for example PipeWire's \c media.name or PulseAudio's \c media.name).
+     */
+    Q_PROPERTY(QString streamName READ streamName WRITE setStreamName NOTIFY streamNameChanged FINAL)
 
     /*!
      * Returns the \l DragonAudioOutput instance controlling volume and
      * mute for this player. The instance is owned by the player.
      */
     [[nodiscard]] DragonAudioOutput *audioOutput() const;
+
+    /*!
+     * Returns the display name of the audio stream as shown by the audio
+     * server, or an empty string if no custom name has been set.
+     */
+    [[nodiscard]] QString streamName() const;
 
     /*!
      * Returns the media being played.
@@ -515,6 +536,11 @@ Q_SIGNALS:
      * Emitted when the prefinish mark changes to \a msec.
      */
     void prefinishMarkChanged(std::chrono::milliseconds msec);
+
+    /*!
+     * Emitted when the stream name changes to \a name.
+     */
+    void streamNameChanged(const QString &name);
 
     /*!
      * \qmlsignal void org.kde.dragonmediabackend::DragonPlayer::aboutToFinish()
