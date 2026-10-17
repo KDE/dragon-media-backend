@@ -23,7 +23,7 @@ endif()
 # tests are disabled.
 pkg_check_modules(FLAC REQUIRED IMPORTED_TARGET flac)
 
-include(ECMMarkNonGuiExecutable)
+include(ECMAddTests)
 
 option(DRAGON_CI_PIPEWIRE "Start a headless PipeWire daemon for audio tests" OFF)
 option(DRAGON_CI_NO_AUDIO "Disable tests that require a real audio device (for headless Windows CI)" OFF)
@@ -46,18 +46,13 @@ set(_dragon_common_test_env
 
 function(dragon_add_test name)
     cmake_parse_arguments(PARSE_ARGV 1 ARG "" "" "LIBRARIES;ENVIRONMENT")
-    add_executable(${name} ${name}.cpp)
-    # let's you use see the output in the terminal on Windows:
-    ecm_mark_nongui_executable(${name})
+    ecm_add_test(${name}.cpp
+        LINK_LIBRARIES DragonMediaBackend Qt6::Test ${ARG_LIBRARIES}
+        ENVIRONMENT ${_dragon_common_test_env} ${ARG_ENVIRONMENT}
+    )
     target_include_directories(${name} PRIVATE ${PROJECT_SOURCE_DIR}/src)
-    target_link_libraries(${name} PRIVATE DragonMediaBackend Qt6::Test ${ARG_LIBRARIES})
     target_compile_definitions(${name} PRIVATE
         DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
-    )
-    add_test(NAME ${name} COMMAND ${name})
-    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
-        ${_dragon_common_test_env}
-        ${ARG_ENVIRONMENT}
     )
 endfunction()
 

@@ -21,7 +21,7 @@ endif()
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(ECM 6.0.0 NO_MODULE)
+find_package(ECM 6.13.0 NO_MODULE)
 set(CMAKE_MODULE_PATH ${ECM_MODULE_PATH})
 
 include(FeatureSummary)
