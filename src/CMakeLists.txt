@@ -9,11 +9,6 @@ add_subdirectory(fft)
 add_subdirectory(sink)
 
 qt_add_library(DragonMediaBackend SHARED
-    $<TARGET_OBJECTS:dragon_player_objs>
-    $<TARGET_OBJECTS:dragon_decoder_objs>
-    $<TARGET_OBJECTS:dragon_stream_objs>
-    $<TARGET_OBJECTS:dragon_fft_objs>
-    $<TARGET_OBJECTS:dragon_sink_objs>
     ${DragonMediaBackend_SOURCES}
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
     ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
@@ -41,29 +36,19 @@ target_include_directories(DragonMediaBackend
         # The generated qmltyperegistrations.cpp includes the public headers
         # by file name via __has_include().
         ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
 )
 
 target_link_libraries(DragonMediaBackend
+    PRIVATE
+        dragon_player_objs
+        dragon_decoder_objs
+        dragon_stream_objs
+        dragon_fft_objs
+        dragon_sink_objs
     PUBLIC
         Qt6::Core
         Qt6::QmlIntegration
-    PRIVATE
-        Qt6::Network
-        QCoro6::Core
-        QCoro6::Network
-        PkgConfig::FFmpeg
-        Qt6::Gui
-        KF6::KIOCore
-        KF6::CoreAddons
-        KF6::I18n
-        kissfft::kissfft
 )
-
-if(LIBCDIO_FOUND)
-    target_link_libraries(DragonMediaBackend PRIVATE PkgConfig::LIBCDIO)
-endif()
 
 target_compile_definitions(DragonMediaBackend PRIVATE
     DRAGONMEDIABACKEND_INTERNAL_BUILD
