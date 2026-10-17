@@ -10,14 +10,7 @@ add_subdirectory(sink)
 
 qt_add_library(DragonMediaBackend SHARED
     ${DragonMediaBackend_SOURCES}
-    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtrack.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtoc.h
-    ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtocreader.h
+    ${DragonMediaBackend_PUBLIC_HEADERS}
 )
 
 add_library(DragonMediaBackend::DragonMediaBackend ALIAS DragonMediaBackend)
@@ -38,6 +31,8 @@ target_include_directories(DragonMediaBackend
         ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend
 )
 
+target_compile_features(DragonMediaBackend PUBLIC cxx_std_23)
+
 target_link_libraries(DragonMediaBackend
     PRIVATE
         dragon_player_objs
@@ -57,7 +52,6 @@ target_compile_definitions(DragonMediaBackend PRIVATE
 # The QML module: the public types self-register into the library via the
 # declarative QML macros in their headers; this generates the plugin,
 # qmldir and qmltypes for import as "org.kde.dragonmediabackend".
-set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 include(ECMQmlModule)
 
 qt_add_qml_module(DragonMediaBackend
@@ -103,7 +97,7 @@ ecm_finalize_qml_module(DragonMediaBackend
     VERSION ${PROJECT_VERSION}
 )
 
-    ecm_generate_qdoc(DragonMediaBackend ../docs/dragonmediabackend.qdocconf)
+ecm_generate_qdoc(DragonMediaBackend ../docs/dragonmediabackend.qdocconf)
 if (TARGET generate_qch_DragonMediaBackend)
     add_dependencies(generate_qch_DragonMediaBackend generate_docs_DragonMediaBackend)
 endif()

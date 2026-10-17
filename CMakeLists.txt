@@ -18,8 +18,6 @@ else()
     message(STATUS "ccache not found")
 endif()
 
-file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/tsan-logs")
-
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -45,6 +43,7 @@ include(ECMFeatureSummary)
 include(ECMGenerateQDoc)
 include(KDEClangFormat)
 include(KDEGitCommitHooks)
+include(ECMUninstallTarget)
 
 ecm_setup_version(PROJECT
     VARIABLE_PREFIX DRAGONMEDIABACKEND
@@ -53,10 +52,6 @@ ecm_setup_version(PROJECT
     COMPATIBILITY SameMajorVersion
     SOVERSION ${PROJECT_VERSION_MAJOR}
 )
-
-if(MSVC)
-    add_compile_options(/std:c++latest)
-endif()
 
 include(FetchContent)
 
@@ -78,26 +73,28 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/sdl3-src" AND NOT DEFINED FETCHCONTENT_SOURCE_DIR
 endif()
 
 # hey libc++ please implement C++23
-include(CheckCXXSourceCompiles)
-set(CMAKE_REQUIRED_FLAGS "-std=c++23")
-check_cxx_source_compiles("
-    #include <thread>
-    int main() { std::stop_token t; return t.stop_possible() ? 1 : 0; }
-" DRAGON_HAVE_STD_STOP_TOKEN)
-if(NOT DRAGON_HAVE_STD_STOP_TOKEN)
-    set(CMAKE_REQUIRED_FLAGS "-std=c++23 -fexperimental-library")
+block()
+    include(CheckCXXSourceCompiles)
+    set(CMAKE_REQUIRED_FLAGS "-std=c++23")
     check_cxx_source_compiles("
         #include <thread>
-        int main() { std::stop_source s; std::jthread j; return 0; }
-    " DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
-    if(NOT DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
-        message(FATAL_ERROR
-            "std::stop_token/std::jthread are unavailable and -fexperimental-library "
-            "did not enable them — the C++ standard library is too old for this pipeline.")
+        int main() { std::stop_token t; return t.stop_possible() ? 1 : 0; }
+    " DRAGON_HAVE_STD_STOP_TOKEN)
+    if(NOT DRAGON_HAVE_STD_STOP_TOKEN)
+        set(CMAKE_REQUIRED_FLAGS "-std=c++23 -fexperimental-library")
+        check_cxx_source_compiles("
+            #include <thread>
+            int main() { std::stop_source s; std::jthread j; return 0; }
+        " DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
+        if(NOT DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
+            message(FATAL_ERROR
+                "std::stop_token/std::jthread are unavailable and -fexperimental-library "
+                "did not enable them — the C++ standard library is too old for this pipeline.")
+        endif()
+        add_compile_options(-fexperimental-library)
+        message(STATUS "std::stop_token needs -fexperimental-library on this toolchain — enabled")
     endif()
-    add_compile_options(-fexperimental-library)
-    message(STATUS "std::stop_token needs -fexperimental-library on this toolchain — enabled")
-endif()
+endblock()
 
 
 set(DRAGON_MIN_QT_VERSION 6.8)
@@ -196,15 +193,6 @@ set_package_properties(LIBCDIO PROPERTIES
     URL "https://www.gnu.org/software/libcdio/"
 )
 
-if(NOT TARGET PkgConfig::FFmpeg)
-    add_library(PkgConfig::FFmpeg INTERFACE IMPORTED)
-    foreach(_lib IN ITEMS avformat avcodec swresample avutil)
-        if(TARGET FFmpeg_${_lib})
-            target_link_libraries(PkgConfig::FFmpeg INTERFACE FFmpeg_${_lib})
-        endif()
-    endforeach()
-endif()
-
 pkg_check_modules(KISSFFT_PC IMPORTED_TARGET kissfft-float)
 if(KISSFFT_PC_FOUND)
     message(STATUS "Found kissfft via pkg-config")
@@ -286,8 +274,6 @@ set_package_properties(QCoro6 PROPERTIES
     URL "https://github.com/qcoro/qcoro"
 )
 
-include(CheckCXXSourceCompiles)
-set(CMAKE_REQUIRED_FLAGS "-std=c++23")
 add_library(spsc_queue INTERFACE)
 target_include_directories(spsc_queue INTERFACE
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/LockFreeSpscQueue>
@@ -364,6 +350,21 @@ ecm_qt_install_logging_categories(
     SORT
 )
 
+set(DragonMediaBackend_PUBLIC_HEADERS
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtrack.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtoc.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtocreader.h
+    ${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_export.h
+    ${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_version.h
+)
+
+set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+
 add_subdirectory(src)
 
 ecm_generate_export_header(DragonMediaBackend
@@ -399,19 +400,6 @@ if(WIN32 AND TARGET SDL3-shared)
         RUNTIME DESTINATION ${KDE_INSTALL_BINDIR}
     )
 endif()
-
-set(DragonMediaBackend_PUBLIC_HEADERS
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonspectrumanalyzer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtrack.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtoc.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragoncdtocreader.h
-    ${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_export.h
-    ${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_version.h
-)
 
 install(FILES ${DragonMediaBackend_PUBLIC_HEADERS}
     ${DragonMediaBackend_CamelCase_HEADERS}
@@ -486,9 +474,7 @@ if(BUILD_EXAMPLES)
     add_subdirectory(examples/playcd)
 endif()
 
-option(BUILD_TESTING "Build tests" ON)
 if(BUILD_TESTING)
-    enable_testing()
     add_subdirectory(tests)
 endif()
 

@@ -5,6 +5,7 @@
 find_package(Qt6 REQUIRED COMPONENTS Core Qml Test)
 
 if(NOT WIN32 AND ECM_ENABLE_SANITIZERS MATCHES "thread")
+    file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/tsan-logs")
     get_directory_property(_ecm_link_libraries LINK_LIBRARIES)
     set_directory_properties(PROPERTIES LINK_LIBRARIES "")
     add_library(tsan_clockjoin_shim MODULE tsan_clockjoin_shim.cpp)
