@@ -6,6 +6,7 @@ add_library(dragon_sink_objs OBJECT
     dragonaudiosink.cpp
     dragonaudiosinkfactory.cpp
     dragonnullaudiosink.cpp
+    dragonmediabackend_audio_logging.cpp
 )
 
 target_include_directories(dragon_sink_objs PRIVATE
@@ -31,22 +32,24 @@ target_compile_definitions(dragon_sink_objs PRIVATE
 )
 
 kcoreaddons_add_plugin(dragonsdlaudiosink
-        SOURCES dragonsdlaudiosink.cpp ${dragonsdlaudiosink_SOURCES}
+        SOURCES dragonsdlaudiosink.cpp
         INSTALL_NAMESPACE "DragonMediaBackend/AudioSink"
 )
 target_include_directories(dragonsdlaudiosink PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_BINARY_DIR}
         ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
 )
 target_link_libraries(dragonsdlaudiosink PRIVATE DragonMediaBackend SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
 
 if(PULSEAUDIO_FOUND)
     kcoreaddons_add_plugin(dragonpulseaudiosink
-            SOURCES dragonpulseaudiosink.cpp ${dragonpulseaudiosink_SOURCES}
+            SOURCES dragonpulseaudiosink.cpp
             INSTALL_NAMESPACE "DragonMediaBackend/AudioSink"
     )
     target_include_directories(dragonpulseaudiosink PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
+            ${PROJECT_BINARY_DIR}
             ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
     )
     target_link_libraries(dragonpulseaudiosink PRIVATE DragonMediaBackend PkgConfig::PULSEAUDIO KF6::CoreAddons Qt6::Gui KF6::I18n)
@@ -55,11 +58,12 @@ endif()
 
 if(PIPEWIRE_FOUND)
     kcoreaddons_add_plugin(dragonpipewireaudiosink
-            SOURCES dragonpipewireaudiosink.cpp ${dragonpipewireaudiosink_SOURCES}
+            SOURCES dragonpipewireaudiosink.cpp
             INSTALL_NAMESPACE "DragonMediaBackend/AudioSink"
     )
     target_include_directories(dragonpipewireaudiosink PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
+            ${PROJECT_BINARY_DIR}
             ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
     )
     target_link_libraries(dragonpipewireaudiosink PRIVATE DragonMediaBackend PkgConfig::PIPEWIRE KF6::CoreAddons Qt6::Gui KF6::I18n)

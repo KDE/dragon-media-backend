@@ -294,7 +294,6 @@ target_include_directories(spsc_queue INTERFACE
 )
 
 set(CMAKE_AUTOMOC ON)
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     HEADER "dragonmediabackend_logging.h"
@@ -314,16 +313,7 @@ ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     DEFAULT_SEVERITY Info
 )
 
-ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
-    HEADER "dragonmediabackend_audio_logging.h"
-    IDENTIFIER "dragonMediaBackendAudio"
-    CATEGORY_NAME "org.kde.dragonmediabackend.audio"
-    DESCRIPTION "DragonMediaBackend (audio output)"
-    DEFAULT_SEVERITY Info
-)
-
-ecm_qt_declare_logging_category(dragonsdlaudiosink_SOURCES
-    HEADER "dragonmediabackend_audio_logging.h"
+ecm_qt_export_logging_category(
     IDENTIFIER "dragonMediaBackendAudio"
     CATEGORY_NAME "org.kde.dragonmediabackend.audio"
     DESCRIPTION "DragonMediaBackend (SDL audio output)"
@@ -367,33 +357,12 @@ ecm_qt_declare_logging_category(DragonMediaBackend_SOURCES
     DEFAULT_SEVERITY Info
 )
 
-if(PULSEAUDIO_FOUND)
-    ecm_qt_declare_logging_category(dragonpulseaudiosink_SOURCES
-        HEADER "dragonmediabackend_audio_logging.h"
-        IDENTIFIER "dragonMediaBackendAudio"
-        CATEGORY_NAME "org.kde.dragonmediabackend.audio"
-        DEFAULT_SEVERITY Info
-    )
-endif()
-
-if(PIPEWIRE_FOUND)
-    ecm_qt_declare_logging_category(dragonpipewireaudiosink_SOURCES
-        HEADER "dragonmediabackend_audio_logging.h"
-        IDENTIFIER "dragonMediaBackendAudio"
-        CATEGORY_NAME "org.kde.dragonmediabackend.audio"
-        DEFAULT_SEVERITY Info
-    )
-endif()
-
 ecm_qt_install_logging_categories(
     EXPORT DragonMediaBackend
     FILE dragonmediabackend.categories
     DESTINATION "${KDE_INSTALL_LOGGINGCATEGORIESDIR}"
     SORT
 )
-
-set(CMAKE_AUTOMOC ON)
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
 add_subdirectory(src)
 
