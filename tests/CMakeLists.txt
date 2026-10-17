@@ -28,8 +28,24 @@ include(ECMMarkNonGuiExecutable)
 option(DRAGON_CI_PIPEWIRE "Start a headless PipeWire daemon for audio tests" OFF)
 option(DRAGON_CI_NO_AUDIO "Disable tests that require a real audio device (for headless Windows CI)" OFF)
 
+set(_qt_plugin_path "${PROJECT_BINARY_DIR}/bin")
+if(DEFINED ENV{QT_PLUGIN_PATH} AND NOT "$ENV{QT_PLUGIN_PATH}" STREQUAL "")
+    if(WIN32)
+        string(APPEND _qt_plugin_path ";$ENV{QT_PLUGIN_PATH}")
+    else()
+        string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
+    endif()
+endif()
+# needed for Windows:
+string(REPLACE ";" "\\;" _qt_plugin_path "${_qt_plugin_path}")
+
+set(_dragon_common_test_env
+    "QT_QPA_PLATFORM=offscreen"
+    "QT_PLUGIN_PATH=${_qt_plugin_path}"
+)
+
 function(dragon_add_test name)
-    cmake_parse_arguments(ARG "" "" "LIBRARIES;ENVIRONMENT" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 1 ARG "" "" "LIBRARIES;ENVIRONMENT")
     add_executable(${name} ${name}.cpp)
     # let's you use see the output in the terminal on Windows:
     ecm_mark_nongui_executable(${name})
@@ -39,21 +55,39 @@ function(dragon_add_test name)
         DRAGON_SDL_TESTS_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures"
     )
     add_test(NAME ${name} COMMAND ${name})
-    set(_qt_plugin_path "${PROJECT_BINARY_DIR}/bin")
-    if(DEFINED ENV{QT_PLUGIN_PATH} AND NOT "$ENV{QT_PLUGIN_PATH}" STREQUAL "")
-        if(WIN32)
-            string(APPEND _qt_plugin_path ";$ENV{QT_PLUGIN_PATH}")
-        else()
-            string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
-        endif()
-    endif()
-    # needed for Windows:
-    string(REPLACE ";" "\\;" _qt_plugin_path "${_qt_plugin_path}")
     set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
+        ${_dragon_common_test_env}
         ${ARG_ENVIRONMENT}
     )
+endfunction()
+
+# Adds one disabled "base" test plus <base>_sdl / _pulseaudio / _pipewire
+# variants (the latter only when the backend was found).
+function(dragon_add_backend_test_variants base)
+    cmake_parse_arguments(PARSE_ARGV 1 ARG ""
+        "" "EXTRA_ENV_PULSEAUDIO;EXTRA_ENV_PIPEWIRE")
+    set_tests_properties(${base} PROPERTIES DISABLED TRUE)
+    add_test(NAME ${base}_sdl COMMAND ${base})
+    set_property(TEST ${base}_sdl APPEND PROPERTY ENVIRONMENT
+        ${_dragon_common_test_env}
+        "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
+    )
+    if(PULSEAUDIO_FOUND)
+        add_test(NAME ${base}_pulseaudio COMMAND ${base})
+        set_property(TEST ${base}_pulseaudio APPEND PROPERTY ENVIRONMENT
+            ${_dragon_common_test_env}
+            "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
+            ${ARG_EXTRA_ENV_PULSEAUDIO}
+        )
+    endif()
+    if(PIPEWIRE_FOUND)
+        add_test(NAME ${base}_pipewire COMMAND ${base})
+        set_property(TEST ${base}_pipewire APPEND PROPERTY ENVIRONMENT
+            ${_dragon_common_test_env}
+            "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
+            ${ARG_EXTRA_ENV_PIPEWIRE}
+        )
+    endif()
 endfunction()
 
 set(_dragon_audio_tests
@@ -114,6 +148,8 @@ dragon_add_test(test_kiostream LIBRARIES Qt6::Network KF6::KIOCore)
 
 # CD audio tests: run against generated bin/cue images through libcdio's
 # bincue driver, so no CD hardware is required.
+set(_player_libs Qt6::Network SDL3::SDL3 PkgConfig::FFmpeg spsc_queue kissfft::kissfft)
+
 if(LIBCDIO_FOUND)
     dragon_add_test(test_cdstream LIBRARIES ${_player_libs} KF6::KIOCore)
     dragon_add_test(test_cd_toc LIBRARIES ${_player_libs} Qt6::Qml)
@@ -123,7 +159,6 @@ if(LIBCDIO_FOUND)
 endif()
 
 # Player tests
-set(_player_libs Qt6::Network SDL3::SDL3 PkgConfig::FFmpeg spsc_queue kissfft::kissfft)
 dragon_add_test(test_dragonduration LIBRARIES ${_player_libs})
 dragon_add_test(test_dragonduration_qml LIBRARIES ${_player_libs} Qt6::Qml)
 
@@ -135,10 +170,8 @@ target_compile_definitions(test_qml_module PRIVATE
 )
 dragon_add_test(test_sink_null        LIBRARIES ${_player_libs})
 dragon_add_test(test_player_basics    LIBRARIES ${_player_libs})
-# Playback state tests are sensitive to audio-sink timing differences;
-# build one executable and run it once per backend via env var.
 dragon_add_test(test_player_playback  LIBRARIES ${_player_libs})
-set_tests_properties(test_player_playback PROPERTIES DISABLED TRUE)
+dragon_add_backend_test_variants(test_player_playback)
 dragon_add_test(test_player_signals   LIBRARIES ${_player_libs})
 dragon_add_test(test_player_setsource LIBRARIES ${_player_libs})
 dragon_add_test(test_player_prefinish LIBRARIES ${_player_libs})
@@ -150,66 +183,7 @@ dragon_add_test(test_decodepipeline_promotion LIBRARIES ${_player_libs} QCoro6::
 
 # Integration tests
 dragon_add_test(test_e2e              LIBRARIES Qt6::Network PkgConfig::FFmpeg)
-set_tests_properties(test_e2e PROPERTIES DISABLED TRUE)
-
-set(_qt_plugin_path "${PROJECT_BINARY_DIR}/bin")
-if(DEFINED ENV{QT_PLUGIN_PATH} AND NOT "$ENV{QT_PLUGIN_PATH}" STREQUAL "")
-    if(WIN32)
-        string(APPEND _qt_plugin_path ";$ENV{QT_PLUGIN_PATH}")
-    else()
-        string(APPEND _qt_plugin_path ":$ENV{QT_PLUGIN_PATH}")
-    endif()
-endif()
-
-# needed for Windows:
-string(REPLACE ";" "\\;" _qt_plugin_path "${_qt_plugin_path}")
-
-add_test(NAME test_e2e_sdl COMMAND test_e2e)
-set_property(TEST test_e2e_sdl APPEND PROPERTY ENVIRONMENT
-    "QT_QPA_PLATFORM=offscreen"
-    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
-    "QT_PLUGIN_PATH=${_qt_plugin_path}"
-)
-if(PULSEAUDIO_FOUND)
-    add_test(NAME test_e2e_pulseaudio COMMAND test_e2e)
-    set_property(TEST test_e2e_pulseaudio APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
-if(PIPEWIRE_FOUND)
-    add_test(NAME test_e2e_pipewire COMMAND test_e2e)
-    set_property(TEST test_e2e_pipewire APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
-
-# Playback state tests (one executable, run once per backend via env var)
-add_test(NAME test_player_playback_sdl COMMAND test_player_playback)
-set_property(TEST test_player_playback_sdl APPEND PROPERTY ENVIRONMENT
-    "QT_QPA_PLATFORM=offscreen"
-    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
-    "QT_PLUGIN_PATH=${_qt_plugin_path}"
-)
-if(PULSEAUDIO_FOUND)
-    add_test(NAME test_player_playback_pulseaudio COMMAND test_player_playback)
-    set_property(TEST test_player_playback_pulseaudio APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
-if(PIPEWIRE_FOUND)
-    add_test(NAME test_player_playback_pipewire COMMAND test_player_playback)
-    set_property(TEST test_player_playback_pipewire APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
+dragon_add_backend_test_variants(test_e2e)
 
 dragon_add_test(test_network_playback LIBRARIES ${_player_libs})
 
@@ -220,31 +194,10 @@ set_property(TEST test_e2e_sdl_gapless APPEND PROPERTY ENVIRONMENT
 )
 
 dragon_add_test(test_e2e_gapless_data_streams LIBRARIES ${_player_libs} PkgConfig::FLAC)
-set_tests_properties(test_e2e_gapless_data_streams PROPERTIES DISABLED TRUE)
-add_test(NAME test_e2e_gapless_data_streams_sdl COMMAND test_e2e_gapless_data_streams)
-set_property(TEST test_e2e_gapless_data_streams_sdl APPEND PROPERTY ENVIRONMENT
-    "QT_QPA_PLATFORM=offscreen"
-    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
-    "QT_PLUGIN_PATH=${_qt_plugin_path}"
+dragon_add_backend_test_variants(test_e2e_gapless_data_streams
+    EXTRA_ENV_PULSEAUDIO "PULSE_SINK=dragon-test-sink"
+    EXTRA_ENV_PIPEWIRE "DRAGON_PW_TEST_SINK_NAME=dragon-test-sink"
 )
-if(PULSEAUDIO_FOUND)
-    add_test(NAME test_e2e_gapless_data_streams_pulseaudio COMMAND test_e2e_gapless_data_streams)
-    set_property(TEST test_e2e_gapless_data_streams_pulseaudio APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
-        "PULSE_SINK=dragon-test-sink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
-if(PIPEWIRE_FOUND)
-    add_test(NAME test_e2e_gapless_data_streams_pipewire COMMAND test_e2e_gapless_data_streams)
-    set_property(TEST test_e2e_gapless_data_streams_pipewire APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
-        "DRAGON_PW_TEST_SINK_NAME=dragon-test-sink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
 
 # PipeWire gapless tests requires PipeWire + WirePlumber with dragon-test-sink (monitor ports)
 if(PIPEWIRE_FOUND)
@@ -269,57 +222,11 @@ endif()
 
 # Audio output tests (one executable, run once per backend via env var)
 dragon_add_test(test_audiooutput LIBRARIES SDL3::SDL3 spsc_queue Qt6::Gui)
-set_tests_properties(test_audiooutput PROPERTIES DISABLED TRUE)
-
-add_test(NAME test_audiooutput_sdl COMMAND test_audiooutput)
-set_property(TEST test_audiooutput_sdl APPEND PROPERTY ENVIRONMENT
-    "QT_QPA_PLATFORM=offscreen"
-    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
-    "QT_PLUGIN_PATH=${_qt_plugin_path}"
-)
-if(PULSEAUDIO_FOUND)
-    add_test(NAME test_audiooutput_pulseaudio COMMAND test_audiooutput)
-    set_property(TEST test_audiooutput_pulseaudio APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
-if(PIPEWIRE_FOUND)
-    add_test(NAME test_audiooutput_pipewire COMMAND test_audiooutput)
-    set_property(TEST test_audiooutput_pipewire APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
+dragon_add_backend_test_variants(test_audiooutput)
 
 # Stream-name player semantics (one executable, run once per backend via env var)
 dragon_add_test(test_player_streamname LIBRARIES ${_player_libs} Qt6::Gui)
-set_tests_properties(test_player_streamname PROPERTIES DISABLED TRUE)
-
-add_test(NAME test_player_streamname_sdl COMMAND test_player_streamname)
-set_property(TEST test_player_streamname_sdl APPEND PROPERTY ENVIRONMENT
-    "QT_QPA_PLATFORM=offscreen"
-    "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
-    "QT_PLUGIN_PATH=${_qt_plugin_path}"
-)
-if(PULSEAUDIO_FOUND)
-    add_test(NAME test_player_streamname_pulseaudio COMMAND test_player_streamname)
-    set_property(TEST test_player_streamname_pulseaudio APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
-if(PIPEWIRE_FOUND)
-    add_test(NAME test_player_streamname_pipewire COMMAND test_player_streamname)
-    set_property(TEST test_player_streamname_pipewire APPEND PROPERTY ENVIRONMENT
-        "QT_QPA_PLATFORM=offscreen"
-        "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
-        "QT_PLUGIN_PATH=${_qt_plugin_path}"
-    )
-endif()
+dragon_add_backend_test_variants(test_player_streamname)
 
 if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
     foreach(_test ${_dragon_audio_tests} test_e2e_pipewire_gapless test_e2e_pulseaudio_gapless)
