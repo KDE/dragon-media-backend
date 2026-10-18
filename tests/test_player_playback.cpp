@@ -9,10 +9,12 @@
 #include <QtCore>
 #include <QtTest>
 
+#include "helpers/fixture_generator.h"
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
 #include "player/dragondiagnostics.h"
+#include "sink/dragonaudiosink.h"
 #include <DragonPlayer>
 
 #include <QSignalSpy>
@@ -87,6 +89,8 @@ private Q_SLOTS:
     void testSeekWhilePausedReachesEos();
 
     void testSeekNearEndThenElisaStyleAdvancePlays();
+
+    void testEndOfMediaAdvanceAcrossFormatChange();
 };
 
 void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
@@ -839,6 +843,48 @@ void TestPlayerPlayback::testSeekNearEndThenElisaStyleAdvancePlays()
     QVERIFY2(diag.isAudioActive(), "Audio must be active on the track after an Elisa-style advance");
 
     player.stop();
+}
+
+void TestPlayerPlayback::testEndOfMediaAdvanceAcrossFormatChange()
+{
+    DragonPlayer player;
+    DragonDiagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    const auto fixtureA = FixtureGenerator::makeEndMarkerFixture(96000, 2, 96000);
+    const auto fixtureB = FixtureGenerator::makeStartMarkerFixture(44100, 2, 44100);
+    QVERIFY2(!fixtureA.filePath.isEmpty() && QFile::exists(fixtureA.filePath), "96kHz fixture must be generated");
+    QVERIFY2(!fixtureB.filePath.isEmpty() && QFile::exists(fixtureB.filePath), "44.1kHz fixture must be generated");
+
+    QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(fixtureA.filePath)));
+    QVERIFY(helper.playAndWait());
+
+    QVERIFY2(helper.waitForEndOfMedia(15000), "Track A must reach EndOfMedia naturally");
+    QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QVERIFY2(!diag.audioSink()->isDeviceOpen(), "Natural end of media must close the device");
+
+    player.setSource(QUrl::fromLocalFile(fixtureB.filePath));
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QTimer::singleShot(0, &player, [&player]() {
+        player.play();
+    });
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
+    QVERIFY2(diag.audioSink()->hasFormat(44100, 2),
+             "play() after an end-of-media track change must reopen the sink at the new track's sample rate to avoid chimpmunks");
+
+    const bool advanced = QTest::qWaitFor(
+        [&diag]() {
+            return diag.audioPosition() > 300ms;
+        },
+        5000);
+    QVERIFY2(advanced, qPrintable(u"Audio must actually flow after the reopen: audioPosition=%1ms"_s.arg(diag.audioPosition().count())));
+
+    player.stop();
+
+    QFile::remove(fixtureA.filePath);
+    QFile::remove(fixtureB.filePath);
 }
 
 QTEST_MAIN(TestPlayerPlayback)

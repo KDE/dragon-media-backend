@@ -483,6 +483,10 @@ void DragonPlayerPrivate::init()
                     }
                 },
                 Qt::QueuedConnection);
+        } else if (audioOutput && audioOutput->sink()->isDeviceOpen()) {
+            // we're at the end of track, clean up the state
+            audioOutput->sink()->close();
+            audioOutput->sink()->reset();
         }
     });
 
@@ -960,7 +964,8 @@ void DragonPlayer::play()
 
     qCDebug(dragonMediaBackendPlayer) << "play() status is " << d->currentStatus << ", starting audio synchronously";
 
-    if (d->audioOutput && !d->audioOutput->sink()->isDeviceOpen() && d->currentSampleRate > 0) {
+    if (d->audioOutput && d->currentSampleRate > 0
+        && (!d->audioOutput->sink()->isDeviceOpen() || !d->audioOutput->sink()->hasFormat(d->currentSampleRate, d->currentChannels))) {
         d->audioOutput->sink()->open(d->currentSampleRate, d->currentChannels);
     }
     if (d->audioOutput && !d->audioOutput->sink()->isDeviceOpen()) {

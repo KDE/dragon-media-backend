@@ -165,7 +165,7 @@ target_compile_definitions(test_qml_module PRIVATE
 )
 dragon_add_test(test_sink_null        LIBRARIES ${_player_libs})
 dragon_add_test(test_player_basics    LIBRARIES ${_player_libs})
-dragon_add_test(test_player_playback  LIBRARIES ${_player_libs})
+dragon_add_test(test_player_playback  LIBRARIES ${_player_libs} PkgConfig::FLAC)
 dragon_add_backend_test_variants(test_player_playback)
 dragon_add_test(test_player_signals   LIBRARIES ${_player_libs})
 dragon_add_test(test_player_setsource LIBRARIES ${_player_libs})
