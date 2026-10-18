@@ -42,6 +42,12 @@ target_include_directories(dragonsdlaudiosink PRIVATE
 )
 target_link_libraries(dragonsdlaudiosink PRIVATE DragonMediaBackend SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
 
+# useful for applications that fetch us via ContentFetch
+set(DRAGON_SINK_PLUGIN_BUILD_DIR
+    "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/DragonMediaBackend/AudioSink"
+    CACHE INTERNAL "Build-tree directory containing the DragonMediaBackend audio sink plugins" FORCE
+)
+
 if(PULSEAUDIO_FOUND)
     kcoreaddons_add_plugin(dragonpulseaudiosink
             SOURCES dragonpulseaudiosink.cpp
