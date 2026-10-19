@@ -63,6 +63,8 @@ private Q_SLOTS:
     void testBackpressureDrainsHeldTailOnEof();
     void testBackpressureNoDataLoss();
 
+    void testUserAgentHeader();
+
 private:
     TestHttpServer *m_server = nullptr;
 
@@ -943,6 +945,38 @@ void TestRadioStream::testBackpressureNoDataLoss()
     server.close();
     for (auto *c : clients)
         c->deleteLater();
+}
+
+void TestRadioStream::testUserAgentHeader()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+    const quint16 port = server.serverPort();
+
+    QByteArray receivedRequest;
+    QObject::connect(&server, &QTcpServer::newConnection, &server, [&]() {
+        while (server.hasPendingConnections()) {
+            QTcpSocket *socket = server.nextPendingConnection();
+            QObject::connect(socket, &QTcpSocket::readyRead, socket, [socket, &receivedRequest]() {
+                receivedRequest.append(socket->readAll());
+                if (receivedRequest.contains("\r\n\r\n")) {
+                    socket->write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                    socket->flush();
+                    socket->disconnectFromHost();
+                }
+            });
+            QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+        }
+    });
+
+    DragonRadioStream stream;
+    stream.setUrl(QUrl(QStringLiteral("http://127.0.0.1:%1/test").arg(port)));
+    stream.start();
+    QTRY_VERIFY_WITH_TIMEOUT(!receivedRequest.isEmpty(), 5000);
+    stream.stop();
+
+    QVERIFY(receivedRequest.contains("User-Agent: DragonMediaBackend/"));
+    server.close();
 }
 
 #include "test_radiostream.moc"

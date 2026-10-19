@@ -9,16 +9,33 @@
 
 #include "dragonmediabackend_network_logging.h"
 #include <KLocalizedString>
+#include <QCoreApplication>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QTimer>
 #include <QUrl>
+#include <dragonmediabackend_version.h>
 
 #include <cstring>
 
 using namespace Qt::StringLiterals;
 using namespace std::chrono_literals;
+
+namespace
+{
+const QByteArray &userAgent()
+{
+    static const QByteArray agent = []() -> QByteArray {
+        const QString appName = QCoreApplication::applicationName();
+        if (appName.isEmpty()) {
+            return "DragonMediaBackend/" DRAGONMEDIABACKEND_VERSION_STRING ""_ba;
+        }
+        return "DragonMediaBackend/" DRAGONMEDIABACKEND_VERSION_STRING " ("_ba + appName.toUtf8() + ")"_ba;
+    }();
+    return agent;
+}
+}
 
 DragonRadioStream::DragonRadioStream(QObject *parent)
     : DragonStream(parent)
@@ -63,6 +80,7 @@ void DragonRadioStream::start()
     }
 
     QNetworkRequest request(m_url);
+    request.setHeader(QNetworkRequest::UserAgentHeader, userAgent());
     request.setRawHeader("Icy-Metadata"_ba, "1"_ba);
     request.setTransferTimeout(std::chrono::seconds(5));
     m_reply = m_nam->get(request);
@@ -176,6 +194,7 @@ qint64 DragonRadioStream::seek(qint64 offset)
     m_bufferProgress->reset();
 
     QNetworkRequest request(m_url);
+    request.setHeader(QNetworkRequest::UserAgentHeader, userAgent());
     request.setRawHeader("Icy-Metadata"_ba, "1"_ba);
     request.setRawHeader("Range"_ba, "bytes="_ba + QByteArray::number(offset) + "-"_ba);
     request.setTransferTimeout(std::chrono::seconds(5));
