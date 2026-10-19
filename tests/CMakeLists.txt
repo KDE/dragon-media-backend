@@ -138,6 +138,7 @@ dragon_add_test(test_pipe LIBRARIES DragonMediaBackend spsc_queue)
 dragon_add_test(test_positionestimator LIBRARIES Qt6::Core)
 
 # Stream tests
+dragon_add_test(test_streambuffer LIBRARIES Qt6::Core)
 dragon_add_test(test_radiostream LIBRARIES Qt6::Network)
 dragon_add_test(test_kiostream LIBRARIES Qt6::Network KF6::KIOCore)
 

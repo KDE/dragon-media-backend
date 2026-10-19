@@ -5,10 +5,15 @@
 set(_dragon_stream_sources
     dragonstream.cpp
     dragonstreamfactory.cpp
-    dragonradiostream.cpp
+    dragonstreambuffer.cpp
     dragonkiostream.cpp
     dragonbufferprogress.cpp
     dragonicymetadata.cpp
+    http/dragonradiostream.cpp
+    http/dragonhttpprotocol.cpp
+    http/dragonhttpbodyframer.cpp
+    http/dragonicydemuxer.cpp
+    http/dragonhttpsocket.cpp
     cd/dragoncdtrack.cpp
     cd/dragoncdtoc.cpp
     cd/dragoncdtocreader.cpp

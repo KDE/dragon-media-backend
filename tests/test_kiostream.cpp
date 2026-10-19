@@ -640,9 +640,9 @@ void TestKioStream::testBackpressureCapsBuffer()
     // Let data accumulate without reading buffer should be capped.
     QTest::qWait(3000);
 
-    QVERIFY2(stream.m_bufferDepth.load() <= DragonKioStream::MAX_BUFFER_BYTES + 8192,
-             qPrintable(u"Buffer depth %1 exceeds cap + tolerance"_s.arg(stream.m_bufferDepth.load())));
-    QVERIFY2(stream.m_bufferDepth.load() > 0, "Buffer should have some data after waiting");
+    QVERIFY2(stream.bufferDepth() <= DragonKioStream::MAX_BUFFER_BYTES + 8192,
+             qPrintable(u"Buffer depth %1 exceeds cap + tolerance"_s.arg(stream.bufferDepth())));
+    QVERIFY2(stream.bufferDepth() > 0, "Buffer should have some data after waiting");
 
     stream.stop();
     server.stop();
@@ -672,7 +672,7 @@ void TestKioStream::testBackpressureResumesAfterDrain()
 
     // Let buffer fill to cap and suspend the job.
     QTest::qWait(3000);
-    QVERIFY2(stream.m_bufferDepth.load() > 0, "Buffer should have data");
+    QVERIFY2(stream.bufferDepth() > 0, "Buffer should have data");
     QVERIFY2(stream.m_suspended, "Job should be suspended after hitting the cap");
 
     // Now read everything the job must be resumed for the stream to complete.

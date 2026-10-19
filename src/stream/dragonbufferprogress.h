@@ -25,8 +25,6 @@ public:
     void setDecoderReady(bool ready);
 
     [[nodiscard]] qreal progress() const;
-    [[nodiscard]] bool headersReceived() const;
-    [[nodiscard]] bool isTlsHandshakeComplete() const;
 
 Q_SIGNALS:
     void progressChanged(qreal progress);

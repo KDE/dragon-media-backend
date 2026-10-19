@@ -20,6 +20,8 @@
 #include <span>
 #include <stop_token>
 
+#include "dragonstreambuffer.h"
+
 class DragonBufferProgress;
 class QTimer;
 
@@ -44,10 +46,27 @@ public:
         return m_url.scheme() == QLatin1String("sftp");
     }
 
-    [[nodiscard]] qint64 size() const override;
-    [[nodiscard]] qint64 position() const override;
+    [[nodiscard]] qint64 size() const override
+    {
+        return m_buffer.totalSize();
+    }
+    [[nodiscard]] qint64 position() const override
+    {
+        return m_buffer.position();
+    }
 
-    [[nodiscard]] DragonBufferProgress *bufferProgress() const override;
+    [[nodiscard]] DragonBufferProgress *bufferProgress() const override
+    {
+        return m_buffer.bufferProgress();
+    }
+    [[nodiscard]] qint64 bufferDepth() const
+    {
+        return m_buffer.depth();
+    }
+    [[nodiscard]] bool isAborted() const
+    {
+        return m_buffer.isAborted();
+    }
 
 private Q_SLOTS:
     void onData(KIO::Job *job, const QByteArray &data);
@@ -61,28 +80,9 @@ private:
     QPointer<KIO::TransferJob> m_job;
     QPointer<QTimer> m_watchdogTimer;
 
-    std::mutex m_bufferMutex;
-    std::condition_variable_any m_bufferCv;
-    std::deque<QByteArray> m_networkBuffer;
-    int m_bufferOffset{0};
+    static constexpr qint64 MAX_BUFFER_BYTES = DragonStreamBuffer::DEFAULT_MAX_BUFFER_BYTES;
 
-    std::atomic<bool> m_abort{false};
-    std::atomic<bool> m_error{false};
-    std::atomic<bool> m_finished{false};
-
-    std::atomic<qint64> m_totalSize{-1};
-    std::atomic<qint64> m_streamPosition{0};
-
-    DragonBufferProgress *m_bufferProgress;
-
-    // Runtime buffer depth tracking
-    std::atomic<qint64> m_bufferDepth{0};
-    std::atomic<bool> m_isBuffering{false};
-    static constexpr qint64 LOW_WATER_MARK = 0;
-    static constexpr qint64 HIGH_WATER_MARK = 128 * 1024;
-    // Hard cap on buffered bytes. When reached, the KIO job is suspended to
-    // apply backpressure instead of growing memory without bound.
-    static constexpr qint64 MAX_BUFFER_BYTES = 4 * 1024 * 1024;
+    DragonStreamBuffer m_buffer;
     bool m_suspended = false;
 
     void applyBackpressure();

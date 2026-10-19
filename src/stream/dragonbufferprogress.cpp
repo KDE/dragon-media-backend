@@ -68,16 +68,6 @@ qreal DragonBufferProgress::progress() const
     return 0.50 + (downloadRatio * 0.45);
 }
 
-bool DragonBufferProgress::headersReceived() const
-{
-    return m_headersReceived;
-}
-
-bool DragonBufferProgress::isTlsHandshakeComplete() const
-{
-    return m_tlsHandshakeComplete;
-}
-
 void DragonBufferProgress::emitProgressIfChanged()
 {
     qreal current = progress();

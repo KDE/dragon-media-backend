@@ -63,11 +63,5 @@ struct DecodeEof { };
 
 using DecodeEvent = std::variant<FormatReady, SamplesChunk, DecodeError, DecodeEof>;
 
-template<class... Ts>
-struct overloaded : Ts... {
-    using Ts::operator()...;
-};
-template<class... Ts>
-overloaded(Ts...) -> overloaded<Ts...>;
-
+#include "dragonoverloaded.h"
 }

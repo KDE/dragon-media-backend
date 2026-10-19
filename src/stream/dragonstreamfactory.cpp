@@ -10,7 +10,7 @@
 #endif
 
 #include "dragonkiostream.h"
-#include "dragonradiostream.h"
+#include "http/dragonradiostream.h"
 
 #include <QUrl>
 

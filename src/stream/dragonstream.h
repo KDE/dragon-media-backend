@@ -14,8 +14,9 @@
 #include <span>
 #include <stop_token>
 
+#include <dragonicymetadata.h>
+
 class DragonBufferProgress;
-class DragonIcyMetadata;
 
 class DRAGONMEDIABACKEND_EXPORT DragonStream : public QObject
 {

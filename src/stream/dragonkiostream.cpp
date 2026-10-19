@@ -15,11 +15,15 @@
 DragonKioStream::DragonKioStream(QObject *parent)
     : DragonStream(parent)
     , m_watchdogTimer(new QTimer(this))
-    , m_bufferProgress(new DragonBufferProgress(this))
+    , m_buffer(this)
 {
     m_watchdogTimer->setInterval(5000);
     m_watchdogTimer->setSingleShot(true);
     connect(m_watchdogTimer, &QTimer::timeout, this, &DragonKioStream::onWatchdogTimeout);
+
+    m_buffer.setBackpressureRelievedCallback([this]() {
+        releaseBackpressure();
+    });
 }
 
 DragonKioStream::~DragonKioStream()
@@ -38,11 +42,8 @@ void DragonKioStream::start()
 
     Q_EMIT seekableChanged(isSeekable());
 
-    m_abort = false;
-    m_error = false;
-    m_finished = false;
-    m_bufferProgress->reset();
-    m_totalSize = -1;
+    m_buffer.reset();
+    m_suspended = false;
 
     if (m_job) {
         m_job->kill(KJob::Quietly);
@@ -61,8 +62,7 @@ void DragonKioStream::start()
 
 void DragonKioStream::stop()
 {
-    m_abort = true;
-    m_bufferCv.notify_all();
+    m_buffer.abort();
 
     if (m_watchdogTimer) {
         m_watchdogTimer->stop();
@@ -73,63 +73,12 @@ void DragonKioStream::stop()
         m_job->kill(KJob::Quietly);
         m_job = nullptr;
     }
-
-    {
-        std::scoped_lock lock(m_bufferMutex);
-        m_networkBuffer.clear();
-        m_bufferOffset = 0;
-    }
+    m_suspended = false;
 }
 
 int DragonKioStream::read(std::span<uint8_t> buf, const std::stop_token &st)
 {
-    std::unique_lock lock(m_bufferMutex);
-
-    m_bufferCv.wait(lock, st, [this] {
-        return !m_networkBuffer.empty() || m_abort.load() || m_error.load() || m_finished.load();
-    });
-
-    if (st.stop_requested() || m_abort || m_error) {
-        return -1;
-    }
-
-    if (m_finished && m_networkBuffer.empty()) {
-        return 0;
-    }
-
-    int bytesRead = 0;
-
-    while (bytesRead < static_cast<int>(buf.size()) && !m_networkBuffer.empty()) {
-        const QByteArray &front = m_networkBuffer.front();
-        auto src = std::span(reinterpret_cast<const uint8_t *>(front.constData()), front.size()).subspan(m_bufferOffset);
-        auto dst = buf.subspan(bytesRead);
-        const int take = static_cast<int>(std::min(src.size(), dst.size()));
-
-        std::ranges::copy(src.first(take), dst.begin());
-        bytesRead += take;
-        m_bufferOffset += take;
-
-        if (m_bufferOffset >= front.size()) {
-            m_networkBuffer.pop_front();
-            m_bufferOffset = 0;
-        }
-    }
-
-    m_streamPosition += bytesRead;
-
-    if (bytesRead > 0) {
-        const auto prev = m_bufferDepth.fetch_sub(bytesRead);
-        const auto newDepth = prev - bytesRead;
-        if (prev > LOW_WATER_MARK && newDepth <= LOW_WATER_MARK) {
-            m_isBuffering = true;
-            Q_EMIT streamBuffering();
-        }
-        if (newDepth < MAX_BUFFER_BYTES) {
-            releaseBackpressure();
-        }
-    }
-
-    return bytesRead;
+    return m_buffer.read(buf, st);
 }
 
 void DragonKioStream::applyBackpressure()
@@ -137,8 +86,8 @@ void DragonKioStream::applyBackpressure()
     // Runs on the KIO job's thread (from onData). Suspending throttles
     // further network delivery so the buffer cannot grow without bound when
     // the consumer (decode thread) is slower than the network.
-    if (!m_suspended && m_job && m_bufferDepth.load() >= MAX_BUFFER_BYTES) {
-        qCDebug(dragonMediaBackendNetwork) << "KIO buffer full (" << m_bufferDepth.load() << "bytes), suspending job";
+    if (!m_suspended && m_job && m_buffer.isFull()) {
+        qCDebug(dragonMediaBackendNetwork) << "KIO buffer full (" << m_buffer.depth() << "bytes), suspending job";
         m_suspended = true;
         m_job->suspend();
     }
@@ -158,14 +107,8 @@ qint64 DragonKioStream::seek(qint64 offset)
 {
     stop();
 
-    {
-        std::scoped_lock lock(m_bufferMutex);
-        m_abort = false;
-        m_error = false;
-        m_finished = false;
-        m_bufferOffset = 0;
-    }
-    m_streamPosition = offset;
+    m_buffer.reset(offset);
+    m_suspended = false;
 
     m_job = KIO::get(m_url, KIO::NoReload, KIO::HideProgressInfo);
 
@@ -182,21 +125,6 @@ qint64 DragonKioStream::seek(qint64 offset)
     return offset;
 }
 
-qint64 DragonKioStream::size() const
-{
-    return m_totalSize.load();
-}
-
-qint64 DragonKioStream::position() const
-{
-    return m_streamPosition.load();
-}
-
-DragonBufferProgress *DragonKioStream::bufferProgress() const
-{
-    return m_bufferProgress;
-}
-
 void DragonKioStream::onData(KIO::Job *job, const QByteArray &data)
 {
     if (job != m_job || data.isEmpty()) {
@@ -207,17 +135,7 @@ void DragonKioStream::onData(KIO::Job *job, const QByteArray &data)
         m_watchdogTimer->start();
     }
 
-    {
-        std::scoped_lock lock(m_bufferMutex);
-        m_networkBuffer.push_back(data);
-    }
-    const qint64 newDepth = m_bufferDepth += data.size();
-    m_bufferCv.notify_all();
-
-    if (m_isBuffering.exchange(false) && newDepth >= HIGH_WATER_MARK) {
-        Q_EMIT streamBuffered();
-    }
-
+    m_buffer.write(data);
     applyBackpressure();
 }
 
@@ -233,13 +151,11 @@ void DragonKioStream::onResult(KJob *job)
 
     if (job->error()) {
         qCWarning(dragonMediaBackendNetwork) << "KIO error:" << job->errorString();
-        m_error = true;
-        Q_EMIT errorOccurred(job->errorString());
+        m_buffer.setError(job->errorString());
     } else {
         qCDebug(dragonMediaBackendNetwork) << "KIO job finished successfully";
-        m_finished = true;
+        m_buffer.setFinished();
     }
-    m_bufferCv.notify_all();
 }
 
 void DragonKioStream::onTotalAmountChanged(KJob *job, KJob::Unit unit, qulonglong amount)
@@ -248,7 +164,7 @@ void DragonKioStream::onTotalAmountChanged(KJob *job, KJob::Unit unit, qulonglon
         return;
     }
     if (unit == KJob::Bytes) {
-        m_totalSize = static_cast<qint64>(amount);
+        m_buffer.setTotalSize(static_cast<qint64>(amount));
     }
 }
 
@@ -258,13 +174,13 @@ void DragonKioStream::onProcessedAmountChanged(KJob *job, KJob::Unit unit, qulon
         return;
     }
     if (unit == KJob::Bytes) {
-        m_bufferProgress->setBytesReceived(static_cast<qint64>(amount));
+        m_buffer.bufferProgress()->setBytesReceived(static_cast<qint64>(amount));
     }
 }
 
 void DragonKioStream::onWatchdogTimeout()
 {
-    if (m_abort) {
+    if (m_buffer.isAborted()) {
         return;
     }
 
