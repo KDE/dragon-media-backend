@@ -358,7 +358,10 @@ void DragonPlayerPrivate::setPlaybackState(DragonPlayer::PlaybackState state)
     currentPlaybackState = state;
 
     Q_EMIT q->playbackStateChanged(state, oldState);
+    QT_WARNING_PUSH
+    QT_WARNING_DISABLE_DEPRECATED
     Q_EMIT q->stateChanged(state, oldState);
+    QT_WARNING_POP
 }
 
 void DragonPlayerPrivate::setStatus(DragonPlayer::MediaStatus status)
