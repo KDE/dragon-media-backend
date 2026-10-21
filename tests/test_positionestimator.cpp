@@ -63,7 +63,7 @@ private Q_SLOTS:
     void testTrackChangedResetsToZeroWithNewDuration();
     void testSnapToDurationIsSticky();
     void testPositionClampedToDuration();
-    void testResetPositionIsSilent();
+    void testResetPositionEmitsWhenChanged();
     void testNoReanchorBeforeSyncIntervalElapses();
     void testDoubleFreezeKeepsPosition();
     void testSeekWithUnknownDurationClampsToZero();
@@ -305,7 +305,7 @@ void TestPositionEstimator::testPositionClampedToDuration()
     QCOMPARE(h.estimator.position(), 1000ms);
 }
 
-void TestPositionEstimator::testResetPositionIsSilent()
+void TestPositionEstimator::testResetPositionEmitsWhenChanged()
 {
     EstimatorHarness h{std::chrono::milliseconds{1000}};
     QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
@@ -314,9 +314,15 @@ void TestPositionEstimator::testResetPositionIsSilent()
     h.estimator.tick();
     QCOMPARE(spy.count(), 1);
 
+    // resetPosition(0ms) when position was 1000ms must emit positionChanged(0ms)
     h.estimator.resetPosition(0ms);
-    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.count(), 2);
+    QCOMPARE(spy.last().at(0).value<std::chrono::milliseconds>(), 0ms);
     QCOMPARE(h.estimator.position(), 0ms);
+
+    // resetPosition(0ms) when position is already 0ms must NOT emit positionChanged
+    h.estimator.resetPosition(0ms);
+    QCOMPARE(spy.count(), 2);
 
     h.device.position = 0ms;
     h.now = 100ms;

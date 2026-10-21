@@ -31,6 +31,7 @@ private Q_SLOTS:
     void testSetSourceSignalOrderFromPlaying();
     void testSetSourceSameUrlWhileStoppedReloads();
     void testSetSourceThenClearInSameTurnDoesNotLoad();
+    void testSetSourceResetsPositionToZeroAndEmitsSignal();
 };
 
 void TestPlayerSetSource::testSetSourceFromFreshPlayerNoForceEmit()
@@ -137,6 +138,47 @@ void TestPlayerSetSource::testSetSourceThenClearInSameTurnDoesNotLoad()
     for (const auto &args : statusSpy) {
         QVERIFY2(args.at(0).value<DragonPlayer::MediaStatus>() != DragonPlayer::MediaStatus::LoadedMedia, "a cleared source must never reach LoadedMedia");
     }
+}
+
+void TestPlayerSetSource::testSetSourceResetsPositionToZeroAndEmitsSignal()
+{
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+
+    // Play track until EndOfMedia (position snaps to duration)
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QTRY_VERIFY_WITH_TIMEOUT(helper.waitForEndOfMedia(15000), 15000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::EndOfMedia);
+    QVERIFY2(player.position() > 0ms, "Position must be > 0 at EndOfMedia");
+
+    // Setting a new source from EndOfMedia must reset position to 0 and emit positionChanged(0)
+    QSignalSpy posSpy(&player, &DragonPlayer::positionChanged);
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
+    QCOMPARE(player.position(), 0ms);
+    QVERIFY2(posSpy.count() >= 1, "setSource() must emit positionChanged(0) when position was non-zero");
+    QCOMPARE(posSpy.at(0).at(0).value<std::chrono::milliseconds>(), 0ms);
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QCOMPARE(player.position(), 0ms);
+
+    // Seeking while stopped, then setting source again must also reset position to 0 and emit signal
+    player.setPosition(1000ms);
+    QCOMPARE(player.position(), 1000ms);
+
+    posSpy.clear();
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
+    QCOMPARE(player.position(), 0ms);
+    QCOMPARE(posSpy.count(), 1);
+    QCOMPARE(posSpy.at(0).at(0).value<std::chrono::milliseconds>(), 0ms);
+
+    // Setting source when position is already 0 must NOT emit positionChanged
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    posSpy.clear();
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
+    QCOMPARE(player.position(), 0ms);
+    QCOMPARE(posSpy.count(), 0);
 }
 
 QTEST_MAIN(TestPlayerSetSource)

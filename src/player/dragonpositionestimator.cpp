@@ -93,8 +93,12 @@ void DragonPositionEstimator::snapToDuration()
 
 void DragonPositionEstimator::resetPosition(std::chrono::milliseconds position)
 {
+    const auto oldPosition = extrapolated();
     m_position = position;
     m_anchorValid = false;
+    if (oldPosition != position) {
+        Q_EMIT positionChanged(position);
+    }
 }
 
 void DragonPositionEstimator::tick()

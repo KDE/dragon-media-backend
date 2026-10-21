@@ -728,6 +728,13 @@ void DragonPlayer::setSource(const QUrl &source)
 
     const bool wasPlayingOrPaused = d->currentPlaybackState == PlaybackState::PlayingState || d->currentPlaybackState == PlaybackState::PausedState;
 
+    if (!playRequestedReload) {
+        d->requestedPlaybackState = PlaybackState::StoppedState;
+        if (wasPlayingOrPaused) {
+            d->setPlaybackState(PlaybackState::StoppedState);
+        }
+    }
+
     d->currentSource = source;
     d->positionEstimator->resetPosition(0ms);
     d->currentDuration = {};
@@ -740,11 +747,6 @@ void DragonPlayer::setSource(const QUrl &source)
     d->currentChannels = 0;
 
     if (!playRequestedReload) {
-        d->requestedPlaybackState = PlaybackState::StoppedState;
-        if (wasPlayingOrPaused) {
-            d->setPlaybackState(PlaybackState::StoppedState);
-        }
-
         if (d->currentSource.isEmpty()) {
             ++d->loadGeneration;
             if (d->audioOutput) {
