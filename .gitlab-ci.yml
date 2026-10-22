@@ -19,7 +19,7 @@ include:
     - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
     - git clone https://github.com/mborgerding/kissfft.git --depth=1 --branch 131.2.0 kissfft-src
 
-suse_tumbleweed_qt611:
+suse_tumbleweed_qt612:
   before_script: !reference [.ci-checkout, before_script]
 
 suse_tumbleweed_qt613:
