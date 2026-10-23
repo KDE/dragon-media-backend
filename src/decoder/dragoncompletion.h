@@ -123,7 +123,7 @@ public:
     }
 
 Q_SIGNALS:
-    void finished(const InitResult &result);
+    void finished(const DragonMediaBackend::InitResult &result);
 
 private:
     std::atomic<bool> m_settled{false};

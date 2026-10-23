@@ -121,7 +121,7 @@ public Q_SLOTS:
      * Sets the visualization mode to \a mode. Setting Off stops frame
      * emission, any other value starts it.
      */
-    void setMode(Mode mode);
+    void setMode(DragonSpectrumAnalyzer::Mode mode);
 
     /*!
      * Sets the target frame rate to \a framesPerSecond.
@@ -132,7 +132,7 @@ Q_SIGNALS:
     /*!
      * Emitted when the visualization mode changes to \a mode.
      */
-    void modeChanged(Mode mode);
+    void modeChanged(DragonSpectrumAnalyzer::Mode mode);
 
     /*!
      * Emitted when the target frame rate changes to \a rate.

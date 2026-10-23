@@ -22,6 +22,7 @@ class DragonDiagnosticsPrivate;
 
 class DRAGONMEDIABACKEND_EXPORT DragonDiagnostics : public QObject
 {
+    Q_OBJECT
 public:
     explicit DragonDiagnostics(DragonPlayer *player);
     ~DragonDiagnostics() override;

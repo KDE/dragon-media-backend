@@ -502,24 +502,24 @@ Q_SIGNALS:
      * Emitted when the playback state changes to \a newState, with the
      * previous state in \a oldState.
      */
-    void playbackStateChanged(PlaybackState newState, PlaybackState oldState);
+    void playbackStateChanged(DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState oldState);
 
     /*!
      * Emitted when the playback state changes to \a newState, with the
      * previous state in \a oldState.
      * \deprecated Use playbackStateChanged instead.
      */
-    [[deprecated("Use playbackStateChanged instead")]] void stateChanged(PlaybackState newState, PlaybackState oldState);
+    [[deprecated("Use playbackStateChanged instead")]] void stateChanged(DragonPlayer::PlaybackState newState, DragonPlayer::PlaybackState oldState);
 
     /*!
      * Emitted when the media status changes to \a status.
      */
-    void statusChanged(MediaStatus status);
+    void statusChanged(DragonPlayer::MediaStatus status);
 
     /*!
      * Emitted when the error state changes to \a error.
      */
-    void errorChanged(Error error);
+    void errorChanged(DragonPlayer::Error error);
 
     /*!
      * Emitted when the duration of the current source changes to \a

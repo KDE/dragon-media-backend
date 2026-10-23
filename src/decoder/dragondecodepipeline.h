@@ -63,7 +63,7 @@ public:
             TrackStart,
             EndOfStream,
         };
-        Kind kind;
+        Kind kind = Kind::TrackStart;
         QUrl url; // TrackStart only
         int sampleRate = 0; // TrackStart only
         int channels = 0; // TrackStart only

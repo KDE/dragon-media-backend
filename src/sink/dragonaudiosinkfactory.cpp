@@ -11,6 +11,7 @@
 #include <KPluginMetaData>
 
 #include <algorithm>
+#include <utility>
 
 #include "dragonmediabackend_factory_logging.h"
 
@@ -81,7 +82,7 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requ
         return a.value(u"Priority"_s, 0) > b.value(u"Priority"_s, 0);
     });
 
-    for (const auto &md : plugins) {
+    for (const auto &md : std::as_const(plugins)) {
         qCDebug(dragonMediaBackendFactory) << "Found audio sink plugin:" << md.pluginId() << "with priority:" << md.value(u"Priority"_s, 0);
     }
 
@@ -120,7 +121,7 @@ std::unique_ptr<DragonAudioSink> createAudioSink(DragonAudioOutput::Backend requ
         }
     }
 
-    for (const auto &md : plugins) {
+    for (const auto &md : std::as_const(plugins)) {
         if (auto sink = tryLoad(md, selectedSinkOut)) {
             return sink;
         }
