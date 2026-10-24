@@ -25,7 +25,7 @@ suse_tumbleweed_qt612:
 suse_tumbleweed_qt613:
   before_script: !reference [.ci-checkout, before_script]
 
-windows_qt611:
+windows_qt612:
   before_script:
     - !reference [.ci-checkout, before_script]
     - git clone https://github.com/libsdl-org/SDL.git --depth=1 --branch release-3.4.12 sdl3-src
