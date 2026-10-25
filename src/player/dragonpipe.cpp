@@ -22,13 +22,13 @@ DragonPipe<T>::DragonPipe(size_t capacity)
 }
 
 template<typename T>
-size_t DragonPipe<T>::Producer::write(std::span<const T> items, std::stop_token st)
+size_t DragonPipe<T>::Producer::write(std::span<const T> items, const std::stop_token &st)
 {
-    return write(items, std::move(st), {});
+    return write(items, st, {});
 }
 
 template<typename T>
-size_t DragonPipe<T>::Producer::write(std::span<const T> items, std::stop_token st, const std::function<bool()> &shouldAbort)
+size_t DragonPipe<T>::Producer::write(std::span<const T> items, const std::stop_token &st, const std::function<bool()> &shouldAbort)
 {
     size_t written = 0;
     while (written < items.size() && !st.stop_requested()) {
@@ -67,7 +67,7 @@ size_t DragonPipe<T>::Producer::available() const
 }
 
 template<typename T>
-bool DragonPipe<T>::Consumer::waitFor(size_t minItems, std::stop_token st)
+bool DragonPipe<T>::Consumer::waitFor(size_t minItems, const std::stop_token &st)
 {
     std::unique_lock lock(m_pipe->m_cvMutex);
     bool ready = m_pipe->m_consumer_cv.wait_for(lock, st, std::chrono::milliseconds(50), [&] {

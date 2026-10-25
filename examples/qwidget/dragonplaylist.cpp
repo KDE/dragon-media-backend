@@ -77,7 +77,7 @@ void DragonPlaylist::addEntries(const QList<Entry> &entries)
 
     if (wasEmpty) {
         m_currentIndex = 0;
-        m_player->setSource(m_tracks.first().url);
+        m_player->setSource(m_tracks.constFirst().url);
         m_player->play();
         Q_EMIT currentIndexChanged(0);
     }

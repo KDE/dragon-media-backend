@@ -181,6 +181,7 @@ public:
     /*!
      * Returns the total playable duration.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
     [[nodiscard]] std::chrono::milliseconds discDuration() const;
 
     /*!

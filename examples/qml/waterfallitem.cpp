@@ -65,7 +65,8 @@ void WaterfallItem::onPixelsReady(const QList<uint32_t> &pixels)
         m_texture.clear();
     }
 
-    const auto line = reinterpret_cast<uint32_t *>(m_image.scanLine(m_writeIndex));
+    const auto line =
+        reinterpret_cast<uint32_t *>(m_image.scanLine(m_writeIndex)); // NOLINT(clazy-detaching-member) m_image is a private, unshared frame buffer
     std::ranges::copy(pixels, line);
 
     m_writeIndex = (m_writeIndex + 1) % m_historySize;

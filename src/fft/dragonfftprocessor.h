@@ -56,7 +56,7 @@ public:
 
     void setFrameCallback(FrameCallback cb);
 
-    void processLoop(std::stop_token st);
+    void processLoop(const std::stop_token &st);
 
     [[nodiscard]] DragonFftFrame takeLatestFrame();
 
@@ -76,7 +76,7 @@ private:
     std::array<float, NUM_BAR_BINS> m_prevBarFrequencies;
     void transformReal(std::span<const float, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output);
 
-    bool drainPipeToHistory(std::stop_token st);
+    bool drainPipeToHistory(const std::stop_token &st);
     void readWindowEndingAt(size_t endPos, std::span<float, FFT_SIZE> out);
     bool historyHasEnoughForWindow() const;
 

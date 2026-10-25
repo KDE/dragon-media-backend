@@ -15,6 +15,7 @@
 
 #include <cstddef>
 #include <span>
+#include <string_view>
 
 using namespace Qt::StringLiterals;
 
@@ -51,7 +52,7 @@ constexpr uint32_t le32(const std::array<uint8_t, 44> &bytes, size_t offset)
     return uint32_t(bytes[offset]) | (uint32_t(bytes[offset + 1]) << 8) | (uint32_t(bytes[offset + 2]) << 16) | (uint32_t(bytes[offset + 3]) << 24);
 }
 
-constexpr uint32_t fourcc(const char (&tag)[5])
+constexpr uint32_t fourcc(std::string_view tag)
 {
     return uint32_t(uint8_t(tag[0])) | (uint32_t(uint8_t(tag[1])) << 8) | (uint32_t(uint8_t(tag[2])) << 16) | (uint32_t(uint8_t(tag[3])) << 24);
 }
@@ -201,7 +202,7 @@ void DragonCdStream::stop()
     m_cacheStartLogicalSector = -1;
 }
 
-int DragonCdStream::read(std::span<uint8_t> buf, std::stop_token st)
+int DragonCdStream::read(std::span<uint8_t> buf, const std::stop_token &st)
 {
     if (buf.empty()) {
         return 0;
@@ -221,7 +222,7 @@ int DragonCdStream::read(std::span<uint8_t> buf, std::stop_token st)
     return *result;
 }
 
-std::expected<int, QString> DragonCdStream::readLocked(std::span<uint8_t> buf, std::stop_token st)
+std::expected<int, QString> DragonCdStream::readLocked(std::span<uint8_t> buf, const std::stop_token &st)
 {
     std::scoped_lock lock(m_ioMutex);
 

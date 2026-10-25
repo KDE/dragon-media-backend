@@ -422,7 +422,7 @@ public:
     /*!
      * Returns the error state of the player.
      */
-    [[nodiscard]] Error error() const;
+    [[nodiscard]] Error error() const; // NOLINT(clazy-qproperty-type-mismatch) error and errorString intentionally share the errorChanged signal
 
     /*!
      * Returns a human-readable description of the current error, if any.
@@ -433,11 +433,13 @@ public:
      * Returns the duration of the current source, or an empty
      * std::optional for streams of unknown duration.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
     [[nodiscard]] std::optional<std::chrono::milliseconds> duration() const;
 
     /*!
      * Returns the playback position.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
     [[nodiscard]] std::chrono::milliseconds position() const;
 
     /*!
@@ -461,6 +463,7 @@ public:
      * Returns how long before the end of the source aboutToFinish() is
      * emitted.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
     [[nodiscard]] std::chrono::milliseconds prefinishMark() const;
 
 Q_SIGNALS:
@@ -519,18 +522,20 @@ Q_SIGNALS:
     /*!
      * Emitted when the error state changes to \a error.
      */
-    void errorChanged(DragonPlayer::Error error);
+    void errorChanged(DragonPlayer::Error error); // NOLINT(clazy-qproperty-type-mismatch) error and errorString intentionally share this signal
 
     /*!
      * Emitted when the duration of the current source changes to \a
      * duration. The optional is empty for streams of unknown duration.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
     void durationChanged(std::optional<std::chrono::milliseconds> duration);
 
     /*!
      * Emitted while playing, when the playback position changes to \a
      * position.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
     void positionChanged(std::chrono::milliseconds position);
 
     /*!
@@ -548,6 +553,7 @@ Q_SIGNALS:
     /*!
      * Emitted when the prefinish mark changes to \a msec.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
     void prefinishMarkChanged(std::chrono::milliseconds msec);
 
     /*!
@@ -614,14 +620,14 @@ public Q_SLOTS:
     /*!
      * Seeks to \a position into the current source, when it is seekable.
      */
-    void setPosition(std::chrono::milliseconds position);
+    void setPosition(std::chrono::milliseconds position); // NOLINT(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
 
     /*!
      * Sets the prefinish mark to \a msec.
      *
      * \sa aboutToFinish()
      */
-    void setPrefinishMark(std::chrono::milliseconds msec);
+    void setPrefinishMark(std::chrono::milliseconds msec); // NOLINT(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
 
     /*!
      * \qmlmethod void org.kde.dragonmediabackend::DragonPlayer::play()

@@ -81,12 +81,12 @@ std::optional<int> DragonCdUrl::trackNumberFromName(const QString &fileName, int
         }
     }
 
-    auto validRuns = runs | std::views::filter([firstTrackNum, lastTrackNum](const Run &r) {
+    auto validRuns = runs | std::views::filter([firstTrackNum, lastTrackNum](Run r) {
                          return r.value >= firstTrackNum && r.value <= lastTrackNum;
                      });
 
     if (auto it = std::ranges::find_if(validRuns,
-                                       [](const Run &r) {
+                                       [](Run r) {
                                            return r.length == 2;
                                        });
         it != std::ranges::end(validRuns)) {

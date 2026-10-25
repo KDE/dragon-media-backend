@@ -187,6 +187,7 @@ public:
      * value serves the \l duration property through the implicit
      * conversion of DragonDuration.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) DragonDuration is the QML-facing adapter for chrono values
     [[nodiscard]] std::chrono::milliseconds duration() const;
 
     /*!

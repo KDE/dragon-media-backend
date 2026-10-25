@@ -296,14 +296,20 @@ void SDLCALL DragonSdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioSt
 
     self->m_activeCallbacks.fetch_add(1, std::memory_order_relaxed);
     struct Guard {
-        DragonSdlAudioSink *self;
+        explicit Guard(DragonSdlAudioSink *s)
+            : self(s)
+        {
+        }
         ~Guard()
         {
             self->m_activeCallbacks.fetch_sub(1, std::memory_order_relaxed);
             self->m_callbackDoneCv.notify_one();
         }
+        Guard(const Guard &) = delete;
+        Guard &operator=(const Guard &) = delete;
+        DragonSdlAudioSink *self;
     };
-    Guard guard{self};
+    Guard guard(self);
 
     const auto *session = self->m_session.load(std::memory_order_acquire);
     if (!session)

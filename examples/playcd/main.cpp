@@ -59,8 +59,9 @@ public:
     {
         auto *reader = new DragonCdTocReader(this);
         connect(reader, &DragonCdTocReader::tocReady, this, [this](const DragonCdToc &toc) {
+            const QList<DragonCdTrack> tracks = toc.tracks();
             m_audioTracks.clear();
-            for (const DragonCdTrack &track : toc.tracks()) {
+            for (const DragonCdTrack &track : tracks) {
                 if (track.isAudio()) {
                     m_audioTracks.append(track);
                 }
@@ -71,12 +72,12 @@ public:
                 return;
             }
 
-            qInfo() << "Disc:" << toc.tracks().size() << "tracks," << formatDuration(toc.discDuration());
-            for (const DragonCdTrack &track : toc.tracks()) {
+            qInfo() << "Disc:" << tracks.size() << "tracks," << formatDuration(toc.discDuration());
+            for (const DragonCdTrack &track : tracks) {
                 qInfo() << " track" << track.number() << (track.isAudio() ? "audio" : "data") << formatDuration(track.duration());
             }
 
-            m_player->setSource(m_audioTracks.first().url());
+            m_player->setSource(m_audioTracks.constFirst().url());
             m_player->play();
         });
         connect(reader, &DragonCdTocReader::failed, this, [](const QString &errorMessage) {

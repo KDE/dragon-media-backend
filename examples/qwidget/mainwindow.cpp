@@ -18,6 +18,7 @@
 #include <DragonSpectrumAnalyzer>
 
 #include <chrono>
+#include <utility>
 
 #include <QApplication>
 #include <QCheckBox>
@@ -272,7 +273,7 @@ void MainWindow::setupUi()
 
 void MainWindow::connectPlayer()
 {
-    for (auto c : m_playerConnections) {
+    for (auto c : std::as_const(m_playerConnections)) {
         QObject::disconnect(c);
     }
     m_playerConnections.clear();
@@ -425,6 +426,7 @@ void MainWindow::openMultipleFiles()
 
     if (!files.isEmpty()) {
         QList<QUrl> urls;
+        urls.reserve(files.size());
         for (const QString &f : files) {
             urls.append(QUrl::fromLocalFile(f));
         }
@@ -491,7 +493,8 @@ void MainWindow::playCd()
         // duration.
         QList<DragonPlaylist::Entry> entries;
         m_cdTrackNumberByUrl.clear();
-        for (const DragonCdTrack &track : toc.tracks()) {
+        const QList<DragonCdTrack> tracks = toc.tracks();
+        for (const DragonCdTrack &track : tracks) {
             if (!track.isAudio()) {
                 continue;
             }
@@ -697,7 +700,6 @@ bool MainWindow::eventFilter(QObject *obj, QEvent *event)
         const int max = m_seekSlider->maximum();
         const int targetValue = min + static_cast<int>(ratio * (max - min));
         m_player->setPosition(std::chrono::milliseconds{targetValue});
-        return false;
     }
     return QMainWindow::eventFilter(obj, event);
 }

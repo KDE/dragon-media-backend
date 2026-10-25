@@ -61,7 +61,12 @@ namespace
 {
 
 std::mutex s_acquireMutex;
-std::map<QString, std::weak_ptr<DragonCdDisc>> s_cache;
+
+std::map<QString, std::weak_ptr<DragonCdDisc>> &discCache()
+{
+    static std::map<QString, std::weak_ptr<DragonCdDisc>> cache;
+    return cache;
+}
 
 QString resolveDevice(const QString &device)
 {
@@ -149,17 +154,18 @@ std::expected<std::shared_ptr<DragonCdDisc>, QString> DragonCdDisc::acquire(cons
 
     std::scoped_lock lock(s_acquireMutex);
 
-    std::erase_if(s_cache, [](const auto &entry) {
+    std::erase_if(discCache(), [](const auto &entry) {
         return entry.second.expired();
     });
 
-    if (auto it = s_cache.find(key); it != s_cache.end()) {
+    auto &cache = discCache();
+    if (auto it = cache.find(key); it != cache.end()) {
         if (const std::shared_ptr<DragonCdDisc> disc = it->second.lock()) {
             if (disc->stillCurrent(key)) {
                 return disc;
             }
         }
-        s_cache.erase(it);
+        cache.erase(it);
     }
 
     auto opened = open(key, key.isEmpty() ? device : key);
@@ -167,7 +173,7 @@ std::expected<std::shared_ptr<DragonCdDisc>, QString> DragonCdDisc::acquire(cons
         return opened;
     }
 
-    s_cache[key] = *opened;
+    cache[key] = *opened;
     return opened;
 }
 

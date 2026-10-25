@@ -39,7 +39,7 @@ public:
     void start() override;
     void stop() override;
 
-    int read(std::span<uint8_t> buf, std::stop_token st) override;
+    int read(std::span<uint8_t> buf, const std::stop_token &st) override;
 
     qint64 seek(qint64 offset) override;
 
@@ -77,7 +77,7 @@ private:
      * -1 signals a stop or an error state without a message, 0 the end of the
      * stream.
      */
-    std::expected<int, QString> readLocked(std::span<uint8_t> buf, std::stop_token st);
+    std::expected<int, QString> readLocked(std::span<uint8_t> buf, const std::stop_token &st);
 
     QUrl m_url;
     DragonBufferProgress *m_bufferProgress = nullptr;

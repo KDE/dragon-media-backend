@@ -68,9 +68,9 @@ void DragonFftPipeline::startThread()
         return;
     }
 
-    m_fftThread = std::jthread([this](std::stop_token st) {
+    m_fftThread = std::jthread([this](const std::stop_token &st) {
         DragonThreadName::set("dragon-fft");
-        m_fftProcessor->processLoop(std::move(st));
+        m_fftProcessor->processLoop(st);
     });
 
     qCDebug(dragonMediaBackendFft) << "FFT thread started";

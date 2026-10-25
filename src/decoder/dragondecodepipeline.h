@@ -141,7 +141,7 @@ private:
         Finalize,
     };
     [[nodiscard]] Action nextAction() const;
-    void decodeThreadMain(std::stop_token st);
+    void decodeThreadMain(const std::stop_token &st);
     void runCurrentSession(std::unique_lock<std::mutex> &lock);
     bool promoteNext(std::unique_lock<std::mutex> &lock);
     void finalizeSession(std::unique_lock<std::mutex> &lock);

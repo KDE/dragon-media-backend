@@ -102,8 +102,8 @@ void DragonPlayerPrivate::onSinkTrackStarted(std::uint32_t trackId, std::optiona
     PendingTrack pending;
     {
         std::scoped_lock lock(m_pendingTracksMutex);
-        const auto it = m_pendingTracks.find(trackId);
-        if (it == m_pendingTracks.end()) {
+        const auto it = m_pendingTracks.constFind(trackId);
+        if (it == m_pendingTracks.constEnd()) {
             qCDebug(dragonMediaBackendPlayer) << "onSinkTrackStarted: no pending track for id, ignoring (stale)";
             return;
         }

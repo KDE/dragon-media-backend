@@ -41,7 +41,7 @@ namespace
 static constexpr auto INVOKE_STOPPABLE_TIMEOUT = std::chrono::milliseconds(2000);
 
 template<typename R, typename F>
-std::optional<R> invokeStoppable(QObject *context, std::stop_token st, F &&func)
+std::optional<R> invokeStoppable(QObject *context, const std::stop_token &st, F &&func)
 {
     struct State {
         std::mutex mutex;
@@ -138,7 +138,7 @@ DragonDecodePipeline::DragonDecodePipeline(DragonPlayer *player)
     , m_player(player)
 {
     qCDebug(dragonMediaBackendDecode) << "creating decode thread";
-    m_decodeThread = std::jthread([this](std::stop_token st) {
+    m_decodeThread = std::jthread([this](const std::stop_token &st) {
         DragonThreadName::set("dragon-decode");
         qCDebug(dragonMediaBackendDecode) << "decode thread started";
         decodeThreadMain(st);
@@ -151,7 +151,7 @@ DragonDecodePipeline::~DragonDecodePipeline()
     stop();
 }
 
-void DragonDecodePipeline::decodeThreadMain(std::stop_token st)
+void DragonDecodePipeline::decodeThreadMain(const std::stop_token &st)
 {
     std::unique_lock lock(m_decoderMutex);
     while (!st.stop_requested()) {
@@ -286,7 +286,7 @@ void DragonDecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
                                       Q_EMIT sessionError(err.message);
                                   },
 
-                                  [&](const DecodeEof &) {
+                                  [&](DecodeEof) {
                                       qCDebug(dragonMediaBackendDecode) << "decode thread DecodeEof received";
                                   }},
                        event);
@@ -594,7 +594,7 @@ void DragonDecodePipeline::setNextSource(const QUrl &next)
         return;
     }
 
-    m_preWarmThread = std::jthread([this, next](std::stop_token st) {
+    m_preWarmThread = std::jthread([this, next](const std::stop_token &st) {
         DragonThreadName::set("dragon-prewarm");
         auto session = createSession(next, true);
         if (st.stop_requested()) {

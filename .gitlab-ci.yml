@@ -62,3 +62,22 @@ dragonqml_apk_arm64:
   extends: .dragonqml_apk
   script:
     - bash ci/run-apk-job.sh arm64-v8a
+
+build_clazy:
+  extends:
+    - .ci_linux_base
+    - .suse_tumbleweed_qt6stable
+  rules:
+    # only run on merge requests
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+  variables:
+    # where --only-setup-environment unpacked the prebuilt dependency packages
+    CMAKE_PREFIX_PATH: "$CI_PROJECT_DIR/_install"
+    LD_LIBRARY_PATH: "$CI_PROJECT_DIR/_install/lib64"
+  before_script:
+    - !reference [.ci-checkout, before_script]
+  script:
+    - git config --global --add safe.directory $CI_PROJECT_DIR
+    - python3 -u ci-utilities/run-ci-build.py --project $CI_PROJECT_NAME --branch $CI_COMMIT_REF_NAME --platform Linux/Qt6/Shared --only-setup-environment
+    - cmake --workflow --preset clazy
+  artifacts: null

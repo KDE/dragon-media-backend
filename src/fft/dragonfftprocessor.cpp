@@ -109,7 +109,7 @@ DragonFftFrame DragonFftProcessor::takeLatestFrame()
     return result;
 }
 
-void DragonFftProcessor::processLoop(std::stop_token st)
+void DragonFftProcessor::processLoop(const std::stop_token &st)
 {
     auto prevMode = FftMode::Off;
     bool primed = false;
@@ -181,7 +181,7 @@ void DragonFftProcessor::processLoop(std::stop_token st)
     }
 }
 
-bool DragonFftProcessor::drainPipeToHistory(std::stop_token st)
+bool DragonFftProcessor::drainPipeToHistory(const std::stop_token &st)
 {
     bool gotAny = false;
     const int ch = m_channelCount.load(std::memory_order_relaxed);

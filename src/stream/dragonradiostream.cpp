@@ -116,7 +116,7 @@ void DragonRadioStream::stop()
     }
 }
 
-int DragonRadioStream::read(std::span<uint8_t> buf, std::stop_token st)
+int DragonRadioStream::read(std::span<uint8_t> buf, const std::stop_token &st)
 {
     std::unique_lock lock(m_bufferMutex);
 

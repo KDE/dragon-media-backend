@@ -235,8 +235,11 @@ void DragonPipeWireAudioSink::open(int sampleRate, int channels)
     uint8_t podBuffer[PW_POD_BUFFER_LENGTH];
     spa_pod_builder b = SPA_POD_BUILDER_INIT(podBuffer, sizeof(podBuffer));
 
-    spa_audio_info_raw audioInfo =
-        SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_F32, .rate = static_cast<uint32_t>(sampleRate), .channels = static_cast<uint32_t>(channels));
+    spa_audio_info_raw audioInfo = SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_F32,
+                                                           .flags = 0,
+                                                           .rate = static_cast<uint32_t>(sampleRate),
+                                                           .channels = static_cast<uint32_t>(channels),
+                                                           .position = {});
 
     // Explicit channel positions for mono and stereo.
     // For >2 channels, PipeWire infers positions from the channel count.

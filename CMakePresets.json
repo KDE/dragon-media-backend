@@ -109,9 +109,13 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
-        "Fetch": "ON"
+        "BUILD_TESTING": "OFF",
+        "BUILD_EXAMPLES": "ON",
+        "Fetch": "ON",
+        "CMAKE_CXX_FLAGS": "-Werror -Wno-deprecated-declarations"
       },
       "environment": {
+        "CC": "clang",
         "CXX": "clazy",
         "CCACHE_DISABLE": "ON"
       }
@@ -250,9 +254,11 @@
     {
       "name": "clazy",
       "configurePreset": "clazy",
+      "cleanFirst": true,
+      "nativeToolOptions": ["-k", "0"],
       "environment": {
         "CLAZY_CHECKS": "level0,level1,level2,no-ctor-missing-parent-argument,no-missing-typeinfo,container-inside-loop,detaching-member,heap-allocated-small-trivial-type,ifndef-define-typo,isempty-vs-count,qhash-with-char-pointer-key,qproperty-type-mismatch,qrequiredresult-candidates,qstring-varargs,qvariant-template-instantiation,raw-environment-function,reserve-candidates,signal-with-return-value,thread-with-slots,unneeded-cast",
-        "CLAZY_IGNORE_DIRS": "/usr/include/|/build-clazy/",
+        "CLAZY_IGNORE_DIRS": "/usr/include/|/build-clazy/|/_install/",
         "CCACHE_DISABLE": "ON"
       }
     },
@@ -472,6 +478,21 @@
         {
           "type": "test",
           "name": "dev"
+        }
+      ]
+    },
+    {
+      "name": "clazy",
+      "displayName": "Run clazy over library sources and examples",
+      "description": "Configure and build with the clazy compiler plugin (BUILD_TESTING=OFF).",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "clazy"
+        },
+        {
+          "type": "build",
+          "name": "clazy"
         }
       ]
     },

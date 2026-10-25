@@ -173,11 +173,13 @@ public:
      * Returns all custom ICY fields the stream provided, as a mapping
      * of field name to value.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) clazy tokenizes the comma inside QHash<QString, QString>
     [[nodiscard]] QHash<QString, QString> customFields() const;
 
     /*!
      * Replaces the custom ICY fields with \a fields.
      */
+    // NOLINTNEXTLINE(clazy-qproperty-type-mismatch) clazy tokenizes the comma inside QHash<QString, QString>
     void setCustomFields(const QHash<QString, QString> &fields);
 
     /*!

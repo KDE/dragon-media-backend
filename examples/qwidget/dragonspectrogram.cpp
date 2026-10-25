@@ -85,7 +85,7 @@ void DragonSpectrogram::updateFrequencies(std::span<const float> frequenciesDb)
         m_writeIndex = 0;
     }
 
-    QRgb *line = reinterpret_cast<QRgb *>(m_image.scanLine(m_writeIndex));
+    QRgb *line = reinterpret_cast<QRgb *>(m_image.scanLine(m_writeIndex)); // NOLINT(clazy-detaching-member) m_image is a private, unshared frame buffer
     for (int i = 0; i < numBins; ++i) {
         line[i] = dbToColor(frequenciesDb[i]);
     }
