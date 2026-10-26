@@ -13,56 +13,6 @@ include:
       - /gitlab-templates/freebsd-qt6.yml
       - /gitlab-templates/android-qt6.yml
 
-.ci-checkout:
-  before_script:
-    - git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
-    - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
-    - git clone https://github.com/mborgerding/kissfft.git --depth=1 --branch 131.2.0 kissfft-src
-
-suse_tumbleweed_qt612:
-  before_script: !reference [.ci-checkout, before_script]
-
-suse_tumbleweed_qt613:
-  before_script: !reference [.ci-checkout, before_script]
-
-windows_qt612:
-  before_script:
-    - !reference [.ci-checkout, before_script]
-    - git clone https://github.com/libsdl-org/SDL.git --depth=1 --branch release-3.4.12 sdl3-src
-
-freebsd150_qt611:
-  before_script:
-    - !reference [.ci-checkout, before_script]
-    - git clone https://github.com/libsdl-org/SDL.git --depth=1 --branch release-3.4.12 sdl3-src
-
-android_qt611:
-  before_script:
-    - git clone https://invent.kde.org/sysadmin/ci-utilities.git --depth=1
-    - git clone https://invent.kde.org/sysadmin/repo-metadata.git ci-utilities/repo-metadata/ --depth=1
-  script:
-    - bash ci/run-android-artifact-job.sh
-
-.dragonqml_apk:
-  stage: build
-  image: storage.kde.org/vm-images/android-qt611-ci
-  tags:
-    - VM
-    - amd64
-  interruptible: true
-  variables:
-    DRAGON_ANDROID_DEPS_ROOT: "$CI_PROJECT_DIR/.ci-android-deps"
-  retry: 1
-
-dragonqml_apk_x86_64:
-  extends: .dragonqml_apk
-  script:
-    - bash ci/run-apk-job.sh x86_64
-
-dragonqml_apk_arm64:
-  extends: .dragonqml_apk
-  script:
-    - bash ci/run-apk-job.sh arm64-v8a
-
 build_clazy:
   extends:
     - .ci_linux_base
@@ -74,8 +24,6 @@ build_clazy:
     # where --only-setup-environment unpacked the prebuilt dependency packages
     CMAKE_PREFIX_PATH: "$CI_PROJECT_DIR/_install"
     LD_LIBRARY_PATH: "$CI_PROJECT_DIR/_install/lib64"
-  before_script:
-    - !reference [.ci-checkout, before_script]
   script:
     - git config --global --add safe.directory $CI_PROJECT_DIR
     - python3 -u ci-utilities/run-ci-build.py --project $CI_PROJECT_NAME --branch $CI_COMMIT_REF_NAME --platform Linux/Qt6/Shared --only-setup-environment
