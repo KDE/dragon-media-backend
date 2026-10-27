@@ -71,6 +71,11 @@ DragonSdlAudioSink::DragonSdlAudioSink(QObject *parent, const QVariantList &args
         SDL_SetHint(SDL_HINT_AUDIO_DEVICE_APP_ICON_NAME, appIdUtf8.constData());
     }
 
+#ifdef Q_OS_ANDROID
+    // don't stop playing when android app isn't on screen
+    SDL_SetHint(SDL_HINT_ANDROID_BLOCK_ON_PAUSE, "0");
+#endif
+
     if (!SDL_Init(SDL_INIT_AUDIO)) {
         qCCritical(dragonMediaBackendAudio) << "SDL_Init(SDL_INIT_AUDIO) failed:" << SDL_GetError();
         Q_EMIT errorOccurred(QString::fromUtf8(SDL_GetError()));

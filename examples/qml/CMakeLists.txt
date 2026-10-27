@@ -64,16 +64,16 @@ if(ANDROID)
     if(NOT EXISTS "${_dragon_sdl3_lib}")
         set(_dragon_sdl3_lib "${_dragon_android_prefix}/lib/libSDL3.so")
     endif()
-    set(_dragon_sdl3_jar "${_dragon_android_prefix}/jar/SDL3-qtactivity-qt.jar")
-    foreach(_dragon_android_artifact IN ITEMS "${_dragon_sdl3_lib}" "${_dragon_sdl3_jar}")
-        if(NOT EXISTS "${_dragon_android_artifact}")
-            message(FATAL_ERROR
-                "Expected ${_dragon_android_artifact} — the craft prefix is missing "
-                "the SDL3 artifacts. The jar is built by "
-                "scripts/build-sdl3-qtactivity-jar.sh from the SDL3 sources Craft "
-                "unpacked; libSDL3.so comes from the libs/libsdl3 blueprint.")
-        endif()
-    endforeach()
+    file(GLOB _dragon_sdl3_jars LIST_DIRECTORIES false
+        "${_dragon_android_prefix}/share/java/SDL3/SDL3-*.jar")
+    list(FILTER _dragon_sdl3_jars EXCLUDE REGEX "-sources\\.jar$")
+    if(_dragon_sdl3_jars)
+        list(GET _dragon_sdl3_jars 0 _dragon_sdl3_jar)
+    endif()
+    if(NOT EXISTS "${_dragon_sdl3_lib}" OR NOT _dragon_sdl3_jar)
+        message(FATAL_ERROR
+            "The craft prefix ${_dragon_android_prefix} is missing the SDL3 artifacts.")
+    endif()
 
     set(_dragon_android_pkg_dir ${CMAKE_CURRENT_BINARY_DIR}/android-package)
     file(REMOVE_RECURSE ${_dragon_android_pkg_dir})
@@ -96,11 +96,10 @@ if(ANDROID)
     endfunction()
     cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL dragonqml_android_pkg_sync_hook)
 
-    set(_dragon_sink_lib ${CMAKE_BINARY_DIR}/lib/DragonMediaBackend/AudioSink/libplugins_DragonMediaBackend_AudioSink_dragonsdlaudiosink.so)
     set_target_properties(dragonqml_example PROPERTIES
         QT_ANDROID_PACKAGE_NAME org.kde.dragonqmlexample
         QT_ANDROID_PACKAGE_SOURCE_DIR ${_dragon_android_pkg_dir}
         QT_ANDROID_MIN_SDK_VERSION 28
-        QT_ANDROID_EXTRA_LIBS "${_dragon_sdl3_lib};${_dragon_sink_lib}"
+        QT_ANDROID_EXTRA_LIBS "${_dragon_sdl3_lib}"
     )
 endif()
