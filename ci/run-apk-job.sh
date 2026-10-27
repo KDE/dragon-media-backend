@@ -4,13 +4,6 @@
 #
 # Usage:
 #   run-apk-job.sh <arm64-v8a|x86_64> [--project-dir DIR] [--deps-root DIR] [--qt-android DIR]
-#
-# Builds the dragonqml example APK for one Android ABI. Every native
-# dependency (Qt, KF6/KIO, QCoro, FFmpeg, SDL3, kissfft) is installed by
-# KDE Craft from the upstream craft-blueprints-kde, via the dependency
-# graph of kde/libs/dragon-media-backend. The SDL3 QtActivity java glue
-# jar is built from the SDL3 sources Craft unpacked
-# (see scripts/build-sdl3-qtactivity-jar.sh).
 
 set -euo pipefail
 
@@ -86,20 +79,6 @@ bash "$PROJECT_DIR/ci/craft-android-deps.sh" \
     --target "$CRAFT_TARGET" \
     --root "$QT_ANDROID" \
     libs/qt6/qtsvg libs/qt6/qttools libs/qt6/qtshadertools
-
-# SDL3 java glue: built from the same SDL3 sources Craft unpacked, so the
-# jar matches the native libSDL3.so in the craft root
-SDL_ANDROID_PROJECT="$(find "$QT_ANDROID/build/libs/libsdl3" -type d -name android-project | head -1)"
-if [ -z "$SDL_ANDROID_PROJECT" ]; then
-    echo "SDL3 sources not found under $QT_ANDROID/build/libs/libsdl3 — expected libs/libsdl3 to have been built from source" >&2
-    exit 1
-fi
-bash "$PROJECT_DIR/scripts/build-sdl3-qtactivity-jar.sh" \
-    --sdl-source "$(dirname "$SDL_ANDROID_PROJECT")" \
-    --qt-android "$QT_ANDROID" \
-    --output "$QT_ANDROID/jar/SDL3-qtactivity-qt.jar" \
-    --java-home "$JAVA_HOME" \
-    --android-home "$ANDROID_HOME"
 
 cd "$PROJECT_DIR"
 cmake --preset "$PRESET"

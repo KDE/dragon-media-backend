@@ -49,6 +49,13 @@ target_compile_definitions(DragonMediaBackend PRIVATE
     DRAGONMEDIABACKEND_INTERNAL_BUILD
 )
 
+if(ANDROID)
+    kcoreaddons_target_static_plugins(DragonMediaBackend
+        NAMESPACE "DragonMediaBackend/AudioSink"
+        LINK_OPTION PRIVATE
+    )
+endif()
+
 # The QML module: the public types self-register into the library via the
 # declarative QML macros in their headers; this generates the plugin,
 # qmldir and qmltypes for import as "org.kde.dragonmediabackend".
