@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+SPDX-License-Identifier: CC0-1.0
+-->
+<component type="generic">
+  <id>org.kde.dragonmediabackend</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL</project_license>
+
+  <name>Dragon Media Backend</name>
+  <summary>Audio playback library for music players</summary>
+
+  <description>
+    <p>
+      Dragon Media Backend is a Qt C++ library intended for desktop music players.
+      It can play any audio format that FFmpeg decodes and outputs it through a
+      plugin system of audio sinks with support for PipeWire, PulseAudio, and SDL.
+    </p>
+    <p>
+      It also calculates FFTs for audio visualizations, can play music over KDE's
+      KIO system, plays audio CDs and provides basic audio CD track information,
+      and supports ICY metadata for radio streams.
+    </p>
+  </description>
+
+  <url type="homepage">https://invent.kde.org/libraries/dragon-media-backend</url>
+  <url type="help">https://eean.dev/dragon-media-backend/api/</url>
+  <url type="bugtracker">https://bugs.kde.org/enter_bug.cgi?format=guided&amp;product=dragon-media-backend</url>
+  <url type="vcs-browser">https://invent.kde.org/libraries/dragon-media-backend</url>
+
+  <developer id="org.kde">
+    <name translate="no">KDE</name>
+  </developer>
+  <project_group>KDE</project_group>
+
+  <provides>
+    <library>libdragonmediabackend.so.0</library>
+  </provides>
+
+  <content_rating type="oars-1.1" />
+
+  <custom>
+    <value key="KDE::forum">https://discuss.kde.org/tag/multimedia/434</value>
+    <value key="KDE::matrix">#kde-multimedia:kde.org</value>
+  </custom>
+
+  <releases>
+    <release version="0.83.0" date="2026-10-17"/>
+    <release version="0.82.1" date="2026-10-04"/>
+    <release version="0.82.0" date="2026-10-02"/>
+    <release version="0.81.1" date="2026-09-29"/>
+    <release version="0.81.0" date="2026-09-28"/>
+  </releases>
+</component>

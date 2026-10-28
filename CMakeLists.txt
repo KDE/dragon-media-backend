@@ -407,6 +407,10 @@ install(FILES ${DragonMediaBackend_PUBLIC_HEADERS}
     COMPONENT Devel
 )
 
+install(FILES org.kde.dragonmediabackend.metainfo.xml
+    DESTINATION ${KDE_INSTALL_METAINFODIR}
+)
+
 include(CMakePackageConfigHelpers)
 
 set(CMAKECONFIG_INSTALL_DIR "${KDE_INSTALL_CMAKEPACKAGEDIR}/DragonMediaBackend")
