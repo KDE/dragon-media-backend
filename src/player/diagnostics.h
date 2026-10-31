@@ -16,7 +16,7 @@
 
 class DragonPlayer;
 class DragonSpectrumAnalyzer;
-class AudioSink;
+class PlaybackPipeline;
 
 class DiagnosticsPrivate;
 
@@ -53,7 +53,13 @@ public:
 
     [[nodiscard]] bool isFlushPending() const;
 
-    [[nodiscard]] AudioSink *audioSink() const;
+    [[nodiscard]] qint64 producerSamples() const;
+
+    [[nodiscard]] std::uint64_t streamEpoch() const;
+
+    [[nodiscard]] std::uint64_t primarySlotStreamEpoch() const;
+
+    [[nodiscard]] PlaybackPipeline *playbackPipeline() const;
 
 private:
     std::unique_ptr<DiagnosticsPrivate> d;

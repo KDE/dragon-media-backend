@@ -216,6 +216,30 @@ public:
         return reached && !hasRealError() && m_player->error() == DragonPlayer::Error::NoError && (statusSpy.count() > 0 || statusBefore == m_player->status());
     }
 
+    bool setSourceAndWait(const QUrl &url, const DragonSourceOptions &options, int timeoutMs = 10000)
+    {
+        const auto statusBefore = m_player->status();
+        QSignalSpy statusSpy(m_player, &DragonPlayer::statusChanged);
+        QSignalSpy errorSpy(m_player, &DragonPlayer::errorChanged);
+
+        m_player->setSource(url, options);
+
+        const auto hasRealError = [&errorSpy]() {
+            return std::ranges::any_of(errorSpy, [](const QList<QVariant> &args) {
+                return args.at(0).value<DragonPlayer::Error>() != DragonPlayer::Error::NoError;
+            });
+        };
+
+        const bool reached = QTest::qWaitFor(
+            [&]() {
+                return m_player->status() == DragonPlayer::MediaStatus::LoadedMedia || m_player->status() == DragonPlayer::MediaStatus::BufferedMedia
+                    || hasRealError();
+            },
+            timeoutMs);
+
+        return reached && !hasRealError() && m_player->error() == DragonPlayer::Error::NoError && (statusSpy.count() > 0 || statusBefore == m_player->status());
+    }
+
     bool playAndWait(int timeoutMs = 5000)
     {
         const auto stateBefore = m_player->playbackState();

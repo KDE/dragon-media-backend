@@ -20,8 +20,13 @@ race:QDBusConnectionManager::instance
 race:setStatusAndClearList
 race:addObjectWithPendingBindingStatusChange
 
+# Qt Core / Thread pool internals
+race:QThreadPoolThread::run
+
 # Qt Network internals
 race:QHttpHeadersPrivate
+race:QHostInfoPrivate
+race:QHostInfoRunnable
 
 # GLib / GDBus internals (known upstream races)
 race:g_free
@@ -30,6 +35,7 @@ race:g_wakeup_signal
 race:g_wakeup_free
 race:g_str_equal
 race:schedule_callbacks
+race:g_strsplit
 
 # PulseAudio internals
 race:pa_mutex_lock

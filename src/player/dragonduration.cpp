@@ -7,6 +7,8 @@
 
 #include <KFormat>
 
+#include <cmath>
+
 DragonDuration::DragonDuration(std::chrono::milliseconds duration)
     : m_duration(duration)
 {
@@ -34,6 +36,10 @@ qreal DragonDuration::toSeconds() const
 
 void DragonDuration::setSeconds(qreal seconds)
 {
+    if (!std::isfinite(seconds)) {
+        m_duration = std::nullopt;
+        return;
+    }
     m_duration = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::duration<qreal>{seconds});
 }
 
@@ -49,7 +55,7 @@ DragonDuration::operator std::chrono::milliseconds() const
 
 QString DragonDuration::formatted() const
 {
-    if (!m_duration) {
+    if (!m_duration || *m_duration < std::chrono::milliseconds{0}) {
         return QStringLiteral("--:--");
     }
     // KFormat always prints the hours with DefaultDuration and folds them

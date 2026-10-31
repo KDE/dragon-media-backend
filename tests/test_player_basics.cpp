@@ -12,7 +12,7 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include "sink/audiosink.h"
+#include "sink/playbackpipeline.h"
 #include <DragonPlayer>
 
 #include <QSignalSpy>
@@ -779,7 +779,7 @@ void TestPlayerBasics::testFormatChangeRequiredRespectsFlushPending()
     DragonPlayer player;
     Diagnostics diag(&player);
 
-    auto *sink = diag.audioSink();
+    auto *sink = diag.playbackPipeline();
     QVERIFY(sink);
 
     QVERIFY(diag.isQueueReady());
@@ -789,7 +789,7 @@ void TestPlayerBasics::testFormatChangeRequiredRespectsFlushPending()
     QVERIFY(sink->isDeviceOpen());
 
     // Induce a pending flush (as when seeking while playing)
-    sink->setPositionOffset(1000ms, AudioSink::PositionResetMode::Seek);
+    sink->setPositionOffset(1000ms);
     QVERIFY(diag.isFlushPending());
     QVERIFY(!diag.isQueueReady());
 
@@ -813,14 +813,14 @@ void TestPlayerBasics::testFormatChangeRequiredUngatesQueueWhenNoFlushPending()
     DragonPlayer player;
     Diagnostics diag(&player);
 
-    auto *sink = diag.audioSink();
+    auto *sink = diag.playbackPipeline();
     QVERIFY(sink);
 
     sink->open(44100, 2);
     QVERIFY(sink->isDeviceOpen());
 
     // Gate the queue while no flush is pending
-    sink->setQueueReady(false);
+    sink->closeGate();
     QVERIFY(!diag.isQueueReady());
     QVERIFY(!diag.isFlushPending());
 

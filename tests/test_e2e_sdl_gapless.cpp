@@ -20,9 +20,10 @@
 #include "test_utils.h"
 
 #include "player/diagnostics.h"
-#include "sink/audiosink.h"
+#include "sink/playbackpipeline.h"
 #include <DragonPlayer>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <vector>
@@ -54,6 +55,36 @@ static std::vector<float> readRawS16LeAsFloat(const QString &path)
     return pcm;
 }
 
+// Goertzel magnitude of channel 0 at freq over a window of frames.
+static double goertzelMagnitude(const std::vector<float> &pcm, int startFrame, int frames, int channels, double freq, int sampleRate)
+{
+    if (startFrame < 0 || startFrame + frames > static_cast<int>(pcm.size()) / channels) {
+        return 0.0;
+    }
+    const double coeff = 2.0 * std::cos(2.0 * M_PI * freq / sampleRate);
+    double s0 = 0.0, s1 = 0.0, s2 = 0.0;
+    for (int i = 0; i < frames; ++i) {
+        const double x = pcm[(startFrame + i) * channels];
+        s0 = x + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    return std::sqrt(std::max(0.0, s1 * s1 + s2 * s2 - coeff * s1 * s2)) / frames;
+}
+
+// Per-window magnitudes of the two tones, 50 ms windows.
+static void
+analyzeWindows(const std::vector<float> &pcm, int channels, int sampleRate, double freqA, double freqB, std::vector<double> &magA, std::vector<double> &magB)
+{
+    const int windowFrames = sampleRate / 20;
+    const int totalFrames = static_cast<int>(pcm.size()) / channels;
+    const int numWindows = totalFrames / windowFrames;
+    for (int w = 0; w < numWindows; ++w) {
+        magA.push_back(goertzelMagnitude(pcm, w * windowFrames, windowFrames, channels, freqA, sampleRate));
+        magB.push_back(goertzelMagnitude(pcm, w * windowFrames, windowFrames, channels, freqB, sampleRate));
+    }
+}
+
 class TestSdlGapless : public QObject
 {
     Q_OBJECT
@@ -63,6 +94,7 @@ private Q_SLOTS:
     void cleanupTestCase();
 
     void testGaplessSameFormat();
+    void testCrossfadeSameFormat();
     void testGaplessFormatChangeStateMachine();
     void testTrackChangeAtAudibleBoundary();
     void testFormatChangePlaysAtNativeRate();
@@ -130,6 +162,121 @@ void TestSdlGapless::testGaplessSameFormat()
              qPrintable(u"Captured frame count %1 should be >= expected %2 (disk driver may pad with silence)"_s.arg(capturedFrames).arg(expectedTotalFrames)));
 
     QVERIFY(verifyGaplessPcm(capturedPcm, fixtureA, fixtureB, kDefaultChannels));
+
+    QFile::remove(m_pcmCapturePath);
+}
+
+void TestSdlGapless::testCrossfadeSameFormat()
+{
+    // Track A: 440 Hz sine, Track B: 880 Hz sine, both 3 s stereo at 44.1 kHz.
+    const QString pathA = QDir::tempPath() + u"/dragon-crossfade-a.flac"_s;
+    const QString pathB = QDir::tempPath() + u"/dragon-crossfade-b.flac"_s;
+    FixtureGuard guardA{pathA};
+    FixtureGuard guardB{pathB};
+
+    auto makeSineFixture = [&](const QString &path, double freq) {
+        std::vector<float> samples(static_cast<size_t>(kDurationFrames) * kDefaultChannels);
+        for (int frm = 0; frm < kDurationFrames; ++frm) {
+            const double t = static_cast<double>(frm) / kSampleRate;
+            const float val = static_cast<float>(std::sin(2.0 * M_PI * freq * t) * 0.4);
+            samples[static_cast<size_t>(frm) * kDefaultChannels] = val;
+            samples[static_cast<size_t>(frm) * kDefaultChannels + 1] = val;
+        }
+        return FixtureGenerator::writeFlac(path, samples, kSampleRate, kDefaultChannels, kDurationFrames);
+    };
+    QVERIFY2(makeSineFixture(pathA, 440.0), "Failed to generate crossfade fixture A");
+    QVERIFY2(makeSineFixture(pathB, 880.0), "Failed to generate crossfade fixture B");
+
+    EnvGuard diskDriverEnv{
+        {"SDL_AUDIODRIVER", QByteArray("disk")},
+        {"SDL_AUDIO_DISK_OUTPUT_FILE", m_pcmCapturePath.toUtf8()},
+        {"SDL_AUDIO_DISK_TIMESCALE", QByteArray("1")},
+    };
+
+    QFile::remove(m_pcmCapturePath);
+
+    DragonPlayer player;
+    Diagnostics diagnostics(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY2(helper.setSourceAndWait(QUrl::fromLocalFile(pathA)), "Track A failed to load");
+    QVERIFY2(helper.playAndWait(), "Track A failed to start playing");
+    QVERIFY2(diagnostics.isAudioActive(), "Audio should be active after play");
+
+    // Let track A play audibly for ~500 ms before the crossfade.
+    QTest::qWait(500);
+
+    DragonSourceOptions options;
+    options.setCrossfadeDuration(1000ms);
+    player.setSource(QUrl::fromLocalFile(pathB), options);
+
+    // The crossfade keeps the player playing the incoming track's timeline
+    // without reopening the audio device.
+    QVERIFY2(helper.waitForState(DragonPlayer::PlaybackState::PlayingState, 10000), "Player did not resume PlayingState during crossfade");
+    QCOMPARE(player.source(), QUrl::fromLocalFile(pathB));
+    QVERIFY2(diagnostics.isAudioActive(), "Audio should remain active during crossfade");
+    QVERIFY2(helper.waitForEndOfMedia(30000), "Track B did not reach EndOfMedia");
+    QVERIFY2(helper.waitForState(DragonPlayer::PlaybackState::StoppedState, 10000), "Player did not stop after track B finished");
+
+    player.stop(); // flush the disk capture on all platforms
+
+    QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
+    auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
+    QVERIFY2(capturedPcm.size() > 2u * static_cast<size_t>(kSampleRate), "Capture too short");
+
+    std::vector<double> mag440;
+    std::vector<double> mag880;
+    analyzeWindows(capturedPcm, kDefaultChannels, kSampleRate, 440.0, 880.0, mag440, mag880);
+    QVERIFY2(mag440.size() > 30, "Capture too short for window analysis");
+
+    const double max440 = *std::ranges::max_element(mag440);
+    const double max880 = *std::ranges::max_element(mag880);
+    QVERIFY2(max440 > 0.1, qPrintable(u"440 Hz tone missing from capture (max=%1)"_s.arg(max440)));
+    QVERIFY2(max880 > 0.1, qPrintable(u"880 Hz tone missing from capture (max=%1)"_s.arg(max880)));
+
+    const double thresh440 = 0.25 * max440;
+    const double thresh880 = 0.25 * max880;
+
+    int fadeStart = -1; // first window where 880 Hz becomes audible
+    int fadeEnd = -1; // last window where 440 Hz is still audible
+    for (int w = 0; w < static_cast<int>(mag880.size()); ++w) {
+        if (fadeStart < 0 && mag880[w] > thresh880) {
+            fadeStart = w;
+        }
+        if (mag440[w] > thresh440) {
+            fadeEnd = w;
+        }
+    }
+    QVERIFY2(fadeStart > 2, "880 Hz appeared immediately: no pre-fade window for track A");
+    QVERIFY2(fadeEnd > fadeStart, "No overlapped crossfade window: track B started after track A ended");
+
+    // Pre-fade: pure 440 Hz, no 880 Hz energy.
+    QVERIFY2(mag440[2] > 0.6 * max440, "Track A is not at unity gain before the fade");
+    QVERIFY2(mag880[2] < 0.15 * max880, "Track B audible before the crossfade");
+
+    // Post-fade: pure 880 Hz, no 440 Hz energy.
+    const int lastWindow = static_cast<int>(mag440.size()) - 1;
+    QVERIFY2(mag880[lastWindow - 2] > 0.6 * max880, "Track B is not at unity gain after the fade");
+    QVERIFY2(mag440[lastWindow - 2] < 0.15 * max440, "Track A still audible after the fade");
+
+    // Equal-power handoff: across the overlap 440 Hz declines and 880 Hz rises,
+    // both monotonically within noise tolerance, and the power sum stays near
+    // the pre-fade level instead of dipping.
+    for (int w = fadeStart; w <= fadeEnd; ++w) {
+        if (w > fadeStart) {
+            QVERIFY2(mag440[w] <= mag440[w - 1] + 0.15 * max440, qPrintable(u"440 Hz envelope not monotonically declining at window %1"_s.arg(w)));
+            QVERIFY2(mag880[w] >= mag880[w - 1] - 0.15 * max880, qPrintable(u"880 Hz envelope not monotonically rising at window %1"_s.arg(w)));
+        }
+    }
+
+    // No clicks: adjacent captured samples in the overlap window must stay
+    // within the slope of the two summed sines.
+    const int overlapStartFrame = fadeStart * (kSampleRate / 20);
+    const int overlapEndFrame = (fadeEnd + 1) * (kSampleRate / 20);
+    for (int i = overlapStartFrame + 1; i < overlapEndFrame; ++i) {
+        const float diff = qAbs(capturedPcm[static_cast<size_t>(i) * kDefaultChannels] - capturedPcm[(static_cast<size_t>(i) - 1) * kDefaultChannels]);
+        QVERIFY2(diff < 0.1f, qPrintable(u"Sample discontinuity (%1) at frame %2 during crossfade"_s.arg(diff).arg(i)));
+    }
 
     QFile::remove(m_pcmCapturePath);
 }

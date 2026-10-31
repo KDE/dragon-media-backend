@@ -234,7 +234,6 @@ void DecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
         }
     }
     lock.unlock();
-
     if (!decoder) {
         qCDebug(dragonMediaBackendDecode) << "decode thread session retired before decodeLoop, treating as stopped";
         {
@@ -260,6 +259,7 @@ void DecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
     if (initResult.success) {
         qCDebug(dragonMediaBackendDecode) << "decode thread starting decodeLoop for decoder" << decoder;
 
+        bool retireBudgetExhausted = false;
         for (auto event : decoder->decodeLoop(sessionToken)) {
             if (sessionToken.stop_requested()) {
                 qCDebug(dragonMediaBackendDecode) << "decode thread stop requested during iteration";
@@ -279,9 +279,23 @@ void DecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
                                       if (callback && !sc.data.empty()) {
                                           callback(sc.data, sessionToken);
                                       }
+                                      if (m_retiring.load(std::memory_order_acquire)) {
+                                          const auto rem =
+                                              m_retiringSamplesRemaining.fetch_sub(static_cast<std::int64_t>(sc.data.size()), std::memory_order_acq_rel)
+                                              - static_cast<std::int64_t>(sc.data.size());
+                                          if (rem <= 0) {
+                                              retireBudgetExhausted = true;
+                                          }
+                                      }
                                   },
 
                                   [&](const DecodeError &err) {
+                                      if (m_retiring.load(std::memory_order_acquire)) {
+                                          // A retiring track's errors are invisible to the player:
+                                          // the fade-out simply ends early.
+                                          qCDebug(dragonMediaBackendDecode) << "decode thread DecodeError while retiring (suppressed):" << err.message;
+                                          return;
+                                      }
                                       qCDebug(dragonMediaBackendDecode) << "decode thread DecodeError:" << err.message;
                                       Q_EMIT sessionError(err.message);
                                   },
@@ -290,29 +304,48 @@ void DecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
                                       qCDebug(dragonMediaBackendDecode) << "decode thread DecodeEof received";
                                   }},
                        event);
+
+            if (retireBudgetExhausted) {
+                break;
+            }
         }
     }
 
     qCDebug(dragonMediaBackendDecode) << "decode thread decodeLoop finished";
     const bool wasStopped = sessionToken.stop_requested();
     const bool fatal = !initResult.success || decoder->hasFatalError();
+    const bool wasRetiring = m_retiring.exchange(false, std::memory_order_acq_rel);
     QUrl finishedSource;
     {
         std::scoped_lock relock(m_decoderMutex);
         finishedSource = m_currentSource;
-        qCDebug(dragonMediaBackendDecode) << "decode thread loopInactive, wasStopped=" << wasStopped << " fatal=" << fatal;
+        qCDebug(dragonMediaBackendDecode) << "decode thread loopInactive, wasStopped=" << wasStopped << " fatal=" << fatal << " wasRetiring=" << wasRetiring;
 
         if (m_phase == Phase::Decoding) {
-            m_phase = (wasStopped || fatal) ? Phase::Stopped : Phase::Finished;
+            m_phase = (wasStopped || fatal || wasRetiring) ? Phase::Stopped : Phase::Finished;
         }
-        if (fatal) {
+        if (fatal || wasRetiring) {
             // The fatal sessionFinished below counts as this session's
-            // reported end.
+            // reported end; a retiring session must not trigger a
+            // finalize action either.
             m_endReported = true;
         }
         if (m_activeSession) {
             m_activeSession->decoder.reset();
         }
+    }
+    if (wasRetiring) {
+        qCDebug(dragonMediaBackendDecode) << "decode thread session retired, invoking retire-finished callback";
+        RetireFinishedCallback retireFinished;
+        {
+            std::scoped_lock callbackLock(m_retireCallbackMutex);
+            retireFinished = m_retireFinishedCallback;
+        }
+        if (retireFinished) {
+            retireFinished();
+        }
+        lock.lock();
+        return;
     }
     if (fatal) {
         qCDebug(dragonMediaBackendDecode) << "decode thread fatal error, emitting sessionFinished for" << finishedSource.toString();
@@ -417,9 +450,13 @@ bool DecodePipeline::promoteNext(std::unique_lock<std::mutex> &lock)
     return true;
 }
 
-QCoro::Task<InitResult> DecodePipeline::initializeSession(QUrl source, bool isGapless)
+QCoro::Task<InitResult> DecodePipeline::initializeSession(QUrl source, Decoder::TargetAudioFormat targetFormat)
 {
-    qCDebug(dragonMediaBackendDecode) << "initializeSession(" << source.toString() << ") isGapless=" << isGapless;
+    qCDebug(dragonMediaBackendDecode) << "initializeSession(" << source.toString() << ") targetFormat=" << targetFormat.sampleRate << "x"
+                                      << targetFormat.channels;
+
+    m_retiring.store(false, std::memory_order_release);
+    m_retiringSamplesRemaining.store(0, std::memory_order_release);
 
     auto completion = std::make_shared<Completion>();
 
@@ -452,6 +489,10 @@ QCoro::Task<InitResult> DecodePipeline::initializeSession(QUrl source, bool isGa
         co_return makeErrorResult(i18n("Failed to create decoder"));
     }
 
+    if (session->decoder) {
+        session->decoder->setTargetFormat(targetFormat);
+    }
+
     {
         std::scoped_lock lock(m_decoderMutex);
         m_startCompletion = completion;
@@ -466,6 +507,38 @@ QCoro::Task<InitResult> DecodePipeline::initializeSession(QUrl source, bool isGa
     m_stateChanged.notify_all();
 
     co_return co_await *completion;
+}
+
+void DecodePipeline::setRetireFinishedCallback(RetireFinishedCallback cb)
+{
+    std::scoped_lock lock(m_retireCallbackMutex);
+    m_retireFinishedCallback = std::move(cb);
+}
+
+void DecodePipeline::retireAfter(std::int64_t remainingSamples)
+{
+    qCDebug(dragonMediaBackendDecode) << "retireAfter(" << remainingSamples << ")";
+
+    clearNextSource();
+
+    if (remainingSamples <= 0) {
+        // The pipe already holds enough buffered samples to cover the whole
+        // fade-out: stop the decoder immediately and tell the sink no further
+        // fading samples will be produced.
+        stopSession();
+        RetireFinishedCallback retireFinished;
+        {
+            std::scoped_lock callbackLock(m_retireCallbackMutex);
+            retireFinished = m_retireFinishedCallback;
+        }
+        if (retireFinished) {
+            retireFinished();
+        }
+        return;
+    }
+
+    m_retiringSamplesRemaining.store(remainingSamples, std::memory_order_release);
+    m_retiring.store(true, std::memory_order_release);
 }
 
 void DecodePipeline::clearNextSource()
@@ -483,7 +556,7 @@ void DecodePipeline::cancelPendingStart(const QString &reason)
     std::shared_ptr<Completion> pending;
     {
         std::scoped_lock lock(m_decoderMutex);
-        pending = m_startCompletion;
+        pending = std::exchange(m_startCompletion, nullptr);
     }
     if (pending) {
         pending->cancel(reason);
@@ -492,6 +565,9 @@ void DecodePipeline::cancelPendingStart(const QString &reason)
 
 void DecodePipeline::stopSession()
 {
+    m_retiring.store(false, std::memory_order_release);
+    m_retiringSamplesRemaining.store(0, std::memory_order_release);
+
     {
         std::scoped_lock lock(m_decoderMutex);
         m_phase = Phase::Stopped;

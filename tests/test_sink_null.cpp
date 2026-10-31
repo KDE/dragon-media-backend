@@ -10,15 +10,15 @@
 
 #include "test_utils.h"
 
-#include "sink/audiosink.h"
-#include "sink/audiosinkfactory.h"
 #include "sink/nullaudiosink.h"
+#include "sink/playbackpipeline.h"
+#include "sink/playbackpipelinefactory.h"
 #include <DragonAudioOutput>
 #include <DragonPlayer>
 
 using namespace Qt::StringLiterals;
 
-// The null sink's error message goes through i18n(); force the C locale so
+// The null device's error message goes through i18n(); force the C locale so
 // the English substring assertions below are stable regardless of the
 // environment the test suite runs in.
 [[maybe_unused]] static const bool s_cLocaleForced = [] {
@@ -42,10 +42,10 @@ private Q_SLOTS:
 void TestSinkNull::testFactoryExplicitNull()
 {
     DragonAudioOutput::Backend selectedSink = DragonAudioOutput::Backend::Auto;
-    auto sink = createAudioSink(DragonAudioOutput::Backend::Null, &selectedSink);
-    QVERIFY(sink != nullptr);
+    auto pipeline = createPlaybackPipeline(DragonAudioOutput::Backend::Null, &selectedSink);
+    QVERIFY(pipeline != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
-    QVERIFY(qobject_cast<NullAudioSink *>(sink.get()) != nullptr);
+    QVERIFY(qobject_cast<NullAudioSink *>(pipeline->sink()) != nullptr);
 }
 
 void TestSinkNull::testFactoryEnvRequestsNull()
@@ -53,19 +53,19 @@ void TestSinkNull::testFactoryEnvRequestsNull()
     EnvGuard guard({{"DRAGON_AUDIO_SINK", QByteArray("dragonnullaudiosink")}});
 
     DragonAudioOutput::Backend selectedSink = DragonAudioOutput::Backend::Auto;
-    auto sink = createAudioSink(DragonAudioOutput::Backend::Auto, &selectedSink);
-    QVERIFY(sink != nullptr);
+    auto pipeline = createPlaybackPipeline(DragonAudioOutput::Backend::Auto, &selectedSink);
+    QVERIFY(pipeline != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
 }
 
 void TestSinkNull::testFactoryFallbackNoPluginsFound()
 {
-    // Simulate a broken install where no audio-sink plugins can be found at
+    // Simulate a broken install where no audio-device plugins can be found at
     // all: KPluginMetaData::findPlugins() always checks the application
     // directory, so from within the test binary the real plugins are always
     // visible. Pointing DRAGON_AUDIO_SINK_PLUGIN_DIR at an absolute path to
     // an empty directory makes findPlugins() look only there, i.e. exactly
-    // the "no plugins found" situation the null sink exists for.
+    // the "no plugins found" situation the null device exists for.
     QTemporaryDir emptyPluginDir;
     QVERIFY(emptyPluginDir.isValid());
     QVERIFY(QDir(emptyPluginDir.path()).mkpath(u"DragonMediaBackend/AudioSink"_s));
@@ -77,65 +77,65 @@ void TestSinkNull::testFactoryFallbackNoPluginsFound()
 
     // Auto with no plugins available anywhere
     DragonAudioOutput::Backend selectedSink = DragonAudioOutput::Backend::Auto;
-    auto sink = createAudioSink(DragonAudioOutput::Backend::Auto, &selectedSink);
-    QVERIFY(sink != nullptr);
+    auto pipeline = createPlaybackPipeline(DragonAudioOutput::Backend::Auto, &selectedSink);
+    QVERIFY(pipeline != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
-    QVERIFY(qobject_cast<NullAudioSink *>(sink.get()) != nullptr);
-    QVERIFY(sink->probe());
-    QVERIFY(!sink->isDeviceOpen());
+    QVERIFY(qobject_cast<NullAudioSink *>(pipeline->sink()) != nullptr);
+    QVERIFY(pipeline->probe());
+    QVERIFY(!pipeline->isDeviceOpen());
 
     // A specifically requested backend is also unavailable: still no nullptr
     selectedSink = DragonAudioOutput::Backend::Auto;
-    sink = createAudioSink(DragonAudioOutput::Backend::SDL, &selectedSink);
-    QVERIFY(sink != nullptr);
+    pipeline = createPlaybackPipeline(DragonAudioOutput::Backend::SDL, &selectedSink);
+    QVERIFY(pipeline != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
-    QVERIFY(qobject_cast<NullAudioSink *>(sink.get()) != nullptr);
+    QVERIFY(qobject_cast<NullAudioSink *>(pipeline->sink()) != nullptr);
 
     // A DRAGON_AUDIO_SINK request for a plugin that does not exist: still no nullptr
     qputenv("DRAGON_AUDIO_SINK", "dragonsdlaudiosink");
     selectedSink = DragonAudioOutput::Backend::Auto;
-    sink = createAudioSink(DragonAudioOutput::Backend::Auto, &selectedSink);
-    QVERIFY(sink != nullptr);
+    pipeline = createPlaybackPipeline(DragonAudioOutput::Backend::Auto, &selectedSink);
+    QVERIFY(pipeline != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
-    QVERIFY(qobject_cast<NullAudioSink *>(sink.get()) != nullptr);
+    QVERIFY(qobject_cast<NullAudioSink *>(pipeline->sink()) != nullptr);
 }
 
 void TestSinkNull::testNullSinkMethods()
 {
-    NullAudioSink sink;
-    QVERIFY(sink.probe());
-    QVERIFY(!sink.isDeviceOpen());
-    QVERIFY(!sink.isPaused());
-    QCOMPARE(sink.deviceQueuedSamples(), 0);
+    PlaybackPipeline pipeline(std::make_unique<NullAudioSink>());
+    QVERIFY(pipeline.probe());
+    QVERIFY(!pipeline.isDeviceOpen());
+    QVERIFY(!pipeline.isPaused());
+    QCOMPARE(pipeline.deviceQueuedSamples(), 0);
 
     // Opening records the format and reports the broken install, but the
     // device never becomes open: that is the contract DragonPlayer's generic
     // open-failure handling relies on to refuse playback.
-    QSignalSpy errorSpy(&sink, &AudioSink::errorOccurred);
-    sink.open(44100, 2);
-    QVERIFY(!sink.isDeviceOpen());
-    QVERIFY(!sink.isPaused());
-    QVERIFY(sink.hasFormat(44100, 2));
+    QSignalSpy errorSpy(&pipeline, &PlaybackPipeline::errorOccurred);
+    pipeline.open(44100, 2);
+    QVERIFY(!pipeline.isDeviceOpen());
+    QVERIFY(!pipeline.isPaused());
+    QVERIFY(pipeline.hasFormat(44100, 2));
     QCOMPARE(errorSpy.count(), 1);
     QVERIFY(errorSpy.last().at(0).toString().contains(u"plugins"_s, Qt::CaseInsensitive));
 
     // Volume and mute operations
-    sink.setVolume(0.5f);
-    QVERIFY(qAbs(sink.volume() - 0.5f) < 0.01f);
-    sink.setMuted(true);
-    QVERIFY(sink.muted());
+    pipeline.setVolume(0.5f);
+    QVERIFY(qAbs(pipeline.volume() - 0.5f) < 0.01f);
+    pipeline.setMuted(true);
+    QVERIFY(pipeline.muted());
 
     // Pause / resume / close
-    sink.pause();
-    sink.resume();
-    sink.close();
-    sink.clearStream();
+    pipeline.pause();
+    pipeline.resume();
+    pipeline.close();
+    pipeline.clearStream();
 }
 
 void TestSinkNull::testNullSinkSignals()
 {
-    NullAudioSink sink;
-    QSignalSpy errorSpy(&sink, &AudioSink::errorOccurred);
+    PlaybackPipeline pipeline(std::make_unique<NullAudioSink>());
+    QSignalSpy errorSpy(&pipeline, &PlaybackPipeline::errorOccurred);
     QVERIFY(errorSpy.wait(200));
     QString msg = errorSpy.takeFirst().at(0).toString();
     QVERIFY(msg.contains(u"plugins"_s, Qt::CaseInsensitive));
@@ -149,7 +149,7 @@ void TestSinkNull::testPlayerWithNullSinkState()
 
     QSignalSpy errorSpy(&player, &DragonPlayer::errorChanged);
 
-    // Process queued events to receive initial error from null sink
+    // Process queued events to receive initial error from null device
     if (player.error() == DragonPlayer::Error::NoError) {
         errorSpy.wait(100);
     }
@@ -164,7 +164,7 @@ void TestSinkNull::testPlayerWithNullSinkState()
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     // Load a real file and request playback: the media loads successfully,
-    // but the sink's open() fails by contract (isDeviceOpen() stays false),
+    // but the device's open() fails by contract (isDeviceOpen() stays false),
     // so the player must refuse to enter PlayingState and keep reporting the
     // resource error instead of silently pretending to play.
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);

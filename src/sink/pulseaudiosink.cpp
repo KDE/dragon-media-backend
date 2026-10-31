@@ -6,6 +6,7 @@
 #include "pulseaudiosink.h"
 
 #include "dragonmediabackend_audio_logging.h"
+#include "mixer/mixer.h"
 
 #include <KLocalizedString>
 #include <KPluginFactory>
@@ -93,7 +94,10 @@ struct PulseAudioSink::PaState {
     MainloopPtr mainloop;
     ContextPtr context;
     StreamPtr stream;
-    uint32_t sinkInputIndex = static_cast<uint32_t>(-1);
+    // Published under the mainloop lock in open(); read from PA-mainloop
+    // callbacks (which hold the lock) and from main-thread methods under the
+    // lock, but atomic so every reader gets a consistent value regardless.
+    std::atomic<uint32_t> sinkInputIndex{static_cast<uint32_t>(-1)};
     bool contextReady = false;
 };
 
@@ -102,7 +106,7 @@ PulseAudioSink::PulseAudioSink(QObject *parent, const QVariantList &args)
     , m_pa(std::make_unique<PaState>())
 {
     Q_UNUSED(args);
-    qCDebug(dragonMediaBackendAudio) << "PulseAudio audio sink created";
+    qCDebug(dragonMediaBackendAudio) << "PulseAudio audio device created";
 }
 
 PulseAudioSink::~PulseAudioSink()
@@ -138,12 +142,14 @@ bool PulseAudioSink::probe()
         pa_threaded_mainloop_signal(ml, 0);
     };
 
+    bool alive = false;
     {
         ScopedMainloopLock lock(ml.get());
         pa_context_set_state_callback(ctx.get(), probeContextStateCallback, ml.get());
 
         if (pa_context_connect(ctx.get(), nullptr, PA_CONTEXT_NOAUTOSPAWN, nullptr) < 0) {
             qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() pa_context_connect failed";
+            pa_context_set_state_callback(ctx.get(), nullptr, nullptr);
             return false;
         }
 
@@ -160,49 +166,96 @@ bool PulseAudioSink::probe()
             }
         }
 
-        bool alive = PA_CONTEXT_IS_GOOD(state) && (state == PA_CONTEXT_READY);
+        alive = PA_CONTEXT_IS_GOOD(state) && (state == PA_CONTEXT_READY);
         if (alive) {
             qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() daemon reachable";
         } else {
             qCDebug(dragonMediaBackendAudio) << "PulseAudio probe() daemon unreachable";
         }
-        return alive;
+
+        pa_context_set_state_callback(ctx.get(), nullptr, nullptr);
+        pa_context_disconnect(ctx.get());
     }
+
+    pa_threaded_mainloop_stop(ml.get());
+    return alive;
 }
 
 void PulseAudioSink::contextStateCallback(pa_context *c, void *userdata)
 {
-    Q_UNUSED(c);
     auto *self = static_cast<PulseAudioSink *>(userdata);
-    pa_threaded_mainloop_signal(self->m_pa->mainloop.get(), 0);
+    if (!self || !c) {
+        return;
+    }
+    const pa_context_state_t state = pa_context_get_state(c);
+    if (state == PA_CONTEXT_FAILED) {
+        const char *err = pa_strerror(pa_context_errno(c));
+        const QString errorMsg = err ? QString::fromUtf8(err) : QStringLiteral("PulseAudio context failed");
+        qCCritical(dragonMediaBackendAudio) << "PulseAudio context error state:" << errorMsg;
+        if (self->isDeviceOpen()) {
+            QMetaObject::invokeMethod(
+                self,
+                [self, errorMsg]() {
+                    Q_EMIT self->errorOccurred(errorMsg);
+                },
+                Qt::QueuedConnection);
+        }
+    }
+    if (self->m_pa && self->m_pa->mainloop) {
+        pa_threaded_mainloop_signal(self->m_pa->mainloop.get(), 0);
+    }
 }
 
 void PulseAudioSink::streamStateCallback(pa_stream *s, void *userdata)
 {
-    Q_UNUSED(s);
     auto *self = static_cast<PulseAudioSink *>(userdata);
-    pa_threaded_mainloop_signal(self->m_pa->mainloop.get(), 0);
+    if (!self || !s) {
+        return;
+    }
+    const pa_stream_state_t state = pa_stream_get_state(s);
+    if (state == PA_STREAM_FAILED) {
+        const char *err = (self->m_pa && self->m_pa->context) ? pa_strerror(pa_context_errno(self->m_pa->context.get())) : nullptr;
+        const QString errorMsg = err ? QString::fromUtf8(err) : QStringLiteral("PulseAudio stream failed");
+        qCCritical(dragonMediaBackendAudio) << "PulseAudio stream error state:" << errorMsg;
+        if (self->isDeviceOpen()) {
+            QMetaObject::invokeMethod(
+                self,
+                [self, errorMsg]() {
+                    Q_EMIT self->errorOccurred(errorMsg);
+                },
+                Qt::QueuedConnection);
+        }
+    }
+    if (self->m_pa && self->m_pa->mainloop) {
+        pa_threaded_mainloop_signal(self->m_pa->mainloop.get(), 0);
+    }
 }
 
 void PulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *userdata)
 {
     auto *self = static_cast<PulseAudioSink *>(userdata);
-    self->m_activeCallbacks.fetch_add(1, std::memory_order_relaxed);
-
-    auto cleanupGuard = qScopeGuard([self]() noexcept {
-        self->m_activeCallbacks.fetch_sub(1, std::memory_order_relaxed);
-        self->m_callbackDoneCv.notify_one();
-    });
-
-    if (!self->m_open.load(std::memory_order_acquire)) {
+    if (!self) {
         return;
     }
 
-    if (nbytes == 0) {
+    CallbackQuiesce::ScopedCallback guard(self->m_quiesce);
+    if (guard.closing()) {
         return;
     }
 
-    const int channels = self->currentChannels();
+    if (!self->m_open.load(std::memory_order_seq_cst)) {
+        return;
+    }
+
+    if (nbytes == 0 || !self->mixer()) {
+        return;
+    }
+
+    const int channels = self->mixer()->clock().currentChannels();
+    const int sampleRate = self->mixer()->clock().currentSampleRate();
+    if (channels <= 0 || sampleRate <= 0) {
+        return;
+    }
 
     const size_t floatsNeeded = (nbytes / sizeof(float)) / static_cast<size_t>(channels) * static_cast<size_t>(channels);
     if (floatsNeeded == 0) {
@@ -220,7 +273,7 @@ void PulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *userdata)
     auto now = std::chrono::steady_clock::now().time_since_epoch();
     auto pts = std::chrono::duration_cast<std::chrono::microseconds>(now) + std::chrono::microseconds(latency);
 
-    auto pcm = self->processAudioCallback(floatsNeeded, pts);
+    auto pcm = self->mixer()->render(floatsNeeded, pts);
 
     if (!pcm.empty()) {
         size_t bytes = pcm.size() * sizeof(float);
@@ -228,12 +281,14 @@ void PulseAudioSink::writeCallback(pa_stream *s, size_t nbytes, void *userdata)
         if (ret < 0) {
             qCCritical(dragonMediaBackendAudio) << "PulseAudio pa_stream_write failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
         }
-    } else if (self->tryClaimDrained()) {
+    } else if (self->mixer()->clock().tryClaimDrained()) {
         pa_operation *op = pa_stream_drain(s, PulseAudioSink::drainCallback, self);
         if (!op) {
             qCWarning(dragonMediaBackendAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_pa->context.get()));
+        } else {
+            pa_operation_unref(op);
         }
-    } else if (!self->endOfStreamArmed()) {
+    } else if (!self->mixer()->clock().endOfStreamArmed()) {
         thread_local std::vector<float> silence;
         silence.resize(floatsNeeded, 0.0f);
         pa_stream_write(s, silence.data(), silence.size() * sizeof(float), nullptr, 0, PA_SEEK_RELATIVE);
@@ -354,12 +409,18 @@ void PulseAudioSink::disconnectFromServer()
         resetStreamLocked();
 
         if (m_pa->context) {
+            pa_context_set_state_callback(m_pa->context.get(), nullptr, nullptr);
             pa_context_set_subscribe_callback(m_pa->context.get(), nullptr, nullptr);
             m_pa->context.reset();
         }
     }
 
     m_pa->mainloop.reset();
+}
+
+std::size_t PulseAudioSink::preferredCallbackSamples(int sampleRate, int channels) const
+{
+    return static_cast<std::size_t>(sampleRate) * static_cast<std::size_t>(channels);
 }
 
 void PulseAudioSink::open(int sampleRate, int channels)
@@ -370,14 +431,6 @@ void PulseAudioSink::open(int sampleRate, int channels)
         qCDebug(dragonMediaBackendAudio) << "open() called while already open closing old session";
         close();
     }
-
-    setFormat(sampleRate, channels);
-    reset();
-
-    m_lastSampleRate = sampleRate;
-    m_lastChannels = channels;
-
-    preAllocateCallbackBuffer(static_cast<size_t>(sampleRate) * static_cast<size_t>(channels));
 
     // Session setup can transiently fail server-side: the pulse server (or
     // pipewire-pulse standing in for it, e.g. in CI) may drop the connection
@@ -456,6 +509,14 @@ void PulseAudioSink::open(int sampleRate, int channels)
             pa_cvolume cvol;
             pa_cvolume_set(&cvol, channels, pa_sw_volume_from_linear(m_cachedGain.load(std::memory_order_relaxed)));
 
+            // Mark the sink open BEFORE connecting the playback stream: the
+            // first writeCallback can fire from within the
+            // pa_threaded_mainloop_wait() below (while we still hold the
+            // mainloop lock), and it must observe m_open == true or it drops
+            // the very first write request. Error paths below reset the flag.
+            m_paused.store(false, std::memory_order_release);
+            m_open.store(true, std::memory_order_seq_cst);
+
             int ret = pa_stream_connect_playback(
                 m_pa->stream.get(),
                 nullptr,
@@ -465,6 +526,7 @@ void PulseAudioSink::open(int sampleRate, int channels)
                 nullptr);
 
             if (ret < 0) {
+                m_open.store(false, std::memory_order_seq_cst);
                 qCCritical(dragonMediaBackendAudio) << "PulseAudio: pa_stream_connect_playback failed:" << pa_strerror(pa_context_errno(m_pa->context.get()));
                 return std::unexpected(ConnectError{i18n("PulseAudio: failed to connect stream")});
             }
@@ -476,13 +538,17 @@ void PulseAudioSink::open(int sampleRate, int channels)
             }
 
             if (!PA_STREAM_IS_GOOD(streamState) || streamState != PA_STREAM_READY) {
+                m_open.store(false, std::memory_order_seq_cst);
                 qCCritical(dragonMediaBackendAudio) << "PulseAudio: stream did not become ready, state:" << streamState
                                                     << "context state:" << pa_context_get_state(m_pa->context.get())
                                                     << "error:" << pa_strerror(pa_context_errno(m_pa->context.get()));
                 return std::unexpected(ConnectError{i18n("PulseAudio: stream not ready"), true});
             }
 
-            m_pa->sinkInputIndex = pa_stream_get_index(m_pa->stream.get());
+            m_pa->sinkInputIndex.store(pa_stream_get_index(m_pa->stream.get()), std::memory_order_release);
+            m_firstVolumeReportSeen.store(false, std::memory_order_relaxed);
+            m_gainSetByPipeline.store(false, std::memory_order_relaxed);
+            requestSinkInputInfo();
             return {};
         };
 
@@ -491,15 +557,13 @@ void PulseAudioSink::open(int sampleRate, int channels)
             ScopedMainloopLock lock(m_pa->mainloop.get());
             result = openStream();
             if (!result) {
+                m_open.store(false, std::memory_order_seq_cst);
                 resetStreamLocked();
             }
         } // ScopedMainloopLock released here
 
         if (result) {
-            m_paused.store(false, std::memory_order_release);
-            m_open.store(true, std::memory_order_release);
-
-            qCDebug(dragonMediaBackendAudio) << "PulseAudio stream opened, sink_input_index:" << m_pa->sinkInputIndex;
+            qCDebug(dragonMediaBackendAudio) << "PulseAudio stream opened, sink_input_index:" << m_pa->sinkInputIndex.load(std::memory_order_acquire);
             return;
         }
 
@@ -516,17 +580,29 @@ void PulseAudioSink::close()
 {
     qCDebug(dragonMediaBackendAudio) << "PulseAudio close()";
 
-    m_open.store(false, std::memory_order_release);
+    m_open.store(false, std::memory_order_seq_cst);
     m_paused.store(false, std::memory_order_release);
 
     // Wait for active callbacks to finish BEFORE tearing down PA objects.
-    // Callbacks check m_open and bail quickly when false, so this is bounded.
-    {
-        std::unique_lock lock(m_callbackDoneMutex);
-        m_callbackDoneCv.wait_for(lock, std::chrono::milliseconds(500), [this]() {
-            return m_activeCallbacks.load(std::memory_order_acquire) == 0;
-        });
+    // Callbacks check the quiesce handshake and bail quickly when close() is
+    // in progress, so this is bounded.
+    m_quiesce.beginClose();
+    const bool quiesced = m_quiesce.waitForIdle(std::chrono::milliseconds(500));
+    if (!quiesced) {
+        m_poisoned = true;
+        qCCritical(dragonMediaBackendAudio)
+            << "PulseAudio close(): callbacks did not quiesce within 500ms; leaking the PA handles (zombie state) to avoid a use-after-free";
+        // Deliberately leak: release the mainloop/context/stream without
+        // freeing or stopping them, so a still-running callback can keep
+        // dereferencing valid PA objects. close() stays marked as in
+        // progress so any future callback bails out immediately.
+        m_pa->contextReady = false;
+        m_pa->context.release();
+        m_pa->stream.release();
+        m_pa->mainloop.release();
+        return;
     }
+    m_quiesce.endClose();
 
     disconnectFromServer();
 
@@ -561,6 +637,7 @@ void PulseAudioSink::resume()
 
 void PulseAudioSink::setGain(float linearGain)
 {
+    m_gainSetByPipeline.store(true, std::memory_order_relaxed);
     m_cachedGain.store(linearGain, std::memory_order_relaxed);
 
     if (m_pa->stream && m_pa->mainloop && m_open.load(std::memory_order_acquire)) {
@@ -575,14 +652,14 @@ void PulseAudioSink::applyVolume(float linearGain)
         return;
     }
 
-    const int channels = currentChannels();
+    const int channels = mixer()->clock().currentChannels();
     if (channels <= 0) {
         return;
     }
 
     pa_cvolume cvol;
     pa_cvolume_set(&cvol, static_cast<unsigned>(channels), pa_sw_volume_from_linear(linearGain));
-    pa_operation *op = pa_context_set_sink_input_volume(m_pa->context.get(), m_pa->sinkInputIndex, &cvol, nullptr, nullptr);
+    pa_operation *op = pa_context_set_sink_input_volume(m_pa->context.get(), m_pa->sinkInputIndex.load(std::memory_order_acquire), &cvol, nullptr, nullptr);
     if (op) {
         pa_operation_unref(op);
     }
@@ -594,13 +671,12 @@ void PulseAudioSink::setMuted(bool muted)
 
     if (m_pa->context && m_pa->mainloop && m_open.load(std::memory_order_acquire)) {
         ScopedMainloopLock lock(m_pa->mainloop.get());
-        pa_operation *op = pa_context_set_sink_input_mute(m_pa->context.get(), m_pa->sinkInputIndex, muted ? 1 : 0, nullptr, nullptr);
+        pa_operation *op =
+            pa_context_set_sink_input_mute(m_pa->context.get(), m_pa->sinkInputIndex.load(std::memory_order_acquire), muted ? 1 : 0, nullptr, nullptr);
         if (op) {
             pa_operation_unref(op);
         }
     }
-
-    AudioSink::setMuted(muted);
 }
 
 void PulseAudioSink::clearStream()
@@ -630,8 +706,8 @@ qint64 PulseAudioSink::deviceQueuedSamples() const
         return 0;
     }
 
-    const int channels = currentChannels();
-    const int sampleRate = currentSampleRate();
+    const int channels = mixer()->clock().currentChannels();
+    const int sampleRate = mixer()->clock().currentSampleRate();
     if (channels <= 0 || sampleRate <= 0) {
         return 0;
     }
@@ -652,7 +728,7 @@ int PulseAudioSink::audioBufferFrames() const
         return -1;
     }
 
-    const int sampleRate = currentSampleRate();
+    const int sampleRate = mixer()->clock().currentSampleRate();
     if (sampleRate <= 0) {
         return -1;
     }
@@ -670,11 +746,11 @@ int PulseAudioSink::audioBufferFrames() const
 std::optional<std::chrono::microseconds> PulseAudioSink::audioBufferDuration() const
 {
     const int frames = audioBufferFrames();
-    if (frames <= 0 || currentSampleRate() <= 0) {
+    if (frames <= 0 || mixer()->clock().currentSampleRate() <= 0) {
         return std::nullopt;
     }
 
-    return std::chrono::microseconds{(static_cast<qint64>(frames) * 1000000) / currentSampleRate()};
+    return std::chrono::microseconds{(static_cast<qint64>(frames) * 1000000) / mixer()->clock().currentSampleRate()};
 }
 
 bool PulseAudioSink::isDeviceOpen() const
@@ -716,13 +792,20 @@ void PulseAudioSink::drainCallback(pa_stream *s, int success, void *userdata)
 {
     Q_UNUSED(s);
     auto *self = static_cast<PulseAudioSink *>(userdata);
+    if (!self) {
+        return;
+    }
     if (!success) {
         qCWarning(dragonMediaBackendAudio) << "PulseAudio stream drain failed";
     }
-    if (!self->takeDrainedEmission()) {
-        return;
-    }
-    Q_EMIT self->drained();
+    QMetaObject::invokeMethod(
+        self,
+        [self]() {
+            if (self->mixer() && self->mixer()->clock().takeDrainedEmission()) {
+                Q_EMIT self->drained();
+            }
+        },
+        Qt::QueuedConnection);
 }
 
 void PulseAudioSink::underflowCallback(pa_stream *s, void *userdata)
@@ -740,12 +823,19 @@ void PulseAudioSink::subscribeCallback(pa_context *c, pa_subscription_event_type
         return;
     }
 
+    // Quiesce handshake with close(): bail out before touching any PA
+    // object when close() is in progress.
+    CallbackQuiesce::ScopedCallback guard(self->m_quiesce);
+    if (guard.closing()) {
+        return;
+    }
+
     const auto facility = type & PA_SUBSCRIPTION_EVENT_FACILITY_MASK;
     if (facility != PA_SUBSCRIPTION_EVENT_SINK_INPUT) {
         return;
     }
 
-    if (idx != self->m_pa->sinkInputIndex) {
+    if (idx != self->m_pa->sinkInputIndex.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -766,21 +856,41 @@ void PulseAudioSink::sinkInputInfoCallback(pa_context *c, const pa_sink_input_in
         return;
     }
 
+    // Quiesce handshake with close(): bail out before touching sink state
+    // when close() is in progress.
+    CallbackQuiesce::ScopedCallback guard(self->m_quiesce);
+    if (guard.closing()) {
+        return;
+    }
+
     if (info->has_volume) {
         const pa_volume_t avg = pa_cvolume_avg(&info->volume);
         const float linearGain = static_cast<float>(pa_sw_volume_to_linear(avg));
+
+        const bool isFirstReport = !self->m_firstVolumeReportSeen.exchange(true, std::memory_order_relaxed);
+        const bool neverSetGain = !self->m_gainSetByPipeline.load(std::memory_order_relaxed);
 
         float cached = self->m_cachedGain.load(std::memory_order_relaxed);
         if (qAbs(linearGain - cached) >= 0.001f) {
             self->m_cachedGain.store(linearGain, std::memory_order_relaxed);
 
-            qCDebug(dragonMediaBackendAudio) << "PulseAudio external volume change, linearGain:" << linearGain;
-            QMetaObject::invokeMethod(
-                self,
-                [self, linearGain]() {
-                    self->onExternalVolumeChanged(linearGain);
-                },
-                Qt::QueuedConnection);
+            if (isFirstReport && neverSetGain) {
+                qCDebug(dragonMediaBackendAudio) << "PulseAudio stream-restore volume, linearGain:" << linearGain;
+                QMetaObject::invokeMethod(
+                    self,
+                    [self, linearGain]() {
+                        Q_EMIT self->externalVolumeRestored(linearGain);
+                    },
+                    Qt::QueuedConnection);
+            } else {
+                qCDebug(dragonMediaBackendAudio) << "PulseAudio external volume change, linearGain:" << linearGain;
+                QMetaObject::invokeMethod(
+                    self,
+                    [self, linearGain]() {
+                        Q_EMIT self->externalVolumeChanged(linearGain);
+                    },
+                    Qt::QueuedConnection);
+            }
         }
     }
 
@@ -792,7 +902,7 @@ void PulseAudioSink::sinkInputInfoCallback(pa_context *c, const pa_sink_input_in
         QMetaObject::invokeMethod(
             self,
             [self, muted]() {
-                self->setMuted(muted);
+                Q_EMIT self->externalMutedChanged(muted);
             },
             Qt::QueuedConnection);
     }
@@ -803,7 +913,8 @@ void PulseAudioSink::requestSinkInputInfo()
     if (!m_pa->context || !m_pa->mainloop) {
         return;
     }
-    pa_operation *op = pa_context_get_sink_input_info(m_pa->context.get(), m_pa->sinkInputIndex, PulseAudioSink::sinkInputInfoCallback, this);
+    pa_operation *op =
+        pa_context_get_sink_input_info(m_pa->context.get(), m_pa->sinkInputIndex.load(std::memory_order_acquire), PulseAudioSink::sinkInputInfoCallback, this);
     if (op) {
         pa_operation_unref(op);
     }

@@ -19,11 +19,8 @@
 #include <memory>
 #include <optional>
 
-#ifdef DRAGONMEDIABACKEND_INTERNAL_BUILD
-#include "player/dragonduration.h"
-#else
-class DragonDuration;
-#endif
+#include "dragonduration.h"
+#include "dragonsourceoptions.h"
 
 class DragonAudioOutput;
 class DragonPlayerPrivate;
@@ -404,6 +401,12 @@ public:
     [[nodiscard]] QUrl source() const;
 
     /*!
+     * Returns the fade options that were passed to setSource(const QUrl &, const DragonSourceOptions &)
+     * for the current source, or default-constructed options if none were specified.
+     */
+    [[nodiscard]] DragonSourceOptions sourceOptions() const;
+
+    /*!
      * Returns the source queued for the gapless transition at the end
      * of the current track, or an empty URL if none is set.
      */
@@ -601,6 +604,15 @@ public Q_SLOTS:
      * stopped and the position is reset.
      */
     void setSource(const QUrl &source);
+
+    /*!
+     * Sets the media to be played to \a source with the crossfade
+     * behavior described by \a options: when a source is currently
+     * playing, it fades out while \a source fades in over
+     * DragonSourceOptions::crossfadeDuration(). The duration defaults to
+     * zero, which switches sources immediately like setSource(\a source).
+     */
+    void setSource(const QUrl &source, const DragonSourceOptions &options);
 
     /*!
      * Queues \a nextSource to be played when the current source

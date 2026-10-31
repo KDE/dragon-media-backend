@@ -40,16 +40,16 @@ public:
     void attachTap()
     {
         auto *priv = player ? player->d.get() : nullptr;
-        if (priv && priv->audioSink()) {
-            priv->audioSink()->setFftPipe(&fftPipe);
+        if (priv && priv->playbackPipeline()) {
+            priv->playbackPipeline()->setFftPipe(&fftPipe);
         }
     }
 
     void detachTap()
     {
         auto *priv = player ? player->d.get() : nullptr;
-        if (priv && priv->audioSink()) {
-            priv->audioSink()->setFftPipe(nullptr);
+        if (priv && priv->playbackPipeline()) {
+            priv->playbackPipeline()->setFftPipe(nullptr);
         }
     }
 };

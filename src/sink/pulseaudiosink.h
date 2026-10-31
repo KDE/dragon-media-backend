@@ -6,6 +6,7 @@
 #pragma once
 
 #include "audiosink.h"
+#include "callbackquiesce.h"
 
 #include <QVariant>
 
@@ -14,11 +15,9 @@
 #include <pulse/subscribe.h>
 
 #include <atomic>
-#include <condition_variable>
 #include <cstddef>
 #include <expected>
 #include <memory>
-#include <mutex>
 
 struct pa_threaded_mainloop;
 struct pa_context;
@@ -27,6 +26,7 @@ struct pa_stream;
 class PulseAudioSink : public AudioSink
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(PulseAudioSink)
 
 public:
     explicit PulseAudioSink(QObject *parent, const QVariantList &args);
@@ -50,6 +50,8 @@ public:
     [[nodiscard]] bool isPaused() const override;
 
     void setStreamName(const QString &name) override;
+
+    [[nodiscard]] std::size_t preferredCallbackSamples(int sampleRate, int channels) const override;
 
     // Callbacks called from the PA mainloop thread
     static void writeCallback(pa_stream *s, size_t nbytes, void *userdata);
@@ -82,12 +84,16 @@ private:
     std::atomic<bool> m_paused{false};
     std::atomic<bool> m_open{false};
 
-    std::mutex m_callbackDoneMutex;
-    std::condition_variable m_callbackDoneCv;
-    std::atomic<int> m_activeCallbacks{0};
+    // Quiesce handshake between the PA-mainloop-thread callbacks and close().
+    CallbackQuiesce m_quiesce;
+
+    // Set when close() could not quiesce its callbacks within the bounded
+    // wait: the PA handles are deliberately leaked into a detached "zombie"
+    // state instead of risking a use-after-free.
+    bool m_poisoned = false;
 
     std::atomic<float> m_cachedGain{1.0f};
     std::atomic<bool> m_cachedMuted{false};
-    int m_lastSampleRate = 0;
-    int m_lastChannels = 0;
+    std::atomic<bool> m_gainSetByPipeline{false};
+    std::atomic<bool> m_firstVolumeReportSeen{false};
 };

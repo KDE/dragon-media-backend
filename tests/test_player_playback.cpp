@@ -14,7 +14,7 @@
 #include "test_utils.h"
 
 #include "player/diagnostics.h"
-#include "sink/audiosink.h"
+#include "sink/playbackpipeline.h"
 #include <DragonPlayer>
 
 #include <QSignalSpy>
@@ -91,6 +91,11 @@ private Q_SLOTS:
     void testSeekNearEndThenElisaStyleAdvancePlays();
 
     void testEndOfMediaAdvanceAcrossFormatChange();
+    void testPlayRapidCrossfadeRetrigger();
+    void testDemotedCrossfadeWriterDoesNotCorruptProducerState();
+    void testCrossfadeSlotStreamEpochFollowsClock();
+    void testClearSourceDuringCrossfadeStopsPlayback();
+    void testFadeInFromStoppedState();
 };
 
 void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
@@ -862,7 +867,7 @@ void TestPlayerPlayback::testEndOfMediaAdvanceAcrossFormatChange()
     QVERIFY2(helper.waitForEndOfMedia(15000), "Track A must reach EndOfMedia naturally");
     QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
-    QVERIFY2(!diag.audioSink()->isDeviceOpen(), "Natural end of media must close the device");
+    QVERIFY2(!diag.playbackPipeline()->isDeviceOpen(), "Natural end of media must close the device");
 
     player.setSource(QUrl::fromLocalFile(fixtureB.filePath));
     QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
@@ -871,7 +876,7 @@ void TestPlayerPlayback::testEndOfMediaAdvanceAcrossFormatChange()
     });
 
     QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState, 10000);
-    QVERIFY2(diag.audioSink()->hasFormat(44100, 2),
+    QVERIFY2(diag.playbackPipeline()->hasFormat(44100, 2),
              "play() after an end-of-media track change must reopen the sink at the new track's sample rate to avoid chimpmunks");
 
     const bool advanced = QTest::qWaitFor(
@@ -885,6 +890,173 @@ void TestPlayerPlayback::testEndOfMediaAdvanceAcrossFormatChange()
 
     QFile::remove(fixtureA.filePath);
     QFile::remove(fixtureB.filePath);
+}
+
+void TestPlayerPlayback::testPlayRapidCrossfadeRetrigger()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    const auto urlA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    const auto urlB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
+    const auto urlC = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.aac"_s));
+    const auto urlD = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-1c-44100hz.flac"_s));
+
+    QVERIFY(helper.setSourceAndWait(urlA));
+    QVERIFY(helper.playAndWait());
+    QVERIFY2(diag.isAudioActive(), "Track A must be active");
+
+    DragonSourceOptions opts;
+    opts.setCrossfadeDuration(500ms);
+
+    // Rapid re-trigger across slots: A -> B -> C -> D
+    player.setSource(urlB, opts);
+    player.setSource(urlC, opts);
+    player.setSource(urlD, opts);
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.source(), urlD, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    const bool advanced = QTest::qWaitFor(
+        [&diag]() {
+            return diag.audioPosition() > 200ms;
+        },
+        5000);
+    QVERIFY2(advanced, "Audio must advance and play on final track D");
+    QVERIFY2(diag.isAudioActive(), "Audio must remain active on track D");
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testDemotedCrossfadeWriterDoesNotCorruptProducerState()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    const auto urlA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    const auto urlB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
+    const auto urlC = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.aac"_s));
+
+    DragonSourceOptions optsA;
+    optsA.setCrossfadeDuration(500ms);
+    QVERIFY(helper.setSourceAndWait(urlA, optsA));
+    QVERIFY(helper.playAndWait());
+    QVERIFY2(diag.isAudioActive(), "Track A must be active");
+
+    QTest::qWait(200);
+
+    // Crossfade to B with a wide fade-out window (2000ms), then immediately setSource(C).
+    // The A -> B arm plus C's re-trigger leaves B's decode thread as the demoted writer mid-gate.
+    DragonSourceOptions optsB;
+    optsB.setCrossfadeDuration(2000ms);
+    DragonSourceOptions optsC;
+    optsC.setCrossfadeDuration(500ms);
+    player.setSource(urlB, optsB);
+    player.setSource(urlC, optsC);
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.source(), urlC, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    // Option A consistency check: once track C latches, primary slot epoch must match clock epoch
+    QTRY_COMPARE_WITH_TIMEOUT(diag.primarySlotStreamEpoch(), diag.streamEpoch(), 5000);
+
+    // Let C play to completion (reaching EndOfMedia)
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::EndOfMedia, 10000);
+
+    // Invariant: EOS fired and producerSamples() equals exactly the samples read at EOF.
+    // If B's demoted decode thread had erroneously stamped C's epoch, producerSamples() would
+    // exceed audioSamplesRead() and EOS would have hung / never fired.
+    const qint64 prodSamples = diag.producerSamples();
+    const qint64 readSamples = diag.audioSamplesRead();
+    QVERIFY(prodSamples > 0);
+    QCOMPARE(prodSamples, readSamples);
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testCrossfadeSlotStreamEpochFollowsClock()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    const auto urlA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    const auto urlB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
+
+    QVERIFY(helper.setSourceAndWait(urlA));
+    QVERIFY(helper.playAndWait());
+    QVERIFY(diag.isAudioActive());
+    QTRY_COMPARE_WITH_TIMEOUT(diag.primarySlotStreamEpoch(), diag.streamEpoch(), 5000);
+
+    DragonSourceOptions opts;
+    opts.setCrossfadeDuration(500ms);
+    player.setSource(urlB, opts);
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.source(), urlB, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+
+    // After crossfade latch, primary slot's epoch matches the clock's current epoch
+    QTRY_COMPARE_WITH_TIMEOUT(diag.primarySlotStreamEpoch(), diag.streamEpoch(), 5000);
+
+    // Seeking also flushes and updates slot's epoch to the post-flush epoch once consumed
+    player.setPosition(1000ms);
+    QTRY_COMPARE_WITH_TIMEOUT(diag.primarySlotStreamEpoch(), diag.streamEpoch(), 5000);
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testClearSourceDuringCrossfadeStopsPlayback()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    const auto urlA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    const auto urlB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
+
+    QVERIFY(helper.setSourceAndWait(urlA));
+    QVERIFY(helper.playAndWait());
+    QVERIFY(diag.isAudioActive());
+
+    DragonSourceOptions opts;
+    opts.setCrossfadeDuration(1500ms);
+    player.setSource(urlB, opts);
+    QVERIFY(diag.playbackPipeline()->isCrossfading());
+
+    // Clearing the source mid-crossfade must immediately transition to StoppedState + NoMedia.
+    player.setSource(QUrl{});
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::NoMedia);
+    QVERIFY(player.source().isEmpty());
+    QVERIFY(!diag.playbackPipeline()->isCrossfading());
+}
+
+void TestPlayerPlayback::testFadeInFromStoppedState()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    const auto urlA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+
+    DragonSourceOptions opts;
+    opts.setCrossfadeDuration(500ms);
+    QVERIFY(helper.setSourceAndWait(urlA, opts));
+    QVERIFY(helper.playAndWait());
+
+    const bool advanced = QTest::qWaitFor(
+        [&diag]() {
+            return diag.audioPosition() > 250ms;
+        },
+        5000);
+    QVERIFY2(advanced, "Playback with standalone fade-in from StoppedState must advance");
+
+    player.stop();
 }
 
 QTEST_MAIN(TestPlayerPlayback)

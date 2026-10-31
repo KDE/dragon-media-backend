@@ -6,6 +6,7 @@ add_subdirectory(player)
 add_subdirectory(decoder)
 add_subdirectory(stream)
 add_subdirectory(fft)
+add_subdirectory(mixer)
 add_subdirectory(sink)
 
 qt_add_library(DragonMediaBackend SHARED
@@ -39,6 +40,7 @@ target_link_libraries(DragonMediaBackend
         dragon_decoder_objs
         dragon_stream_objs
         dragon_fft_objs
+        dragon_mixer_objs
         dragon_sink_objs
     PUBLIC
         Qt6::Core

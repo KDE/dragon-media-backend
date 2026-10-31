@@ -6,7 +6,7 @@
 #pragma once
 
 #include "decoder/decodepipeline.h"
-#include "sink/audiosink.h"
+#include "sink/playbackpipeline.h"
 #include <dragonaudiooutput.h>
 #include <dragonplayer.h>
 
@@ -18,6 +18,7 @@
 
 #include <QCoroTask>
 #include <QHash>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -41,6 +42,7 @@ class DragonPlayerPrivate : public QObject
     Q_OBJECT
 public:
     explicit DragonPlayerPrivate(DragonPlayer *player, DragonAudioOutput::Backend requestedBackend = DragonAudioOutput::Backend::Auto);
+    Q_DISABLE_COPY_MOVE(DragonPlayerPrivate)
 
 private:
     friend class Diagnostics;
@@ -50,7 +52,7 @@ private:
 
     void init();
 
-    AudioSink *audioSink() const;
+    PlaybackPipeline *playbackPipeline() const;
 
     DragonPlayer *q = nullptr;
 
@@ -60,8 +62,8 @@ private Q_SLOTS:
     void onDecodeFinished(const QUrl &source, bool hadFatalError);
     void onDecodeError(const QString &message);
 
-    void onSinkTrackStarted(std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration);
-    void onSinkFormatChangeRequired(int sampleRate, int channels);
+    void onPlaybackTrackStarted(std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration);
+    void onPlaybackFormatChangeRequired(int sampleRate, int channels);
 
     void onStreamStalled();
     void onStreamBuffering();
@@ -76,13 +78,78 @@ private:
 
     void writeToQueues(std::span<const float> pcm, const std::stop_token &st);
 
+    struct PipelineSlot {
+        explicit PipelineSlot(DragonPlayer *parent)
+            : decodePipeline(parent)
+        {
+        }
+        DecodePipeline decodePipeline;
+        Pipe<float> audioPipe{Pipe<float>::kDefaultCapacity};
+        // Single content/session tag: bumped by invalidateSlotContent() and
+        // invalidateQueuedContent() alike; an in-flight producer write whose
+        // tag no longer matches aborts, and a demoted slot's writer stamps a
+        // stale stream epoch the sink rejects.
+        std::atomic<uint64_t> contentEpoch{0};
+        std::atomic<uint64_t> streamEpoch{1};
+    };
+
+    // Two rotating (decode pipeline, audio pipe) slots. Crossfading needs the
+    // outgoing track's tail and the incoming track's head decoded concurrently.
+    // If a track change occurs while a crossfade is already running, the running
+    // crossfade is aborted immediately, cutting the fading track, so a third
+    // slot is never needed.
+    std::array<PipelineSlot, 2> m_slots{PipelineSlot{q}, PipelineSlot{q}};
+    std::atomic<std::uint8_t> m_primarySlotIndex{0};
+
+    [[nodiscard]] PipelineSlot &primarySlot() noexcept
+    {
+        return m_slots[m_primarySlotIndex.load(std::memory_order_acquire) & 1u];
+    }
+    [[nodiscard]] const PipelineSlot &primarySlot() const noexcept
+    {
+        return m_slots[m_primarySlotIndex.load(std::memory_order_acquire) & 1u];
+    }
+    [[nodiscard]] PipelineSlot &fadingSlot() noexcept
+    {
+        return m_slots[(m_primarySlotIndex.load(std::memory_order_acquire) ^ 1u) & 1u];
+    }
+    [[nodiscard]] PipelineSlot &rotateSlots() noexcept
+    {
+        const auto nextIdx = static_cast<std::uint8_t>((m_primarySlotIndex.load(std::memory_order_relaxed) ^ 1u) & 1u);
+        m_primarySlotIndex.store(nextIdx, std::memory_order_release);
+        return m_slots[nextIdx];
+    }
+
+    [[nodiscard]] DecodePipeline &decodePipeline()
+    {
+        return primarySlot().decodePipeline;
+    }
+    [[nodiscard]] Pipe<float> &audioPipe()
+    {
+        return primarySlot().audioPipe;
+    }
+
+    // Role routing for the decode-pipeline callbacks: only the primary
+    // slot's sessions may affect player and sink state.
+    [[nodiscard]] bool isPrimarySlot(const PipelineSlot &slot) const
+    {
+        return &slot == &primarySlot();
+    }
+
+    void invalidateSlotContent(PipelineSlot &slot)
+    {
+        slot.contentEpoch.fetch_add(1, std::memory_order_acq_rel);
+    }
+
+    void writeToSlotQueue(PipelineSlot &slot, std::span<const float> pcm, const std::stop_token &st);
+
     bool onPipelineBoundary(const DecodePipeline::BoundaryEvent &event);
 
     struct PendingTrack {
         QUrl url;
         int sampleRate = 0;
         int channels = 0;
-        std::optional<std::chrono::milliseconds> duration;
+        std::optional<std::chrono::milliseconds> duration = std::nullopt;
         bool seekable = false;
     };
     QHash<std::uint32_t, PendingTrack> m_pendingTracks;
@@ -104,7 +171,7 @@ private:
     void resolvePendingTrackForSeek();
 
     // The stream epoch the decode thread's producer last observed before a
-    // write (see AudioSink::streamEpoch()). Decode-thread confined
+    // write (see PlaybackPipeline::streamEpoch()). Decode-thread confined
     // writer; read on the decode thread when recording boundaries. A
     // TrackStart boundary is stamped with it so boundaries of a superseded
     // stream are discarded instead of firing in the new one.
@@ -112,7 +179,12 @@ private:
 
     void invalidateQueuedContent();
 
-    QCoro::Task<void> startLoad(QUrl source, uint64_t generation);
+    // Shared teardown sequence: abandon any staged/active crossfade, close
+    // the sink (quiescing the audio callback) and fully reset mixer + clock
+    // (which also un-sticks a stale EOS claim state).
+    void teardownPipeline();
+
+    QCoro::Task<void> startLoad(PipelineSlot &slot, QUrl source, uint64_t generation, Decoder::TargetAudioFormat targetFormat = {});
 
     void setPlaybackState(DragonPlayer::PlaybackState state);
     void setStatus(DragonPlayer::MediaStatus status);
@@ -120,11 +192,8 @@ private:
 
     void stopPipeline();
 
-    DecodePipeline decodePipeline;
-
-    Pipe<float> audioPipe;
-
     QUrl currentSource;
+    DragonSourceOptions currentSourceOptions;
     QUrl nextSource;
     DragonPlayer::PlaybackState currentPlaybackState = DragonPlayer::PlaybackState::StoppedState;
     DragonPlayer::MediaStatus currentStatus = DragonPlayer::MediaStatus::NoMedia;
@@ -146,11 +215,6 @@ private:
     bool playRequestedReload = false;
 
     uint64_t loadGeneration = 0;
-
-    // Bumped on seek and track change so the decode thread's producer can
-    // discard queued/in-flight stale audio itself instead of relying on the
-    // audio sink's consumer-side drain to win a race against fresh samples.
-    std::atomic<uint64_t> contentGeneration{0};
 
     std::chrono::milliseconds prefinishMark{2000ms};
     bool aboutToFinishEmitted = false;

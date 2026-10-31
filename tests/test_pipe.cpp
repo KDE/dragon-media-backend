@@ -409,6 +409,16 @@ private Q_SLOTS:
         QVERIFY2(!mismatchDetected.load(), "Data mismatch or size error detected in multi-threaded cycle");
         QCOMPARE_EQ(totalRead.load(), kRounds * kBatchSize);
     }
+
+    void testProducerDoneFlag()
+    {
+        Pipe<float> pipe;
+        QVERIFY(!pipe.producerDone());
+        pipe.setProducerDone(true);
+        QVERIFY(pipe.producerDone());
+        pipe.setProducerDone(false);
+        QVERIFY(!pipe.producerDone());
+    }
 };
 
 QTEST_MAIN(TestDragonPipe)

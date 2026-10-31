@@ -20,8 +20,8 @@
 
     The public API centers on \l DragonPlayer, the playback controller,
     together with \l DragonAudioOutput for output controls, \l DragonSpectrumAnalyzer
-    for FFT outputs for visualization. Supporting value classes include \l DragonFftFrame
-    and \l DragonIcyMetadata.
+    for FFT outputs for visualization. Supporting value classes include \l DragonFftFrame,
+    \l DragonIcyMetadata, and \l DragonSourceOptions.
 
     The \l DragonCdTocReader class provides the entry point to playing audio CDs. Use it
     to obtain the \l DragonCdToc of a disc, which has a list of \l DragonCdTrack. It has a url

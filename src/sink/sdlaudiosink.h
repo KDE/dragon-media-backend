@@ -6,18 +6,20 @@
 #pragma once
 
 #include "audiosink.h"
+#include "callbackquiesce.h"
 
 #include <SDL3/SDL_audio.h>
 
 #include <QVariant>
 
 #include <atomic>
-#include <condition_variable>
+#include <cstddef>
 #include <mutex>
 
 class SdlAudioSink : public AudioSink
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(SdlAudioSink)
 
 public:
     explicit SdlAudioSink(QObject *parent, const QVariantList &args);
@@ -41,6 +43,8 @@ public:
     [[nodiscard]] int audioBufferFrames() const override;
     [[nodiscard]] std::optional<std::chrono::microseconds> audioBufferDuration() const override;
 
+    [[nodiscard]] std::size_t preferredCallbackSamples(int sampleRate, int channels) const override;
+
 private:
     static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
 
@@ -51,8 +55,18 @@ private:
 
     std::atomic<AudioSession *> m_session{nullptr};
 
-    std::mutex m_callbackDoneMutex;
-    std::condition_variable m_callbackDoneCv;
-    std::atomic<int> m_activeCallbacks{0};
+    // Serializes the main-thread control methods (pause/resume/setGain/
+    // clearStream/deviceQueuedSamples) against close()'s teardown of the
+    // native session. Never taken on the RT audio callback path.
+    mutable std::mutex m_mainMutex;
+
+    // Quiesce handshake between the RT audio callback and close().
+    CallbackQuiesce m_quiesce;
+
+    // Set when close() could not quiesce its callback within the bounded
+    // wait: the native session is deliberately leaked into a detached
+    // "zombie" state instead of risking a use-after-free.
+    bool m_poisoned = false;
+
     std::atomic<float> m_cachedGain{1.0f};
 };

@@ -11,9 +11,11 @@
 class DRAGONMEDIABACKEND_EXPORT NullAudioSink : public AudioSink
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(NullAudioSink)
 
 public:
     explicit NullAudioSink(QObject *parent = nullptr);
+    ~NullAudioSink() override = default;
 
     [[nodiscard]] bool probe() override;
     void open(int sampleRate, int channels) override;

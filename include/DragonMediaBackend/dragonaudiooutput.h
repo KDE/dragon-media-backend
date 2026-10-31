@@ -13,7 +13,7 @@
 #include <memory>
 
 class DragonPlayer;
-class AudioSink;
+class PlaybackPipeline;
 class DragonAudioOutputPrivate;
 
 /*!
@@ -194,7 +194,7 @@ private:
     friend class DragonPlayerPrivate;
     friend class Diagnostics;
 
-    AudioSink *sink() const;
+    PlaybackPipeline *playbackPipeline() const;
 
     std::unique_ptr<DragonAudioOutputPrivate> d;
 };

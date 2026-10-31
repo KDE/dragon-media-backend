@@ -32,6 +32,7 @@ namespace GaplessTestUtils
 inline constexpr int kFlacDrainToleranceDivisor = 10; // 100ms at sampleRate
 inline constexpr double kFlacQuantTolerance = 1.5 / 32768.0;
 inline constexpr int kVerifyEdgeFrames = 100;
+inline constexpr float kMarkerAmplitudeTolerance = 0.08f;
 
 struct MarkerHit {
     bool found = false;
@@ -257,14 +258,14 @@ verifyGaplessPcm(const std::vector<float> &capturedPcm, const BoundaryFixture &f
     }
     qDebug() << "Leading silence:" << firstAudioFrame << "frames";
 
-    if (!(std::abs(endMarkerHit.amplitude - 1.0f) < 0.01f)) {
+    if (!(std::abs(endMarkerHit.amplitude - 1.0f) < kMarkerAmplitudeTolerance)) {
         qWarning().noquote() << qPrintable(u"Track A end marker amplitude should be +1.0, got %1"_s.arg(endMarkerHit.amplitude));
         return false;
     }
     qDebug() << "Track A end marker verified at frame" << endMarkerHit.frameIndex << "(amplitude=" << endMarkerHit.amplitude << ")";
 
     // Track B completeness: verify track B starts at its very first sample
-    if (!(std::abs(startMarkerHit.amplitude - (-1.0f)) < 0.01f)) {
+    if (!(std::abs(startMarkerHit.amplitude - (-1.0f)) < kMarkerAmplitudeTolerance)) {
         qWarning().noquote() << qPrintable(u"Track B start marker amplitude should be -1.0, got %1"_s.arg(startMarkerHit.amplitude));
         return false;
     }

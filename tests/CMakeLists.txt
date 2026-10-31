@@ -56,14 +56,16 @@ function(dragon_add_test name)
     )
 endfunction()
 
-# Adds one disabled "base" test plus <base>_sdl / _pulseaudio / _pipewire
+# Adds one "base" test plus <base>_sdl / _pulseaudio / _pipewire
 # variants (the latter only when the backend was found).
+#
+# The pulseaudio/pipewire variants share the system audio graph (and, for
+# capture-style tests, the dragon-test-sink monitor ports), so they must not
+# run concurrently with each other or with other audio-playing tests.
 function(dragon_add_backend_test_variants base)
     cmake_parse_arguments(PARSE_ARGV 1 ARG ""
         "" "EXTRA_ENV_PULSEAUDIO;EXTRA_ENV_PIPEWIRE")
-    set_tests_properties(${base} PROPERTIES DISABLED TRUE)
-    add_test(NAME ${base}_sdl COMMAND ${base})
-    set_property(TEST ${base}_sdl APPEND PROPERTY ENVIRONMENT
+    set_property(TEST ${base} APPEND PROPERTY ENVIRONMENT
         ${_dragon_common_test_env}
         "DRAGON_AUDIO_SINK=dragonsdlaudiosink"
     )
@@ -74,6 +76,7 @@ function(dragon_add_backend_test_variants base)
             "DRAGON_AUDIO_SINK=dragonpulseaudiosink"
             ${ARG_EXTRA_ENV_PULSEAUDIO}
         )
+        set_tests_properties(${base}_pulseaudio PROPERTIES RUN_SERIAL TRUE)
     endif()
     if(PIPEWIRE_FOUND)
         add_test(NAME ${base}_pipewire COMMAND ${base})
@@ -82,6 +85,7 @@ function(dragon_add_backend_test_variants base)
             "DRAGON_AUDIO_SINK=dragonpipewireaudiosink"
             ${ARG_EXTRA_ENV_PIPEWIRE}
         )
+        set_tests_properties(${base}_pipewire PROPERTIES RUN_SERIAL TRUE)
     endif()
 endfunction()
 
@@ -157,6 +161,8 @@ endif()
 # Player tests
 dragon_add_test(test_dragonduration LIBRARIES ${_player_libs})
 dragon_add_test(test_dragonduration_qml LIBRARIES ${_player_libs} Qt6::Qml)
+dragon_add_test(test_dragonsourceoptions)
+dragon_add_test(test_fadeenvelope)
 
 # QML module import test: loads org.kde.dragonmediabackend via an import
 # path the way the standalone qml6 runtime does (no context properties).
@@ -165,6 +171,10 @@ target_compile_definitions(test_qml_module PRIVATE
     DRAGON_QML_IMPORT_PATH="${PROJECT_BINARY_DIR}/bin"
 )
 dragon_add_test(test_sink_null        LIBRARIES ${_player_libs})
+dragon_add_test(test_sink_backends    LIBRARIES ${_player_libs})
+dragon_add_test(test_sink_crossfade  LIBRARIES ${_player_libs})
+dragon_add_test(test_mixer_channels  LIBRARIES ${_player_libs})
+dragon_add_test(test_streamclock      LIBRARIES ${_player_libs})
 dragon_add_test(test_player_basics    LIBRARIES ${_player_libs})
 dragon_add_test(test_player_playback  LIBRARIES ${_player_libs} PkgConfig::FLAC)
 dragon_add_backend_test_variants(test_player_playback)
@@ -195,9 +205,14 @@ dragon_add_backend_test_variants(test_e2e_gapless_data_streams
     EXTRA_ENV_PIPEWIRE "DRAGON_PW_TEST_SINK_NAME=dragon-test-sink"
 )
 
-# PipeWire gapless tests requires PipeWire + WirePlumber with dragon-test-sink (monitor ports)
+# PipeWire gapless tests requires PipeWire + WirePlumber with dragon-test-sink (monitor ports).
+# These capture audio from dragon-test-sink and require exclusive access to the audio graph
+# so that other tests playing audio do not mix into the captured PCM stream.
 if(PIPEWIRE_FOUND)
     dragon_add_test(test_e2e_pipewire_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC PkgConfig::PIPEWIRE)
+    set_tests_properties(test_e2e_pipewire_gapless PROPERTIES
+        RUN_SERIAL TRUE
+    )
     if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
         set_tests_properties(test_e2e_pipewire_gapless PROPERTIES
             FIXTURES_REQUIRED "dragon_pipewire"
@@ -206,9 +221,12 @@ if(PIPEWIRE_FOUND)
 endif()
 
 # PulseAudio gapless tests Pulse client output routed to dragon-test-sink,
-# captured via PipeWire monitor ports (requires PulseAudio on PipeWire)
+# captured via PipeWire monitor ports (requires PulseAudio on PipeWire).
 if(PIPEWIRE_FOUND AND PULSEAUDIO_FOUND)
     dragon_add_test(test_e2e_pulseaudio_gapless LIBRARIES ${_player_libs} PkgConfig::FLAC PkgConfig::PIPEWIRE)
+    set_tests_properties(test_e2e_pulseaudio_gapless PROPERTIES
+        RUN_SERIAL TRUE
+    )
     if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
         set_tests_properties(test_e2e_pulseaudio_gapless PROPERTIES
             FIXTURES_REQUIRED "dragon_pipewire"

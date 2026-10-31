@@ -4,8 +4,8 @@
  */
 
 #include "dragonplayer_p.h"
-#include "sink/audiosink.h"
-#include "sink/audiosinkfactory.h"
+#include "sink/playbackpipeline.h"
+#include "sink/playbackpipelinefactory.h"
 #include <dragonaudiooutput.h>
 #include <dragonplayer.h>
 
@@ -19,7 +19,7 @@ public:
     {
     }
 
-    std::unique_ptr<AudioSink> sink;
+    std::unique_ptr<PlaybackPipeline> pipeline;
     DragonAudioOutput::Backend requestedBackend;
     DragonAudioOutput::Backend selectedBackend = DragonAudioOutput::Backend::Auto;
 };
@@ -28,31 +28,31 @@ DragonAudioOutput::DragonAudioOutput(Backend requested, DragonPlayer *parent)
     : QObject(parent)
     , d(std::make_unique<DragonAudioOutputPrivate>(requested))
 {
-    d->sink = createAudioSink(requested, &d->selectedBackend);
+    d->pipeline = createPlaybackPipeline(requested, &d->selectedBackend);
 
-    if (d->sink) {
-        connect(d->sink.get(), &AudioSink::volumeChanged, this, [this]() {
+    if (d->pipeline) {
+        connect(d->pipeline.get(), &PlaybackPipeline::volumeChanged, this, [this]() {
             Q_EMIT volumeChanged(volume());
         });
-        connect(d->sink.get(), &AudioSink::mutedChanged, this, &DragonAudioOutput::mutedChanged);
+        connect(d->pipeline.get(), &PlaybackPipeline::mutedChanged, this, &DragonAudioOutput::mutedChanged);
     }
 }
 
 DragonAudioOutput::~DragonAudioOutput() = default;
 
-AudioSink *DragonAudioOutput::sink() const
+PlaybackPipeline *DragonAudioOutput::playbackPipeline() const
 {
-    return d->sink.get();
+    return d->pipeline.get();
 }
 
 qreal DragonAudioOutput::volume() const
 {
-    return d->sink ? d->sink->volume() : 1.0;
+    return d->pipeline ? d->pipeline->volume() : 1.0;
 }
 
 bool DragonAudioOutput::isMuted() const
 {
-    return d->sink ? d->sink->muted() : false;
+    return d->pipeline ? d->pipeline->muted() : false;
 }
 
 bool DragonAudioOutput::muted() const
@@ -67,14 +67,14 @@ DragonAudioOutput::Backend DragonAudioOutput::backend() const
 
 void DragonAudioOutput::setVolume(qreal volume)
 {
-    if (d->sink) {
-        d->sink->setVolume(static_cast<float>(volume));
+    if (d->pipeline) {
+        d->pipeline->setVolume(static_cast<float>(volume));
     }
 }
 
 void DragonAudioOutput::setMuted(bool muted)
 {
-    if (d->sink) {
-        d->sink->setMuted(muted);
+    if (d->pipeline) {
+        d->pipeline->setMuted(muted);
     }
 }

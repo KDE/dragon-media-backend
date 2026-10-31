@@ -11,7 +11,7 @@
 
 namespace
 {
-QString nullSinkErrorMessage()
+QString nullDeviceErrorMessage()
 {
     return i18n("Could not find any audio sink plugins.");
 }
@@ -24,7 +24,7 @@ NullAudioSink::NullAudioSink(QObject *parent)
     QMetaObject::invokeMethod(
         this,
         [this]() {
-            Q_EMIT errorOccurred(nullSinkErrorMessage());
+            Q_EMIT errorOccurred(nullDeviceErrorMessage());
         },
         Qt::QueuedConnection);
 }
@@ -38,8 +38,9 @@ void NullAudioSink::open(int sampleRate, int channels)
 {
     // Report the broken install on every open attempt; DragonPlayer's generic
     // open-failure handling sees isDeviceOpen() == false and refuses playback.
-    Q_EMIT errorOccurred(nullSinkErrorMessage());
-    setFormat(sampleRate, channels);
+    Q_UNUSED(sampleRate);
+    Q_UNUSED(channels);
+    Q_EMIT errorOccurred(nullDeviceErrorMessage());
 }
 
 void NullAudioSink::close()

@@ -23,6 +23,13 @@ public:
     explicit DragonCdTocReaderPrivate(DragonCdTocReader *reader)
         : q(reader)
     {
+        threadPool.setMaxThreadCount(1);
+    }
+
+    ~DragonCdTocReaderPrivate()
+    {
+        threadPool.clear();
+        threadPool.waitForDone();
     }
 
     void requestToc(const QString &device);
@@ -33,6 +40,7 @@ public:
     bool running = false;
     QString runningDevice;
     QString pendingDevice;
+    QThreadPool threadPool;
 };
 
 class CdTocAcquireJob : public QRunnable
@@ -89,7 +97,7 @@ void DragonCdTocReaderPrivate::requestToc(const QString &device)
 
     running = true;
     runningDevice = device;
-    QThreadPool::globalInstance()->start(new CdTocAcquireJob(q, device));
+    threadPool.start(new CdTocAcquireJob(q, device));
 }
 
 void DragonCdTocReaderPrivate::workerDone(const DragonCdToc &toc, const QString &errorMessage)

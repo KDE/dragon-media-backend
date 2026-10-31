@@ -6,8 +6,20 @@
 #include "dragonplaylist.h"
 
 #include <DragonPlayer>
+#include <DragonSourceOptions>
 
 #include <QDebug>
+
+#include <chrono>
+
+using namespace std::chrono_literals;
+
+namespace
+{
+// 3 s equal-power crossfade when the user selects a different track.
+// Natural end-of-track gapless handoffs use setNextSource() and are unaffected.
+constexpr auto kTrackSwitchCrossfade = 3s;
+}
 
 DragonPlaylist::DragonPlaylist(DragonPlayer *player, QObject *parent)
     : QObject(parent)
@@ -173,7 +185,9 @@ void DragonPlaylist::playNext()
         return;
     }
     m_currentIndex++;
-    m_player->setSource(m_tracks[m_currentIndex].url);
+    DragonSourceOptions options;
+    options.setCrossfadeDuration(kTrackSwitchCrossfade);
+    m_player->setSource(m_tracks[m_currentIndex].url, options);
     m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
     updatePlayerQueue();
@@ -185,7 +199,9 @@ void DragonPlaylist::playPrevious()
         return;
     }
     m_currentIndex--;
-    m_player->setSource(m_tracks[m_currentIndex].url);
+    DragonSourceOptions options;
+    options.setCrossfadeDuration(kTrackSwitchCrossfade);
+    m_player->setSource(m_tracks[m_currentIndex].url, options);
     m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
     updatePlayerQueue();
@@ -197,7 +213,9 @@ void DragonPlaylist::setCurrentIndex(int index)
         return;
     }
     m_currentIndex = index;
-    m_player->setSource(m_tracks[m_currentIndex].url);
+    DragonSourceOptions options;
+    options.setCrossfadeDuration(kTrackSwitchCrossfade);
+    m_player->setSource(m_tracks[m_currentIndex].url, options);
     m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
     updatePlayerQueue();

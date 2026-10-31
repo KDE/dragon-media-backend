@@ -89,10 +89,10 @@ block()
         if(NOT DRAGON_STOP_TOKEN_WITH_EXPERIMENTAL_LIBRARY)
             message(FATAL_ERROR
                 "std::stop_token/std::jthread are unavailable and -fexperimental-library "
-                "did not enable them — the C++ standard library is too old for this pipeline.")
+                "did not enable them: the C++ standard library is too old for this pipeline.")
         endif()
         add_compile_options(-fexperimental-library)
-        message(STATUS "std::stop_token needs -fexperimental-library on this toolchain — enabled")
+        message(STATUS "std::stop_token needs -fexperimental-library")
     endif()
 endblock()
 
@@ -352,6 +352,8 @@ ecm_qt_install_logging_categories(
 
 set(DragonMediaBackend_PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonduration.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonsourceoptions.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonicymetadata.h
@@ -386,6 +388,7 @@ ecm_generate_headers(DragonMediaBackend_CamelCase_HEADERS
         DragonIcyMetadata
         DragonPlayer
         DragonSpectrumAnalyzer
+        DragonSourceOptions
     RELATIVE include/DragonMediaBackend
 )
 

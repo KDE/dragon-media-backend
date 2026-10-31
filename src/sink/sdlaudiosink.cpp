@@ -11,6 +11,7 @@
 #include <SDL3/SDL_main.h>
 
 #include "dragonmediabackend_audio_logging.h"
+#include "mixer/mixer.h"
 
 #include <KPluginFactory>
 
@@ -85,13 +86,23 @@ SdlAudioSink::SdlAudioSink(QObject *parent, const QVariantList &args)
 SdlAudioSink::~SdlAudioSink()
 {
     SdlAudioSink::close();
-    SDL_Quit();
+    // A poisoned close deliberately leaks the native session (and the device
+    // behind it): tearing the whole SDL subsystem down underneath a
+    // still-running callback would only trade one use-after-free for another.
+    if (!m_poisoned) {
+        SDL_Quit();
+    }
 }
 
 bool SdlAudioSink::probe()
 {
-    qCDebug(dragonMediaBackendAudio) << "SDL probe() SDL_Init already called in constructor";
-    return true; // SDL_Init succeeded during construction
+    qCDebug(dragonMediaBackendAudio) << "SDL probe() checking SDL_WasInit";
+    return SDL_WasInit(SDL_INIT_AUDIO) != 0;
+}
+
+std::size_t SdlAudioSink::preferredCallbackSamples(int sampleRate, int channels) const
+{
+    return static_cast<std::size_t>(sampleRate) * static_cast<std::size_t>(channels);
 }
 
 void SdlAudioSink::open(int sampleRate, int channels)
@@ -103,17 +114,12 @@ void SdlAudioSink::open(int sampleRate, int channels)
         close();
     }
 
-    setFormat(sampleRate, channels);
-    reset();
-
     auto *session = new AudioSession;
 
     const QString openStreamName = resolvedStreamName();
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_STREAM_NAME, openStreamName.toUtf8().constData());
 
     const SDL_AudioSpec spec = {SDL_AUDIO_F32, channels, sampleRate};
-
-    preAllocateCallbackBuffer(spec.freq * spec.channels);
 
     SDL_AudioStream *stream = SDL_CreateAudioStream(&spec, nullptr);
     if (!stream) {
@@ -145,8 +151,14 @@ void SdlAudioSink::open(int sampleRate, int channels)
 
     SDL_SetAudioStreamGain(stream, m_cachedGain.load(std::memory_order_relaxed));
 
+    // Publish the session BEFORE registering the callback and resuming the
+    // device: once the device is running, the RT callback can fire at any
+    // moment and must never observe a null (or stale) session.
+    m_session.store(session, std::memory_order_seq_cst);
+
     if (!SDL_SetAudioStreamGetCallback(stream, &SdlAudioSink::audioStreamCallback, this)) {
         qCCritical(dragonMediaBackendAudio) << "SDL_SetAudioStreamGetCallback FAILED:" << SDL_GetError();
+        m_session.store(nullptr, std::memory_order_seq_cst);
         SDL_CloseAudioDevice(deviceId);
         SDL_DestroyAudioStream(stream);
         delete session;
@@ -156,7 +168,6 @@ void SdlAudioSink::open(int sampleRate, int channels)
 
     SDL_ResumeAudioDevice(deviceId);
 
-    m_session.store(session, std::memory_order_release);
     qCDebug(dragonMediaBackendAudio) << "SDL audio device opened";
 }
 
@@ -164,23 +175,39 @@ void SdlAudioSink::close()
 {
     qCDebug(dragonMediaBackendAudio) << "close()";
 
-    auto *oldSession = m_session.exchange(nullptr, std::memory_order_acq_rel);
+    // Serialize against the other main-thread control methods.
+    std::lock_guard lock(m_mainMutex);
+
+    auto *oldSession = m_session.exchange(nullptr, std::memory_order_seq_cst);
+
+    if (oldSession && oldSession->deviceId != 0) {
+        SDL_PauseAudioDevice(oldSession->deviceId);
+    }
+
+    // Wait for active callbacks to finish BEFORE tearing down the session.
+    // New callbacks bail out at their entry while close() is in progress, so
+    // this is bounded.
+    m_quiesce.beginClose();
+    const bool quiesced = m_quiesce.waitForIdle(std::chrono::milliseconds(500));
+    if (!quiesced) {
+        m_poisoned = true;
+        qCCritical(dragonMediaBackendAudio)
+            << "SDL close(): callback did not quiesce within 500ms; leaking the native audio session (zombie state) to avoid a use-after-free";
+        // Deliberately leak the session and everything it owns: the device and
+        // the stream keep living with the (stuck) callback, which may still
+        // dereference them. close() stays marked as in progress so any future
+        // callback bails out immediately.
+        return;
+    }
+    m_quiesce.endClose();
 
     if (oldSession) {
         if (oldSession->deviceId != 0) {
-            SDL_PauseAudioDevice(oldSession->deviceId);
             SDL_CloseAudioDevice(oldSession->deviceId);
         }
         if (oldSession->stream) {
             SDL_DestroyAudioStream(oldSession->stream);
         }
-    }
-
-    {
-        std::unique_lock lock(m_callbackDoneMutex);
-        m_callbackDoneCv.wait(lock, [this]() {
-            return m_activeCallbacks.load(std::memory_order_acquire) == 0;
-        });
     }
 
     delete oldSession;
@@ -189,6 +216,8 @@ void SdlAudioSink::close()
 
 void SdlAudioSink::pause()
 {
+    std::lock_guard lock(m_mainMutex);
+
     if (auto *session = m_session.load(std::memory_order_acquire)) {
         if (session->deviceId != 0) {
             SDL_PauseAudioDevice(session->deviceId);
@@ -201,6 +230,8 @@ void SdlAudioSink::pause()
 
 void SdlAudioSink::resume()
 {
+    std::lock_guard lock(m_mainMutex);
+
     if (auto *session = m_session.load(std::memory_order_acquire)) {
         if (session->stream) {
             SDL_SetAudioStreamGain(session->stream, m_cachedGain.load(std::memory_order_relaxed));
@@ -214,6 +245,9 @@ void SdlAudioSink::resume()
 void SdlAudioSink::setGain(float linearGain)
 {
     m_cachedGain.store(linearGain, std::memory_order_relaxed);
+
+    std::lock_guard lock(m_mainMutex);
+
     if (auto *session = m_session.load(std::memory_order_acquire); session && session->stream) {
         SDL_SetAudioStreamGain(session->stream, linearGain);
     }
@@ -221,6 +255,8 @@ void SdlAudioSink::setGain(float linearGain)
 
 qint64 SdlAudioSink::deviceQueuedSamples() const
 {
+    std::lock_guard lock(m_mainMutex);
+
     auto *session = m_session.load(std::memory_order_acquire);
     if (!session || !session->stream) {
         return 0;
@@ -247,6 +283,8 @@ bool SdlAudioSink::isDeviceOpen() const
 
 void SdlAudioSink::clearStream()
 {
+    std::lock_guard lock(m_mainMutex);
+
     auto *session = m_session.load(std::memory_order_acquire);
     if (session && session->stream) {
         SDL_ClearAudioStream(session->stream);
@@ -280,11 +318,11 @@ int SdlAudioSink::audioBufferFrames() const
 std::optional<std::chrono::microseconds> SdlAudioSink::audioBufferDuration() const
 {
     const int frames = audioBufferFrames();
-    if (frames < 0 || currentSampleRate() <= 0) {
+    if (frames < 0 || mixer()->clock().currentSampleRate() <= 0) {
         return std::nullopt;
     }
 
-    return std::chrono::microseconds{(static_cast<qint64>(frames) * 1000000) / currentSampleRate()};
+    return std::chrono::microseconds{(static_cast<qint64>(frames) * 1000000) / mixer()->clock().currentSampleRate()};
 }
 
 void SDLCALL SdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int)
@@ -299,32 +337,29 @@ void SDLCALL SdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioStream *
         audioThreadNamed = true;
     }
 
-    self->m_activeCallbacks.fetch_add(1, std::memory_order_relaxed);
-    struct Guard {
-        explicit Guard(SdlAudioSink *s)
-            : self(s)
-        {
-        }
-        ~Guard()
-        {
-            self->m_activeCallbacks.fetch_sub(1, std::memory_order_relaxed);
-            self->m_callbackDoneCv.notify_one();
-        }
-        Guard(const Guard &) = delete;
-        Guard &operator=(const Guard &) = delete;
-        SdlAudioSink *self;
-    };
-    Guard guard(self);
+    // Quiesce handshake with close(): the destructor is a fetch_sub plus an
+    // atomic notify, never a mutex, so it is safe on this RT path. While
+    // close() is in progress, bail out before touching the session.
+    CallbackQuiesce::ScopedCallback guard(self->m_quiesce);
+    if (guard.closing()) {
+        return;
+    }
 
-    const auto *session = self->m_session.load(std::memory_order_acquire);
+    const auto *session = self->m_session.load(std::memory_order_seq_cst);
     if (!session)
         return;
 
     if (additional_amount <= 0)
         return;
 
-    const int channels = self->currentChannels();
-    const int sampleRate = self->currentSampleRate();
+    if (!self->mixer())
+        return;
+
+    const int channels = self->mixer()->clock().currentChannels();
+    const int sampleRate = self->mixer()->clock().currentSampleRate();
+    if (channels <= 0 || sampleRate <= 0)
+        return;
+
     const size_t floatsNeeded = (static_cast<size_t>(additional_amount) / sizeof(float)) / static_cast<size_t>(channels) * static_cast<size_t>(channels);
     if (floatsNeeded == 0)
         return;
@@ -340,25 +375,25 @@ void SDLCALL SdlAudioSink::audioStreamCallback(void *userdata, SDL_AudioStream *
     auto now = std::chrono::steady_clock::now().time_since_epoch();
     auto pts = std::chrono::duration_cast<std::chrono::microseconds>(now) + std::chrono::microseconds(static_cast<qint64>(latencySeconds * 1000000.0f));
 
-    auto pcm = self->processAudioCallback(floatsNeeded, pts);
+    auto pcm = self->mixer()->render(floatsNeeded, pts);
 
     if (!pcm.empty()) {
         SDL_PutAudioStreamData(stream, pcm.data(), static_cast<int>(pcm.size() * sizeof(float)));
         return;
     }
 
-    if (self->endOfStreamPending()) {
+    if (self->mixer()->clock().endOfStreamPending()) {
         SDL_FlushAudioStream(stream);
         if (SDL_GetAudioStreamQueued(stream) > 0 || SDL_GetAudioStreamAvailable(stream) > 0) {
             return;
         }
     }
 
-    if (self->tryClaimDrained()) {
+    if (self->mixer()->clock().tryClaimDrained()) {
         QMetaObject::invokeMethod(
             self,
             [self]() {
-                if (!self->takeDrainedEmission()) {
+                if (!self->mixer()->clock().takeDrainedEmission()) {
                     return;
                 }
                 qCDebug(dragonMediaBackendAudio) << "drain complete, all decoded audio played out";

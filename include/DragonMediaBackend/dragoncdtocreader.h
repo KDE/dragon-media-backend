@@ -26,7 +26,7 @@ class DragonCdTocReaderPrivate;
  * Call requestToc(), then handle tocReady() and the failed() signals.
  *
  * With the TOC in hand, the application can build its track list and
- * run a CDDB or MusicBrainz lookup itself — the reader supplies the
+ * run a CDDB or MusicBrainz lookup itself. The reader supplies the
  * basic track data, it does not do network metadata lookups.
  *
  * Re-reading after a disc swap requires another requestToc() call. Use

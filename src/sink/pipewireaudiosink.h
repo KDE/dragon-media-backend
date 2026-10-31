@@ -6,21 +6,20 @@
 #pragma once
 
 #include "audiosink.h"
+#include "callbackquiesce.h"
 
 #include <QVariant>
 
 #include <atomic>
-#include <condition_variable>
-#include <mutex>
+#include <cstddef>
 #include <vector>
 
-struct pw_thread_loop;
-struct pw_stream;
-struct spa_hook;
+#include <pipewire/pipewire.h>
 
 class PipeWireAudioSink : public AudioSink
 {
     Q_OBJECT
+    Q_DISABLE_COPY_MOVE(PipeWireAudioSink)
 
 public:
     explicit PipeWireAudioSink(QObject *parent, const QVariantList &args);
@@ -44,8 +43,11 @@ public:
     [[nodiscard]] bool isDeviceOpen() const override;
     [[nodiscard]] bool isPaused() const override;
 
+    [[nodiscard]] std::size_t preferredCallbackSamples(int sampleRate, int channels) const override;
+
     // Called from the pw_thread_loop callback thread public for the static events struct
     static void onProcess(void *userdata);
+    static void onStateChanged(void *userdata, enum pw_stream_state old, enum pw_stream_state state, const char *error);
     static void onControlInfo(void *userdata, uint32_t id, const struct pw_stream_control *control);
     static void onParamChanged(void *userdata, uint32_t id, const struct spa_pod *param);
     static void onDrained(void *userdata);
@@ -59,12 +61,18 @@ private:
     std::atomic<bool> m_paused{false};
     std::atomic<bool> m_open{false};
 
-    std::mutex m_callbackDoneMutex;
-    std::condition_variable m_callbackDoneCv;
-    std::atomic<int> m_activeCallbacks{0};
+    // Quiesce handshake between the onProcess data thread and close().
+    CallbackQuiesce m_quiesce;
+
+    // Set when close() could not quiesce onProcess within the bounded wait:
+    // the pw stream/loop are deliberately leaked into a detached "zombie"
+    // state instead of risking a use-after-free.
+    bool m_poisoned = false;
 
     std::vector<float> m_volumesScratch;
 
     std::atomic<float> m_cachedGain{1.0f};
     std::atomic<bool> m_cachedMuted{false};
+    std::atomic<bool> m_gainSetByPipeline{false};
+    std::atomic<bool> m_firstVolumeReportSeen{false};
 };

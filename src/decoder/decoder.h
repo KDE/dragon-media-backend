@@ -37,6 +37,20 @@ public:
 
     using SeekCallback = std::function<qint64(qint64 offset, SeekWhence whence)>;
 
+    // Optional output format override: when set, libswresample converts every
+    // decoded frame to this sample rate / channel count instead of the file's
+    // native format. Used for crossfading into an already-open audio sink so
+    // both streams feed the callback at the device's exact format.
+    struct TargetAudioFormat {
+        int sampleRate = 0;
+        int channels = 0;
+    };
+
+    void setTargetFormat(TargetAudioFormat target) noexcept
+    {
+        m_targetFormat = target;
+    }
+
     explicit Decoder(ReadCallback readCb, SeekCallback seekCb = nullptr, qint64 streamSize = -1, const QString &filePath = {}, QObject *parent = nullptr);
     ~Decoder() override;
 
@@ -65,6 +79,8 @@ private:
 
     std::atomic<bool> m_seekRequested{false};
     std::atomic<std::chrono::milliseconds::rep> m_seekTarget{0};
+
+    TargetAudioFormat m_targetFormat{};
 
     struct DecodeSession;
     std::unique_ptr<DecodeSession> m_session;

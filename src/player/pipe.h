@@ -10,6 +10,7 @@
 #include <LockFreeSpscQueue.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstddef>
@@ -87,12 +88,23 @@ public:
         return Consumer(this);
     }
 
+    void setProducerDone(bool done) noexcept
+    {
+        m_producerDone.store(done, std::memory_order_release);
+    }
+
+    [[nodiscard]] bool producerDone() const noexcept
+    {
+        return m_producerDone.load(std::memory_order_acquire);
+    }
+
 private:
     std::vector<T> m_buffer;
     LockFreeSpscQueue<T> m_queue;
     std::condition_variable_any m_consumer_cv;
     std::condition_variable_any m_producer_cv;
     std::mutex m_cvMutex;
+    std::atomic<bool> m_producerDone{false};
 };
 
 template<typename T>

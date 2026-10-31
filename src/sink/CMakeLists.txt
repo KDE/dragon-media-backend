@@ -4,7 +4,9 @@
 
 add_library(dragon_sink_objs OBJECT
     audiosink.cpp
-    audiosinkfactory.cpp
+    playbackpipeline.cpp
+    playbackpipelinefactory.cpp
+    streamclock.cpp
     nullaudiosink.cpp
     dragonmediabackend_audio_logging.cpp
 )
@@ -41,6 +43,7 @@ kcoreaddons_add_plugin(dragonsdlaudiosink
 )
 target_include_directories(dragonsdlaudiosink PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/src
         ${PROJECT_BINARY_DIR}
         ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
 )
@@ -67,6 +70,7 @@ if(PULSEAUDIO_FOUND)
     )
     target_include_directories(dragonpulseaudiosink PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
+            ${PROJECT_SOURCE_DIR}/src
             ${PROJECT_BINARY_DIR}
             ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
     )
@@ -81,6 +85,7 @@ if(PIPEWIRE_FOUND)
     )
     target_include_directories(dragonpipewireaudiosink PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}
+            ${PROJECT_SOURCE_DIR}/src
             ${PROJECT_BINARY_DIR}
             ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
     )
