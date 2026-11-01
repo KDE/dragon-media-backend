@@ -15,7 +15,6 @@
 #include <QFileInfo>
 
 #include <cdio/cdio.h>
-#include <cdio/disc.h>
 #include <cdio/memory.h>
 #include <cdio/read.h>
 #include <cdio/track.h>
@@ -104,11 +103,8 @@ std::expected<DragonCdToc, QString> DragonCdDisc::readToc(CdIoHandle &cdioDevice
 {
     CdIo_t *const cdio = cdioDevice.get();
 
-    const discmode_t discmode = cdio_get_discmode(cdio);
-    if (discmode != CDIO_DISC_MODE_CD_DA && discmode != CDIO_DISC_MODE_CD_MIXED) {
-        return std::unexpected(i18n("The disc is not an Audio CD."));
-    }
-
+    // cdio_get_discmode() is buggy for bin/cue test files, so just count audio tracks
+    // instead, to determine if it's a audio cd
     const track_t firstTrack = cdio_get_first_track_num(cdio);
     const track_t numTracks = cdio_get_num_tracks(cdio);
     if (firstTrack == CDIO_INVALID_TRACK || numTracks == CDIO_INVALID_TRACK || numTracks <= 0) {
@@ -123,7 +119,12 @@ std::expected<DragonCdToc, QString> DragonCdDisc::readToc(CdIoHandle &cdioDevice
     tocPrivate->device = device;
     tocPrivate->leadOutFrame = leadOutLogicalSector >= 0 ? int(leadOutLogicalSector) + DragonCdFrames::kLeadInFrames : 0;
 
+    int audioTrackCount = 0;
     for (int number = first; number <= last; ++number) {
+        if (cdio_get_track_format(cdio, track_t(number)) == TRACK_FORMAT_AUDIO) {
+            ++audioTrackCount;
+        }
+
         const int64_t startLogicalSector = cdio_get_track_lsn(cdio, track_t(number));
         const int64_t endLogicalSector = (number < last) ? cdio_get_track_lsn(cdio, track_t(number + 1)) : leadOutLogicalSector;
         if (startLogicalSector < 0 || endLogicalSector < startLogicalSector) {
@@ -141,6 +142,10 @@ std::expected<DragonCdToc, QString> DragonCdDisc::readToc(CdIoHandle &cdioDevice
             trackPrivate->url = DragonCdUrl::makeTrackUrl(number, device);
         }
         tocPrivate->tracks.append(DragonCdTrack(trackPrivate.release()));
+    }
+
+    if (audioTrackCount == 0) {
+        return std::unexpected(i18n("The disc is not an Audio CD."));
     }
 
     qCDebug(dragonMediaBackendNetwork) << "DragonCdToc built:" << tocPrivate->device << "tracks" << tocPrivate->tracks.size() << "leadOutFrame"
