@@ -55,8 +55,7 @@ if(ANDROID)
     if(_dragon_android_prefix STREQUAL "")
         message(FATAL_ERROR
             "DRAGON_QT_ANDROID_ARM64 / DRAGON_QT_ANDROID_X86_64 must point at the "
-            "Qt-for-Android craft prefix that provides Qt, FFmpeg and SDL3 "
-            "(see ci/craft-android-deps.sh).")
+            "Qt-for-Android craft prefix that provides Qt, FFmpeg and SDL3.")
     endif()
 
     # craft's android build names the library after the ABI
