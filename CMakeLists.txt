@@ -474,7 +474,7 @@ if(BUILD_EXAMPLES AND Qt6Qml_FOUND AND Qt6Quick_FOUND AND Qt6QuickControls2_FOUN
     add_subdirectory(examples/qml)
 endif()
 
-if(BUILD_EXAMPLES)
+if(BUILD_EXAMPLES AND LIBCDIO_FOUND)
     add_subdirectory(examples/playcd)
 endif()
 

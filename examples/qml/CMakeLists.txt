@@ -47,58 +47,34 @@ target_include_directories(dragonqml_example PRIVATE
 )
 
 if(ANDROID)
-    if(ANDROID_ABI STREQUAL "arm64-v8a")
-        set(_dragon_android_prefix "$ENV{DRAGON_QT_ANDROID_ARM64}")
-    else()
-        set(_dragon_android_prefix "$ENV{DRAGON_QT_ANDROID_X86_64}")
-    endif()
-    if(_dragon_android_prefix STREQUAL "")
-        message(FATAL_ERROR
-            "DRAGON_QT_ANDROID_ARM64 / DRAGON_QT_ANDROID_X86_64 must point at the "
-            "Qt-for-Android craft prefix that provides Qt, FFmpeg and SDL3.")
-    endif()
-
-    # craft's android build names the library after the ABI
-    set(_dragon_sdl3_lib "${_dragon_android_prefix}/lib/libSDL3_${ANDROID_ABI}.so")
-    if(NOT EXISTS "${_dragon_sdl3_lib}")
-        set(_dragon_sdl3_lib "${_dragon_android_prefix}/lib/libSDL3.so")
-    endif()
-    file(GLOB _dragon_sdl3_jars LIST_DIRECTORIES false
-        "${_dragon_android_prefix}/share/java/SDL3/SDL3-*.jar")
-    list(FILTER _dragon_sdl3_jars EXCLUDE REGEX "-sources\\.jar$")
-    if(_dragon_sdl3_jars)
-        list(GET _dragon_sdl3_jars 0 _dragon_sdl3_jar)
-    endif()
-    if(NOT EXISTS "${_dragon_sdl3_lib}" OR NOT _dragon_sdl3_jar)
-        message(FATAL_ERROR
-            "The craft prefix ${_dragon_android_prefix} is missing the SDL3 artifacts.")
+    set(_dragon_sdl3_jar "")
+    if(TARGET SDL3::Jar)
+        get_target_property(_dragon_sdl3_jar SDL3::Jar JAR_FILE)
     endif()
 
     set(_dragon_android_pkg_dir ${CMAKE_CURRENT_BINARY_DIR}/android-package)
-    file(REMOVE_RECURSE ${_dragon_android_pkg_dir})
+    file(MAKE_DIRECTORY ${_dragon_android_pkg_dir}/libs)
+    file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/android/ DESTINATION ${_dragon_android_pkg_dir})
+    if(_dragon_sdl3_jar)
+        file(COPY ${_dragon_sdl3_jar} DESTINATION ${_dragon_android_pkg_dir}/libs)
+    endif()
 
     add_custom_target(dragonqml_android_pkg_sync
-        COMMAND ${CMAKE_COMMAND} -E remove_directory ${_dragon_android_pkg_dir}
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/android ${_dragon_android_pkg_dir}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${_dragon_android_pkg_dir}/libs
         COMMAND ${CMAKE_COMMAND} -E copy "${_dragon_sdl3_jar}" ${_dragon_android_pkg_dir}/libs
     )
-    function(dragonqml_android_pkg_sync_hook)
-        if(TARGET dragonqml_example_make_apk)
-            add_dependencies(dragonqml_example_make_apk dragonqml_android_pkg_sync)
-        else()
-            message(FATAL_ERROR
-                "dragonqml_example_make_apk target not found — the android "
-                "package dir would never be created. Qt changed its internal "
-                "apk target names; update the hook in examples/qml/CMakeLists.txt.")
-        endif()
-    endfunction()
-    cmake_language(DEFER DIRECTORY ${CMAKE_SOURCE_DIR} CALL dragonqml_android_pkg_sync_hook)
+    add_dependencies(dragonqml_example dragonqml_android_pkg_sync)
 
     set_target_properties(dragonqml_example PROPERTIES
         QT_ANDROID_PACKAGE_NAME org.kde.dragonqmlexample
         QT_ANDROID_PACKAGE_SOURCE_DIR ${_dragon_android_pkg_dir}
         QT_ANDROID_MIN_SDK_VERSION 28
-        QT_ANDROID_EXTRA_LIBS "${_dragon_sdl3_lib}"
     )
+
+    function(dragonqml_make_apk_all)
+        if(TARGET dragonqml_example_make_apk)
+            add_custom_target(dragonqml_apk ALL DEPENDS dragonqml_example_make_apk)
+        endif()
+    endfunction()
+    cmake_language(DEFER DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} CALL dragonqml_make_apk_all)
 endif()
