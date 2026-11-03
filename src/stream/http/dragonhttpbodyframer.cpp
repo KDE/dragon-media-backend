@@ -39,10 +39,10 @@ bool DragonHttpBodyFramer::isTruncated() const noexcept
                           [](const Chunked &) {
                               return true;
                           },
-                          [](const FixedLength &fixed) {
+                          [](FixedLength fixed) {
                               return fixed.remaining > 0;
                           },
-                          [](const Unframed &) {
+                          [](Unframed) {
                               return false;
                           },
                       },

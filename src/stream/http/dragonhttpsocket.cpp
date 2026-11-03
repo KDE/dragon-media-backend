@@ -261,7 +261,7 @@ void DragonHttpSocket::handleReadyRead()
 
             bool continueReading = false;
             std::visit(Overloaded{
-                           [&](const InformationalResponse &) {
+                           [&](InformationalResponse) {
                                continueReading = true;
                            },
                            [&](const RedirectResponse &redirect) {

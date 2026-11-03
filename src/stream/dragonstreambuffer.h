@@ -59,7 +59,7 @@ public:
     static constexpr qint64 RADIO_HIGH_WATER_MARK = 16 * 1024;
     static constexpr qint64 DEFAULT_MAX_BUFFER_BYTES = 4 * 1024 * 1024;
 
-    explicit DragonStreamBuffer(DragonStream *parentStream = nullptr, DragonStreamBufferOptions options = {});
+    explicit DragonStreamBuffer(DragonStream *parentStream = nullptr, const DragonStreamBufferOptions &options = {});
     ~DragonStreamBuffer();
 
     DragonStreamBuffer(const DragonStreamBuffer &) = delete;

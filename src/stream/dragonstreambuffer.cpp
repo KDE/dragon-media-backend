@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <ranges>
 
-DragonStreamBuffer::DragonStreamBuffer(DragonStream *parentStream, DragonStreamBufferOptions options)
+DragonStreamBuffer::DragonStreamBuffer(DragonStream *parentStream, const DragonStreamBufferOptions &options)
     : m_stream(parentStream)
     , m_options(options)
     , m_bufferProgress(std::make_unique<DragonBufferProgress>())
