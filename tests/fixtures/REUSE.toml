@@ -11,8 +11,8 @@ path = [
   "gs-3s-2c-44100hz.m4a",
   "gs-3s-2c-44100hz.ogg"
 ]
-SPDX-FileCopyrightText = "Kevin MacLeod (incompetech.com)"
-SPDX-License-Identifier = "CC-BY-3.0"
+SPDX-FileCopyrightText = "Galway & Furious Freak by Kevin MacLeod (incompetech.com)"
+SPDX-License-Identifier = "CC-BY-4.0"
 
 [[annotations]]
 path = [
