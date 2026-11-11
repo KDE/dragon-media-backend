@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <!--
 SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
 SPDX-License-Identifier: CC0-1.0
@@ -7,44 +7,52 @@ SPDX-License-Identifier: CC0-1.0
   <id>org.kde.dragonmediabackend</id>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL</project_license>
-
   <name>Dragon Media Backend</name>
+  <name xml:lang="ca">Dragon Media Backend</name>
+  <name xml:lang="nl">Dragon media-backend</name>
+  <name xml:lang="pt-BR">Backend Dragon Media</name>
+  <name xml:lang="tr">Dragon Ortam Arka Ucu</name>
   <summary>Audio playback library for music players</summary>
-
+  <summary xml:lang="ca">Biblioteca de reproducció d'àudio per a reproductors de música</summary>
+  <summary xml:lang="nl">Bibliotheek voor het afspelen van audio in muziekspelers</summary>
+  <summary xml:lang="pt-BR">Biblioteca de reprodução de áudio para reprodutores de música</summary>
+  <summary xml:lang="tr">Müzikçalarlar için ses çalma kitaplığı</summary>
   <description>
     <p>
       Dragon Media Backend is a Qt C++ library intended for desktop music players.
       It can play any audio format that FFmpeg decodes and outputs it through a
       plugin system of audio sinks with support for PipeWire, PulseAudio, and SDL.
     </p>
+    <p xml:lang="ca">Dragon Media Backend és una biblioteca C++ amb Qt destinada als reproductors de música d'escriptori. Pot reproduir qualsevol format d'àudio que el FFmpeg descodifiqui i emet a través d'un sistema de connectors de conductes d'àudio amb suport per al PipeWire, PulseAudio i SDL.</p>
+    <p xml:lang="nl">Dragon media-backend is een Qt C++-bibliotheek die bedoeld is voor muziekspelers op het bureaublad. De bibliotheek kan elk audioformaat afspelen dat door FFmpeg wordt gedecodeerd en voert het geluid uit via een plug-in-systeem van audio-uitvoer, met ondersteuning voor PipeWire, PulseAudio en SDL.</p>
+    <p xml:lang="pt-BR">O Backend Dragon Media é uma biblioteca em C++ (utilizando Qt) voltada para reprodutores de música para desktop. Ele é capaz de reproduzir qualquer formato de áudio que o FFmpeg consiga decodificar, enviando a saída por meio de um sistema de plugins de destinos de áudio com suporte para PipeWire, PulseAudio e SDL.</p>
+    <p xml:lang="tr">Dragon Ortam Arka Ucu, masaüstü müzikçalarlara yönelik bir Qt C++ kitaplığıdır. FFmpeg’in kodunu çözdüğü ve PipeWire, PulseAudio ve SDL desteğine sahip bir ses havuzları eklenti sistemi aracılığıyla çıkardığı herhangi bir ses biçimini oynatabilir.</p>
     <p>
       It also calculates FFTs for audio visualizations, can play music over KDE's
       KIO system, plays audio CDs and provides basic audio CD track information,
       and supports ICY metadata for radio streams.
     </p>
+    <p xml:lang="ca">També calcula FFT per a visualitzacions d'àudio, pot reproduir música sobre el sistema KIO de KDE, reproduir CD d'àudio i proporciona informació bàsica de pistes dels CD d'àudio, i admet metadades ICY per a fluxos de ràdio.</p>
+    <p xml:lang="nl">Het berekent tevens FFT's voor audiovisualisaties, kan muziek afspelen via het KIO-systeem van KDE, speelt audio-cd's af en biedt basisinformatie over de nummers op een audio-cd, en ondersteunt ICY-metadata voor radio-streams.</p>
+    <p xml:lang="pt-BR">Também calcula FFTs para visualizações de áudio, pode reproduzir músicas por meio do sistema KIO do KDE, toca CDs de áudio e fornece informações básicas sobre as faixas desses CDs, além de oferecer suporte a metadados ICY para transmissões de rádio.</p>
+    <p xml:lang="tr">Aynı zamanda ses görselleştirmeleri için FFT’leri hesaplar, KDE’nin KIO sistemi üzerinden müzik çalabilir, ses CD’lerini çalar ve temel ses CD’si parça bilgilerini sağlar ve radyo akışları için ICY üst verilerini destekler.</p>
   </description>
-
   <url type="homepage">https://invent.kde.org/libraries/dragon-media-backend</url>
   <url type="help">https://eean.dev/dragon-media-backend/api/</url>
   <url type="bugtracker">https://bugs.kde.org/enter_bug.cgi?format=guided&amp;product=dragon-media-backend</url>
   <url type="vcs-browser">https://invent.kde.org/libraries/dragon-media-backend</url>
-
   <developer id="org.kde">
     <name translate="no">KDE</name>
   </developer>
   <project_group>KDE</project_group>
-
   <provides>
     <library>libdragonmediabackend.so.0</library>
   </provides>
-
-  <content_rating type="oars-1.1" />
-
+  <content_rating type="oars-1.1"/>
   <custom>
     <value key="KDE::forum">https://discuss.kde.org/tag/multimedia/434</value>
     <value key="KDE::matrix">#kde-multimedia:kde.org</value>
   </custom>
-
   <releases>
     <release version="0.83.0" date="2026-10-17"/>
     <release version="0.82.1" date="2026-10-04"/>
