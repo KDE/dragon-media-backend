@@ -2,14 +2,26 @@
     "KPlugin": {
         "Authors": [
             {
-                "Name": "Ian Monroe"
+                "Name": "Ian Monroe",
+                "Name[ca]": "Ian Monroe",
+                "Name[nl]": "Ian Monroe",
+                "Name[pt_BR]": "Ian Monroe",
+                "Name[tr]": "Ian Monroe"
             }
         ],
         "Category": "Audio",
         "Description": "PulseAudio audio output for Dragon Media Backend",
+        "Description[ca]": "Sortida d'àudio del PulseAudio per al Dragon Media Backend",
+        "Description[nl]": "PulseAudio audio-uitvoer voor Dragon-media Backend",
+        "Description[pt_BR]": "Saída de áudio via PulseAudio para o Dragon Media Backend",
+        "Description[tr]": "Dragon Ortam Arka Ucu için PulseAudio ses çıkışı",
         "EnabledByDefault": true,
         "Icon": "audio-card",
         "Name": "PulseAudio Audio Sink",
+        "Name[ca]": "Conducte d'àudio del PulseAudio",
+        "Name[nl]": "PulseAudio audio-uitvoer",
+        "Name[pt_BR]": "Saída de áudio do PulseAudio",
+        "Name[tr]": "PulseAudio Ses Havuzu",
         "ServiceTypes": [
             "DragonMediaBackend/AudioSink"
         ],

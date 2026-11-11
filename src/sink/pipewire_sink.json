@@ -2,14 +2,26 @@
     "KPlugin": {
         "Authors": [
             {
-                "Name": "Ian Monroe"
+                "Name": "Ian Monroe",
+                "Name[ca]": "Ian Monroe",
+                "Name[nl]": "Ian Monroe",
+                "Name[pt_BR]": "Ian Monroe",
+                "Name[tr]": "Ian Monroe"
             }
         ],
         "Category": "Audio",
         "Description": "PipeWire audio output for Dragon Media Backend",
+        "Description[ca]": "Sortida d'àudio del PipeWire per al Dragon Media Backend",
+        "Description[nl]": "PipeWire audio-uitvoer voor Dragon-media Backend",
+        "Description[pt_BR]": "Saída de áudio via PipeWire para o Dragon Media Backend",
+        "Description[tr]": "Dragon Ortam Arka Ucu için PipeWire ses çıkışı",
         "EnabledByDefault": true,
         "Icon": "audio-card",
         "Name": "PipeWire Audio Sink",
+        "Name[ca]": "Conducte d'àudio del PipeWire",
+        "Name[nl]": "PipeWire-audio-uitvoer",
+        "Name[pt_BR]": "Saída de áudio do PipeWire",
+        "Name[tr]": "PipeWire Ses Havuzu",
         "ServiceTypes": [
             "DragonMediaBackend/AudioSink"
         ],

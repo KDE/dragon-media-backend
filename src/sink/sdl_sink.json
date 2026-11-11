@@ -2,14 +2,26 @@
     "KPlugin": {
         "Authors": [
             {
-                "Name": "Ian Monroe"
+                "Name": "Ian Monroe",
+                "Name[ca]": "Ian Monroe",
+                "Name[nl]": "Ian Monroe",
+                "Name[pt_BR]": "Ian Monroe",
+                "Name[tr]": "Ian Monroe"
             }
         ],
         "Category": "Audio",
         "Description": "SDL3 audio output for Dragon Media Backend",
+        "Description[ca]": "Sortida d'àudio del SDL3 per al Dragon Media Backend",
+        "Description[nl]": "SDL3 audio-uitvoer voor Dragon-media Backend",
+        "Description[pt_BR]": "Saída de áudio via SDL3 para o Dragon Media Backend",
+        "Description[tr]": "Dragon Ortam Arka Ucu için SDL3 ses çıkışı",
         "EnabledByDefault": true,
         "Icon": "audio-card",
         "Name": "SDL3 Audio Sink",
+        "Name[ca]": "Conducte d'àudio del SDL3",
+        "Name[nl]": "SDL3 audio-uitvoer",
+        "Name[pt_BR]": "Saída de áudio do SDL3",
+        "Name[tr]": "SDL3 Ses Havuzu",
         "ServiceTypes": [
             "DragonMediaBackend/AudioSink"
         ],
