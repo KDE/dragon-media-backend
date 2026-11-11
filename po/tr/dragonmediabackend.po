@@ -1,0 +1,295 @@
+# Copyright (C) 2026 This file is copyright:
+# This file is distributed under the same license as the dragon-media-backend package.
+#
+# SPDX-FileCopyrightText: 2026 Emir SARI <emir_sari@icloud.com>
+msgid ""
+msgstr ""
+"Project-Id-Version: dragon-media-backend\n"
+"Report-Msgid-Bugs-To: https://bugs.kde.org\n"
+"POT-Creation-Date: 2026-11-03 22:11+0000\n"
+"PO-Revision-Date: 2026-11-10 20:55+0300\n"
+"Last-Translator: Emir SARI <emir_sari@icloud.com>\n"
+"Language-Team: Turkish <kde-l10n-tr@kde.org>\n"
+"Language: tr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+"X-Generator: Lokalize 26.08.2\n"
+
+#: decoder/dragondecodepipeline.cpp:452
+#, kde-format
+msgid "Failed to create decoder"
+msgstr "Kod çözücü oluşturulamadı"
+
+#: decoder/dragondecodepipeline.cpp:687
+#, kde-format
+msgid "Stream error"
+msgstr "Akış hatası"
+
+#: decoder/dragondecoder.cpp:199
+#, kde-format
+msgid "Failed to initialize media input"
+msgstr "Ortam çıkışı ilklendirilemedi"
+
+#: decoder/dragondecoder.cpp:203
+#, kde-format
+msgid "Failed to open media container"
+msgstr "Ortam kapsayıcısı açılamadı"
+
+#: decoder/dragondecoder.cpp:207
+#, kde-format
+msgid "No supported audio stream found"
+msgstr "Bulunan desteklenen ses akışı yok"
+
+#: decoder/dragondecoder.cpp:211
+#, kde-format
+msgid "Audio codec setup failed"
+msgstr "Ses kodlayıcısı kurulumu yapılamadı"
+
+#: decoder/dragondecoder.cpp:215
+#, kde-format
+msgid "Audio resampler setup failed"
+msgstr "Ses yeniden örnekleyicisi kurulumu yapılamadı"
+
+#: decoder/dragondecoder.cpp:219
+#, kde-format
+msgid "Failed to allocate decoder resources"
+msgstr "Kod çözücü özkaynakları ayrılamadı"
+
+#: decoder/dragondecoder.cpp:238
+#, kde-format
+msgid "Decoder not initialized"
+msgstr "Kod çözücü ilklendirilmemiş"
+
+#: decoder/dragondecoder.cpp:518
+#, kde-format
+msgid "Resampler reinitialization failed after seek"
+msgstr "Sarma sonrası yeniden örnekleyiciyi ilklendirme başarısız"
+
+#: decoder/dragondecoder.cpp:561
+#, kde-format
+msgid "Read error after %1 attempts: %2"
+msgstr "%1 denemeden sonra okuma hatası: %2"
+
+#: player/dragonplayer.cpp:94
+#, kde-format
+msgid "Failed to open the audio output device."
+msgstr "Ses çıkış aygıtı açılamadı"
+
+#: player/dragonplayer.cpp:231
+#, kde-format
+msgid "Fatal error while decoding media"
+msgstr "Ortam kodu çözülürken onulmaz hata"
+
+#: player/dragonplayer.cpp:258
+#, kde-format
+msgid "Error while decoding media"
+msgstr "Ortam kodu çözülürken hata"
+
+#: player/dragonplayer.cpp:651
+#, kde-format
+msgid "Failed to open media source"
+msgstr "Ortam kaynağı açılamadı"
+
+#: player/dragonplayer.cpp:651
+#, kde-format
+msgid "Network error"
+msgstr "Ağ hatası"
+
+#: sink/dragonnullaudiosink.cpp:16
+#, kde-format
+msgid "Could not find any audio sink plugins."
+msgstr "Bulunan ses havuzu eklentisi yok"
+
+#: sink/dragonpipewireaudiosink.cpp:193
+#, kde-format
+msgid "PipeWire: failed to create thread loop"
+msgstr "PipeWire: İş parçacığı döngüsü oluşturulamadı"
+
+#: sink/dragonpipewireaudiosink.cpp:231
+#, kde-format
+msgid "PipeWire: failed to create stream"
+msgstr "PipeWire: Akış oluşturulamadı"
+
+#: sink/dragonpipewireaudiosink.cpp:256
+#, kde-format
+msgid "PipeWire: failed to build audio format"
+msgstr "PipeWire: Ses biçimi yapılamadı"
+
+#: sink/dragonpipewireaudiosink.cpp:265
+#, kde-format
+msgid "PipeWire: failed to connect stream"
+msgstr "PipeWire: Akış bağlanamadı"
+
+#: sink/dragonpipewireaudiosink.cpp:272
+#, kde-format
+msgid "PipeWire: failed to start thread loop"
+msgstr "PipeWire: İş parçacığı döngüsü başlatılamadı"
+
+#: sink/dragonpulseaudiosink.cpp:248
+#, kde-format
+msgid "PulseAudio: failed to create mainloop"
+msgstr "PulseAudio: Ana döngü oluşturulamadı"
+
+#: sink/dragonpulseaudiosink.cpp:255
+#, kde-format
+msgid "PulseAudio: failed to start mainloop"
+msgstr "PulseAudio: Ana döngü başlatılamadı"
+
+#: sink/dragonpulseaudiosink.cpp:269
+#, kde-format
+msgid "PulseAudio: failed to get mainloop API"
+msgstr "PulseAudio: Ana döngü API’si alınamadı"
+
+#: sink/dragonpulseaudiosink.cpp:294
+#, kde-format
+msgid "PulseAudio: failed to create context"
+msgstr "PulseAudio: Bağlam oluşturulamadı"
+
+#: sink/dragonpulseaudiosink.cpp:304
+#, kde-format
+msgid "PulseAudio: failed to connect context"
+msgstr "PulseAudio: Bağlam bağlanamadı"
+
+#: sink/dragonpulseaudiosink.cpp:316
+#, kde-format
+msgid "PulseAudio: context not ready"
+msgstr "PulseAudio: Bağlam hazır değil"
+
+#: sink/dragonpulseaudiosink.cpp:414
+#, kde-format
+msgid "PulseAudio: failed to init channel map"
+msgstr "PulseAudio: Kanal eşlemi ilklendirilemedi"
+
+#: sink/dragonpulseaudiosink.cpp:423
+#, kde-format
+msgid "PulseAudio: failed to create stream proplist"
+msgstr "PulseAudio: Akış özellikleri listesi oluşturulamadı"
+
+#: sink/dragonpulseaudiosink.cpp:442
+#, kde-format
+msgid "PulseAudio: failed to create stream"
+msgstr "PulseAudio: Akış oluşturulamadı"
+
+#: sink/dragonpulseaudiosink.cpp:469
+#, kde-format
+msgid "PulseAudio: failed to connect stream"
+msgstr "PulseAudio: Akış bağlanamadı"
+
+#: sink/dragonpulseaudiosink.cpp:482
+#, kde-format
+msgid "PulseAudio: stream not ready"
+msgstr "PulseAudio: Akış hazır değil"
+
+#: stream/cd/dragoncddisc.cpp:111
+#, kde-format
+msgid "The CD has no tracks."
+msgstr "CD’de hiçbir parça yok"
+
+#: stream/cd/dragoncddisc.cpp:148
+#, kde-format
+msgid "The disc is not an Audio CD."
+msgstr "Disk, bir ses CD’si değil"
+
+#: stream/cd/dragoncddisc.cpp:189
+#, kde-format
+msgid "Could not open the CD device. Check that a disc is present."
+msgstr "CD aygıtı açılamadı. Bir diskin var olduğundan emin olun"
+
+#: stream/cd/dragoncdstream.cpp:117
+#, kde-format
+msgid "The audiocd:/ URL does not name a track to play."
+msgstr "audiocd:/ URL’si, çalınacak bir parçaya işaret etmiyor"
+
+#: stream/cd/dragoncdstream.cpp:155
+#, kde-format
+msgid "Track not found on the CD: %1"
+msgstr "CD’de parça bulunamadı: %1"
+
+#: stream/cd/dragoncdstream.cpp:159
+#, kde-format
+msgid "CD track %1 is not an audio track."
+msgstr "CD parçası %1, bir ses parçası değil"
+
+#: stream/cd/dragoncdstream.cpp:166
+#, kde-format
+msgid "Could not determine the length of CD track %1."
+msgstr "CD parçası %1 uzunluğu algılanamadı"
+
+#: stream/cd/dragoncdstream.cpp:284
+#, kde-format
+msgid "The CD is no longer available."
+msgstr "CD artık kullanılabilir değil"
+
+#: stream/cd/dragoncdstream.cpp:289
+#, kde-format
+msgid "Attempted to read past the end of the CD track."
+msgstr "CD parçasının sonundan sonrası okunmaya çalışılıyor"
+
+#: stream/cd/dragoncdstream.cpp:297
+#, kde-format
+msgid "Error reading the CD. The disc may have been ejected."
+msgstr "CD okunurken hata. Disk çıkarılmış olabilir"
+
+#: stream/cd/dragoncdtocreader.cpp:61
+#, kde-format
+msgid "This build of Dragon Media Backend was made without CD support."
+msgstr "Dragon Ortam Arka Ucu’nun bu yapısı, CD desteği olmadan yapılmış"
+
+#: stream/http/dragonhttpprotocol.cpp:227 stream/http/dragonhttpsocket.cpp:247
+#: stream/http/dragonhttpsocket.cpp:340
+#, kde-format
+msgid "Malformed response"
+msgstr "Hatalı oluşturulmuş yanıt"
+
+#: stream/http/dragonhttpsocket.cpp:31
+#, kde-format
+msgid "Stream stopped sending data"
+msgstr "Akış, veri göndermeyi durdurdu"
+
+#: stream/http/dragonhttpsocket.cpp:88
+#, kde-format
+msgid "Invalid stream URL: %1"
+msgstr "Geçersiz akış URL’si: %1"
+
+#: stream/http/dragonhttpsocket.cpp:104 stream/http/dragonhttpsocket.cpp:458
+#, kde-format
+msgid "Connection closed"
+msgstr "Bağlantı kesildi"
+
+#: stream/http/dragonhttpsocket.cpp:367 stream/http/dragonhttpsocket.cpp:377
+#, kde-format
+msgid "Server responded with status %1"
+msgstr "Sunucu, %1 durumuyla yanıt verdi"
+
+#: stream/http/dragonhttpsocket.cpp:373
+#, kde-format
+msgid "Proxy requires authentication"
+msgstr "Vekil, kimlik doğrulama gerektiriyor"
+
+#: stream/http/dragonhttpsocket.cpp:384
+#, kde-format
+msgid "Server returned unexpected byte range"
+msgstr "Sunucu, beklenmedik bayt erimi döndürdü"
+
+#: stream/http/dragonhttpsocket.cpp:389
+#, kde-format
+msgid "Server ignored requested byte range"
+msgstr "Sunucu, istenen bayt erimini yok saydı"
+
+#: stream/http/dragonhttpsocket.cpp:400 stream/http/dragonhttpsocket.cpp:410
+#: stream/http/dragonhttpsocket.cpp:414 stream/http/dragonhttpsocket.cpp:417
+#, kde-format
+msgid "Unusable redirect address"
+msgstr "Kullanılamayan yeniden yönlendirme adresi"
+
+#: stream/http/dragonhttpsocket.cpp:403
+#, kde-format
+msgid "Too many redirects"
+msgstr "Pek çok yeniden yönlendirme"
+
+#: stream/http/dragonradiostream.cpp:246
+#, kde-format
+msgid "Network error: %1"
+msgstr "Ağ hatası: %1"
