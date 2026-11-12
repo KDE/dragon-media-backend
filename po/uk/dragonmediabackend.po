@@ -1,0 +1,304 @@
+# Copyright (C) 2026 This file is copyright:
+# This file is distributed under the same license as the dragon-media-backend package.
+#
+# SPDX-FileCopyrightText: 2026 Yuri Chornoivan <yurchor@ukr.net>
+msgid ""
+msgstr ""
+"Project-Id-Version: dragon-media-backend\n"
+"Report-Msgid-Bugs-To: https://bugs.kde.org\n"
+"POT-Creation-Date: 2026-11-03 22:11+0000\n"
+"PO-Revision-Date: 2026-11-11 18:42+0200\n"
+"Last-Translator: Yuri Chornoivan <yurchor@ukr.net>\n"
+"Language-Team: Ukrainian <trans-uk@lists.fedoraproject.org>\n"
+"Language: uk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
+"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"X-Generator: Lokalize 25.12.1\n"
+
+#: decoder/dragondecodepipeline.cpp:452
+#, kde-format
+msgid "Failed to create decoder"
+msgstr "Не вдалося створити кодувальник"
+
+#: decoder/dragondecodepipeline.cpp:687
+#, kde-format
+msgid "Stream error"
+msgstr "Помилка потоку"
+
+#: decoder/dragondecoder.cpp:199
+#, kde-format
+msgid "Failed to initialize media input"
+msgstr "Не вдалося ініціалізувати джерело вхідних мультимедійних даних"
+
+#: decoder/dragondecoder.cpp:203
+#, kde-format
+msgid "Failed to open media container"
+msgstr "Не вдалося відкрити мультимедійний контейнер"
+
+#: decoder/dragondecoder.cpp:207
+#, kde-format
+msgid "No supported audio stream found"
+msgstr "Не знайдено підтримуваного потоку звукових даних"
+
+#: decoder/dragondecoder.cpp:211
+#, kde-format
+msgid "Audio codec setup failed"
+msgstr "Не вдалося налаштувати звуковий кодек"
+
+#: decoder/dragondecoder.cpp:215
+#, kde-format
+msgid "Audio resampler setup failed"
+msgstr "Не вдалося налаштувати засіб передискретизації звукових даних"
+
+#: decoder/dragondecoder.cpp:219
+#, kde-format
+msgid "Failed to allocate decoder resources"
+msgstr "Не вдалося розмістити у пам'яті ресурси засобу декодування"
+
+#: decoder/dragondecoder.cpp:238
+#, kde-format
+msgid "Decoder not initialized"
+msgstr "Засіб декодування не ініціалізовано"
+
+#: decoder/dragondecoder.cpp:518
+#, kde-format
+msgid "Resampler reinitialization failed after seek"
+msgstr ""
+"Після позиціювання не вдалося повторено ініціалізувати засіб "
+"передискретизації"
+
+#: decoder/dragondecoder.cpp:561
+#, kde-format
+msgid "Read error after %1 attempts: %2"
+msgstr "Помилка читання після %1 спроб: %2"
+
+#: player/dragonplayer.cpp:94
+#, kde-format
+msgid "Failed to open the audio output device."
+msgstr "Не вдалося відкрити пристрій виведення звукових даних."
+
+#: player/dragonplayer.cpp:231
+#, kde-format
+msgid "Fatal error while decoding media"
+msgstr "Критична помилка під час декодування мультимедійних даних"
+
+#: player/dragonplayer.cpp:258
+#, kde-format
+msgid "Error while decoding media"
+msgstr "Помилка під час декодування мультимедійних даних"
+
+#: player/dragonplayer.cpp:651
+#, kde-format
+msgid "Failed to open media source"
+msgstr "Не вдалося відкрити джерело мультимедійних даних"
+
+#: player/dragonplayer.cpp:651
+#, kde-format
+msgid "Network error"
+msgstr "Помилка мережі"
+
+#: sink/dragonnullaudiosink.cpp:16
+#, kde-format
+msgid "Could not find any audio sink plugins."
+msgstr "Не вдалося знайти жодного додатка приймачів звукових даних."
+
+#: sink/dragonpipewireaudiosink.cpp:193
+#, kde-format
+msgid "PipeWire: failed to create thread loop"
+msgstr "PipeWire: не вдалося створити цикл потоків"
+
+#: sink/dragonpipewireaudiosink.cpp:231
+#, kde-format
+msgid "PipeWire: failed to create stream"
+msgstr "PipeWire: не вдалося створити потік"
+
+#: sink/dragonpipewireaudiosink.cpp:256
+#, kde-format
+msgid "PipeWire: failed to build audio format"
+msgstr "PipeWire: не вдалося зібрати формат звукових даних"
+
+#: sink/dragonpipewireaudiosink.cpp:265
+#, kde-format
+msgid "PipeWire: failed to connect stream"
+msgstr "PipeWire: не вдалося встановити з'єднання з потоком даних"
+
+#: sink/dragonpipewireaudiosink.cpp:272
+#, kde-format
+msgid "PipeWire: failed to start thread loop"
+msgstr "PipeWire: не вдалося запустити цикл потоків"
+
+#: sink/dragonpulseaudiosink.cpp:248
+#, kde-format
+msgid "PulseAudio: failed to create mainloop"
+msgstr "PulseAudio: не вдалося створити основний цикл"
+
+#: sink/dragonpulseaudiosink.cpp:255
+#, kde-format
+msgid "PulseAudio: failed to start mainloop"
+msgstr "PulseAudio: не вдалося запустити основний цикл"
+
+#: sink/dragonpulseaudiosink.cpp:269
+#, kde-format
+msgid "PulseAudio: failed to get mainloop API"
+msgstr "PulseAudio: не вдалося отримати програмний інтерфейс основного циклу"
+
+#: sink/dragonpulseaudiosink.cpp:294
+#, kde-format
+msgid "PulseAudio: failed to create context"
+msgstr "PulseAudio: не вдалося створити контекст"
+
+#: sink/dragonpulseaudiosink.cpp:304
+#, kde-format
+msgid "PulseAudio: failed to connect context"
+msgstr "PulseAudio: не вдалося встановити з'єднання з контекстом"
+
+#: sink/dragonpulseaudiosink.cpp:316
+#, kde-format
+msgid "PulseAudio: context not ready"
+msgstr "PulseAudio: немає готовності контексту"
+
+#: sink/dragonpulseaudiosink.cpp:414
+#, kde-format
+msgid "PulseAudio: failed to init channel map"
+msgstr "PulseAudio: не вдалося ініціалізувати карту каналів"
+
+#: sink/dragonpulseaudiosink.cpp:423
+#, kde-format
+msgid "PulseAudio: failed to create stream proplist"
+msgstr "PulseAudio: не вдалося створити список властивостей потоку"
+
+#: sink/dragonpulseaudiosink.cpp:442
+#, kde-format
+msgid "PulseAudio: failed to create stream"
+msgstr "PulseAudio: не вдалося створити потік даних"
+
+#: sink/dragonpulseaudiosink.cpp:469
+#, kde-format
+msgid "PulseAudio: failed to connect stream"
+msgstr "PulseAudio: не вдалося встановити з'єднання з потоком даних"
+
+#: sink/dragonpulseaudiosink.cpp:482
+#, kde-format
+msgid "PulseAudio: stream not ready"
+msgstr "PulseAudio: немає готовності потоку даних"
+
+#: stream/cd/dragoncddisc.cpp:111
+#, kde-format
+msgid "The CD has no tracks."
+msgstr "На компакт-диску немає доріжок."
+
+#: stream/cd/dragoncddisc.cpp:148
+#, kde-format
+msgid "The disc is not an Audio CD."
+msgstr "Цей диск не є звуковим компакт-диском."
+
+#: stream/cd/dragoncddisc.cpp:189
+#, kde-format
+msgid "Could not open the CD device. Check that a disc is present."
+msgstr ""
+"Не вдалося відкрити пристрій для читання компакт-дисків. Перевірте, чи "
+"вставлено до нього диск."
+
+#: stream/cd/dragoncdstream.cpp:117
+#, kde-format
+msgid "The audiocd:/ URL does not name a track to play."
+msgstr "Адреса audiocd:/ не містить назви доріжки для відтворення."
+
+#: stream/cd/dragoncdstream.cpp:155
+#, kde-format
+msgid "Track not found on the CD: %1"
+msgstr "Не знайдено доріжки на компакт-диску: %1"
+
+#: stream/cd/dragoncdstream.cpp:159
+#, kde-format
+msgid "CD track %1 is not an audio track."
+msgstr "Доріжка %1 на компакт-диску не є доріжкою звукових даних."
+
+#: stream/cd/dragoncdstream.cpp:166
+#, kde-format
+msgid "Could not determine the length of CD track %1."
+msgstr "Не вдалося визначити тривалість відтворення доріжки %1 компакт-диска."
+
+#: stream/cd/dragoncdstream.cpp:284
+#, kde-format
+msgid "The CD is no longer available."
+msgstr "Доступ до компакт-диска втрачено."
+
+#: stream/cd/dragoncdstream.cpp:289
+#, kde-format
+msgid "Attempted to read past the end of the CD track."
+msgstr "Спроба читання даних за кінцем доріжки компакт-диска."
+
+#: stream/cd/dragoncdstream.cpp:297
+#, kde-format
+msgid "Error reading the CD. The disc may have been ejected."
+msgstr ""
+"Помилка під час читання компакт-диска. Можливо, диск виштовхнуто з пристрою "
+"для читання."
+
+#: stream/cd/dragoncdtocreader.cpp:61
+#, kde-format
+msgid "This build of Dragon Media Backend was made without CD support."
+msgstr ""
+"Цю версію мультимедійного модуля Dragon було зібрано без підтримки компакт-"
+"дисків."
+
+#: stream/http/dragonhttpprotocol.cpp:227 stream/http/dragonhttpsocket.cpp:247
+#: stream/http/dragonhttpsocket.cpp:340
+#, kde-format
+msgid "Malformed response"
+msgstr "Помилкове форматування відповіді"
+
+#: stream/http/dragonhttpsocket.cpp:31
+#, kde-format
+msgid "Stream stopped sending data"
+msgstr "Потік припинив надсилання даних"
+
+#: stream/http/dragonhttpsocket.cpp:88
+#, kde-format
+msgid "Invalid stream URL: %1"
+msgstr "Некоректна адреса потоку: %1"
+
+#: stream/http/dragonhttpsocket.cpp:104 stream/http/dragonhttpsocket.cpp:458
+#, kde-format
+msgid "Connection closed"
+msgstr "З’єднання розірвано"
+
+#: stream/http/dragonhttpsocket.cpp:367 stream/http/dragonhttpsocket.cpp:377
+#, kde-format
+msgid "Server responded with status %1"
+msgstr "Сервер відповів повідомленням про стан %1"
+
+#: stream/http/dragonhttpsocket.cpp:373
+#, kde-format
+msgid "Proxy requires authentication"
+msgstr "Проксі потребує розпізнавання"
+
+#: stream/http/dragonhttpsocket.cpp:384
+#, kde-format
+msgid "Server returned unexpected byte range"
+msgstr "Сервером повернуто неочікуваний діапазон байтів"
+
+#: stream/http/dragonhttpsocket.cpp:389
+#, kde-format
+msgid "Server ignored requested byte range"
+msgstr "Сервером проігноровано запитаний діапазон байтів"
+
+#: stream/http/dragonhttpsocket.cpp:400 stream/http/dragonhttpsocket.cpp:410
+#: stream/http/dragonhttpsocket.cpp:414 stream/http/dragonhttpsocket.cpp:417
+#, kde-format
+msgid "Unusable redirect address"
+msgstr "Непридатна до використання адреса переспрямування"
+
+#: stream/http/dragonhttpsocket.cpp:403
+#, kde-format
+msgid "Too many redirects"
+msgstr "Забагато переспрямовувань"
+
+#: stream/http/dragonradiostream.cpp:246
+#, kde-format
+msgid "Network error: %1"
+msgstr "Помилка мережі: %1"
