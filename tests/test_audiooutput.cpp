@@ -8,13 +8,13 @@
 
 #include "logging_timestamp_init.h"
 
-#include "dragonpipe_test_utils.h"
 #include "helpers/pa_sink_input_props.h"
 #include "helpers/pw_node_props.h"
-#include "player/dragonpipe.h"
-#include "sink/dragonaudiosink.h"
-#include "sink/dragonaudiosinkfactory.h"
-#include "sink/dragonproducerstate.h"
+#include "pipe_test_utils.h"
+#include "player/pipe.h"
+#include "sink/audiosink.h"
+#include "sink/audiosinkfactory.h"
+#include "sink/producerstate.h"
 
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -96,7 +96,7 @@ private Q_SLOTS:
     void testEosPublicationOrderRace();
 
 private:
-    void fillQueue(DragonPipe<float> *pipe, const std::vector<float> &data);
+    void fillQueue(Pipe<float> *pipe, const std::vector<float> &data);
     static QString currentSinkBackend();
     static bool findSinkInputByApplicationName(const QString &appName, uint32_t &sinkInputIndexOut);
     static bool setSinkInputVolume(uint32_t sinkInputIndex, int percent);
@@ -182,7 +182,7 @@ void TestAudioOutput::testVolumeChangedSignal()
 {
     auto output = createAudioSink();
     QVERIFY(output);
-    QSignalSpy spy(output.get(), &DragonAudioSink::volumeChanged);
+    QSignalSpy spy(output.get(), &AudioSink::volumeChanged);
 
     output->setVolume(0.7f);
     QVERIFY(spy.count() > 0);
@@ -191,7 +191,7 @@ void TestAudioOutput::testVolumeChangedSignal()
     output->setVolume(0.7f);
     QVERIFY2(spy.count() == countBefore, "Setting same volume should not emit signal");
 
-    QSignalSpy muteSpy(output.get(), &DragonAudioSink::mutedChanged);
+    QSignalSpy muteSpy(output.get(), &AudioSink::mutedChanged);
     output->setMuted(true);
     QVERIFY(muteSpy.count() > 0);
 }
@@ -200,7 +200,7 @@ void TestAudioOutput::testSetQueue()
 {
     auto output = createAudioSink();
     QVERIFY(output);
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
 
     output->setAudioPipe(&pipe);
     QVERIFY(!output->isDeviceOpen());
@@ -264,7 +264,7 @@ void TestAudioOutput::testStreamNameServerRoundTrip()
         auto fresh = createAudioSink();
         QVERIFY(fresh);
 
-        DragonPipe<float> freshPipe(65536);
+        Pipe<float> freshPipe(65536);
         fresh->setAudioPipe(&freshPipe);
 
         fresh->open(44100, 2);
@@ -305,7 +305,7 @@ void TestAudioOutput::testStreamNameServerRoundTrip()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->setStreamName(u"Dragon Seeded Track"_s);
@@ -401,7 +401,7 @@ void TestAudioOutput::testStreamNameLiveUpdate()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -478,7 +478,7 @@ void TestAudioOutput::testPositionMsCalculation()
     QVERIFY(output->position() == 0ms);
     QVERIFY(output->totalSamplesWritten() == 0);
 
-    output->setPositionOffset(1000ms, DragonAudioSink::PositionResetMode::NormalTrackChange);
+    output->setPositionOffset(1000ms, AudioSink::PositionResetMode::NormalTrackChange);
     QVERIFY2(output->position() == 1000ms, "position() should reflect the offset set via setPositionOffset");
 }
 
@@ -498,7 +498,7 @@ void TestAudioOutput::testReset()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -530,7 +530,7 @@ void TestAudioOutput::testStartStopLifecycle()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -550,7 +550,7 @@ void TestAudioOutput::testMultipleStartStopCycles()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     for (int i = 0; i < 3; ++i) {
@@ -568,7 +568,7 @@ void TestAudioOutput::testAudioDataProcessing()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     std::vector<float> audioData(4096, 0.5f);
@@ -592,7 +592,7 @@ void TestAudioOutput::testPositionTrackingWithData()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -617,7 +617,7 @@ void TestAudioOutput::testQueueBehavior()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
 
     output->setAudioPipe(&pipe);
     QVERIFY(!output->isDeviceOpen());
@@ -626,7 +626,7 @@ void TestAudioOutput::testQueueBehavior()
     if (!output2)
         QSKIP("No audio sink available");
 
-    DragonPipe<float> pipe2(65536);
+    Pipe<float> pipe2(65536);
     output2->setAudioPipe(&pipe2);
     output2->open(44100, 2);
     QVERIFY2(output2->isDeviceOpen(), "Second sink device should be open after open()");
@@ -645,7 +645,7 @@ void TestAudioOutput::testStartWhileAlreadyStarted()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -663,7 +663,7 @@ void TestAudioOutput::testStopWithActiveCallbacks()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -687,7 +687,7 @@ void TestAudioOutput::testRapidStartStopCycles()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     for (int i = 0; i < 10; ++i) {
@@ -713,7 +713,7 @@ void TestAudioOutput::testStopDuringStarvation()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -754,7 +754,7 @@ void TestAudioOutput::testFlushOpensGate()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -766,7 +766,7 @@ void TestAudioOutput::testFlushOpensGate()
     output->setQueueReady(false);
     QVERIFY(!output->isQueueReady());
 
-    output->setPositionOffset(0ms, DragonAudioSink::PositionResetMode::NormalTrackChange);
+    output->setPositionOffset(0ms, AudioSink::PositionResetMode::NormalTrackChange);
 
     QTest::qWait(100);
 
@@ -783,7 +783,7 @@ void TestAudioOutput::testStartPaused()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -810,7 +810,7 @@ void TestAudioOutput::testPauseResumeCycle()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -853,7 +853,7 @@ void TestAudioOutput::testIsPausedBasic()
 
     QVERIFY(!output->isPaused());
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -874,7 +874,7 @@ void TestAudioOutput::testIsPausedAfterStop()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -891,7 +891,7 @@ void TestAudioOutput::testSeekWhilePaused()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -912,7 +912,7 @@ void TestAudioOutput::testSeekWhilePaused()
     QVERIFY(!output->isQueueReady());
 
     const std::chrono::milliseconds seekTarget{30000};
-    output->setPositionOffset(seekTarget, DragonAudioSink::PositionResetMode::Seek);
+    output->setPositionOffset(seekTarget, AudioSink::PositionResetMode::Seek);
 
     const std::chrono::milliseconds posAfterSeek = output->position();
     QCOMPARE(posAfterSeek, seekTarget);
@@ -932,7 +932,7 @@ void TestAudioOutput::testPositionStabilityDuringPause()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -963,7 +963,7 @@ void TestAudioOutput::testPositionAdvancesSmoothlyDuringPlayback()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(1 << 19);
+    Pipe<float> pipe(1 << 19);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -997,7 +997,7 @@ void TestAudioOutput::testPositionAdvancesSmoothlyDuringPlayback()
     }
 }
 
-void TestAudioOutput::fillQueue(DragonPipe<float> *pipe, const std::vector<float> &data)
+void TestAudioOutput::fillQueue(Pipe<float> *pipe, const std::vector<float> &data)
 {
     pipe->producer().write(data, std::stop_token{});
 }
@@ -1115,10 +1115,10 @@ void TestAudioOutput::testDrainCallback()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
-    QSignalSpy drainSpy(output.get(), &DragonAudioSink::drained);
+    QSignalSpy drainSpy(output.get(), &AudioSink::drained);
     QCOMPARE(drainSpy.count(), 0);
 
     output->open(44100, 2);
@@ -1148,7 +1148,7 @@ void TestAudioOutput::testDrainCallback()
 
     QVERIFY(!output->boundaryEndOfStream());
 
-    output->setPositionOffset(std::chrono::milliseconds{0}, DragonAudioSink::PositionResetMode::NormalTrackChange);
+    output->setPositionOffset(std::chrono::milliseconds{0}, AudioSink::PositionResetMode::NormalTrackChange);
     output->resume();
 
     fillQueue(&pipe, std::vector<float>(8820, 0.5f));
@@ -1180,10 +1180,10 @@ void TestAudioOutput::testDrainRepeatCycles()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
-    QSignalSpy drainSpy(output.get(), &DragonAudioSink::drained);
+    QSignalSpy drainSpy(output.get(), &AudioSink::drained);
     output->open(44100, 2);
     QVERIFY(output->isDeviceOpen());
 
@@ -1210,7 +1210,7 @@ void TestAudioOutput::testDrainRepeatCycles()
         QTest::qWait(50);
         QCOMPARE(drainSpy.count(), countBefore + 1);
 
-        output->setPositionOffset(std::chrono::milliseconds{0}, DragonAudioSink::PositionResetMode::NormalTrackChange);
+        output->setPositionOffset(std::chrono::milliseconds{0}, AudioSink::PositionResetMode::NormalTrackChange);
         output->resume();
     }
 
@@ -1222,10 +1222,10 @@ void TestAudioOutput::testBoundaryStaleEpochTagDiscarded()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
-    QSignalSpy trackSpy(output.get(), &DragonAudioSink::trackStarted);
+    QSignalSpy trackSpy(output.get(), &AudioSink::trackStarted);
     QCOMPARE(trackSpy.count(), 0);
 
     output->open(44100, 2);
@@ -1238,7 +1238,7 @@ void TestAudioOutput::testBoundaryStaleEpochTagDiscarded()
 
     QTRY_COMPARE_WITH_TIMEOUT(trackSpy.count(), 1, 5000);
 
-    output->setPositionOffset(std::chrono::milliseconds{0}, DragonAudioSink::PositionResetMode::Seek);
+    output->setPositionOffset(std::chrono::milliseconds{0}, AudioSink::PositionResetMode::Seek);
     QTRY_VERIFY2(output->streamEpoch() > epoch, "flush should bump the stream epoch");
 
     fillQueue(&pipe, std::vector<float>(8820, 0.5f));
@@ -1260,7 +1260,7 @@ void TestAudioOutput::testBoundaryStaleEpochTagDiscarded()
 
 void TestAudioOutput::testProducerStateUnit()
 {
-    DragonProducerState state{1};
+    ProducerState state{1};
     QCOMPARE(state.epoch(), 1);
     QCOMPARE(state.samples(), 0);
 
@@ -1291,8 +1291,8 @@ void TestAudioOutput::testProducerStateUnit()
     QCOMPARE(state.samples(), 400);
 
     // Test epoch wrap-around at kEpochMask: wraps to 1 (never 0)
-    state.reset(DragonProducerState::kEpochMask, 1000);
-    QCOMPARE(state.epoch(), DragonProducerState::kEpochMask);
+    state.reset(ProducerState::kEpochMask, 1000);
+    QCOMPARE(state.epoch(), ProducerState::kEpochMask);
     QCOMPARE(state.samples(), 1000);
     const auto wrappedEpoch = state.bumpEpoch();
     QCOMPARE(wrappedEpoch, 1);
@@ -1305,7 +1305,7 @@ void TestAudioOutput::testSamplesProducedStaleEpochDiscarded()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -1319,7 +1319,7 @@ void TestAudioOutput::testSamplesProducedStaleEpochDiscarded()
     QCOMPARE(output->producerSamples(), 1000);
 
     // Flush supersedes the epoch and resets producerSamples to 0
-    output->setPositionOffset(std::chrono::milliseconds{0}, DragonAudioSink::PositionResetMode::Seek);
+    output->setPositionOffset(std::chrono::milliseconds{0}, AudioSink::PositionResetMode::Seek);
     QTRY_VERIFY2(output->streamEpoch() > initialEpoch, "flush should bump the stream epoch");
     QCOMPARE(output->producerSamples(), 0);
 
@@ -1337,7 +1337,7 @@ void TestAudioOutput::testSamplesProducedStaleEpochDiscarded()
 
 void TestAudioOutput::testSamplesProducedConcurrentFlushRace()
 {
-    DragonProducerState state{1};
+    ProducerState state{1};
     std::atomic<bool> stop{false};
 
     // Thread A: repeatedly loads epoch and calls addSamples
@@ -1368,10 +1368,10 @@ void TestAudioOutput::testSamplesProducedConcurrentFlushRace()
 
 void TestAudioOutput::testEosPublicationOrderRace()
 {
-    class TestSink : public DragonAudioSink
+    class TestSink : public AudioSink
     {
     public:
-        using DragonAudioSink::processAudioCallback;
+        using AudioSink::processAudioCallback;
         bool probe() override
         {
             return true;
@@ -1409,7 +1409,7 @@ void TestAudioOutput::testEosPublicationOrderRace()
     };
 
     TestSink sink;
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     sink.setAudioPipe(&pipe);
 
     std::atomic<bool> stop{false};
@@ -1429,7 +1429,7 @@ void TestAudioOutput::testEosPublicationOrderRace()
         sink.boundaryEndOfStream();
 
         // Flush resets counters and m_eosState to None, but leaves m_eosSample = 50
-        sink.setPositionOffset(0ms, DragonAudioSink::PositionResetMode::Seek);
+        sink.setPositionOffset(0ms, AudioSink::PositionResetMode::Seek);
         sink.processAudioCallback(0, 0us);
 
         // Stream 2: consumer reads 100 samples
@@ -1444,7 +1444,7 @@ void TestAudioOutput::testEosPublicationOrderRace()
         sink.retractEndOfStream();
 
         // Flush for next iteration
-        sink.setPositionOffset(0ms, DragonAudioSink::PositionResetMode::Seek);
+        sink.setPositionOffset(0ms, AudioSink::PositionResetMode::Seek);
         sink.processAudioCallback(0, 0us);
     }
 
@@ -1460,7 +1460,7 @@ void TestAudioOutput::testVolumeChangeWhilePlaying()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->open(44100, 2);
@@ -1469,7 +1469,7 @@ void TestAudioOutput::testVolumeChangeWhilePlaying()
     fillQueue(&pipe, std::vector<float>(8192, 0.5f));
     QTest::qWait(100);
 
-    QSignalSpy spy(output.get(), &DragonAudioSink::volumeChanged);
+    QSignalSpy spy(output.get(), &AudioSink::volumeChanged);
     spy.clear();
 
     output->setVolume(0.4f);
@@ -1478,10 +1478,10 @@ void TestAudioOutput::testVolumeChangeWhilePlaying()
 
     spy.clear();
     bool signalReceived = false;
-    QObject::connect(output.get(), &DragonAudioSink::mutedChanged, [&signalReceived](bool) {
+    QObject::connect(output.get(), &AudioSink::mutedChanged, [&signalReceived](bool) {
         signalReceived = true;
     });
-    QSignalSpy muteSpy(output.get(), &DragonAudioSink::mutedChanged);
+    QSignalSpy muteSpy(output.get(), &AudioSink::mutedChanged);
 
     // The PipeWire/PulseAudio server may report an initial mute state during
     // stream setup. Reset to a known unmuted state before testing the mute
@@ -1522,7 +1522,7 @@ void TestAudioOutput::testExternalVolumeChangePropagates()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->setStreamName(uniqueTag);
@@ -1534,7 +1534,7 @@ void TestAudioOutput::testExternalVolumeChangePropagates()
 
     const float initialVolume = output->volume();
 
-    QSignalSpy spy(output.get(), &DragonAudioSink::volumeChanged);
+    QSignalSpy spy(output.get(), &AudioSink::volumeChanged);
 
     bool changed = false;
     if (backend == u"dragonpulseaudiosink"_s) {
@@ -1567,7 +1567,7 @@ void TestAudioOutput::testExternalVolumeChangePropagates()
                 return spy.count() > 0 && qAbs(output->volume() - initialVolume) > 0.05f;
             },
             5000);
-        QVERIFY2(propagated, "External volume change should propagate to DragonAudioSink::volumeChanged()");
+        QVERIFY2(propagated, "External volume change should propagate to AudioSink::volumeChanged()");
     }
 
     output->close();
@@ -1590,7 +1590,7 @@ void TestAudioOutput::testExternalMuteChangePropagates()
     auto output = createAudioSink();
     QVERIFY(output);
 
-    DragonPipe<float> pipe(65536);
+    Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
 
     output->setStreamName(uniqueTag);
@@ -1605,7 +1605,7 @@ void TestAudioOutput::testExternalMuteChangePropagates()
     QTest::qWait(200);
     QVERIFY(!output->muted());
 
-    QSignalSpy spy(output.get(), &DragonAudioSink::mutedChanged);
+    QSignalSpy spy(output.get(), &AudioSink::mutedChanged);
 
     bool changed = false;
     if (backend == u"dragonpulseaudiosink"_s) {
@@ -1638,7 +1638,7 @@ void TestAudioOutput::testExternalMuteChangePropagates()
                 return spy.count() > 0 && output->muted();
             },
             5000);
-        QVERIFY2(propagated, "External mute change should propagate to DragonAudioSink::mutedChanged()");
+        QVERIFY2(propagated, "External mute change should propagate to AudioSink::mutedChanged()");
     }
 
     spy.clear();
@@ -1674,7 +1674,7 @@ void TestAudioOutput::testExternalMuteChangePropagates()
                 return spy.count() > 0 && !output->muted();
             },
             5000);
-        QVERIFY2(propagated, "External unmute change should propagate to DragonAudioSink::mutedChanged()");
+        QVERIFY2(propagated, "External unmute change should propagate to AudioSink::mutedChanged()");
     }
 
     output->close();

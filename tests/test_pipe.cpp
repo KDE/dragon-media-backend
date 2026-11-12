@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  */
 
-#include "dragonpipe_test_utils.h"
-#include "player/dragonpipe.h"
+#include "pipe_test_utils.h"
+#include "player/pipe.h"
 
 #include <QtTest>
 
@@ -28,20 +28,20 @@ private Q_SLOTS:
 
     void testDefaultCapacity()
     {
-        DragonPipe<float> pipe;
+        Pipe<float> pipe;
         QCOMPARE_EQ(pipe.producer().available(), size_t{65536});
         QCOMPARE_EQ(pipe.consumer().ready(), size_t{0});
     }
 
     void testCustomCapacity()
     {
-        DragonPipe<float> pipe(256);
+        Pipe<float> pipe(256);
         QCOMPARE_EQ(pipe.producer().available(), size_t{256});
     }
 
     void testWriteReadSome()
     {
-        DragonPipe<float> pipe(1024);
+        Pipe<float> pipe(1024);
 
         std::array<float, 8> input;
         std::ranges::generate(input, [n = 1.0f]() mutable {
@@ -67,7 +67,7 @@ private Q_SLOTS:
 
     void testNonBlockingWriteSmallData()
     {
-        DragonPipe<float> pipe(16);
+        Pipe<float> pipe(16);
 
         std::array<float, 8> data;
         std::ranges::generate(data, [n = 1.0f]() mutable {
@@ -82,7 +82,7 @@ private Q_SLOTS:
 
     void testBlockingWriteBackpressure()
     {
-        DragonPipe<float> pipe(16);
+        Pipe<float> pipe(16);
 
         std::array<float, 64> data;
         std::ranges::generate(data, [n = 1.0f]() mutable {
@@ -122,7 +122,7 @@ private Q_SLOTS:
 
     void testBlockingWriteStopRequested()
     {
-        DragonPipe<float> pipe(8);
+        Pipe<float> pipe(8);
 
         std::vector<float> big(1000, 1.0f);
 
@@ -141,7 +141,7 @@ private Q_SLOTS:
 
     void testWaitForWakesOnData()
     {
-        DragonPipe<float> pipe(256);
+        Pipe<float> pipe(256);
 
         std::stop_source ss;
 
@@ -160,7 +160,7 @@ private Q_SLOTS:
 
     void testWaitForTimeout()
     {
-        DragonPipe<float> pipe(64);
+        Pipe<float> pipe(64);
 
         std::stop_source ss;
 
@@ -170,7 +170,7 @@ private Q_SLOTS:
 
     void testWaitForStopRequested()
     {
-        DragonPipe<float> pipe(64);
+        Pipe<float> pipe(64);
 
         std::stop_source ss;
 
@@ -188,7 +188,7 @@ private Q_SLOTS:
 
     void testDrain()
     {
-        DragonPipe<float> pipe(128);
+        Pipe<float> pipe(128);
 
         std::array<float, 16> data;
         std::ranges::generate(data, [n = 1.0f]() mutable {
@@ -203,7 +203,7 @@ private Q_SLOTS:
 
     void testWriteAbortWhileParkedOnFullPipe()
     {
-        DragonPipe<float> pipe(16);
+        Pipe<float> pipe(16);
 
         std::array<float, 16> fill{};
         writeAll(pipe.producer(), fill);
@@ -232,7 +232,7 @@ private Q_SLOTS:
 
     void testWriteAbortBeforeStart()
     {
-        DragonPipe<float> pipe(64);
+        Pipe<float> pipe(64);
 
         std::atomic<uint64_t> generation{1};
 
@@ -248,7 +248,7 @@ private Q_SLOTS:
 
     void testProducerNotify()
     {
-        DragonPipe<float> pipe(128);
+        Pipe<float> pipe(128);
 
         std::stop_source ss;
         std::atomic<bool> enteredWait{false};
@@ -272,7 +272,7 @@ private Q_SLOTS:
 
     void testAvailable()
     {
-        DragonPipe<float> pipe(16);
+        Pipe<float> pipe(16);
         QCOMPARE_EQ(pipe.producer().available(), size_t{16});
 
         std::array<float, 4> d;
@@ -282,7 +282,7 @@ private Q_SLOTS:
 
     void testWrapAround()
     {
-        DragonPipe<float> pipe(64);
+        Pipe<float> pipe(64);
 
         std::array<float, 70> writeBuf;
         std::ranges::generate(writeBuf, [n = 1.0f]() mutable {
@@ -320,7 +320,7 @@ private Q_SLOTS:
 
     void testWriteSomeWith()
     {
-        DragonPipe<float> pipe(64);
+        Pipe<float> pipe(64);
 
         size_t n = pipe.producer().writeSomeWith(8, [](std::span<float> b1, std::span<float> b2) {
             for (size_t i = 0; i < b1.size(); ++i)
@@ -346,7 +346,7 @@ private Q_SLOTS:
 
     void testMultiThreadedCycle()
     {
-        DragonPipe<float> pipe(256);
+        Pipe<float> pipe(256);
 
         constexpr int kRounds = 5;
         constexpr int kBatchSize = 16;

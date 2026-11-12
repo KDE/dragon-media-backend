@@ -19,8 +19,8 @@
 #include "helpers/gapless_test_utils.h"
 #include "test_utils.h"
 
-#include "player/dragondiagnostics.h"
-#include "sink/dragonaudiosink.h"
+#include "player/diagnostics.h"
+#include "sink/audiosink.h"
 #include <DragonPlayer>
 
 #include <cmath>
@@ -110,7 +110,7 @@ void TestSdlGapless::testGaplessSameFormat()
     QFile::remove(m_pcmCapturePath);
 
     DragonPlayer player;
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
     PlayerHelper helper(&player);
     auto trackSpy = SignalSpyHelper::trackSpy(&player);
 
@@ -153,7 +153,7 @@ void TestSdlGapless::testGaplessFormatChangeStateMachine()
     };
 
     DragonPlayer player;
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
     PlayerHelper helper(&player);
     auto trackSpy = SignalSpyHelper::trackSpy(&player);
 
@@ -178,7 +178,7 @@ void TestSdlGapless::testTrackChangeAtAudibleBoundary()
     };
 
     DragonPlayer player;
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
     PlayerHelper helper(&player);
 
     qint64 samplesReadAtTrackChange = -1;
@@ -226,7 +226,7 @@ void TestSdlGapless::testFormatChangePlaysAtNativeRate()
     };
 
     DragonPlayer player;
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
     PlayerHelper helper(&player);
 
     QElapsedTimer timer;
@@ -276,7 +276,7 @@ void TestSdlGapless::testSingleTrackIntegrity()
     QFile::remove(m_pcmCapturePath);
 
     DragonPlayer player;
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
     PlayerHelper helper(&player);
     QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(fixture.filePath)));
     QVERIFY(helper.playAndWait());
@@ -347,7 +347,7 @@ void TestSdlGapless::testTrackStartNotWiped()
 
     {
         DragonPlayer player;
-        DragonDiagnostics diagnostics(&player);
+        Diagnostics diagnostics(&player);
         PlayerHelper helper(&player);
         QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(fixtureA.filePath)));
         QVERIFY(helper.playAndWait());
@@ -387,7 +387,7 @@ void TestSdlGapless::testTrackStartNotWiped()
 
     {
         DragonPlayer player;
-        DragonDiagnostics diagnostics(&player);
+        Diagnostics diagnostics(&player);
         PlayerHelper helper(&player);
         QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(fixtureA.filePath)));
         QVERIFY(helper.playAndWait());

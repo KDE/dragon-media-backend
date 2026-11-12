@@ -18,7 +18,7 @@
 #include "helpers/pw_capture_stream.h"
 #include "test_utils.h"
 
-#include "player/dragondiagnostics.h"
+#include "player/diagnostics.h"
 #include <DragonPlayer>
 
 using namespace Qt::StringLiterals;
@@ -80,7 +80,7 @@ void TestPulseGapless::testGaplessSameFormat()
     qDebug() << "Capture stream connected, waiting for data flow...";
 
     DragonPlayer player;
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
     PlayerHelper helper(&player);
 
     auto waitForCapture = [&capture]() {

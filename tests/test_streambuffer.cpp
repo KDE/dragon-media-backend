@@ -7,9 +7,9 @@
 #include <QtTest>
 
 #include "logging_timestamp_init.h"
-#include "stream/dragonbufferprogress.h"
-#include "stream/dragonstream.h"
-#include "stream/dragonstreambuffer.h"
+#include "stream/bufferprogress.h"
+#include "stream/stream.h"
+#include "stream/streambuffer.h"
 
 #include <array>
 #include <atomic>
@@ -19,13 +19,13 @@
 
 using namespace Qt::StringLiterals;
 
-// Dummy stream to test signal forwarding from DragonStreamBuffer
-class MockStream : public DragonStream
+// Dummy stream to test signal forwarding from StreamBuffer
+class MockStream : public Stream
 {
     Q_OBJECT
 public:
     explicit MockStream(QObject *parent = nullptr)
-        : DragonStream(parent)
+        : Stream(parent)
     {
     }
 
@@ -42,7 +42,7 @@ public:
     {
         return 0;
     }
-    DragonBufferProgress *bufferProgress() const override
+    BufferProgress *bufferProgress() const override
     {
         return nullptr;
     }
@@ -75,7 +75,7 @@ private Q_SLOTS:
 
 void TestStreamBuffer::testInitialState()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     QCOMPARE(buffer.depth(), 0);
     QCOMPARE(buffer.position(), 0);
     QCOMPARE(buffer.totalSize(), -1);
@@ -90,7 +90,7 @@ void TestStreamBuffer::testInitialState()
 
 void TestStreamBuffer::testBasicReadWrite()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     const QByteArray data = "Hello, world!";
 
     const auto writeRes = buffer.write(data);
@@ -111,7 +111,7 @@ void TestStreamBuffer::testBasicReadWrite()
 
 void TestStreamBuffer::testMultipleWritesSingleRead()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     const QByteArray chunk1 = "Chunk One; ";
     const QByteArray chunk2 = "Chunk Two; ";
     const QByteArray chunk3 = "Chunk Three.";
@@ -134,7 +134,7 @@ void TestStreamBuffer::testMultipleWritesSingleRead()
 
 void TestStreamBuffer::testSingleWriteMultipleReads()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     const QByteArray data = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
     buffer.write(data);
 
@@ -155,7 +155,7 @@ void TestStreamBuffer::testSingleWriteMultipleReads()
 
 void TestStreamBuffer::testEmptySpan()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     const auto emptyRes = buffer.write(QByteArray{});
     QCOMPARE(emptyRes.newDepth, 0);
     QVERIFY(!emptyRes.exitedBuffering);
@@ -177,7 +177,7 @@ void TestStreamBuffer::testEmptySpan()
 
 void TestStreamBuffer::testReadAfterFinishWithRemainingData()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     buffer.write(QByteArray("Hello"));
     buffer.setFinished();
     QVERIFY(buffer.isFinished());
@@ -194,12 +194,12 @@ void TestStreamBuffer::testReadAfterFinishWithRemainingData()
 
 void TestStreamBuffer::testWatermarkTransitions()
 {
-    DragonStreamBuffer buffer(nullptr,
-                              DragonStreamBufferOptions{
-                                  .lowWaterMark = 0,
-                                  .highWaterMark = 100,
-                                  .maxBufferBytes = 1000,
-                              });
+    StreamBuffer buffer(nullptr,
+                        StreamBufferOptions{
+                            .lowWaterMark = 0,
+                            .highWaterMark = 100,
+                            .maxBufferBytes = 1000,
+                        });
 
     auto wRes = buffer.write(QByteArray(50, 'a'));
     QCOMPARE(wRes.newDepth, 50);
@@ -232,12 +232,12 @@ void TestStreamBuffer::testWatermarkTransitions()
 
 void TestStreamBuffer::testBackpressureDetection()
 {
-    DragonStreamBuffer buffer(nullptr,
-                              DragonStreamBufferOptions{
-                                  .lowWaterMark = 0,
-                                  .highWaterMark = 100,
-                                  .maxBufferBytes = 500,
-                              });
+    StreamBuffer buffer(nullptr,
+                        StreamBufferOptions{
+                            .lowWaterMark = 0,
+                            .highWaterMark = 100,
+                            .maxBufferBytes = 500,
+                        });
 
     std::atomic<bool> backpressureRelievedCalled{false};
     buffer.setBackpressureRelievedCallback([&]() {
@@ -273,7 +273,7 @@ void TestStreamBuffer::testBackpressureDetection()
 
 void TestStreamBuffer::testBlockingReadUnblockedByWrite()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     std::stop_source ss;
     std::atomic<int> readBytes{0};
     const QByteArray payload = "payload data";
@@ -295,7 +295,7 @@ void TestStreamBuffer::testBlockingReadUnblockedByWrite()
 
 void TestStreamBuffer::testBlockingReadUnblockedByAbort()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     std::stop_source ss;
     std::atomic<int> readResult{0};
 
@@ -314,7 +314,7 @@ void TestStreamBuffer::testBlockingReadUnblockedByAbort()
 
 void TestStreamBuffer::testBlockingReadUnblockedByError()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     std::stop_source ss;
     std::atomic<int> readResult{0};
 
@@ -333,7 +333,7 @@ void TestStreamBuffer::testBlockingReadUnblockedByError()
 
 void TestStreamBuffer::testBlockingReadUnblockedByFinish()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     std::stop_source ss;
     std::atomic<int> readResult{-99};
 
@@ -352,7 +352,7 @@ void TestStreamBuffer::testBlockingReadUnblockedByFinish()
 
 void TestStreamBuffer::testStopTokenCancellation()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     std::stop_source ss;
     std::atomic<int> readResult{0};
 
@@ -370,7 +370,7 @@ void TestStreamBuffer::testStopTokenCancellation()
 
 void TestStreamBuffer::testReset()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     buffer.write(QByteArray("data"));
     buffer.abort();
     QVERIFY(buffer.isAborted());
@@ -387,7 +387,7 @@ void TestStreamBuffer::testReset()
 
 void TestStreamBuffer::testPositionTracking()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     QCOMPARE(buffer.position(), 0);
 
     buffer.setPosition(100);
@@ -406,7 +406,7 @@ void TestStreamBuffer::testPositionTracking()
 
 void TestStreamBuffer::testTotalSize()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     QCOMPARE(buffer.totalSize(), -1);
 
     buffer.setTotalSize(1048576);
@@ -415,7 +415,7 @@ void TestStreamBuffer::testTotalSize()
 
 void TestStreamBuffer::testBufferProgress()
 {
-    DragonStreamBuffer buffer;
+    StreamBuffer buffer;
     QVERIFY(buffer.bufferProgress() != nullptr);
 
     buffer.bufferProgress()->setBytesReceived(2048);
@@ -426,16 +426,16 @@ void TestStreamBuffer::testBufferProgress()
 void TestStreamBuffer::testStreamSignalIntegration()
 {
     MockStream stream;
-    DragonStreamBuffer buffer(&stream,
-                              DragonStreamBufferOptions{
-                                  .lowWaterMark = 0,
-                                  .highWaterMark = 100,
-                                  .maxBufferBytes = 500,
-                              });
+    StreamBuffer buffer(&stream,
+                        StreamBufferOptions{
+                            .lowWaterMark = 0,
+                            .highWaterMark = 100,
+                            .maxBufferBytes = 500,
+                        });
 
-    QSignalSpy bufferingSpy(&stream, &DragonStream::streamBuffering);
-    QSignalSpy bufferedSpy(&stream, &DragonStream::streamBuffered);
-    QSignalSpy errorSpy(&stream, &DragonStream::errorOccurred);
+    QSignalSpy bufferingSpy(&stream, &Stream::streamBuffering);
+    QSignalSpy bufferedSpy(&stream, &Stream::streamBuffered);
+    QSignalSpy errorSpy(&stream, &Stream::errorOccurred);
 
     buffer.write(QByteArray(50, 'x'));
     QCOMPARE(bufferedSpy.count(), 0);

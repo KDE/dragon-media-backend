@@ -5,7 +5,7 @@
 
 #include <dragoncdtoc.h>
 
-#include "dragoncdframes.h"
+#include "cdframes.h"
 #include "dragoncdtoc_p.h"
 
 #include <utility>
@@ -62,7 +62,7 @@ int DragonCdToc::leadOutFrame() const
 
 std::chrono::milliseconds DragonCdToc::discDuration() const
 {
-    return DragonCdFrames::framesToDuration(qint64(d->leadOutFrame) - DragonCdFrames::kLeadInFrames);
+    return CdFrames::framesToDuration(qint64(d->leadOutFrame) - CdFrames::kLeadInFrames);
 }
 
 QList<quint32> DragonCdToc::cddbTrackOffsetList() const

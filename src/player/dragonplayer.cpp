@@ -5,9 +5,9 @@
 
 #include "dragonplayer_p.h"
 
-#include "dragonpositionestimator.h"
-#include "sink/dragonaudiosinkfactory.h"
-#include "stream/dragonstreamfactory.h"
+#include "positionestimator.h"
+#include "sink/audiosinkfactory.h"
+#include "stream/streamfactory.h"
 #include <dragonaudiooutput.h>
 #include <dragonfftframe.h>
 #include <dragonplayer.h>
@@ -119,7 +119,7 @@ void DragonPlayerPrivate::applyPendingTrack(const PendingTrack &pending)
     currentSource = pending.url;
     aboutToFinishEmitted = false;
     qCDebug(dragonMediaBackendPlayer) << "applyPendingTrack: reset aboutToFinishEmitted for" << currentSource.toString();
-    currentIsLocal = DragonStreamFactory::isLocalSource(currentSource);
+    currentIsLocal = StreamFactory::isLocalSource(currentSource);
     currentSeekable = pending.seekable;
     currentDuration = pending.duration;
     currentSampleRate = pending.sampleRate;
@@ -164,12 +164,12 @@ void DragonPlayerPrivate::onSinkFormatChangeRequired(int sampleRate, int channel
     sink->setQueueReady(!sink->isFlushPending());
 }
 
-bool DragonPlayerPrivate::onPipelineBoundary(const DragonDecodePipeline::BoundaryEvent &event)
+bool DragonPlayerPrivate::onPipelineBoundary(const DecodePipeline::BoundaryEvent &event)
 {
-    DragonAudioSink *sink = audioOutput ? audioOutput->sink() : nullptr;
+    AudioSink *sink = audioOutput ? audioOutput->sink() : nullptr;
 
     switch (event.kind) {
-    case DragonDecodePipeline::BoundaryEvent::Kind::TrackStart: {
+    case DecodePipeline::BoundaryEvent::Kind::TrackStart: {
         if (!sink) {
             return true;
         }
@@ -202,7 +202,7 @@ bool DragonPlayerPrivate::onPipelineBoundary(const DragonDecodePipeline::Boundar
         }
         return true;
     }
-    case DragonDecodePipeline::BoundaryEvent::Kind::EndOfStream:
+    case DecodePipeline::BoundaryEvent::Kind::EndOfStream:
         if (sink && !sink->boundaryEndOfStream()) {
             qCWarning(dragonMediaBackendPlayer) << "boundary: could not arm end of stream (one is already armed or claimed)";
         }
@@ -318,7 +318,7 @@ void DragonPlayerPrivate::writeToQueues(std::span<const float> pcm, const std::s
     }
 
     const uint64_t generation = contentGeneration.load(std::memory_order_acquire);
-    DragonAudioSink *sink = audioOutput ? audioOutput->sink() : nullptr;
+    AudioSink *sink = audioOutput ? audioOutput->sink() : nullptr;
     const std::uint64_t streamEpoch = sink ? sink->streamEpoch() : 0;
     if (sink) {
         // The epoch the producer last observed; TrackStart boundaries are
@@ -424,7 +424,7 @@ void DragonPlayerPrivate::stopPipeline()
     qCDebug(dragonMediaBackendPlayer) << "stopPipeline() teardown complete";
 }
 
-DragonAudioSink *DragonPlayerPrivate::audioSink() const
+AudioSink *DragonPlayerPrivate::audioSink() const
 {
     return audioOutput ? audioOutput->sink() : nullptr;
 }
@@ -437,15 +437,15 @@ void DragonPlayerPrivate::init()
         audioOutput->sink()->setFftPipe(nullptr);
     }
 
-    positionEstimator = new DragonPositionEstimator(this);
+    positionEstimator = new PositionEstimator(this);
     positionEstimator->setDevicePositionCallback([this]() -> std::optional<std::chrono::milliseconds> {
         if (audioOutput && audioOutput->sink() && audioOutput->sink()->isDeviceOpen()) {
             return audioOutput->sink()->position();
         }
         return std::nullopt;
     });
-    connect(positionEstimator, &DragonPositionEstimator::positionChanged, q, &DragonPlayer::positionChanged);
-    connect(positionEstimator, &DragonPositionEstimator::positionChanged, this, [this](std::chrono::milliseconds pos) {
+    connect(positionEstimator, &PositionEstimator::positionChanged, q, &DragonPlayer::positionChanged);
+    connect(positionEstimator, &PositionEstimator::positionChanged, this, [this](std::chrono::milliseconds pos) {
         if (prefinishMark <= 0ms) {
             return;
         }
@@ -459,11 +459,11 @@ void DragonPlayerPrivate::init()
         }
     });
 
-    connect(audioOutput->sink(), &DragonAudioSink::errorOccurred, this, [this](const QString &message) {
+    connect(audioOutput->sink(), &AudioSink::errorOccurred, this, [this](const QString &message) {
         setError(DragonPlayer::Error::ResourceError, message);
     });
 
-    connect(audioOutput->sink(), &DragonAudioSink::drained, this, [this]() {
+    connect(audioOutput->sink(), &AudioSink::drained, this, [this]() {
         if (decodePipeline.isActive()) {
             qCDebug(dragonMediaBackendPlayer) << "drained ignored, decode session still active (stale drain from previous track)";
             return;
@@ -493,30 +493,30 @@ void DragonPlayerPrivate::init()
         }
     });
 
-    connect(audioOutput->sink(), &DragonAudioSink::trackStarted, this, &DragonPlayerPrivate::onSinkTrackStarted, Qt::QueuedConnection);
+    connect(audioOutput->sink(), &AudioSink::trackStarted, this, &DragonPlayerPrivate::onSinkTrackStarted, Qt::QueuedConnection);
 
-    connect(audioOutput->sink(), &DragonAudioSink::formatChangeRequired, this, &DragonPlayerPrivate::onSinkFormatChangeRequired, Qt::QueuedConnection);
+    connect(audioOutput->sink(), &AudioSink::formatChangeRequired, this, &DragonPlayerPrivate::onSinkFormatChangeRequired, Qt::QueuedConnection);
 
     decodePipeline.setSamplesCallback([this](auto samples, const std::stop_token &st) {
         writeToQueues(samples, st);
     });
 
-    decodePipeline.setBoundaryCallback([this](const DragonDecodePipeline::BoundaryEvent &event) {
+    decodePipeline.setBoundaryCallback([this](const DecodePipeline::BoundaryEvent &event) {
         return onPipelineBoundary(event);
     });
 
-    connect(&decodePipeline, &DragonDecodePipeline::sessionError, this, &DragonPlayerPrivate::onDecodeError, Qt::QueuedConnection);
+    connect(&decodePipeline, &DecodePipeline::sessionError, this, &DragonPlayerPrivate::onDecodeError, Qt::QueuedConnection);
 
-    connect(&decodePipeline, &DragonDecodePipeline::sessionFinished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
+    connect(&decodePipeline, &DecodePipeline::sessionFinished, this, &DragonPlayerPrivate::onDecodeFinished, Qt::QueuedConnection);
 
-    connect(&decodePipeline, &DragonDecodePipeline::streamStalled, this, &DragonPlayerPrivate::onStreamStalled, Qt::QueuedConnection);
-    connect(&decodePipeline, &DragonDecodePipeline::streamBuffering, this, &DragonPlayerPrivate::onStreamBuffering, Qt::QueuedConnection);
-    connect(&decodePipeline, &DragonDecodePipeline::streamBuffered, this, &DragonPlayerPrivate::onStreamBuffered, Qt::QueuedConnection);
-    connect(&decodePipeline, &DragonDecodePipeline::streamSeekableChanged, this, &DragonPlayerPrivate::onStreamSeekable, Qt::QueuedConnection);
+    connect(&decodePipeline, &DecodePipeline::streamStalled, this, &DragonPlayerPrivate::onStreamStalled, Qt::QueuedConnection);
+    connect(&decodePipeline, &DecodePipeline::streamBuffering, this, &DragonPlayerPrivate::onStreamBuffering, Qt::QueuedConnection);
+    connect(&decodePipeline, &DecodePipeline::streamBuffered, this, &DragonPlayerPrivate::onStreamBuffered, Qt::QueuedConnection);
+    connect(&decodePipeline, &DecodePipeline::streamSeekableChanged, this, &DragonPlayerPrivate::onStreamSeekable, Qt::QueuedConnection);
 
     connect(
         &decodePipeline,
-        &DragonDecodePipeline::bufferProgressChanged,
+        &DecodePipeline::bufferProgressChanged,
         this,
         [this](qreal progress) {
             if (!qFuzzyCompare(currentBufferProgress, progress)) {
@@ -712,7 +712,7 @@ void DragonPlayer::setSource(const QUrl &source)
     if (d->audioOutput) {
         d->invalidateQueuedContent();
         d->audioOutput->sink()->setQueueReady(false);
-        d->audioOutput->sink()->setPositionOffset(0ms, DragonAudioSink::PositionResetMode::NormalTrackChange);
+        d->audioOutput->sink()->setPositionOffset(0ms, AudioSink::PositionResetMode::NormalTrackChange);
         if (d->currentSource != source) {
             const QString priorStreamName = d->audioOutput->sink()->streamName();
             d->audioOutput->sink()->setStreamName(QString());
@@ -784,7 +784,7 @@ void DragonPlayer::setSource(const QUrl &source)
         d->setStatus(MediaStatus::LoadingMedia);
     }
 
-    const bool isLocal = DragonStreamFactory::isLocalSource(d->currentSource);
+    const bool isLocal = StreamFactory::isLocalSource(d->currentSource);
     const bool isHttp = d->currentSource.scheme() == QStringLiteral("http") || d->currentSource.scheme() == QStringLiteral("https");
 
     d->currentIsLocal = isLocal;
@@ -884,7 +884,7 @@ void DragonPlayer::setPosition(std::chrono::milliseconds position)
                 return;
             }
         }
-        d->audioOutput->sink()->setPositionOffset(position, DragonAudioSink::PositionResetMode::Seek);
+        d->audioOutput->sink()->setPositionOffset(position, AudioSink::PositionResetMode::Seek);
         d->audioOutput->sink()->clearStream();
     }
     d->positionEstimator->seek(position);

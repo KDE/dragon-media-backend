@@ -11,7 +11,7 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include "player/dragonevent.h"
+#include "player/event.h"
 #include <DragonPlayer>
 
 #include <algorithm>
@@ -42,8 +42,8 @@ DecodeResult decodeFileSync(const QString &filePath, int timeoutMs = 10000)
         return result;
     }
 
-    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
-    QSignalSpy errorSpy(&decoder, &DragonDecoder::streamError);
+    Decoder decoder(nullptr, nullptr, -1, filePath);
+    QSignalSpy errorSpy(&decoder, &Decoder::streamError);
 
     DragonMediaBackend::InitResult initRes = decoder.initialize();
     if (initRes.success) {
@@ -332,7 +332,7 @@ void TestDecoderFixtures::testDecoderNonExistentFile()
     QString filePath = u"/nonexistent/path/to/audio.mp3"_s;
     QVERIFY2(!QFileInfo::exists(filePath), "Test file should not exist");
 
-    DragonDecoder decoder(nullptr, nullptr, -1, filePath);
+    Decoder decoder(nullptr, nullptr, -1, filePath);
     DragonMediaBackend::InitResult res = decoder.initialize();
 
     QVERIFY(!res.success);
@@ -350,7 +350,7 @@ void TestDecoderFixtures::testDecoderInvalidFile()
     file.write(QByteArray(1024, 0x42));
     file.close();
 
-    DragonDecoder decoder(nullptr, nullptr, -1, invalidPath);
+    Decoder decoder(nullptr, nullptr, -1, invalidPath);
     DragonMediaBackend::InitResult res = decoder.initialize();
 
     QVERIFY(!res.success);
@@ -361,7 +361,7 @@ void TestDecoderFixtures::testDecoderSignalEventCounts()
 {
     VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
 
-    DragonDecoder decoder(nullptr, nullptr, -1, TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    Decoder decoder(nullptr, nullptr, -1, TestFixture::fixturePath(u"sample-3s.mp3"_s));
     auto errorSpy = SignalSpyHelper::decoderErrorSpy(&decoder);
 
     QVERIFY(decoder.initialize().success);

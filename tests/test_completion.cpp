@@ -2,14 +2,14 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
- * Unit tests for DragonCompletion signal-backed coroutine awaitable.
+ * Unit tests for Completion signal-backed coroutine awaitable.
  */
 
 #include <QCoreApplication>
 #include <QCoroTask>
 #include <QtTest>
 
-#include "decoder/dragoncompletion.h"
+#include "decoder/completion.h"
 
 #include <atomic>
 #include <chrono>
@@ -40,7 +40,7 @@ struct CompletionCapture {
     Qt::HANDLE resumeThreadId = nullptr;
 };
 
-static QCoro::Task<void> captureAwait(std::shared_ptr<DragonCompletion> c, CompletionCapture *cap)
+static QCoro::Task<void> captureAwait(std::shared_ptr<Completion> c, CompletionCapture *cap)
 {
     cap->result = co_await *c;
     cap->resumeThreadId = QThread::currentThreadId();
@@ -50,7 +50,7 @@ static QCoro::Task<void> captureAwait(std::shared_ptr<DragonCompletion> c, Compl
 // Raw-pointer variant: the coroutine frame does NOT hold a shared_ptr to the
 // completion, so dropping the last external shared_ptr destroys the completion
 // and severs the Qt connection (receiver-lifetime safety).
-static QCoro::Task<void> captureAwaitRaw(DragonCompletion *c, CompletionCapture *cap)
+static QCoro::Task<void> captureAwaitRaw(Completion *c, CompletionCapture *cap)
 {
     cap->result = co_await *c;
     cap->resumeThreadId = QThread::currentThreadId();
@@ -67,7 +67,7 @@ static void waitForDone(CompletionCapture *cap)
 void TestCompletion::testBasicSetResult()
 {
     CompletionCapture cap;
-    auto c = std::make_shared<DragonCompletion>();
+    auto c = std::make_shared<Completion>();
 
     auto task = captureAwait(c, &cap);
 
@@ -89,7 +89,7 @@ void TestCompletion::testBasicSetResult()
 void TestCompletion::testCancel()
 {
     CompletionCapture cap;
-    auto c = std::make_shared<DragonCompletion>();
+    auto c = std::make_shared<Completion>();
 
     auto task = captureAwait(c, &cap);
 
@@ -107,7 +107,7 @@ void TestCompletion::testFirstCallWins()
 {
     {
         CompletionCapture cap;
-        auto c = std::make_shared<DragonCompletion>();
+        auto c = std::make_shared<Completion>();
         auto task = captureAwait(c, &cap);
 
         InitResult r;
@@ -122,7 +122,7 @@ void TestCompletion::testFirstCallWins()
 
     {
         CompletionCapture cap;
-        auto c = std::make_shared<DragonCompletion>();
+        auto c = std::make_shared<Completion>();
         auto task = captureAwait(c, &cap);
 
         QVERIFY(c->cancel(QStringLiteral("first")));
@@ -140,7 +140,7 @@ void TestCompletion::testFirstCallWins()
 void TestCompletion::testSetResultBeforeAwait()
 {
     CompletionCapture cap;
-    auto c = std::make_shared<DragonCompletion>();
+    auto c = std::make_shared<Completion>();
 
     InitResult r;
     r.success = true;
@@ -163,7 +163,7 @@ void TestCompletion::testSetResultBeforeAwait()
 void TestCompletion::testSetResultFromOtherThread()
 {
     CompletionCapture cap;
-    auto c = std::make_shared<DragonCompletion>();
+    auto c = std::make_shared<Completion>();
     Qt::HANDLE mainThreadId = QThread::currentThreadId();
 
     auto task = captureAwait(c, &cap);
@@ -187,7 +187,7 @@ void TestCompletion::testSetResultFromOtherThread()
 void TestCompletion::testCancelFromOtherThread()
 {
     CompletionCapture cap;
-    auto c = std::make_shared<DragonCompletion>();
+    auto c = std::make_shared<Completion>();
     Qt::HANDLE mainThreadId = QThread::currentThreadId();
 
     auto task = captureAwait(c, &cap);
@@ -210,7 +210,7 @@ void TestCompletion::testDestroyBeforeResumeFires()
 {
     CompletionCapture cap;
 
-    auto c = std::make_shared<DragonCompletion>();
+    auto c = std::make_shared<Completion>();
     auto task = captureAwait(c, &cap);
 
     InitResult r;
@@ -233,7 +233,7 @@ void TestCompletion::testDestroyDuringSuspend()
 {
     CompletionCapture cap;
 
-    auto c = std::make_shared<DragonCompletion>();
+    auto c = std::make_shared<Completion>();
     // Raw pointer: the coroutine frame must NOT hold a shared_ptr, otherwise
     // dropping `c` would not destroy the completion and the connection would
     // leak (completion -> connection -> lambda -> state -> handle -> frame ->
@@ -243,7 +243,7 @@ void TestCompletion::testDestroyDuringSuspend()
     // The coroutine has started eagerly and suspended at co_await *c.
     QVERIFY(!cap.done);
 
-    // Drop the last external reference. ~DragonCompletion emits finished() with
+    // Drop the last external reference. ~Completion emits finished() with
     // a cancelled result, which resumes the suspended coroutine safely (no
     // use-after-free, no leaked frame). This replaces the old behavior of
     // m_handle.destroy()-ing the frame, which fought QCoro's ref-counting.
@@ -259,13 +259,13 @@ void TestCompletion::testDestroyDuringSuspend()
 
 void TestCompletion::testCancelUnderLockDeadlock()
 {
-    auto c = std::make_shared<DragonCompletion>();
+    auto c = std::make_shared<Completion>();
     std::timed_mutex mtx;
     std::atomic slotExecuted{false};
     std::atomic slotDeadlocked{false};
 
     // Connect a slot that tries to acquire the same mutex
-    connect(c.get(), &DragonCompletion::finished, c.get(), [&mtx, &slotExecuted, &slotDeadlocked](const InitResult &) {
+    connect(c.get(), &Completion::finished, c.get(), [&mtx, &slotExecuted, &slotDeadlocked](const InitResult &) {
         // Try to lock the mutex with a timeout to detect deadlock
         std::unique_lock lock(mtx, std::chrono::milliseconds(100));
         if (lock.owns_lock()) {
@@ -282,10 +282,10 @@ void TestCompletion::testCancelUnderLockDeadlock()
 
     QTest::qWait(50);
 
-    // This test demonstrates the deadlock pattern that exists in DragonCompletion
+    // This test demonstrates the deadlock pattern that exists in Completion
     // when cancel()/setResult() are called under a lock. The fix is at the call-site
-    // (extract under lock, call outside), not in DragonCompletion itself.
-    QEXPECT_FAIL("", "Demonstrates deadlock pattern - fixed at call-site in dragondecodepipeline.cpp", Continue);
+    // (extract under lock, call outside), not in Completion itself.
+    QEXPECT_FAIL("", "Demonstrates deadlock pattern - fixed at call-site in decodepipeline.cpp", Continue);
     QVERIFY2(slotExecuted.load() && !slotDeadlocked.load(),
              "Expected: slot executes without deadlock. "
              "Bug: cancel() emits synchronously under lock, causing deadlock.");

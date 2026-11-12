@@ -10,7 +10,7 @@
 #include "logging_timestamp_init.h"
 #include "testhttpserver.h"
 
-#include "stream/dragonkiostream.h"
+#include "stream/kiostream.h"
 
 #include <QScopeGuard>
 #include <QTimer>
@@ -98,7 +98,7 @@ void TestKioStream::cleanupTestCase()
 
 void TestKioStream::testConstruction()
 {
-    DragonKioStream stream;
+    KioStream stream;
     QCOMPARE(stream.size(), -1);
     QCOMPARE(stream.position(), 0);
     QCOMPARE(stream.isSeekable(), false);
@@ -106,14 +106,14 @@ void TestKioStream::testConstruction()
 
 void TestKioStream::testSetUrl()
 {
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(QUrl::fromLocalFile(m_testFilePath));
     QCOMPARE(stream.size(), -1);
 }
 
 void TestKioStream::testStartStop()
 {
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(QUrl::fromLocalFile(m_testFilePath));
     stream.start();
     stream.stop();
@@ -122,7 +122,7 @@ void TestKioStream::testStartStop()
 
 void TestKioStream::testReadLocalFile()
 {
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(QUrl::fromLocalFile(m_testFilePath));
     stream.start();
 
@@ -152,10 +152,10 @@ void TestKioStream::testReadLocalFile()
 
 void TestKioStream::testReadNonExistentFile()
 {
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(QUrl::fromLocalFile(QStringLiteral("/non/existent/file/12345")));
 
-    QSignalSpy errorSpy(&stream, &DragonKioStream::errorOccurred);
+    QSignalSpy errorSpy(&stream, &KioStream::errorOccurred);
     stream.start();
 
     QTRY_VERIFY(errorSpy.count() > 0);
@@ -170,7 +170,7 @@ void TestKioStream::testReadNonExistentFile()
 
 void TestKioStream::testReadBlocksUntilStop()
 {
-    DragonKioStream stream;
+    KioStream stream;
     std::atomic<bool> readCompleted{false};
     std::atomic<int> readResult{-2};
     std::vector<uint8_t> buffer(1024);
@@ -193,7 +193,7 @@ void TestKioStream::testReadBlocksUntilStop()
 
 void TestKioStream::testReadCancellation()
 {
-    DragonKioStream stream;
+    KioStream stream;
     std::vector<uint8_t> buffer(1024);
 
     std::stop_source stopSource;
@@ -213,7 +213,7 @@ void TestKioStream::testReadCancellation()
 
 void TestKioStream::testSeeking()
 {
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(QUrl::fromLocalFile(m_testFilePath));
     stream.start();
 
@@ -259,10 +259,10 @@ static QUrl httpUrl(TestHttpServer *server, const QString &path)
 
 void TestKioStream::testSftpAssumedSeekable()
 {
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(QUrl(u"sftp://user@example.org/music/track.flac"_s));
 
-    QSignalSpy seekableSpy(&stream, &DragonStream::seekableChanged);
+    QSignalSpy seekableSpy(&stream, &Stream::seekableChanged);
     QVERIFY(seekableSpy.isValid());
 
     stream.start();
@@ -274,8 +274,8 @@ void TestKioStream::testSftpAssumedSeekable()
 
 void TestKioStream::testNonSftpNotSeekable()
 {
-    DragonKioStream localStream;
-    QSignalSpy localSpy(&localStream, &DragonStream::seekableChanged);
+    KioStream localStream;
+    QSignalSpy localSpy(&localStream, &Stream::seekableChanged);
     QVERIFY(localSpy.isValid());
     localStream.setUrl(QUrl::fromLocalFile(m_testFilePath));
     QCOMPARE(localStream.isSeekable(), false);
@@ -283,7 +283,7 @@ void TestKioStream::testNonSftpNotSeekable()
     QVERIFY(!localSpy.contains(QList<QVariant>{true}));
     localStream.stop();
 
-    DragonKioStream httpStream;
+    KioStream httpStream;
     httpStream.setUrl(QUrl(u"http://example.org/big.dat"_s));
     QCOMPARE(httpStream.isSeekable(), false);
 }
@@ -292,7 +292,7 @@ void TestKioStream::testHttpKioRead()
 {
     m_httpServer->serveFile(m_bigFilePath);
 
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
     stream.start();
 
@@ -316,7 +316,7 @@ void TestKioStream::testHttpKioSeekDataCorrect()
 {
     m_httpServer->serveFile(m_bigFilePath);
 
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
     stream.start();
 
@@ -355,7 +355,7 @@ void TestKioStream::testHttpKioSeekDoesNotCorruptStream()
 {
     m_httpServer->serveFile(m_bigFilePath);
 
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
     stream.start();
 
@@ -397,7 +397,7 @@ void TestKioStream::testHttpKioRapidSeek()
 {
     m_httpServer->serveFile(m_bigFilePath);
 
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
     stream.start();
 
@@ -451,7 +451,7 @@ void TestKioStream::testHttpKioSeekWhileReading()
         m_httpServer->clearThrottle();
     });
 
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(httpUrl(m_httpServer, u"/big.dat"_s));
     stream.start();
 
@@ -633,15 +633,14 @@ void TestKioStream::testBackpressureCapsBuffer()
     url.setPort(server.port());
     url.setPath(u"/big.dat"_s);
 
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(url);
     stream.start();
 
     // Let data accumulate without reading buffer should be capped.
     QTest::qWait(3000);
 
-    QVERIFY2(stream.bufferDepth() <= DragonKioStream::MAX_BUFFER_BYTES + 8192,
-             qPrintable(u"Buffer depth %1 exceeds cap + tolerance"_s.arg(stream.bufferDepth())));
+    QVERIFY2(stream.bufferDepth() <= KioStream::MAX_BUFFER_BYTES + 8192, qPrintable(u"Buffer depth %1 exceeds cap + tolerance"_s.arg(stream.bufferDepth())));
     QVERIFY2(stream.bufferDepth() > 0, "Buffer should have some data after waiting");
 
     stream.stop();
@@ -666,7 +665,7 @@ void TestKioStream::testBackpressureResumesAfterDrain()
     url.setPort(server.port());
     url.setPath(u"/big.dat"_s);
 
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(url);
     stream.start();
 
@@ -723,7 +722,7 @@ void TestKioStream::testBackpressureNoDataLoss()
     url.setPort(server.port());
     url.setPath(u"/big.dat"_s);
 
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(url);
     stream.start();
 
@@ -774,7 +773,7 @@ void TestKioStream::testHttpKioSeekWhileReaderBlockedNoSpuriousEof()
     url.setPort(server.port());
     url.setPath(u"/big.dat"_s);
 
-    DragonKioStream stream;
+    KioStream stream;
     stream.setUrl(url);
     stream.start();
 

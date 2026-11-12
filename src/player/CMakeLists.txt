@@ -7,9 +7,9 @@ add_library(dragon_player_objs OBJECT
     dragonduration.cpp
     dragonduration.h
     dragonaudiooutput.cpp
-    dragonpipe.cpp
-    dragondiagnostics.cpp
-    dragonpositionestimator.cpp
+    pipe.cpp
+    diagnostics.cpp
+    positionestimator.cpp
 )
 
 target_include_directories(dragon_player_objs PRIVATE

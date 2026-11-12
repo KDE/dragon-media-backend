@@ -8,7 +8,7 @@
 #include "dragonspectrogram.h"
 #include "dragonvisualizer.h"
 
-#include "player/dragondiagnostics.h"
+#include "player/diagnostics.h"
 #include <DragonAudioOutput>
 #include <DragonCdToc>
 #include <DragonCdTocReader>
@@ -249,7 +249,7 @@ void MainWindow::setupUi()
     diagLayout->addWidget(m_underrunDiagLabel);
     statusBar()->addPermanentWidget(diagContainer);
 
-    m_diagnostics = new DragonDiagnostics(m_player);
+    m_diagnostics = new Diagnostics(m_player);
     m_diagnostics->setParent(this);
     m_diagnostics->setSpectrumAnalyzer(m_spectrumAnalyzer);
     auto *diagTimer = new QTimer(this);
@@ -379,7 +379,7 @@ void MainWindow::changeAudioSink(int index)
 
     m_player = new DragonPlayer(sink, this);
     m_playlist = new DragonPlaylist(m_player, this);
-    m_diagnostics = new DragonDiagnostics(m_player);
+    m_diagnostics = new Diagnostics(m_player);
     m_diagnostics->setParent(this);
     m_spectrumAnalyzer = new DragonSpectrumAnalyzer(m_player, this);
     m_diagnostics->setSpectrumAnalyzer(m_spectrumAnalyzer);

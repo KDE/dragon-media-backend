@@ -3,10 +3,10 @@
 # SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
 
 add_library(dragon_decoder_objs OBJECT
-    dragondecoder.cpp
-    dragondecodepipeline.cpp
-    dragoncompletion.cpp
-    dragonffmpegjni.cpp
+    decoder.cpp
+    decodepipeline.cpp
+    completion.cpp
+    ffmpegjni.cpp
 )
 
 target_include_directories(dragon_decoder_objs PRIVATE

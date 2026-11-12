@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
- * Tests for DragonCdStream and audiocd:/ playback. Most tests run against
+ * Tests for CdStream and audiocd:/ playback. Most tests run against
  * generated bin/cue CD-DA images read through libcdio's bincue driver, so no
  * CD hardware is required.
  */
@@ -14,11 +14,11 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include "stream/cd/dragoncddisc.h"
-#include "stream/cd/dragoncdstream.h"
-#include "stream/cd/dragoncdurl.h"
-#include "stream/dragonkiostream.h"
-#include "stream/dragonstreamfactory.h"
+#include "stream/cd/cddisc.h"
+#include "stream/cd/cdstream.h"
+#include "stream/cd/cdurl.h"
+#include "stream/kiostream.h"
+#include "stream/streamfactory.h"
 
 #include <DragonAudioOutput>
 #include <DragonPlayer>
@@ -56,7 +56,7 @@ QUrl cdTrackUrl(const QString &fileName, const QString &device, const QString &e
     return url;
 }
 
-std::vector<uint8_t> readAllFromStream(DragonCdStream &stream, qint64 limit)
+std::vector<uint8_t> readAllFromStream(CdStream &stream, qint64 limit)
 {
     std::vector<uint8_t> result;
     std::vector<uint8_t> buffer(64 * 1024);
@@ -114,7 +114,7 @@ private:
 
 void TestCdStream::testWavHeader()
 {
-    const auto header = DragonCdStream::makeWavHeader(300 * 2352);
+    const auto header = CdStream::makeWavHeader(300 * 2352);
     QCOMPARE(QByteArray(reinterpret_cast<const char *>(header.data()), 4), QByteArray("RIFF"));
     QCOMPARE(QByteArray(reinterpret_cast<const char *>(header.data() + 8), 4), QByteArray("WAVE"));
     QCOMPARE(QByteArray(reinterpret_cast<const char *>(header.data() + 12), 4), QByteArray("fmt "));
@@ -139,16 +139,16 @@ void TestCdStream::testTrackNumberFromName()
     const int first = 1;
     const int last = 15;
 
-    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 01.wav"_s, first, last).value_or(-1), 1);
-    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 1.wav"_s, first, last).value_or(-1), 1);
-    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 1.cda"_s, first, last).value_or(-1), 1);
-    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Artist - 03 - Title.flac"_s, first, last).value_or(-1), 3);
-    QCOMPARE(DragonCdUrl::trackNumberFromName(u"U2 - 01 - Beautiful Day.wav"_s, first, last).value_or(-1), 1);
-    QCOMPARE(DragonCdUrl::trackNumberFromName(u"16_-_Some_Title.ogg"_s, first, last).value_or(-1), -1); // out of range
-    QCOMPARE(DragonCdUrl::trackNumberFromName(u"NoDigitsHere.wav"_s, first, last).value_or(-1), -1);
-    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 99.wav"_s, first, last).value_or(-1), -1);
+    QCOMPARE(CdUrl::trackNumberFromName(u"Track 01.wav"_s, first, last).value_or(-1), 1);
+    QCOMPARE(CdUrl::trackNumberFromName(u"Track 1.wav"_s, first, last).value_or(-1), 1);
+    QCOMPARE(CdUrl::trackNumberFromName(u"Track 1.cda"_s, first, last).value_or(-1), 1);
+    QCOMPARE(CdUrl::trackNumberFromName(u"Artist - 03 - Title.flac"_s, first, last).value_or(-1), 3);
+    QCOMPARE(CdUrl::trackNumberFromName(u"U2 - 01 - Beautiful Day.wav"_s, first, last).value_or(-1), 1);
+    QCOMPARE(CdUrl::trackNumberFromName(u"16_-_Some_Title.ogg"_s, first, last).value_or(-1), -1); // out of range
+    QCOMPARE(CdUrl::trackNumberFromName(u"NoDigitsHere.wav"_s, first, last).value_or(-1), -1);
+    QCOMPARE(CdUrl::trackNumberFromName(u"Track 99.wav"_s, first, last).value_or(-1), -1);
     // First valid run wins when there is no zero-padded two-digit run.
-    QCOMPARE(DragonCdUrl::trackNumberFromName(u"Track 3.wav"_s, first, last).value_or(-1), 3);
+    QCOMPARE(CdUrl::trackNumberFromName(u"Track 3.wav"_s, first, last).value_or(-1), 3);
 }
 
 void TestCdStream::createTwoTrackImage()
@@ -168,8 +168,8 @@ void TestCdStream::testStartGeneratesWavStream()
 {
     createTwoTrackImage();
 
-    DragonCdStream stream;
-    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
+    CdStream stream;
+    QSignalSpy errorSpy(&stream, &CdStream::errorOccurred);
     stream.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
     stream.start();
 
@@ -185,7 +185,7 @@ void TestCdStream::testSequentialReadsAndEof()
 {
     createTwoTrackImage();
 
-    DragonCdStream stream;
+    CdStream stream;
     stream.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
     stream.start();
 
@@ -194,7 +194,7 @@ void TestCdStream::testSequentialReadsAndEof()
 
     // The WAV header must match a real header, and the PCM must match the
     // image bytes exactly.
-    const auto header = DragonCdStream::makeWavHeader(uint32_t(m_sectorsPerTrack) * 2352);
+    const auto header = CdStream::makeWavHeader(uint32_t(m_sectorsPerTrack) * 2352);
     QVERIFY(std::equal(header.begin(), header.end(), data.begin()));
     const QByteArray pcm(reinterpret_cast<const char *>(data.data() + 44), qsizetype(data.size()) - 44);
     QCOMPARE(pcm, m_track1Pcm);
@@ -211,7 +211,7 @@ void TestCdStream::testSeek()
 {
     createTwoTrackImage();
 
-    DragonCdStream stream;
+    CdStream stream;
     stream.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
     stream.start();
 
@@ -233,7 +233,7 @@ void TestCdStream::testSeek()
     const int m = stream.read(small, stopSource.get_token());
     QCOMPARE(m, 34);
     QCOMPARE(QByteArray(reinterpret_cast<const char *>(small.data()), 34),
-             QByteArray(reinterpret_cast<const char *>(DragonCdStream::makeWavHeader(uint32_t(m_sectorsPerTrack) * 2352).data() + 10), 34));
+             QByteArray(reinterpret_cast<const char *>(CdStream::makeWavHeader(uint32_t(m_sectorsPerTrack) * 2352).data() + 10), 34));
 
     // Out-of-range seeks are clamped/rejected.
     QCOMPARE(stream.seek(-1), qint64(-1));
@@ -248,7 +248,7 @@ void TestCdStream::testSmallAndLargeReadsAreConsistent()
 
     QByteArray small;
     {
-        DragonCdStream stream;
+        CdStream stream;
         stream.setUrl(cdTrackUrl(u"Track 02.wav"_s, m_cuePath));
         stream.start();
         std::vector<uint8_t> buffer(13); // deliberately not sector-aligned
@@ -265,7 +265,7 @@ void TestCdStream::testSmallAndLargeReadsAreConsistent()
 
     QByteArray large;
     {
-        DragonCdStream stream;
+        CdStream stream;
         stream.setUrl(cdTrackUrl(u"Track 02.wav"_s, m_cuePath));
         stream.start();
         std::vector<uint8_t> buffer(100 * 1024);
@@ -288,7 +288,7 @@ void TestCdStream::testStopCancelsReads()
 {
     createTwoTrackImage();
 
-    DragonCdStream stream;
+    CdStream stream;
     stream.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
     stream.start();
 
@@ -301,7 +301,7 @@ void TestCdStream::testStopCancelsReads()
     std::stop_source fresh;
     QCOMPARE(stream.read(buffer, fresh.get_token()), -1);
 
-    DragonCdStream stoppedStream;
+    CdStream stoppedStream;
     stoppedStream.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
     stoppedStream.start();
     stoppedStream.stop();
@@ -318,16 +318,16 @@ void TestCdStream::testErrorSlotCanStopStream()
 
     // A directly connected errorOccurred slot may reenter the stream API:
     // emission must happen with the I/O mutex released, or this deadlocks.
-    DragonCdStream stream;
+    CdStream stream;
     QObject::connect(
         &stream,
-        &DragonCdStream::errorOccurred,
+        &CdStream::errorOccurred,
         &stream,
         [&stream]() {
             stream.stop();
         },
         Qt::DirectConnection);
-    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
+    QSignalSpy errorSpy(&stream, &CdStream::errorOccurred);
     stream.setUrl(cdTrackUrl(u"Track 02.wav"_s, cue));
     stream.start();
     QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() > 0, 5000);
@@ -336,16 +336,16 @@ void TestCdStream::testErrorSlotCanStopStream()
     // The same contract holds for errors surfaced by read().
     createTwoTrackImage();
 
-    DragonCdStream reading;
+    CdStream reading;
     QObject::connect(
         &reading,
-        &DragonCdStream::errorOccurred,
+        &CdStream::errorOccurred,
         &reading,
         [&reading]() {
             reading.stop();
         },
         Qt::DirectConnection);
-    QSignalSpy readErrorSpy(&reading, &DragonCdStream::errorOccurred);
+    QSignalSpy readErrorSpy(&reading, &CdStream::errorOccurred);
     reading.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
     reading.start();
     QVERIFY(reading.m_disc);
@@ -361,8 +361,8 @@ void TestCdStream::testDirectoryUrlFails()
 {
     createTwoTrackImage();
 
-    DragonCdStream stream;
-    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
+    CdStream stream;
+    QSignalSpy errorSpy(&stream, &CdStream::errorOccurred);
     stream.setUrl(cdTrackUrl(QString(), m_cuePath));
     stream.start();
     QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() > 0, 5000);
@@ -371,8 +371,8 @@ void TestCdStream::testDirectoryUrlFails()
 
 void TestCdStream::testMissingDeviceFails()
 {
-    DragonCdStream stream;
-    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
+    CdStream stream;
+    QSignalSpy errorSpy(&stream, &CdStream::errorOccurred);
     stream.setUrl(cdTrackUrl(u"Track 01.wav"_s, u"/nonexistent/no-disc.cue"_s));
     stream.start();
     QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() > 0, 5000);
@@ -387,8 +387,8 @@ void TestCdStream::testDataTrackFails()
     const QString cue = image.finish();
     QVERIFY(!cue.isEmpty());
 
-    DragonCdStream stream;
-    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
+    CdStream stream;
+    QSignalSpy errorSpy(&stream, &CdStream::errorOccurred);
     stream.setUrl(cdTrackUrl(u"Track 02.wav"_s, cue));
     stream.start();
     QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() > 0, 5000);
@@ -402,8 +402,8 @@ void TestCdStream::testDataOnlyDiscFails()
     const QString cue = image.finish();
     QVERIFY(!cue.isEmpty());
 
-    DragonCdStream stream;
-    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
+    CdStream stream;
+    QSignalSpy errorSpy(&stream, &CdStream::errorOccurred);
     stream.setUrl(cdTrackUrl(u"Track 01.wav"_s, cue));
     stream.start();
     QTRY_VERIFY_WITH_TIMEOUT(errorSpy.count() > 0, 5000);
@@ -414,8 +414,8 @@ void TestCdStream::testTrackQueryItemOverride()
 {
     createTwoTrackImage();
 
-    DragonCdStream stream;
-    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
+    CdStream stream;
+    QSignalSpy errorSpy(&stream, &CdStream::errorOccurred);
     // The file name says track 1, the query item says track 2.
     stream.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath, u"2"_s));
     stream.start();
@@ -423,8 +423,8 @@ void TestCdStream::testTrackQueryItemOverride()
     QCOMPARE(stream.size(), 44 + qint64(m_sectorsPerTrack) * 2352);
 
     // Track 3 does not exist on a two track image.
-    DragonCdStream outOfRange;
-    QSignalSpy outOfRangeSpy(&outOfRange, &DragonCdStream::errorOccurred);
+    CdStream outOfRange;
+    QSignalSpy outOfRangeSpy(&outOfRange, &CdStream::errorOccurred);
     outOfRange.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath, u"3"_s));
     outOfRange.start();
     QTRY_VERIFY_WITH_TIMEOUT(outOfRangeSpy.count() > 0, 5000);
@@ -436,24 +436,24 @@ void TestCdStream::testFactoryRouting()
 {
     createTwoTrackImage();
 
-    // audiocd:/ URLs must route to DragonCdStream (priority over the KIO
+    // audiocd:/ URLs must route to CdStream (priority over the KIO
     // fallback), classify as non-local, and be pre-warmable for gapless.
     const QUrl cdUrl = cdTrackUrl(u"Track 01.wav"_s, m_cuePath);
-    QVERIFY(!DragonStreamFactory::isLocalSource(cdUrl));
-    QVERIFY(DragonStreamFactory::supportsGaplessPreWarm(cdUrl));
+    QVERIFY(!StreamFactory::isLocalSource(cdUrl));
+    QVERIFY(StreamFactory::supportsGaplessPreWarm(cdUrl));
 
-    const auto cdStream = DragonStreamFactory::createStream(cdUrl);
+    const auto cdStream = StreamFactory::createStream(cdUrl);
     QVERIFY(cdStream != nullptr);
-    QVERIFY(qobject_cast<DragonCdStream *>(cdStream.get()) != nullptr);
+    QVERIFY(qobject_cast<CdStream *>(cdStream.get()) != nullptr);
 
     // Scheme matching is case-insensitive in QUrl (schemes are lowercased).
     QUrl upperCaseScheme = cdUrl;
     upperCaseScheme.setScheme(u"AUDIOCD"_s);
-    QVERIFY(qobject_cast<DragonCdStream *>(DragonStreamFactory::createStream(upperCaseScheme).get()) != nullptr);
+    QVERIFY(qobject_cast<CdStream *>(StreamFactory::createStream(upperCaseScheme).get()) != nullptr);
 
-    QCOMPARE(DragonStreamFactory::createStream(QUrl::fromLocalFile(m_cuePath)).get(), nullptr);
-    const auto kioStream = DragonStreamFactory::createStream(QUrl(u"sftp://host/music/file.flac"_s));
-    QVERIFY(qobject_cast<DragonKioStream *>(kioStream.get()) != nullptr);
+    QCOMPARE(StreamFactory::createStream(QUrl::fromLocalFile(m_cuePath)).get(), nullptr);
+    const auto kioStream = StreamFactory::createStream(QUrl(u"sftp://host/music/file.flac"_s));
+    QVERIFY(qobject_cast<KioStream *>(kioStream.get()) != nullptr);
 }
 
 void TestCdStream::testStreamsShareDisc()
@@ -464,14 +464,14 @@ void TestCdStream::testStreamsShareDisc()
     const QString linkPath = linkDir.filePath(u"link.cue"_s);
     QVERIFY(QFile::link(m_cuePath, linkPath));
 
-    std::weak_ptr<DragonCdDisc> weakDisc;
+    std::weak_ptr<CdDisc> weakDisc;
     {
-        DragonCdStream current;
+        CdStream current;
         current.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
         current.start();
         QVERIFY(current.m_disc);
 
-        DragonCdStream next;
+        CdStream next;
         next.setUrl(cdTrackUrl(u"Track 02.wav"_s, linkPath));
         next.start();
         QVERIFY(next.m_disc);
@@ -510,11 +510,11 @@ void TestCdStream::testConcurrentAcquireOpensDiscOnce()
     constexpr int kThreads = 8;
     std::barrier sync(kThreads);
     std::vector<std::thread> threads;
-    std::vector<std::shared_ptr<DragonCdDisc>> discs{size_t(kThreads)};
+    std::vector<std::shared_ptr<CdDisc>> discs{size_t(kThreads)};
     for (int i = 0; i < kThreads; ++i) {
         threads.emplace_back([this, i, &sync, &discs, &linkPath]() {
             sync.arrive_and_wait();
-            auto disc = DragonCdDisc::acquire((i % 2) ? linkPath : m_cuePath);
+            auto disc = CdDisc::acquire((i % 2) ? linkPath : m_cuePath);
             if (disc) {
                 discs[size_t(i)] = *disc;
             }
@@ -540,8 +540,8 @@ void TestCdStream::testReadErrorInvalidatesDisc()
 {
     createTwoTrackImage();
 
-    DragonCdStream current;
-    QSignalSpy errorSpy(&current, &DragonCdStream::errorOccurred);
+    CdStream current;
+    QSignalSpy errorSpy(&current, &CdStream::errorOccurred);
     current.setUrl(cdTrackUrl(u"Track 01.wav"_s, m_cuePath));
     current.start();
     QVERIFY(current.m_disc);
@@ -553,8 +553,8 @@ void TestCdStream::testReadErrorInvalidatesDisc()
     QCOMPARE(current.read(buffer, stopSource.get_token()), -1);
     QCOMPARE(errorSpy.count(), 1);
 
-    DragonCdStream next;
-    QSignalSpy nextErrorSpy(&next, &DragonCdStream::errorOccurred);
+    CdStream next;
+    QSignalSpy nextErrorSpy(&next, &CdStream::errorOccurred);
     next.setUrl(cdTrackUrl(u"Track 02.wav"_s, m_cuePath));
     next.start();
     QCOMPARE(nextErrorSpy.count(), 0);
@@ -572,7 +572,7 @@ void TestCdStream::testChangedImageReopensDisc()
     const QString cue = image.finish();
     QVERIFY(!cue.isEmpty());
 
-    DragonCdStream current;
+    CdStream current;
     current.setUrl(cdTrackUrl(u"Track 01.wav"_s, cue));
     current.start();
     QVERIFY(current.m_disc);
@@ -584,8 +584,8 @@ void TestCdStream::testChangedImageReopensDisc()
         cueFile.write("FILE \"disc.bin\" BINARY\n  TRACK 01 AUDIO\n    INDEX 01 00:00:00\n");
     }
 
-    DragonCdStream newDiscTrack1;
-    QSignalSpy errorSpy(&newDiscTrack1, &DragonCdStream::errorOccurred);
+    CdStream newDiscTrack1;
+    QSignalSpy errorSpy(&newDiscTrack1, &CdStream::errorOccurred);
     newDiscTrack1.setUrl(cdTrackUrl(u"Track 01.wav"_s, cue));
     newDiscTrack1.start();
     QCOMPARE(errorSpy.count(), 0);
@@ -594,8 +594,8 @@ void TestCdStream::testChangedImageReopensDisc()
     QCOMPARE(newDiscTrack1.m_disc->lastTrack(), 1);
     QCOMPARE(newDiscTrack1.size(), 44 + qint64(2 * image.sectorsPerTrack()) * 2352);
 
-    DragonCdStream newDiscTrack2;
-    QSignalSpy missingSpy(&newDiscTrack2, &DragonCdStream::errorOccurred);
+    CdStream newDiscTrack2;
+    QSignalSpy missingSpy(&newDiscTrack2, &CdStream::errorOccurred);
     newDiscTrack2.setUrl(cdTrackUrl(u"Track 02.wav"_s, cue));
     newDiscTrack2.start();
     QCOMPARE(missingSpy.count(), 1);
@@ -731,7 +731,7 @@ void TestCdStream::testGaplessCdTrackFollowedByLocalTrackPreservesSeekable()
     PlayerHelper helper(&player);
     player.setPrefinishMark(200ms);
 
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
 
     const QUrl track1 = cdTrackUrl(u"Track 01.wav"_s, cuePath);
     const QUrl track2 = cdTrackUrl(u"Track 02.wav"_s, cuePath);

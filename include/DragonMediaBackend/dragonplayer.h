@@ -664,7 +664,7 @@ public Q_SLOTS:
     void stop();
 
 private:
-    friend class DragonDiagnostics;
+    friend class Diagnostics;
     friend class DragonPlayerPrivate;
     friend class DragonSpectrumAnalyzer;
     friend class DragonSpectrumAnalyzerPrivate;

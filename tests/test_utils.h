@@ -16,8 +16,8 @@
 #include <QtCore>
 #include <QtTest>
 
-#include "decoder/dragondecoder.h"
-#include "player/dragondiagnostics.h"
+#include "decoder/decoder.h"
+#include "player/diagnostics.h"
 #include <DragonPlayer>
 #include <DragonSpectrumAnalyzer>
 
@@ -144,7 +144,7 @@ private:
 // callback can fire before the decoder has produced its first chunk, which
 // registers as an underrun. Wait until the pipeline has delivered samples so
 // underrun baselines measure only mid-playback starvation.
-inline bool waitForPipelinePrimed(DragonDiagnostics &diagnostics, int timeoutMs = 5000)
+inline bool waitForPipelinePrimed(Diagnostics &diagnostics, int timeoutMs = 5000)
 {
     return QTest::qWaitFor(
         [&diagnostics]() {
@@ -321,7 +321,7 @@ public:
 
     bool wasAudioEverInactive(int durationMs, int pollIntervalMs = 10)
     {
-        DragonDiagnostics diagnostics(m_player);
+        Diagnostics diagnostics(m_player);
         std::atomic<bool> audioEverInactive{false};
 
         QTimer pollTimer;
@@ -379,9 +379,9 @@ public:
         return QSignalSpy(player, &DragonPlayer::durationChanged);
     }
 
-    static QSignalSpy decoderErrorSpy(DragonDecoder *decoder)
+    static QSignalSpy decoderErrorSpy(Decoder *decoder)
     {
-        return QSignalSpy(decoder, &DragonDecoder::streamError);
+        return QSignalSpy(decoder, &Decoder::streamError);
     }
 
     template<typename T>

@@ -1,0 +1,80 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+ * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
+ */
+
+#include "completion.h"
+
+#include <QCoreApplication>
+#include <QDebug>
+
+namespace DragonMediaBackend
+{
+
+Completion::Completion()
+    : QObject(nullptr) // unparented managed by shared_ptr
+{
+}
+
+Completion::~Completion()
+{
+    // If a coroutine is still suspended waiting on us and we're being
+    // destroyed (e.g. the owning pipeline was torn down), resume it with
+    // a cancelled result so its frame is cleaned up by QCoro rather than
+    // leaked. This goes through the normal finished() signal path (guarded
+    // by the awaiter's atomic `resumed` flag), so the coroutine runs its
+    // normal cleanup instead of being forcibly destroyed out from under
+    // QCoro's ref-counting.
+    if (!m_settled.exchange(true, std::memory_order_acq_rel)) {
+        qDebug() << "Completion::~Completion() resuming suspended awaiter with cancelled result, this:" << this;
+        InitResult result;
+        result.cancelled = true;
+        result.success = false;
+        result.errorMessage = QStringLiteral("Completion destroyed");
+        m_buffered = std::move(result);
+        m_resultPublished.store(true, std::memory_order_release);
+        Q_EMIT finished(*m_buffered);
+    }
+}
+
+bool Completion::isReady() const
+{
+    return m_resultPublished.load(std::memory_order_acquire);
+}
+
+InitResult Completion::result() const
+{
+    return *m_buffered;
+}
+
+bool Completion::setResult(InitResult result)
+{
+    if (m_settled.exchange(true, std::memory_order_acq_rel)) {
+        qDebug() << "Completion::setResult() already completed, skipping, this:" << this;
+        return false;
+    }
+    m_buffered = std::move(result);
+    m_resultPublished.store(true, std::memory_order_release);
+    qDebug() << "Completion::setResult() emitting finished, this:" << this << "success:" << m_buffered->success;
+    Q_EMIT finished(*m_buffered);
+    return true;
+}
+
+bool Completion::cancel(const QString &reason)
+{
+    if (m_settled.exchange(true, std::memory_order_acq_rel)) {
+        qDebug() << "Completion::cancel() already completed, skipping, this:" << this;
+        return false;
+    }
+    InitResult result;
+    result.cancelled = true;
+    result.success = false;
+    result.errorMessage = reason;
+    m_buffered = std::move(result);
+    m_resultPublished.store(true, std::memory_order_release);
+    qDebug() << "Completion::cancel() emitting finished, this:" << this << "reason:" << reason;
+    Q_EMIT finished(*m_buffered);
+    return true;
+}
+
+}

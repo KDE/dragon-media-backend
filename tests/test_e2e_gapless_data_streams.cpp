@@ -10,7 +10,7 @@
 #include "helpers/gapless_test_utils.h"
 #include "test_utils.h"
 
-#include "player/dragondiagnostics.h"
+#include "player/diagnostics.h"
 #include <DragonAudioOutput>
 #include <DragonPlayer>
 #include <DragonSpectrumAnalyzer>
@@ -125,7 +125,7 @@ void TestGaplessDataStreams::testPositionAndFftSurviveGaplessTransition()
     if (player.audioOutput()->backend() == DragonAudioOutput::Backend::Null) {
         QSKIP("Selected audio sink not available on this machine");
     }
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
     PlayerHelper helper(&player);
 
     // The qwidget example's visualizers: a spectrum analyzer tapped into the

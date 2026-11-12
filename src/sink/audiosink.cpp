@@ -1,0 +1,452 @@
+/*
+ * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
+ * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
+ */
+
+#include "audiosink.h"
+#include "fft/pcmblock.h"
+#include "player/pipe.h"
+
+#include "dragonmediabackend_audio_logging.h"
+
+#include <QGuiApplication>
+#include <QIcon>
+#include <QMetaObject>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <limits>
+
+namespace
+{
+
+float sliderToLinearGain(float sliderValue)
+{
+    sliderValue = std::clamp(sliderValue, 0.0f, 1.0f);
+
+    if (sliderValue <= 0.001f) {
+        return 0.0f;
+    }
+
+    if (sliderValue >= 0.99f) {
+        return 1.0f;
+    }
+
+    constexpr float LOG100 = 4.60517018599f;
+    return -std::log(1.0f - sliderValue) / LOG100;
+}
+
+float calculateGain(float volume, bool muted)
+{
+    return muted ? 0.0f : sliderToLinearGain(volume);
+}
+
+float linearGainToSlider(float linearGain)
+{
+    if (linearGain <= 0.0f) {
+        return 0.0f;
+    }
+    if (linearGain >= 1.0f) {
+        return 1.0f;
+    }
+    constexpr float LOG100 = 4.60517018599f;
+    return 1.0f - std::exp(-linearGain * LOG100);
+}
+}
+
+AudioSink::AudioSink(QObject *parent)
+    : QObject(parent)
+{
+}
+
+AudioSink::~AudioSink() = default;
+
+void AudioSink::setAudioPipe(Pipe<float> *pipe)
+{
+    m_audioPipe.store(pipe, std::memory_order_release);
+}
+
+void AudioSink::setFftPipe(Pipe<PcmBlock> *pipe)
+{
+    m_fftPipe.store(pipe, std::memory_order_release);
+}
+
+void AudioSink::setQueueReady(bool ready)
+{
+    m_queueReady.store(ready, std::memory_order_release);
+}
+
+bool AudioSink::isQueueReady() const
+{
+    return m_queueReady.load(std::memory_order_acquire);
+}
+
+void AudioSink::setPositionOffset(std::chrono::milliseconds offset, PositionResetMode mode)
+{
+    m_positionOffset.store(offset.count(), std::memory_order_relaxed);
+
+    if (isPaused()) {
+        m_queueReady.store(false, std::memory_order_release); // gate the producer during the flush
+        close();
+        m_flushPending.store(false, std::memory_order_release);
+        m_positionResetPending.store(false, std::memory_order_release);
+        processStreamFlush();
+        return;
+    }
+
+    switch (mode) {
+    case PositionResetMode::Seek:
+    case PositionResetMode::NormalTrackChange:
+        m_queueReady.store(false, std::memory_order_release);
+        m_flushPending.store(true, std::memory_order_release);
+        m_positionResetPending.store(true, std::memory_order_release);
+        break;
+    }
+}
+
+float AudioSink::volume() const
+{
+    return m_volume;
+}
+
+void AudioSink::setVolume(float volume)
+{
+    float clampedVolume = std::clamp(volume, 0.0f, 1.0f);
+    if (qAbs(m_volume - clampedVolume) < 0.001f) {
+        return;
+    }
+    m_volume = clampedVolume;
+    setGain(calculateGain(m_volume, m_muted));
+    Q_EMIT volumeChanged();
+}
+
+bool AudioSink::muted() const
+{
+    return m_muted;
+}
+
+void AudioSink::setMuted(bool muted)
+{
+    if (m_muted == muted) {
+        return;
+    }
+    m_muted = muted;
+    setGain(calculateGain(m_volume, m_muted));
+    Q_EMIT mutedChanged(m_muted);
+}
+
+void AudioSink::onExternalVolumeChanged(float linearGain)
+{
+    setVolume(linearGainToSlider(linearGain));
+}
+
+void AudioSink::setStreamName(const QString &name)
+{
+    m_streamName = name;
+}
+
+QString AudioSink::defaultStreamName()
+{
+    const QString appName = QGuiApplication::applicationDisplayName();
+    return appName.isEmpty() ? QStringLiteral("DragonMediaBackend") : appName;
+}
+
+QString AudioSink::resolvedStreamName() const
+{
+    return m_streamName.isEmpty() ? defaultStreamName() : m_streamName;
+}
+
+QString AudioSink::applicationIconName()
+{
+    QString name = QGuiApplication::desktopFileName();
+    if (name.isEmpty() && qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+        name = QGuiApplication::windowIcon().name();
+    }
+    return name;
+}
+
+std::chrono::milliseconds AudioSink::position() const
+{
+    int channels = m_channels.load(std::memory_order_relaxed);
+    int sampleRate = m_sampleRate.load(std::memory_order_relaxed);
+    const auto offset = std::chrono::milliseconds{m_positionOffset.load(std::memory_order_relaxed)};
+    if (channels <= 0 || sampleRate <= 0) {
+        return offset;
+    }
+
+    // Until the audio callback thread has processed a pending position reset,
+    // m_totalSamplesWritten still counts pre-seek samples already played out.
+    // Report just the new offset in that window.
+    if (m_positionResetPending.load(std::memory_order_acquire)) {
+        return offset;
+    }
+
+    qint64 written = m_totalSamplesWritten.load(std::memory_order_relaxed);
+
+    const qint64 queued = deviceQueuedSamples();
+    if (queued > 0) {
+        written = std::max(qint64{0}, written - queued);
+    }
+
+    const qint64 frameCount = written / channels;
+    return std::chrono::milliseconds{frameCount * 1000 / sampleRate} + offset;
+}
+
+bool AudioSink::hasFormat(int sampleRate, int channels) const
+{
+    return m_sampleRate.load(std::memory_order_relaxed) == sampleRate && m_channels.load(std::memory_order_relaxed) == channels;
+}
+
+qint64 AudioSink::totalSamplesWritten() const
+{
+    return m_totalSamplesWritten.load(std::memory_order_relaxed);
+}
+
+void AudioSink::resetPositionTracking()
+{
+    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+    m_positionOffset.store(0, std::memory_order_relaxed);
+}
+
+bool AudioSink::boundaryTrackStart(std::uint32_t trackId,
+                                   int sampleRate,
+                                   int channels,
+                                   std::optional<std::chrono::milliseconds> duration,
+                                   std::uint64_t epochTag)
+{
+    StreamBoundary boundary;
+    // Stamped with the epoch the producer observed before the write/promotion
+    // this boundary belongs to (not the current one): if a flush superseded
+    // the stream in between, the consumer's epoch check discards the boundary
+    // instead of letting it fire in the new stream (a ghost boundary).
+    boundary.epoch = epochTag;
+    boundary.streamSample = m_producerState.samples();
+    boundary.trackId = trackId;
+    boundary.sampleRate = sampleRate;
+    boundary.channels = channels;
+    boundary.duration = duration;
+
+    if (!m_boundaries.push(boundary)) {
+        qCWarning(dragonMediaBackendAudio) << "boundary ring full; dropping track boundary (seek/flush the stream first)";
+        return false;
+    }
+    return true;
+}
+
+bool AudioSink::boundaryEndOfStream()
+{
+    auto expected = static_cast<std::int8_t>(EosState::None);
+    if (m_eosState.load(std::memory_order_relaxed) != expected) {
+        return false;
+    }
+    m_eosSample.store(m_producerState.samples(), std::memory_order_release);
+    if (!m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Pending), std::memory_order_acq_rel, std::memory_order_acquire)) {
+        return false;
+    }
+    return true;
+}
+
+bool AudioSink::retractEndOfStream()
+{
+    auto expected = static_cast<std::int8_t>(EosState::Pending);
+    return m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::None), std::memory_order_acq_rel, std::memory_order_acquire);
+}
+
+void AudioSink::samplesProduced(std::uint64_t epochTag, std::size_t count)
+{
+    m_producerState.addSamples(epochTag, count);
+}
+
+bool AudioSink::endOfStreamPending() const
+{
+    return m_eosState.load(std::memory_order_acquire) == static_cast<std::int8_t>(EosState::Pending)
+        && m_streamSamplesRead.load(std::memory_order_acquire) >= m_eosSample.load(std::memory_order_acquire);
+}
+
+bool AudioSink::tryClaimDrained()
+{
+    if (!endOfStreamPending()) {
+        return false;
+    }
+    auto expected = static_cast<std::int8_t>(EosState::Pending);
+    return m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Claimed), std::memory_order_acq_rel, std::memory_order_acquire);
+}
+
+bool AudioSink::takeDrainedEmission()
+{
+    auto expected = static_cast<std::int8_t>(EosState::Claimed);
+    return m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Emitted), std::memory_order_acq_rel, std::memory_order_acquire);
+}
+
+void AudioSink::processStreamFlush()
+{
+    m_producerState.bumpEpoch();
+
+    if (auto *ap = m_audioPipe.load(std::memory_order_acquire)) {
+        ap->consumer().drain();
+    }
+    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+
+    m_streamSamplesRead.store(0, std::memory_order_relaxed);
+    while (m_boundaries.peek() != nullptr) {
+        m_boundaries.pop();
+    }
+
+    m_eosState.store(static_cast<std::int8_t>(EosState::None), std::memory_order_release);
+    // just make sure nothing happens until pending:
+    m_eosSample.store(std::numeric_limits<std::uint64_t>::max(), std::memory_order_relaxed);
+    m_formatChangePending.store(false, std::memory_order_relaxed);
+
+    m_queueReady.store(true, std::memory_order_release);
+}
+
+AudioSink::BoundaryAdvance AudioSink::advanceBoundaries(bool afterRead, size_t *budget)
+{
+    BoundaryAdvance result = BoundaryAdvance::NoneCrossed;
+    while (const StreamBoundary *boundary = m_boundaries.peek()) {
+        if (boundary->epoch != streamEpoch()) {
+            m_boundaries.pop();
+            continue;
+        }
+        const std::uint64_t samplesRead = m_streamSamplesRead.load(std::memory_order_relaxed);
+        if (samplesRead < boundary->streamSample) {
+            if (!afterRead && budget != nullptr && (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels())) {
+                *budget = std::min<size_t>(*budget, boundary->streamSample - samplesRead);
+            }
+            break;
+        }
+
+        if (boundary->sampleRate != currentSampleRate() || boundary->channels != currentChannels()) {
+            if (afterRead) {
+                break;
+            }
+            if (!m_formatChangePending.exchange(true, std::memory_order_acq_rel)) {
+                const int sampleRate = boundary->sampleRate;
+                const int channels = boundary->channels;
+                QMetaObject::invokeMethod(
+                    this,
+                    [this, sampleRate, channels]() {
+                        Q_EMIT formatChangeRequired(sampleRate, channels);
+                    },
+                    Qt::QueuedConnection);
+            }
+            return BoundaryAdvance::FormatStall;
+        }
+
+        m_boundaries.pop();
+        m_formatChangePending.store(false, std::memory_order_relaxed);
+        m_positionOffset.store(0, std::memory_order_relaxed);
+        m_totalSamplesWritten.store(afterRead ? static_cast<qint64>(samplesRead - boundary->streamSample) : static_cast<qint64>(0), std::memory_order_relaxed);
+        const std::uint32_t trackId = boundary->trackId;
+        const std::optional<std::chrono::milliseconds> duration = boundary->duration;
+        QMetaObject::invokeMethod(
+            this,
+            [this, trackId, duration]() {
+                Q_EMIT trackStarted(trackId, duration);
+            },
+            Qt::QueuedConnection);
+        if (afterRead) {
+            result = BoundaryAdvance::Crossed;
+        }
+    }
+    return result;
+}
+
+std::span<const float> AudioSink::processAudioCallback(size_t maxSamples, std::chrono::microseconds estimatedPts)
+{
+    if (m_positionResetPending.exchange(false, std::memory_order_acq_rel)) {
+        m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+    }
+
+    if (m_flushPending.exchange(false, std::memory_order_acq_rel)) {
+        processStreamFlush();
+    }
+
+    auto *ap = m_audioPipe.load(std::memory_order_acquire);
+    if (!ap) {
+        return {};
+    }
+
+    size_t budget = maxSamples;
+    if (advanceBoundaries(false, &budget) == BoundaryAdvance::FormatStall) {
+        return {};
+    }
+
+    if (m_callbackBuffer.size() < budget) {
+        m_callbackBuffer.resize(budget);
+    }
+    size_t totalRead = 0;
+
+    ap->consumer().readSomeWith(budget, [&](std::span<const float> b1, std::span<const float> b2) {
+        totalRead = b1.size() + b2.size();
+        if (totalRead == 0) {
+            return;
+        }
+
+        auto it = m_callbackBuffer.begin();
+        it = std::ranges::copy(b1, it).out;
+        std::ranges::copy(b2, it);
+    });
+
+    if (totalRead == 0) {
+        if (!endOfStreamPending()) {
+            m_underrunCount.fetch_add(1, std::memory_order_relaxed);
+        }
+        return {};
+    }
+
+    m_streamSamplesRead.fetch_add(totalRead, std::memory_order_relaxed);
+
+    const bool crossedBoundary = advanceBoundaries(true, nullptr) == BoundaryAdvance::Crossed;
+
+    if (!crossedBoundary) {
+        m_totalSamplesWritten.fetch_add(static_cast<qint64>(totalRead), std::memory_order_relaxed);
+    }
+
+    const auto consumedSpan = std::span{m_callbackBuffer.data(), totalRead};
+
+    if (auto *fp = m_fftPipe.load(std::memory_order_acquire)) {
+        size_t blocksNeeded = (totalRead + PcmBlock::MAX_SAMPLES - 1) / PcmBlock::MAX_SAMPLES;
+        fp->producer().writeSomeWith(blocksNeeded, [&](std::span<PcmBlock> fb1, std::span<PcmBlock> fb2) {
+            size_t srcOffset = 0;
+            auto fillBlock = [&](std::span<PcmBlock> dst) {
+                for (size_t i = 0; i < dst.size() && srcOffset < totalRead; ++i) {
+                    size_t remaining = totalRead - srcOffset;
+                    size_t toCopy = std::min(remaining, PcmBlock::MAX_SAMPLES);
+                    dst[i].count = toCopy;
+                    dst[i].pts = estimatedPts;
+
+                    for (size_t j = 0; j < toCopy; ++j) {
+                        dst[i].samples[j] = m_callbackBuffer[srcOffset + j];
+                    }
+                    srcOffset += toCopy;
+                }
+            };
+            fillBlock(fb1);
+            fillBlock(fb2);
+        });
+    }
+
+    return consumedSpan;
+}
+Pipe<float> *AudioSink::audioPipe() const
+{
+    return m_audioPipe.load(std::memory_order_acquire);
+}
+
+Pipe<PcmBlock> *AudioSink::fftPipe() const
+{
+    return m_fftPipe.load(std::memory_order_acquire);
+}
+
+void AudioSink::setFormat(int sampleRate, int channels)
+{
+    m_sampleRate.store(sampleRate, std::memory_order_relaxed);
+    m_channels.store(channels, std::memory_order_relaxed);
+}
+
+void AudioSink::preAllocateCallbackBuffer(size_t maxSamples)
+{
+    m_callbackBuffer.resize(maxSamples);
+}

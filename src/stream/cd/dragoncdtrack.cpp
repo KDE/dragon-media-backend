@@ -5,7 +5,7 @@
 
 #include <dragoncdtrack.h>
 
-#include "dragoncdframes.h"
+#include "cdframes.h"
 #include "dragoncdtoc_p.h"
 
 #include <utility>
@@ -69,7 +69,7 @@ int DragonCdTrack::lengthFrames() const
 
 std::chrono::milliseconds DragonCdTrack::duration() const
 {
-    return DragonCdFrames::framesToDuration(d->lengthFrames);
+    return CdFrames::framesToDuration(d->lengthFrames);
 }
 
 QUrl DragonCdTrack::url() const

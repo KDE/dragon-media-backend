@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
 
 add_library(dragon_sink_objs OBJECT
-    dragonaudiosink.cpp
-    dragonaudiosinkfactory.cpp
-    dragonnullaudiosink.cpp
+    audiosink.cpp
+    audiosinkfactory.cpp
+    nullaudiosink.cpp
     dragonmediabackend_audio_logging.cpp
 )
 
@@ -36,7 +36,7 @@ if(ANDROID)
 endif()
 kcoreaddons_add_plugin(dragonsdlaudiosink
         ${DRAGON_SDL_SINK_STATIC}
-        SOURCES dragonsdlaudiosink.cpp
+        SOURCES sdlaudiosink.cpp
         INSTALL_NAMESPACE "DragonMediaBackend/AudioSink"
 )
 target_include_directories(dragonsdlaudiosink PRIVATE
@@ -62,7 +62,7 @@ set(DRAGON_SINK_PLUGIN_BUILD_DIR
 
 if(PULSEAUDIO_FOUND)
     kcoreaddons_add_plugin(dragonpulseaudiosink
-            SOURCES dragonpulseaudiosink.cpp
+            SOURCES pulseaudiosink.cpp
             INSTALL_NAMESPACE "DragonMediaBackend/AudioSink"
     )
     target_include_directories(dragonpulseaudiosink PRIVATE
@@ -76,7 +76,7 @@ endif()
 
 if(PIPEWIRE_FOUND)
     kcoreaddons_add_plugin(dragonpipewireaudiosink
-            SOURCES dragonpipewireaudiosink.cpp
+            SOURCES pipewireaudiosink.cpp
             INSTALL_NAMESPACE "DragonMediaBackend/AudioSink"
     )
     target_include_directories(dragonpipewireaudiosink PRIVATE

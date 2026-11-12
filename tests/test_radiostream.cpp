@@ -9,11 +9,11 @@
 
 #include "logging_timestamp_init.h"
 
-#include "stream/http/dragonhttpbodyframer.h"
-#include "stream/http/dragonhttpprotocol.h"
-#include "stream/http/dragonhttpsocket.h"
-#include "stream/http/dragonicydemuxer.h"
-#include "stream/http/dragonradiostream.h"
+#include "stream/http/httpbodyframer.h"
+#include "stream/http/httpprotocol.h"
+#include "stream/http/httpsocket.h"
+#include "stream/http/icydemuxer.h"
+#include "stream/http/radiostream.h"
 
 #include "streamtestserver.h"
 #include "test_utils.h"
@@ -148,7 +148,7 @@ void TestRadioStream::cleanupTestCase()
 
 void TestRadioStream::testLifecycle()
 {
-    DragonRadioStream stream;
+    RadioStream stream;
     QVERIFY(!stream.isAborted());
 
     const QUrl url1("http://127.0.0.1:8080/stream1"_L1);
@@ -173,7 +173,7 @@ void TestRadioStream::testLifecycle()
 
 void TestRadioStream::testReadBlocksUntilStop()
 {
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(QUrl("http://127.0.0.1:0/stream"_L1));
 
     std::atomic<bool> readCompleted{false};
@@ -202,9 +202,9 @@ void TestRadioStream::testReadBlocksUntilStop()
 
 void TestRadioStream::testErrorSignal()
 {
-    DragonRadioStream stream;
+    RadioStream stream;
 
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     stream.setUrl(QUrl("http://invalid-domain-that-does-not-exist-12345.com/stream"_L1));
     stream.start();
@@ -303,10 +303,10 @@ void TestRadioStream::testMetadataParsing()
 
     qRegisterMetaType<DragonIcyMetadata>("DragonIcyMetadata");
 
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(QUrl("http://example.com"_L1));
 
-    QSignalSpy metadataSpy(&stream, &DragonRadioStream::metadataReady);
+    QSignalSpy metadataSpy(&stream, &RadioStream::metadataReady);
     QVERIFY(metadataSpy.isValid());
 
     stream.processMetadata(metadata);
@@ -340,7 +340,7 @@ void TestRadioStream::testMetadataParsing()
 
 void TestRadioStream::testReadBehaviorWithStopToken()
 {
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(QUrl("http://127.0.0.1:0/stream"_L1));
 
     std::vector<uint8_t> buffer(1024);
@@ -367,7 +367,7 @@ void TestRadioStream::testReadBehaviorWithStopToken()
 
 void TestRadioStream::testIsAbortedFlag()
 {
-    DragonRadioStream stream;
+    RadioStream stream;
     QVERIFY(!stream.isAborted());
 
     stream.stop();
@@ -390,7 +390,7 @@ void TestRadioStream::testSeekingCapabilities()
     url.setPort(m_server->port());
     url.setPath(u"/gs-16b-1c-44100hz.wma"_s);
 
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(url);
     stream.start();
 
@@ -448,10 +448,10 @@ void TestRadioStream::testSeekableChangedSignal()
     url.setPort(m_server->port());
     url.setPath(u"/gs-16b-1c-44100hz.wma"_s);
 
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(url);
 
-    QSignalSpy seekableSpy(&stream, &DragonStream::seekableChanged);
+    QSignalSpy seekableSpy(&stream, &Stream::seekableChanged);
     QVERIFY(seekableSpy.isValid());
 
     QVERIFY(!stream.isSeekable());
@@ -532,9 +532,9 @@ void TestRadioStream::testBufferingSignals()
     url.setPort(server.serverPort());
     url.setPath(u"/stream"_s);
 
-    DragonRadioStream stream;
-    QSignalSpy bufferingSpy(&stream, &DragonRadioStream::streamBuffering);
-    QSignalSpy bufferedSpy(&stream, &DragonRadioStream::streamBuffered);
+    RadioStream stream;
+    QSignalSpy bufferingSpy(&stream, &RadioStream::streamBuffering);
+    QSignalSpy bufferedSpy(&stream, &RadioStream::streamBuffered);
 
     stream.setUrl(url);
     stream.start();
@@ -648,13 +648,12 @@ void TestRadioStream::testBackpressure()
     url.setPort(server.serverPort());
     url.setPath(u"/stream"_s);
 
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(url);
     stream.start();
 
-    QTRY_VERIFY_WITH_TIMEOUT(stream.bufferDepth() >= DragonRadioStream::MAX_BUFFER_BYTES, 15000);
-    QVERIFY2(stream.bufferDepth() <= DragonRadioStream::MAX_BUFFER_BYTES + 65536,
-             qPrintable(u"Buffer depth %1 exceeds cap + tolerance"_s.arg(stream.bufferDepth())));
+    QTRY_VERIFY_WITH_TIMEOUT(stream.bufferDepth() >= RadioStream::MAX_BUFFER_BYTES, 15000);
+    QVERIFY2(stream.bufferDepth() <= RadioStream::MAX_BUFFER_BYTES + 65536, qPrintable(u"Buffer depth %1 exceeds cap + tolerance"_s.arg(stream.bufferDepth())));
 
     // Read everything with a brief pause in the middle to exercise the suspend/resume cycle.
     std::stop_source ss;
@@ -713,7 +712,7 @@ QByteArray makeBody(qsizetype size)
 class StreamCollector
 {
 public:
-    explicit StreamCollector(DragonRadioStream &stream)
+    explicit StreamCollector(RadioStream &stream)
         : m_stream(stream)
         , m_reader([this]() {
             collect();
@@ -775,7 +774,7 @@ private:
         }
     }
 
-    DragonRadioStream &m_stream;
+    RadioStream &m_stream;
     std::stop_source m_stop;
     mutable std::mutex m_mutex;
     QByteArray m_payload;
@@ -824,9 +823,9 @@ void TestRadioStream::testDialectsPlayAudio()
     server.setBody(audio);
     server.setIcyMetadata(Metaint, "Slay Test");
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
-    QSignalSpy metadataSpy(&stream, &DragonRadioStream::metadataReady);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
+    QSignalSpy metadataSpy(&stream, &RadioStream::metadataReady);
 
     stream.setUrl(server.url());
     stream.start();
@@ -858,7 +857,7 @@ void TestRadioStream::testDialectsReportSize()
     server.setDialect(StreamTestServer::Dialect::Http);
     server.setBody(audio);
 
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(server.url());
     stream.start();
 
@@ -883,8 +882,8 @@ void TestRadioStream::testDialectsEndOnServerClose()
     // A live station: it sends what it has and holds the connection open.
     server.setCloseAfterBody(false);
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     stream.setUrl(server.url());
     stream.start();
@@ -921,8 +920,8 @@ void TestRadioStream::testDialectsAdvertiseRanges()
         server.setHeader("Accept-Ranges", "bytes");
     }
 
-    DragonRadioStream stream;
-    QSignalSpy seekableSpy(&stream, &DragonRadioStream::seekableChanged);
+    RadioStream stream;
+    QSignalSpy seekableSpy(&stream, &RadioStream::seekableChanged);
 
     stream.setUrl(server.url());
     stream.start();
@@ -950,8 +949,8 @@ void TestRadioStream::testDialectsReportServerError()
     server.setDialect(StreamTestServer::Dialect::Shoutcast);
     server.setStatus(404, "Not Found");
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     stream.setUrl(server.url());
     stream.start();
@@ -973,7 +972,7 @@ void TestRadioStream::testDialectsSendRequestHeaders()
     server.setDialect(StreamTestServer::Dialect::Http);
     server.setBody(makeBody(1024));
 
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(server.url());
     stream.start();
 
@@ -1001,8 +1000,8 @@ void TestRadioStream::testChunkedBodyWithTrailers()
     server.setChunkedTrailer("X-Ice-Public: yes\r\n");
     server.setCloseAfterBody(false);
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     stream.setUrl(server.url());
     stream.start();
@@ -1031,8 +1030,8 @@ void TestRadioStream::testSeekRejectedWhenRangeIsIgnored()
     server.setHeader("Accept-Ranges"_ba, "bytes"_ba);
     server.setCloseAfterBody(false);
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     stream.setUrl(server.url());
     stream.start();
@@ -1064,8 +1063,8 @@ void TestRadioStream::testDialectsEndAtContentLength()
     server.setCloseAfterBody(false);
     server.setContentLengthHeader(true);
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     stream.setUrl(server.url());
     stream.start();
@@ -1092,8 +1091,8 @@ void TestRadioStream::testDialectsFollowRedirect()
     server.setBody(audio);
     server.setRedirect("/elsewhere");
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     stream.setUrl(server.url());
     stream.start();
@@ -1121,8 +1120,8 @@ void TestRadioStream::testDialectsProxyForwarding()
 
     ScopedProxyOverride proxyOverride(QNetworkProxy(QNetworkProxy::HttpProxy, QStringLiteral("127.0.0.1"), proxy.port()));
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     // A host only the proxy could ever reach.
     stream.setUrl(QUrl(QStringLiteral("http://radio.invalid/stream")));
@@ -1166,8 +1165,8 @@ void TestRadioStream::testProxyAuthentication()
 
     ScopedProxyOverride proxyOverride(configured);
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     stream.setUrl(QUrl(QStringLiteral("http://radio.invalid/stream")));
     stream.start();
@@ -1203,8 +1202,8 @@ void TestRadioStream::testSocksProxy()
 
     ScopedProxyOverride proxyOverride(QNetworkProxy(QNetworkProxy::Socks5Proxy, QStringLiteral("127.0.0.1"), proxy.port()));
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     // Host and port that only the proxy could reach/resolve
     stream.setUrl(QUrl(QStringLiteral("http://radio.invalid:8000/stream")));
@@ -1248,18 +1247,18 @@ void TestRadioStream::testResolveProxy()
 
     // Cleartext HTTP accepts a non-tunneling forwarding proxy; HTTPS skips it for a tunneling one
     factory->proxies = {cachingHttp, socks};
-    QCOMPARE(DragonHttpProtocol::resolveProxy(QUrl(u"http://radio.example.org/stream"_s)).hostName(), u"10.0.0.4"_s);
-    QCOMPARE(DragonHttpProtocol::resolveProxy(QUrl(u"https://radio.example.org/stream"_s)).hostName(), u"10.0.0.5"_s);
+    QCOMPARE(HttpProtocol::resolveProxy(QUrl(u"http://radio.example.org/stream"_s)).hostName(), u"10.0.0.4"_s);
+    QCOMPARE(HttpProtocol::resolveProxy(QUrl(u"https://radio.example.org/stream"_s)).hostName(), u"10.0.0.5"_s);
 
     // HTTPS with only a non-tunneling proxy falls back to NoProxy
     factory->proxies = {cachingHttp};
-    QCOMPARE(DragonHttpProtocol::resolveProxy(QUrl(u"https://radio.example.org/stream"_s)).type(), QNetworkProxy::NoProxy);
+    QCOMPARE(HttpProtocol::resolveProxy(QUrl(u"https://radio.example.org/stream"_s)).type(), QNetworkProxy::NoProxy);
 
     // Workaround for Qt's socks5h bug: Socks5Proxy missing TunnelingCapability is accepted and repaired
     QNetworkProxy socks5h(QNetworkProxy::Socks5Proxy, u"10.0.0.3"_s, 1080);
     socks5h.setCapabilities(QNetworkProxy::HostNameLookupCapability);
     factory->proxies = {socks5h};
-    const QNetworkProxy resolved = DragonHttpProtocol::resolveProxy(QUrl(u"https://radio.example.org/stream"_s));
+    const QNetworkProxy resolved = HttpProtocol::resolveProxy(QUrl(u"https://radio.example.org/stream"_s));
     QCOMPARE(resolved.type(), QNetworkProxy::Socks5Proxy);
     QVERIFY(resolved.capabilities().testFlag(QNetworkProxy::TunnelingCapability));
 }
@@ -1269,7 +1268,7 @@ void TestRadioStream::testIcyResponseParsing()
     // SHOUTcast DNAS answers listeners with the pre-standard "ICY 200 OK" status
     // line; reading it is the whole reason the stream drives a socket of its own.
     {
-        const auto result = DragonHttpProtocol::parseIcyResponse("ICY 200 OK\r\nicy-metaint:1024\r\nICY-Name: Test Radio");
+        const auto result = HttpProtocol::parseIcyResponse("ICY 200 OK\r\nicy-metaint:1024\r\nICY-Name: Test Radio");
         QVERIFY(result.has_value());
         QCOMPARE(result->statusCode, 200);
         QCOMPARE(result->headers.value("icy-metaint").toByteArray(), QByteArrayLiteral("1024"));
@@ -1278,7 +1277,7 @@ void TestRadioStream::testIcyResponseParsing()
 
     // Ordinary HTTP is read too, and header names are matched regardless of case.
     {
-        const auto result = DragonHttpProtocol::parseIcyResponse("HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg");
+        const auto result = HttpProtocol::parseIcyResponse("HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg");
         QVERIFY(result.has_value());
         QCOMPARE(result->statusCode, 200);
         QCOMPARE(result->headers.value("content-TYPE").toByteArray(), QByteArrayLiteral("audio/mpeg"));
@@ -1286,20 +1285,20 @@ void TestRadioStream::testIcyResponseParsing()
 
     // A failed read carries the offending status line, for the caller's message.
     {
-        const auto result = DragonHttpProtocol::parseIcyResponse(QByteArray());
+        const auto result = HttpProtocol::parseIcyResponse(QByteArray());
         QVERIFY(!result.has_value());
-        QCOMPARE(static_cast<int>(result.error().error), static_cast<int>(DragonHttpProtocol::IcyParseError::MalformedStatusLine));
+        QCOMPARE(static_cast<int>(result.error().error), static_cast<int>(HttpProtocol::IcyParseError::MalformedStatusLine));
     }
     {
-        const auto result = DragonHttpProtocol::parseIcyResponse("220 some FTP server\r\n");
+        const auto result = HttpProtocol::parseIcyResponse("220 some FTP server\r\n");
         QVERIFY(!result.has_value());
-        QCOMPARE(static_cast<int>(result.error().error), static_cast<int>(DragonHttpProtocol::IcyParseError::NotAudioResponse));
+        QCOMPARE(static_cast<int>(result.error().error), static_cast<int>(HttpProtocol::IcyParseError::NotAudioResponse));
         QCOMPARE(result.error().statusLine, QByteArrayLiteral("220 some FTP server"));
     }
     {
-        const auto result = DragonHttpProtocol::parseIcyResponse("ICY nothing here");
+        const auto result = HttpProtocol::parseIcyResponse("ICY nothing here");
         QVERIFY(!result.has_value());
-        QCOMPARE(static_cast<int>(result.error().error), static_cast<int>(DragonHttpProtocol::IcyParseError::NonNumericStatus));
+        QCOMPARE(static_cast<int>(result.error().error), static_cast<int>(HttpProtocol::IcyParseError::NonNumericStatus));
         QCOMPARE(result.error().statusLine, QByteArrayLiteral("ICY nothing here"));
     }
 }
@@ -1308,7 +1307,7 @@ void TestRadioStream::testBodyFramerDirect()
 {
     // Unframed: everything passes through, and the hang-up alone ends the body.
     {
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.start(false, -1);
         const auto out = framer.feed("hello"_ba);
         QVERIFY(out.has_value());
@@ -1319,7 +1318,7 @@ void TestRadioStream::testBodyFramerDirect()
 
     // Fixed length: bytes past the declared length are not part of the body.
     {
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.start(false, 5);
         const auto out = framer.feed("hello world"_ba);
         QVERIFY(out.has_value());
@@ -1328,7 +1327,7 @@ void TestRadioStream::testBodyFramerDirect()
         QVERIFY(!framer.isTruncated());
     }
     {
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.start(false, 10);
         const auto out = framer.feed("hel"_ba);
         QVERIFY(out.has_value());
@@ -1339,7 +1338,7 @@ void TestRadioStream::testBodyFramerDirect()
 
     // Chunked: extensions on the size line, a CRLF split across feeds, trailers.
     {
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.start(true, -1);
         auto out = framer.feed("4;ext=val\r\nWiki"_ba);
         QVERIFY(out.has_value());
@@ -1355,11 +1354,11 @@ void TestRadioStream::testBodyFramerDirect()
 
     // A chunk size line that does not parse is a malformed body.
     {
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.start(true, -1);
         const auto out = framer.feed("zz\r\n"_ba);
         QVERIFY(!out.has_value());
-        QCOMPARE(out.error(), DragonHttpBodyFramer::Error::MalformedChunkSize);
+        QCOMPARE(out.error(), HttpBodyFramer::Error::MalformedChunkSize);
         QVERIFY(framer.isTruncated());
     }
 
@@ -1367,7 +1366,7 @@ void TestRadioStream::testBodyFramerDirect()
     {
         QHttpHeaders headers;
         headers.append(QHttpHeaders::WellKnownHeader::TransferEncoding, "chunked"_ba);
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.startFromHeaders(headers);
         const auto out = framer.feed("3\r\nabc\r\n0\r\n\r\n"_ba);
         QVERIFY(out.has_value());
@@ -1377,7 +1376,7 @@ void TestRadioStream::testBodyFramerDirect()
     {
         QHttpHeaders headers;
         headers.append(QHttpHeaders::WellKnownHeader::ContentLength, "2"_ba);
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.startFromHeaders(headers);
         const auto out = framer.feed("abcd"_ba);
         QVERIFY(out.has_value());
@@ -1387,29 +1386,29 @@ void TestRadioStream::testBodyFramerDirect()
 
     // Unbounded chunk size line or trailer is rejected with MalformedChunkSize
     {
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.start(true, -1);
-        const QByteArray hugeChunkLine(DragonHttpBodyFramer::MAX_CHUNK_LINE_BYTES + 1, '1');
+        const QByteArray hugeChunkLine(HttpBodyFramer::MAX_CHUNK_LINE_BYTES + 1, '1');
         const auto out = framer.feed(hugeChunkLine);
         QVERIFY(!out.has_value());
-        QCOMPARE(out.error(), DragonHttpBodyFramer::Error::MalformedChunkSize);
+        QCOMPARE(out.error(), HttpBodyFramer::Error::MalformedChunkSize);
         QVERIFY(framer.isTruncated());
     }
     {
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.start(true, -1);
         // Feed chunk 0 to enter trailer state
         const auto out1 = framer.feed("0\r\n"_ba);
         QVERIFY(out1.has_value());
-        const QByteArray hugeTrailer(DragonHttpBodyFramer::MAX_CHUNK_LINE_BYTES + 1, 'X');
+        const QByteArray hugeTrailer(HttpBodyFramer::MAX_CHUNK_LINE_BYTES + 1, 'X');
         const auto out2 = framer.feed(hugeTrailer);
         QVERIFY(!out2.has_value());
-        QCOMPARE(out2.error(), DragonHttpBodyFramer::Error::MalformedChunkSize);
+        QCOMPARE(out2.error(), HttpBodyFramer::Error::MalformedChunkSize);
         QVERIFY(framer.isTruncated());
     }
     // reset() clears framing and pending allocations
     {
-        DragonHttpBodyFramer framer;
+        HttpBodyFramer framer;
         framer.start(true, -1);
         framer.reset();
         QVERIFY(!framer.isComplete());
@@ -1444,8 +1443,8 @@ void TestRadioStream::testStopCancelsPendingReconnectTimer()
         }
     });
 
-    DragonRadioStream stream;
-    QSignalSpy stallSpy(&stream, &DragonRadioStream::streamStalled);
+    RadioStream stream;
+    QSignalSpy stallSpy(&stream, &RadioStream::streamStalled);
 
     stream.setUrl(QUrl(u"http://127.0.0.1:%1/"_s.arg(hangingUpServer.serverPort())));
     stream.start();
@@ -1487,7 +1486,7 @@ void TestRadioStream::testInformational1xxWithPipelinedResponse()
         }
     });
 
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(QUrl(u"http://127.0.0.1:%1/stream"_s.arg(server.serverPort())));
     stream.start();
 
@@ -1526,13 +1525,13 @@ void TestRadioStream::testEndStreamReentrancy()
         }
     });
 
-    DragonHttpSocket socket;
-    QSignalSpy finishedSpy(&socket, &DragonHttpSocket::finished);
+    HttpSocket socket;
+    QSignalSpy finishedSpy(&socket, &HttpSocket::finished);
 
     const QUrl secondUrl(u"http://127.0.0.1:%1/second"_s.arg(server.serverPort()));
     bool reopened = false;
 
-    QObject::connect(&socket, &DragonHttpSocket::bodyDataAvailable, &socket, [&](QByteArrayView) {
+    QObject::connect(&socket, &HttpSocket::bodyDataAvailable, &socket, [&](QByteArrayView) {
         if (!reopened) {
             reopened = true;
             socket.open(secondUrl);
@@ -1555,7 +1554,7 @@ void TestRadioStream::testIcyDemuxerReentrancy()
 {
     // Re-entrancy during feedInterleaved (e.g. reset/clearPendingBytes inside onAudio/onMetadata)
     // must not cause use-after-free, dangling views, or negative length removal on pending buffer.
-    DragonIcyDemuxer demuxer;
+    IcyDemuxer demuxer;
     demuxer.setIcyMetaInt(4);
 
     // Stream: 4 bytes audio ("1234"), 16 bytes metadata (len byte = 1, "StreamTitle='A';"), 4 bytes audio ("5678"), 16 bytes metadata ("StreamTitle='B';")
@@ -1611,7 +1610,7 @@ void TestRadioStream::testIcyDemuxerReentrancy()
 void TestRadioStream::testIcyDemuxerEmptyTitleClearing()
 {
     // processBlock must not drop explicit StreamTitle=''; clearing updates
-    DragonIcyDemuxer demuxer;
+    IcyDemuxer demuxer;
 
     // Initial block with a song title
     const auto meta1 = demuxer.processBlock("StreamTitle='Song 1';\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"_ba);
@@ -1632,7 +1631,7 @@ void TestRadioStream::testIcyDemuxerEmptyTitleClearing()
 void TestRadioStream::testIcyDemuxerSplitMetadata()
 {
     // Tests that metadata block split across multiple feed() packet boundaries is assembled cleanly
-    DragonIcyDemuxer demuxer;
+    IcyDemuxer demuxer;
     demuxer.setIcyMetaInt(4);
 
     QByteArray meta = "StreamTitle='Song Title';"_ba;
@@ -1681,7 +1680,7 @@ void TestRadioStream::testIcyDemuxerSplitMetadata()
 void TestRadioStream::testHttpRequestSetHeaderReplaces()
 {
     // HttpRequest::setHeader must overwrite existing headers case-insensitively instead of appending duplicates
-    DragonHttpProtocol::HttpRequest request("/stream"_ba, "example.com:8080"_ba);
+    HttpProtocol::HttpRequest request("/stream"_ba, "example.com:8080"_ba);
 
     // Overwrite the constructor-set Host header
     request.setHeader("Host"_ba, "newhost.com:9090"_ba);
@@ -1703,7 +1702,7 @@ void TestRadioStream::testHttpRequestSetHeaderReplaces()
 
     // Verify buildStreamGetRequest moves target and produces valid request
     const QUrl url(u"https://example.com/live"_s);
-    const QByteArray req = DragonHttpProtocol::buildStreamGetRequest(url, QNetworkProxy{QNetworkProxy::NoProxy}, std::nullopt);
+    const QByteArray req = HttpProtocol::buildStreamGetRequest(url, QNetworkProxy{QNetworkProxy::NoProxy}, std::nullopt);
     QVERIFY(req.startsWith("GET /live HTTP/1.1\r\n"_ba));
     QVERIFY(req.contains("Host: example.com\r\n"_ba));
 }
@@ -1720,9 +1719,9 @@ void TestRadioStream::testStreamStalledStopCancelsReconnect()
         }
     });
 
-    DragonRadioStream stream;
+    RadioStream stream;
     bool stalledReceived = false;
-    QObject::connect(&stream, &DragonRadioStream::streamStalled, &stream, [&]() {
+    QObject::connect(&stream, &RadioStream::streamStalled, &stream, [&]() {
         stalledReceived = true;
         stream.stop();
     });
@@ -1747,7 +1746,7 @@ void TestRadioStream::testContentRangeParsing()
 {
     // Valid standard Content-Range
     {
-        const auto res = DragonHttpProtocol::parseContentRange("bytes 0-1023/2048"_ba);
+        const auto res = HttpProtocol::parseContentRange("bytes 0-1023/2048"_ba);
         QVERIFY(res.has_value());
         QCOMPARE(res->first, 0);
         QCOMPARE(res->last, 1023);
@@ -1755,7 +1754,7 @@ void TestRadioStream::testContentRangeParsing()
     }
     // Unknown total size with '*'
     {
-        const auto res = DragonHttpProtocol::parseContentRange("bytes 500-999/*"_ba);
+        const auto res = HttpProtocol::parseContentRange("bytes 500-999/*"_ba);
         QVERIFY(res.has_value());
         QCOMPARE(res->first, 500);
         QCOMPARE(res->last, 999);
@@ -1763,58 +1762,58 @@ void TestRadioStream::testContentRangeParsing()
     }
     // Case-insensitive unit and whitespace tolerance
     {
-        const auto res = DragonHttpProtocol::parseContentRange("  BYTES  100-200/5000  "_ba);
+        const auto res = HttpProtocol::parseContentRange("  BYTES  100-200/5000  "_ba);
         QVERIFY(res.has_value());
         QCOMPARE(res->first, 100);
         QCOMPARE(res->last, 200);
         QCOMPARE(res->total, 5000);
     }
     // Malformed range strings
-    QVERIFY(!DragonHttpProtocol::parseContentRange(""_ba).has_value());
-    QVERIFY(!DragonHttpProtocol::parseContentRange("items 0-10/20"_ba).has_value());
-    QVERIFY(!DragonHttpProtocol::parseContentRange("bytes -10/20"_ba).has_value());
-    QVERIFY(!DragonHttpProtocol::parseContentRange("bytes 200-100/500"_ba).has_value()); // last < first
-    QVERIFY(!DragonHttpProtocol::parseContentRange("bytes 100-200"_ba).has_value());
+    QVERIFY(!HttpProtocol::parseContentRange(""_ba).has_value());
+    QVERIFY(!HttpProtocol::parseContentRange("items 0-10/20"_ba).has_value());
+    QVERIFY(!HttpProtocol::parseContentRange("bytes -10/20"_ba).has_value());
+    QVERIFY(!HttpProtocol::parseContentRange("bytes 200-100/500"_ba).has_value()); // last < first
+    QVERIFY(!HttpProtocol::parseContentRange("bytes 100-200"_ba).has_value());
 }
 
 void TestRadioStream::testHostHeaderAndRequestTarget()
 {
     // Host header with default port vs custom port
-    QCOMPARE(DragonHttpProtocol::hostHeader(QUrl("http://example.com"_L1)), QByteArrayLiteral("example.com"));
-    QCOMPARE(DragonHttpProtocol::hostHeader(QUrl("http://example.com:8080"_L1)), QByteArrayLiteral("example.com:8080"));
-    QCOMPARE(DragonHttpProtocol::hostHeader(QUrl("https://example.com:443"_L1)), QByteArrayLiteral("example.com"));
+    QCOMPARE(HttpProtocol::hostHeader(QUrl("http://example.com"_L1)), QByteArrayLiteral("example.com"));
+    QCOMPARE(HttpProtocol::hostHeader(QUrl("http://example.com:8080"_L1)), QByteArrayLiteral("example.com:8080"));
+    QCOMPARE(HttpProtocol::hostHeader(QUrl("https://example.com:443"_L1)), QByteArrayLiteral("example.com"));
 
     // Host header with IPv6
-    QCOMPARE(DragonHttpProtocol::hostHeader(QUrl("http://[::1]"_L1)), QByteArrayLiteral("[::1]"));
-    QCOMPARE(DragonHttpProtocol::hostHeader(QUrl("http://[::1]:8000"_L1)), QByteArrayLiteral("[::1]:8000"));
+    QCOMPARE(HttpProtocol::hostHeader(QUrl("http://[::1]"_L1)), QByteArrayLiteral("[::1]"));
+    QCOMPARE(HttpProtocol::hostHeader(QUrl("http://[::1]:8000"_L1)), QByteArrayLiteral("[::1]:8000"));
 
-    QCOMPARE(DragonHttpProtocol::requestTarget(QUrl("http://example.com"_L1)), QByteArrayLiteral("/"));
-    QCOMPARE(DragonHttpProtocol::requestTarget(QUrl("http://example.com/stream"_L1)), QByteArrayLiteral("/stream"));
-    QCOMPARE(DragonHttpProtocol::requestTarget(QUrl("http://example.com?radio=1"_L1)), QByteArrayLiteral("/?radio=1"));
-    QCOMPARE(DragonHttpProtocol::requestTarget(QUrl("http://example.com/live?codec=mp3#frag"_L1)), QByteArrayLiteral("/live?codec=mp3"));
+    QCOMPARE(HttpProtocol::requestTarget(QUrl("http://example.com"_L1)), QByteArrayLiteral("/"));
+    QCOMPARE(HttpProtocol::requestTarget(QUrl("http://example.com/stream"_L1)), QByteArrayLiteral("/stream"));
+    QCOMPARE(HttpProtocol::requestTarget(QUrl("http://example.com?radio=1"_L1)), QByteArrayLiteral("/?radio=1"));
+    QCOMPARE(HttpProtocol::requestTarget(QUrl("http://example.com/live?codec=mp3#frag"_L1)), QByteArrayLiteral("/live?codec=mp3"));
 }
 
 void TestRadioStream::testSocketErrorAndRetryMapping()
 {
     // SSL handshake failure mapping
-    QCOMPARE(DragonHttpProtocol::mapSocketError(QAbstractSocket::SslHandshakeFailedError), QNetworkReply::SslHandshakeFailedError);
-    QVERIFY(!DragonHttpProtocol::isRetryable(QNetworkReply::SslHandshakeFailedError));
+    QCOMPARE(HttpProtocol::mapSocketError(QAbstractSocket::SslHandshakeFailedError), QNetworkReply::SslHandshakeFailedError);
+    QVERIFY(!HttpProtocol::isRetryable(QNetworkReply::SslHandshakeFailedError));
 
     // Proxy errors mapping
-    QCOMPARE(DragonHttpProtocol::mapSocketError(QAbstractSocket::ProxyConnectionRefusedError), QNetworkReply::ProxyConnectionRefusedError);
-    QCOMPARE(DragonHttpProtocol::mapSocketError(QAbstractSocket::ProxyConnectionTimeoutError), QNetworkReply::ProxyTimeoutError);
+    QCOMPARE(HttpProtocol::mapSocketError(QAbstractSocket::ProxyConnectionRefusedError), QNetworkReply::ProxyConnectionRefusedError);
+    QCOMPARE(HttpProtocol::mapSocketError(QAbstractSocket::ProxyConnectionTimeoutError), QNetworkReply::ProxyTimeoutError);
 
-    QVERIFY(DragonHttpProtocol::isRetryable(QNetworkReply::TimeoutError));
-    QVERIFY(DragonHttpProtocol::isRetryable(QNetworkReply::RemoteHostClosedError));
-    QVERIFY(DragonHttpProtocol::isRetryable(QNetworkReply::ConnectionRefusedError));
-    QVERIFY(DragonHttpProtocol::isRetryable(QNetworkReply::HostNotFoundError));
-    QVERIFY(DragonHttpProtocol::isRetryable(QNetworkReply::ServiceUnavailableError));
+    QVERIFY(HttpProtocol::isRetryable(QNetworkReply::TimeoutError));
+    QVERIFY(HttpProtocol::isRetryable(QNetworkReply::RemoteHostClosedError));
+    QVERIFY(HttpProtocol::isRetryable(QNetworkReply::ConnectionRefusedError));
+    QVERIFY(HttpProtocol::isRetryable(QNetworkReply::HostNotFoundError));
+    QVERIFY(HttpProtocol::isRetryable(QNetworkReply::ServiceUnavailableError));
 
-    QVERIFY(!DragonHttpProtocol::isRetryable(QNetworkReply::ContentNotFoundError));
-    QVERIFY(!DragonHttpProtocol::isRetryable(QNetworkReply::ContentAccessDenied));
-    QVERIFY(!DragonHttpProtocol::isRetryable(QNetworkReply::AuthenticationRequiredError));
-    QVERIFY(!DragonHttpProtocol::isRetryable(QNetworkReply::ProxyAuthenticationRequiredError));
-    QVERIFY(!DragonHttpProtocol::isRetryable(QNetworkReply::ProtocolFailure));
+    QVERIFY(!HttpProtocol::isRetryable(QNetworkReply::ContentNotFoundError));
+    QVERIFY(!HttpProtocol::isRetryable(QNetworkReply::ContentAccessDenied));
+    QVERIFY(!HttpProtocol::isRetryable(QNetworkReply::AuthenticationRequiredError));
+    QVERIFY(!HttpProtocol::isRetryable(QNetworkReply::ProxyAuthenticationRequiredError));
+    QVERIFY(!HttpProtocol::isRetryable(QNetworkReply::ProtocolFailure));
 }
 
 void TestRadioStream::testSeekToZeroWith200Ok()
@@ -1828,8 +1827,8 @@ void TestRadioStream::testSeekToZeroWith200Ok()
     server.setHeader("Accept-Ranges"_ba, "bytes"_ba);
     server.setCloseAfterBody(false);
 
-    DragonRadioStream stream;
-    QSignalSpy errorSpy(&stream, &DragonRadioStream::errorOccurred);
+    RadioStream stream;
+    QSignalSpy errorSpy(&stream, &RadioStream::errorOccurred);
 
     stream.setUrl(server.url());
     stream.start();
@@ -1850,7 +1849,7 @@ void TestRadioStream::testSeekToZeroWith200Ok()
 
 void TestRadioStream::testTlsSessionTicketResumption()
 {
-    DragonHttpSocket socket;
+    HttpSocket socket;
 
     // Initial ticket state is empty
     QVERIFY(socket.sessionTicket().isEmpty());
@@ -1904,8 +1903,8 @@ void TestRadioStream::testTlsSessionTicketResumption()
     QVERIFY(socket.sessionTicket().isEmpty());
     socket.close();
 
-    // DragonRadioStream::setUrl clears the ticket when switching station URL
-    DragonRadioStream stream;
+    // RadioStream::setUrl clears the ticket when switching station URL
+    RadioStream stream;
     stream.m_httpSocket->setSessionTicket("ticket-radiostream"_ba, "station-a.com"_L1, 443);
     stream.setUrl(QUrl("https://station-a.com/live"_L1));
     QCOMPARE(stream.m_httpSocket->sessionTicket(), "ticket-radiostream"_ba);
@@ -1915,7 +1914,7 @@ void TestRadioStream::testTlsSessionTicketResumption()
 
 void TestRadioStream::testParseResponseHeadersDirect()
 {
-    using Socket = DragonHttpSocket;
+    using Socket = HttpSocket;
 
     // Malformed response
     {
@@ -2017,7 +2016,7 @@ void TestRadioStream::testParseResponseHeadersDirect()
 
 void TestRadioStream::testHttpSocketRedirectErrors()
 {
-    DragonHttpSocket socket;
+    HttpSocket socket;
     socket.m_initialUrl = QUrl("https://example.com/stream"_L1);
     socket.m_currentUrl = socket.m_initialUrl;
 
@@ -2062,10 +2061,10 @@ void TestRadioStream::testHttpSocketHeaderEdgeCases()
             }
         });
 
-        DragonHttpSocket socket;
-        QSignalSpy headersSpy(&socket, &DragonHttpSocket::headersReceived);
+        HttpSocket socket;
+        QSignalSpy headersSpy(&socket, &HttpSocket::headersReceived);
         QByteArray receivedAudio;
-        QObject::connect(&socket, &DragonHttpSocket::bodyDataAvailable, &socket, [&](QByteArrayView audio) {
+        QObject::connect(&socket, &HttpSocket::bodyDataAvailable, &socket, [&](QByteArrayView audio) {
             receivedAudio += audio.toByteArray();
         });
 
@@ -2089,7 +2088,7 @@ void TestRadioStream::testHttpSocketHeaderEdgeCases()
                 QObject::connect(client, &QTcpSocket::readyRead, client, [client]() {
                     client->readAll();
                     // Send > 64 KiB without any header delimiter
-                    const QByteArray hugeHeaders(DragonHttpSocket::MAX_HEADER_BYTES + 1024, 'A');
+                    const QByteArray hugeHeaders(HttpSocket::MAX_HEADER_BYTES + 1024, 'A');
                     client->write(hugeHeaders);
                     client->flush();
                 });
@@ -2097,8 +2096,8 @@ void TestRadioStream::testHttpSocketHeaderEdgeCases()
             }
         });
 
-        DragonHttpSocket socket;
-        QSignalSpy failedSpy(&socket, &DragonHttpSocket::failed);
+        HttpSocket socket;
+        QSignalSpy failedSpy(&socket, &HttpSocket::failed);
 
         socket.open(QUrl(u"http://127.0.0.1:%1/stream"_s.arg(server.serverPort())));
 
@@ -2111,8 +2110,8 @@ void TestRadioStream::testHttpSocketHeaderEdgeCases()
 
     // Invalid stream URL (empty host) fails immediately with ProtocolUnknownError without retries
     {
-        DragonHttpSocket socket;
-        QSignalSpy failSpy(&socket, &DragonHttpSocket::failed);
+        HttpSocket socket;
+        QSignalSpy failSpy(&socket, &HttpSocket::failed);
         socket.open(QUrl("http:///empty-host"_L1));
         QCOMPARE(failSpy.count(), 1);
         QCOMPARE(failSpy.at(0).at(0).value<QNetworkReply::NetworkError>(), QNetworkReply::ProtocolUnknownError);
@@ -2121,11 +2120,11 @@ void TestRadioStream::testHttpSocketHeaderEdgeCases()
 
     // HttpRequest clearHeaders and userAgent
     {
-        DragonHttpProtocol::HttpRequest request("/stream"_ba, "example.com"_ba);
+        HttpProtocol::HttpRequest request("/stream"_ba, "example.com"_ba);
         request.clearHeaders();
         QCOMPARE(request.toByteArray(), "GET /stream HTTP/1.1\r\n\r\n"_ba);
-        QVERIFY(!DragonHttpProtocol::userAgent().isEmpty());
-        QVERIFY(DragonHttpProtocol::userAgent().startsWith("DragonMediaBackend/"));
+        QVERIFY(!HttpProtocol::userAgent().isEmpty());
+        QVERIFY(HttpProtocol::userAgent().startsWith("DragonMediaBackend/"));
     }
 }
 
@@ -2149,9 +2148,9 @@ void TestRadioStream::testHttpSocketTruncatedBody()
         }
     });
 
-    DragonHttpSocket socket;
-    QSignalSpy failedSpy(&socket, &DragonHttpSocket::failed);
-    QSignalSpy finishedSpy(&socket, &DragonHttpSocket::finished);
+    HttpSocket socket;
+    QSignalSpy failedSpy(&socket, &HttpSocket::failed);
+    QSignalSpy finishedSpy(&socket, &HttpSocket::finished);
 
     socket.open(QUrl(u"http://127.0.0.1:%1/stream"_s.arg(server.serverPort())));
 
@@ -2197,7 +2196,7 @@ void TestRadioStream::testRangeReconnectionOnDrop()
         }
     });
 
-    DragonRadioStream stream;
+    RadioStream stream;
     stream.setUrl(QUrl(u"http://127.0.0.1:%1/stream"_s.arg(server.serverPort())));
     stream.start();
 

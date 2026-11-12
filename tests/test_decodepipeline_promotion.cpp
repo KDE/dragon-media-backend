@@ -9,7 +9,7 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include "decoder/dragondecodepipeline.h"
+#include "decoder/decodepipeline.h"
 #include <DragonPlayer>
 
 #include <QCoroTask>
@@ -35,7 +35,7 @@ struct InitCapture {
     std::atomic<bool> done{false};
 };
 
-QCoro::Task<void> runInitialize(DragonDecodePipeline &pipeline, const QUrl &url, InitCapture *cap)
+QCoro::Task<void> runInitialize(DecodePipeline &pipeline, const QUrl &url, InitCapture *cap)
 {
     cap->result = co_await pipeline.initializeSession(url);
     cap->done.store(true, std::memory_order_release);
@@ -45,10 +45,10 @@ struct PromotionWindow {
     std::atomic<bool> entered{false};
     std::atomic<bool> callbackDone{false};
 
-    void install(DragonDecodePipeline &pipeline)
+    void install(DecodePipeline &pipeline)
     {
-        pipeline.setBoundaryCallback([this](const DragonDecodePipeline::BoundaryEvent &event) -> bool {
-            if (event.kind == DragonDecodePipeline::BoundaryEvent::Kind::TrackStart && !entered.exchange(true, std::memory_order_acq_rel)) {
+        pipeline.setBoundaryCallback([this](const DecodePipeline::BoundaryEvent &event) -> bool {
+            if (event.kind == DecodePipeline::BoundaryEvent::Kind::TrackStart && !entered.exchange(true, std::memory_order_acq_rel)) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(300));
                 callbackDone.store(true, std::memory_order_release);
             }
@@ -121,7 +121,7 @@ void TestDecodePipelinePromotion::runPromotionRace(const QUrl &raceReplacement)
     const QUrl url3 = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.m4a"_s));
 
     DragonPlayer player; // parent and signal target for the pipeline under test
-    DragonDecodePipeline pipeline(&player);
+    DecodePipeline pipeline(&player);
 
     std::atomic<bool> decodeGate{false};
     pipeline.setSamplesCallback([&decodeGate](std::span<const float>, const std::stop_token &st) {
@@ -146,13 +146,13 @@ void TestDecodePipelinePromotion::runPromotionRace(const QUrl &raceReplacement)
     FinishedLog finished;
     std::atomic<bool> trackStartSeen{false};
     std::atomic<bool> raceDone{false};
-    QObject::connect(&pipeline, &DragonDecodePipeline::sessionFinished, [&finished](const QUrl &source, bool hadFatalError) {
+    QObject::connect(&pipeline, &DecodePipeline::sessionFinished, [&finished](const QUrl &source, bool hadFatalError) {
         Q_UNUSED(hadFatalError);
         finished.append(source);
     });
 
-    pipeline.setBoundaryCallback([&pipeline, &trackStartSeen, &raceDone, raceReplacement](const DragonDecodePipeline::BoundaryEvent &event) -> bool {
-        if (event.kind == DragonDecodePipeline::BoundaryEvent::Kind::TrackStart) {
+    pipeline.setBoundaryCallback([&pipeline, &trackStartSeen, &raceDone, raceReplacement](const DecodePipeline::BoundaryEvent &event) -> bool {
+        if (event.kind == DecodePipeline::BoundaryEvent::Kind::TrackStart) {
             trackStartSeen.store(true, std::memory_order_release);
             if (!raceDone.exchange(true, std::memory_order_acq_rel)) {
                 pipeline.setNextSource(raceReplacement);
@@ -190,7 +190,7 @@ void TestDecodePipelinePromotion::testStopSessionWaitsForInFlightPromotion()
     const QUrl url2 = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
 
     DragonPlayer player; // parent and signal target for the pipeline under test
-    DragonDecodePipeline pipeline(&player);
+    DecodePipeline pipeline(&player);
 
     std::atomic<bool> decodeGate{false};
     pipeline.setSamplesCallback([&decodeGate](std::span<const float>, const std::stop_token &st) {
@@ -235,7 +235,7 @@ void TestDecodePipelinePromotion::testRequestSeekWaitsForInFlightPromotion()
     const QUrl url2 = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
 
     DragonPlayer player; // parent and signal target for the pipeline under test
-    DragonDecodePipeline pipeline(&player);
+    DecodePipeline pipeline(&player);
 
     std::atomic<bool> decodeGate{false};
     pipeline.setSamplesCallback([&decodeGate](std::span<const float>, const std::stop_token &st) {
@@ -257,7 +257,7 @@ void TestDecodePipelinePromotion::testRequestSeekWaitsForInFlightPromotion()
     QTest::qWait(1000); // local 3s fixtures pre-warm in milliseconds
 
     FinishedLog finished;
-    QObject::connect(&pipeline, &DragonDecodePipeline::sessionFinished, [&finished](const QUrl &source, bool hadFatalError) {
+    QObject::connect(&pipeline, &DecodePipeline::sessionFinished, [&finished](const QUrl &source, bool hadFatalError) {
         Q_UNUSED(hadFatalError);
         finished.append(source);
     });
@@ -289,12 +289,12 @@ void TestDecodePipelinePromotion::testBoundaryEventCarriesSeekable()
     const QUrl url2 = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
 
     DragonPlayer player;
-    DragonDecodePipeline pipeline(&player);
+    DecodePipeline pipeline(&player);
 
     std::atomic<bool> seekableSeen{false};
     std::atomic<bool> boundarySeen{false};
-    pipeline.setBoundaryCallback([&](const DragonDecodePipeline::BoundaryEvent &event) -> bool {
-        if (event.kind == DragonDecodePipeline::BoundaryEvent::Kind::TrackStart) {
+    pipeline.setBoundaryCallback([&](const DecodePipeline::BoundaryEvent &event) -> bool {
+        if (event.kind == DecodePipeline::BoundaryEvent::Kind::TrackStart) {
             seekableSeen.store(event.seekable, std::memory_order_release);
             boundarySeen.store(true, std::memory_order_release);
         }
@@ -331,17 +331,17 @@ void TestDecodePipelinePromotion::testSequentialPromotionsMaintainSourceIntegrit
     const QUrl url3 = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.m4a"_s));
 
     DragonPlayer player;
-    DragonDecodePipeline pipeline(&player);
+    DecodePipeline pipeline(&player);
 
     FinishedLog finished;
-    QObject::connect(&pipeline, &DragonDecodePipeline::sessionFinished, [&finished](const QUrl &source, bool hadFatalError) {
+    QObject::connect(&pipeline, &DecodePipeline::sessionFinished, [&finished](const QUrl &source, bool hadFatalError) {
         Q_UNUSED(hadFatalError);
         finished.append(source);
     });
 
     std::atomic<int> promotions{0};
-    pipeline.setBoundaryCallback([&pipeline, &promotions, url3](const DragonDecodePipeline::BoundaryEvent &event) -> bool {
-        if (event.kind == DragonDecodePipeline::BoundaryEvent::Kind::TrackStart) {
+    pipeline.setBoundaryCallback([&pipeline, &promotions, url3](const DecodePipeline::BoundaryEvent &event) -> bool {
+        if (event.kind == DecodePipeline::BoundaryEvent::Kind::TrackStart) {
             const int p = ++promotions;
             if (p == 1) {
                 // When track 2 promotes, immediately arm track 3

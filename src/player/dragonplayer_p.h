@@ -5,12 +5,12 @@
 
 #pragma once
 
-#include "decoder/dragondecodepipeline.h"
-#include "sink/dragonaudiosink.h"
+#include "decoder/decodepipeline.h"
+#include "sink/audiosink.h"
 #include <dragonaudiooutput.h>
 #include <dragonplayer.h>
 
-#include "dragonpipe.h"
+#include "pipe.h"
 
 #include <QObject>
 #include <QTimer>
@@ -28,9 +28,9 @@
 
 using namespace std::chrono_literals;
 
-class DragonDiagnostics;
+class Diagnostics;
 class DragonAudioOutput;
-class DragonPositionEstimator;
+class PositionEstimator;
 
 struct AliveGuard {
     std::atomic<bool> alive{true};
@@ -43,14 +43,14 @@ public:
     explicit DragonPlayerPrivate(DragonPlayer *player, DragonAudioOutput::Backend requestedBackend = DragonAudioOutput::Backend::Auto);
 
 private:
-    friend class DragonDiagnostics;
+    friend class Diagnostics;
     friend class DragonPlayer;
     friend class DragonSpectrumAnalyzer;
     friend class DragonSpectrumAnalyzerPrivate;
 
     void init();
 
-    DragonAudioSink *audioSink() const;
+    AudioSink *audioSink() const;
 
     DragonPlayer *q = nullptr;
 
@@ -76,7 +76,7 @@ private:
 
     void writeToQueues(std::span<const float> pcm, const std::stop_token &st);
 
-    bool onPipelineBoundary(const DragonDecodePipeline::BoundaryEvent &event);
+    bool onPipelineBoundary(const DecodePipeline::BoundaryEvent &event);
 
     struct PendingTrack {
         QUrl url;
@@ -104,7 +104,7 @@ private:
     void resolvePendingTrackForSeek();
 
     // The stream epoch the decode thread's producer last observed before a
-    // write (see DragonAudioSink::streamEpoch()). Decode-thread confined
+    // write (see AudioSink::streamEpoch()). Decode-thread confined
     // writer; read on the decode thread when recording boundaries. A
     // TrackStart boundary is stamped with it so boundaries of a superseded
     // stream are discarded instead of firing in the new one.
@@ -120,9 +120,9 @@ private:
 
     void stopPipeline();
 
-    DragonDecodePipeline decodePipeline;
+    DecodePipeline decodePipeline;
 
-    DragonPipe<float> audioPipe;
+    Pipe<float> audioPipe;
 
     QUrl currentSource;
     QUrl nextSource;
@@ -141,7 +141,7 @@ private:
 
     std::shared_ptr<AliveGuard> aliveGuard;
 
-    DragonPositionEstimator *positionEstimator = nullptr;
+    PositionEstimator *positionEstimator = nullptr;
 
     bool playRequestedReload = false;
 

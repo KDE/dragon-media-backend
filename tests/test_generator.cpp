@@ -2,9 +2,9 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
- * Tests for the dragon::compat::generator<DecodeEvent> coroutine infrastructure using
+ * Tests for the compat::generator<DecodeEvent> coroutine infrastructure using
  * the production DragonMediaBackend event types, plus integration tests that
- * exercise the real DragonDecoder::decodeLoop() generator.
+ * exercise the real Decoder::decodeLoop() generator.
  */
 
 #include <QtCore>
@@ -12,10 +12,10 @@
 
 #include "logging_timestamp_init.h"
 
-#include "decoder/dragondecoder.h"
-#include "player/dragonevent.h"
+#include "decoder/decoder.h"
+#include "player/event.h"
 
-#include "dragoncppcompat.h"
+#include "cppcompat.h"
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -33,7 +33,7 @@ using namespace std::chrono_literals;
 
 namespace
 {
-dragon::compat::generator<DecodeEvent>
+compat::generator<DecodeEvent>
 createTestGenerator(int sampleRate, int channels, std::chrono::milliseconds duration, std::vector<std::vector<float>> sampleBatches)
 {
     co_yield FormatReady{sampleRate, channels, duration};
@@ -47,13 +47,13 @@ createTestGenerator(int sampleRate, int channels, std::chrono::milliseconds dura
     co_yield DecodeEof{};
 }
 
-dragon::compat::generator<DecodeEvent> createErrorGenerator(QString errorMessage)
+compat::generator<DecodeEvent> createErrorGenerator(QString errorMessage)
 {
     co_yield DecodeError{std::move(errorMessage)};
     co_return;
 }
 
-dragon::compat::generator<DecodeEvent> createErrorMidStreamGenerator()
+compat::generator<DecodeEvent> createErrorMidStreamGenerator()
 {
     co_yield FormatReady{44100, 2, std::chrono::milliseconds{1000}};
     co_yield SamplesChunk{};
@@ -385,7 +385,7 @@ void TestGeneratorInfrastructure::testProductionDecoderGeneratorEventOrdering()
     MockReadCallback readCb;
     readCb.data = wavData;
 
-    DragonDecoder decoder(
+    Decoder decoder(
         [&readCb](std::span<uint8_t> buf) {
             return readCb(buf);
         },
@@ -433,7 +433,7 @@ void TestGeneratorInfrastructure::testProductionDecoderGeneratorFormatReadyFromI
     MockReadCallback readCb;
     readCb.data = wavData;
 
-    DragonDecoder decoder(
+    Decoder decoder(
         [&readCb](std::span<uint8_t> buf) {
             return readCb(buf);
         },
@@ -468,7 +468,7 @@ void TestGeneratorInfrastructure::testProductionDecoderGeneratorSampleContent()
     MockReadCallback readCb;
     readCb.data = wavData;
 
-    DragonDecoder decoder(
+    Decoder decoder(
         [&readCb](std::span<uint8_t> buf) {
             return readCb(buf);
         },

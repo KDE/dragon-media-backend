@@ -10,9 +10,9 @@
 
 #include "test_utils.h"
 
-#include "sink/dragonaudiosink.h"
-#include "sink/dragonaudiosinkfactory.h"
-#include "sink/dragonnullaudiosink.h"
+#include "sink/audiosink.h"
+#include "sink/audiosinkfactory.h"
+#include "sink/nullaudiosink.h"
 #include <DragonAudioOutput>
 #include <DragonPlayer>
 
@@ -45,7 +45,7 @@ void TestSinkNull::testFactoryExplicitNull()
     auto sink = createAudioSink(DragonAudioOutput::Backend::Null, &selectedSink);
     QVERIFY(sink != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
-    QVERIFY(qobject_cast<DragonNullAudioSink *>(sink.get()) != nullptr);
+    QVERIFY(qobject_cast<NullAudioSink *>(sink.get()) != nullptr);
 }
 
 void TestSinkNull::testFactoryEnvRequestsNull()
@@ -80,7 +80,7 @@ void TestSinkNull::testFactoryFallbackNoPluginsFound()
     auto sink = createAudioSink(DragonAudioOutput::Backend::Auto, &selectedSink);
     QVERIFY(sink != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
-    QVERIFY(qobject_cast<DragonNullAudioSink *>(sink.get()) != nullptr);
+    QVERIFY(qobject_cast<NullAudioSink *>(sink.get()) != nullptr);
     QVERIFY(sink->probe());
     QVERIFY(!sink->isDeviceOpen());
 
@@ -89,7 +89,7 @@ void TestSinkNull::testFactoryFallbackNoPluginsFound()
     sink = createAudioSink(DragonAudioOutput::Backend::SDL, &selectedSink);
     QVERIFY(sink != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
-    QVERIFY(qobject_cast<DragonNullAudioSink *>(sink.get()) != nullptr);
+    QVERIFY(qobject_cast<NullAudioSink *>(sink.get()) != nullptr);
 
     // A DRAGON_AUDIO_SINK request for a plugin that does not exist: still no nullptr
     qputenv("DRAGON_AUDIO_SINK", "dragonsdlaudiosink");
@@ -97,12 +97,12 @@ void TestSinkNull::testFactoryFallbackNoPluginsFound()
     sink = createAudioSink(DragonAudioOutput::Backend::Auto, &selectedSink);
     QVERIFY(sink != nullptr);
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::Null);
-    QVERIFY(qobject_cast<DragonNullAudioSink *>(sink.get()) != nullptr);
+    QVERIFY(qobject_cast<NullAudioSink *>(sink.get()) != nullptr);
 }
 
 void TestSinkNull::testNullSinkMethods()
 {
-    DragonNullAudioSink sink;
+    NullAudioSink sink;
     QVERIFY(sink.probe());
     QVERIFY(!sink.isDeviceOpen());
     QVERIFY(!sink.isPaused());
@@ -111,7 +111,7 @@ void TestSinkNull::testNullSinkMethods()
     // Opening records the format and reports the broken install, but the
     // device never becomes open: that is the contract DragonPlayer's generic
     // open-failure handling relies on to refuse playback.
-    QSignalSpy errorSpy(&sink, &DragonAudioSink::errorOccurred);
+    QSignalSpy errorSpy(&sink, &AudioSink::errorOccurred);
     sink.open(44100, 2);
     QVERIFY(!sink.isDeviceOpen());
     QVERIFY(!sink.isPaused());
@@ -134,8 +134,8 @@ void TestSinkNull::testNullSinkMethods()
 
 void TestSinkNull::testNullSinkSignals()
 {
-    DragonNullAudioSink sink;
-    QSignalSpy errorSpy(&sink, &DragonAudioSink::errorOccurred);
+    NullAudioSink sink;
+    QSignalSpy errorSpy(&sink, &AudioSink::errorOccurred);
     QVERIFY(errorSpy.wait(200));
     QString msg = errorSpy.takeFirst().at(0).toString();
     QVERIFY(msg.contains(u"plugins"_s, Qt::CaseInsensitive));

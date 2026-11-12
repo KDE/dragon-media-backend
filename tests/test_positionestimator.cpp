@@ -5,7 +5,7 @@
 
 #include <QtTest>
 
-#include "player/dragonpositionestimator.h"
+#include "player/positionestimator.h"
 
 #include <QSignalSpy>
 
@@ -39,7 +39,7 @@ public:
     EstimatorHarness(EstimatorHarness &&) = delete;
     EstimatorHarness &operator=(EstimatorHarness &&) = delete;
 
-    DragonPositionEstimator estimator;
+    PositionEstimator estimator;
     std::chrono::milliseconds now{0};
     FakeDevice device;
 };
@@ -76,7 +76,7 @@ private Q_SLOTS:
 void TestPositionEstimator::testFrozenByDefault()
 {
     EstimatorHarness h;
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.now = 5000ms;
     h.estimator.tick();
@@ -130,7 +130,7 @@ void TestPositionEstimator::testExtrapolatesBetweenSyncPoints()
 void TestPositionEstimator::testNoReanchorWithinTolerance()
 {
     EstimatorHarness h;
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.estimator.start();
     h.estimator.tick();
@@ -168,7 +168,7 @@ void TestPositionEstimator::testReanchorsWhenDriftExceedsTolerance()
 void TestPositionEstimator::testFreezeHoldsPositionAndStopsTicking()
 {
     EstimatorHarness h;
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.estimator.start();
     h.estimator.tick();
@@ -197,7 +197,7 @@ void TestPositionEstimator::testSeekReportsTargetImmediatelyAndReanchors()
 {
     EstimatorHarness h{std::nullopt};
     h.estimator.setDuration(3000ms);
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.estimator.seek(1000ms);
     QCOMPARE(spy.count(), 1);
@@ -220,7 +220,7 @@ void TestPositionEstimator::testSeekClampsToDuration()
 {
     EstimatorHarness h;
     h.estimator.setDuration(3000ms);
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.estimator.seek(5000ms);
     QCOMPARE(h.estimator.position(), 3000ms);
@@ -248,7 +248,7 @@ void TestPositionEstimator::testTrackChangedResetsToZeroWithNewDuration()
 {
     EstimatorHarness h{std::chrono::milliseconds{2500}};
     h.estimator.setDuration(3000ms);
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.estimator.start();
     h.estimator.tick();
@@ -273,7 +273,7 @@ void TestPositionEstimator::testSnapToDurationIsSticky()
 {
     EstimatorHarness h{std::chrono::milliseconds{2990}};
     h.estimator.setDuration(3000ms);
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.estimator.start();
     h.estimator.tick();
@@ -308,7 +308,7 @@ void TestPositionEstimator::testPositionClampedToDuration()
 void TestPositionEstimator::testResetPositionEmitsWhenChanged()
 {
     EstimatorHarness h{std::chrono::milliseconds{1000}};
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.estimator.start();
     h.estimator.tick();
@@ -359,7 +359,7 @@ void TestPositionEstimator::testNoReanchorBeforeSyncIntervalElapses()
 void TestPositionEstimator::testDoubleFreezeKeepsPosition()
 {
     EstimatorHarness h;
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.estimator.start();
     h.estimator.tick();
@@ -379,7 +379,7 @@ void TestPositionEstimator::testDoubleFreezeKeepsPosition()
 void TestPositionEstimator::testSeekWithUnknownDurationClampsToZero()
 {
     EstimatorHarness h;
-    QSignalSpy spy(&h.estimator, &DragonPositionEstimator::positionChanged);
+    QSignalSpy spy(&h.estimator, &PositionEstimator::positionChanged);
 
     h.estimator.seek(1000ms);
     QCOMPARE(h.estimator.position(), 0ms);

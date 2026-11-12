@@ -152,7 +152,7 @@ Q_SIGNALS:
     void frameReady(const DragonFftFrame &frame);
 
 private:
-    friend class DragonDiagnostics;
+    friend class Diagnostics;
 
     [[nodiscard]] std::size_t fftPipeReady() const;
 

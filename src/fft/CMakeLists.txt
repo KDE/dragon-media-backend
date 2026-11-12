@@ -4,8 +4,8 @@
 
 add_library(dragon_fft_objs OBJECT
     dragonfftframe.cpp
-    dragonfftprocessor.cpp
-    dragonfftpipeline.cpp
+    fftprocessor.cpp
+    fftpipeline.cpp
     dragonspectrumanalyzer.cpp
 )
 

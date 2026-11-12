@@ -2,7 +2,7 @@
  * SPDX-FileCopyrightText: 2026 Ian Monroe <imonroe@kde.org>
  * SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
  *
- * Mock live-audio server for DragonRadioStream tests. Answers either as a
+ * Mock live-audio server for RadioStream tests. Answers either as a
  * modern HTTP origin or as SHOUTcast DNAS, so the same expectations can be
  * checked against whichever transport the stream had to use.
  */

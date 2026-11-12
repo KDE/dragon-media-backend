@@ -18,7 +18,7 @@
 #include "helpers/fixture_generator.h"
 #include "test_utils.h"
 
-#include "player/dragondiagnostics.h"
+#include "player/diagnostics.h"
 #include <DragonPlayer>
 
 #include <array>
@@ -121,7 +121,7 @@ struct FixtureGuard {
 // (QVERIFY2-style fatal failures still abort the calling test immediately).
 [[nodiscard]] inline bool runGaplessPlayback(DragonPlayer &player,
                                              PlayerHelper &helper,
-                                             DragonDiagnostics &diagnostics,
+                                             Diagnostics &diagnostics,
                                              const BoundaryFixture &fixtureA,
                                              const BoundaryFixture &fixtureB,
                                              const std::function<bool()> &afterPlaybackStarted = nullptr,

@@ -13,8 +13,8 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include "player/dragondiagnostics.h"
-#include "sink/dragonaudiosink.h"
+#include "player/diagnostics.h"
+#include "sink/audiosink.h"
 #include <DragonPlayer>
 
 #include <QSignalSpy>
@@ -114,7 +114,7 @@ void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
 void TestPlayerPlayback::testSeekWithRealAudio()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -206,7 +206,7 @@ void TestPlayerPlayback::testPositionFrozenWhilePaused()
 void TestPlayerPlayback::testSetPositionWhilePausedThenResume()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -254,7 +254,7 @@ void TestPlayerPlayback::testSetPositionClampedToDuration()
 void TestPlayerPlayback::testPositionResetsOnGaplessTransition()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -298,7 +298,7 @@ void TestPlayerPlayback::testStopResetsPositionToZero()
 void TestPlayerPlayback::testSetSourceDoesNotEmitPlayingState()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
@@ -385,7 +385,7 @@ void TestPlayerPlayback::testPauseDuringLoadingDefers()
 void TestPlayerPlayback::testStopDuringLoadingDefers()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     QSignalSpy stateSpy(&player, &DragonPlayer::playbackStateChanged);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
@@ -418,7 +418,7 @@ void TestPlayerPlayback::testDeferredStateResetOnNewSource()
 void TestPlayerPlayback::testPauseFromPlayingState()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -438,7 +438,7 @@ void TestPlayerPlayback::testPauseFromPlayingState()
 void TestPlayerPlayback::testStopFromPlayingStateDoesNotEmitLoadedMedia()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -595,7 +595,7 @@ void TestPlayerPlayback::testPlayAtEndOfMediaRestarts()
 void TestPlayerPlayback::testPlayDuringLoadingStartsAudioOnComplete()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 
@@ -614,7 +614,7 @@ void TestPlayerPlayback::testPlayDuringLoadingStartsAudioOnComplete()
 void TestPlayerPlayback::testStopDuringLoadingPreventsAudioStart()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 
@@ -630,7 +630,7 @@ void TestPlayerPlayback::testStopDuringLoadingPreventsAudioStart()
 void TestPlayerPlayback::testPlayThenStopDuringLoadingCancelsStart()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
 
@@ -647,7 +647,7 @@ void TestPlayerPlayback::testPlayThenStopDuringLoadingCancelsStart()
 void TestPlayerPlayback::testStopDuringLoadingThenPlayPlays()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
     QCOMPARE(player.status(), DragonPlayer::MediaStatus::LoadingMedia);
@@ -703,7 +703,7 @@ void TestPlayerPlayback::testSignalPresenceOnStop()
 void TestPlayerPlayback::testDeferredPlayIntentDuringFormatResolution()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
@@ -719,7 +719,7 @@ void TestPlayerPlayback::testDeferredPlayIntentDuringFormatResolution()
 void TestPlayerPlayback::testSetSourceThenPlayFirstTrack()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -734,7 +734,7 @@ void TestPlayerPlayback::testSetSourceThenPlayFirstTrack()
 void TestPlayerPlayback::testPlayNextTrackAfterStop()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -754,7 +754,7 @@ void TestPlayerPlayback::testPlayNextTrackAfterStop()
 void TestPlayerPlayback::testPlayRapidNextNext()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -804,7 +804,7 @@ void TestPlayerPlayback::testSeekWhilePausedReachesEos()
 void TestPlayerPlayback::testSeekNearEndThenElisaStyleAdvancePlays()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
@@ -848,7 +848,7 @@ void TestPlayerPlayback::testSeekNearEndThenElisaStyleAdvancePlays()
 void TestPlayerPlayback::testEndOfMediaAdvanceAcrossFormatChange()
 {
     DragonPlayer player;
-    DragonDiagnostics diag(&player);
+    Diagnostics diag(&player);
     PlayerHelper helper(&player);
 
     const auto fixtureA = FixtureGenerator::makeEndMarkerFixture(96000, 2, 96000);

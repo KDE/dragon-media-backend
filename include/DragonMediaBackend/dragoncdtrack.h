@@ -193,7 +193,7 @@ public:
     /*!
      * Returns the playable URL of this track:
      * \c {audiocd:/Track NN.wav?track=N&device=...} matching the scheme
-     * DragonCdStream parses. Data tracks report an empty URL.
+     * CdStream parses. Data tracks report an empty URL.
      */
     [[nodiscard]] QUrl url() const;
 
@@ -203,7 +203,7 @@ private:
     QSharedDataPointer<DragonCdTrackPrivate> d;
 
     friend class DragonCdTocPrivate;
-    friend class DragonCdDisc;
+    friend class CdDisc;
 };
 
 Q_DECLARE_METATYPE(DragonCdTrack)

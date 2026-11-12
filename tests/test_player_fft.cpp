@@ -236,7 +236,7 @@ void TestPlayerFft::testFftHistoryResetWhenReEnabled()
 {
     // Regression test: turning FFT Off then On should not reprocess stale
     // sample history, which would cause a CPU spin and spurious frame burst.
-    // The bug was in DragonFftPipeline::setMode() not calling reset() on
+    // The bug was in FftPipeline::setMode() not calling reset() on
     // the processor before starting the thread on the Off→On transition.
 
     DragonPlayer player;

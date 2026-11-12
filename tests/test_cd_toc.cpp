@@ -12,7 +12,7 @@
 #include "helpers/cdimage.h"
 #include "logging_timestamp_init.h"
 
-#include "stream/cd/dragoncdstream.h"
+#include "stream/cd/cdstream.h"
 
 #include "player/dragonduration.h"
 
@@ -43,7 +43,7 @@ using CdImageTestUtil::generateSectorPcm;
 namespace
 {
 
-std::vector<uint8_t> readAllFromStream(DragonCdStream &stream, qint64 limit)
+std::vector<uint8_t> readAllFromStream(CdStream &stream, qint64 limit)
 {
     std::vector<uint8_t> result;
     std::vector<uint8_t> buffer(64 * 1024);
@@ -246,8 +246,8 @@ void TestCdToc::testUrlRoundTrip()
     QCOMPARE(track2.url().scheme(), u"audiocd"_s);
     QCOMPARE(track2.url().fileName(), u"Track 02.wav"_s);
 
-    DragonCdStream stream;
-    QSignalSpy errorSpy(&stream, &DragonCdStream::errorOccurred);
+    CdStream stream;
+    QSignalSpy errorSpy(&stream, &CdStream::errorOccurred);
     stream.setUrl(track2.url());
     stream.start();
     QTRY_COMPARE_WITH_TIMEOUT(errorSpy.count(), 0, 0);
@@ -256,8 +256,7 @@ void TestCdToc::testUrlRoundTrip()
     QCOMPARE(qint64(data.size()), stream.size());
 
     const QByteArray expectedPcm = trackPcm(m_sectorsPerTrack, m_sectorsPerTrack);
-    const QByteArray pcm(reinterpret_cast<const char *>(data.data() + DragonCdStream::WAV_HEADER_SIZE),
-                         qsizetype(data.size()) - DragonCdStream::WAV_HEADER_SIZE);
+    const QByteArray pcm(reinterpret_cast<const char *>(data.data() + CdStream::WAV_HEADER_SIZE), qsizetype(data.size()) - CdStream::WAV_HEADER_SIZE);
     QCOMPARE(pcm, expectedPcm);
 
     stream.stop();

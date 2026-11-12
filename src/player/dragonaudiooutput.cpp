@@ -4,8 +4,8 @@
  */
 
 #include "dragonplayer_p.h"
-#include "sink/dragonaudiosink.h"
-#include "sink/dragonaudiosinkfactory.h"
+#include "sink/audiosink.h"
+#include "sink/audiosinkfactory.h"
 #include <dragonaudiooutput.h>
 #include <dragonplayer.h>
 
@@ -19,7 +19,7 @@ public:
     {
     }
 
-    std::unique_ptr<DragonAudioSink> sink;
+    std::unique_ptr<AudioSink> sink;
     DragonAudioOutput::Backend requestedBackend;
     DragonAudioOutput::Backend selectedBackend = DragonAudioOutput::Backend::Auto;
 };
@@ -31,16 +31,16 @@ DragonAudioOutput::DragonAudioOutput(Backend requested, DragonPlayer *parent)
     d->sink = createAudioSink(requested, &d->selectedBackend);
 
     if (d->sink) {
-        connect(d->sink.get(), &DragonAudioSink::volumeChanged, this, [this]() {
+        connect(d->sink.get(), &AudioSink::volumeChanged, this, [this]() {
             Q_EMIT volumeChanged(volume());
         });
-        connect(d->sink.get(), &DragonAudioSink::mutedChanged, this, &DragonAudioOutput::mutedChanged);
+        connect(d->sink.get(), &AudioSink::mutedChanged, this, &DragonAudioOutput::mutedChanged);
     }
 }
 
 DragonAudioOutput::~DragonAudioOutput() = default;
 
-DragonAudioSink *DragonAudioOutput::sink() const
+AudioSink *DragonAudioOutput::sink() const
 {
     return d->sink.get();
 }

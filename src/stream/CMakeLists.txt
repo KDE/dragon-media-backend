@@ -3,25 +3,25 @@
 # SPDX-License-Identifier: LGPL-2.1-only OR LGPL-3.0-only OR LicenseRef-KDE-Accepted-LGPL
 
 set(_dragon_stream_sources
-    dragonstream.cpp
-    dragonstreamfactory.cpp
-    dragonstreambuffer.cpp
-    dragonkiostream.cpp
-    dragonbufferprogress.cpp
+    stream.cpp
+    streamfactory.cpp
+    streambuffer.cpp
+    kiostream.cpp
+    bufferprogress.cpp
     dragonicymetadata.cpp
-    http/dragonradiostream.cpp
-    http/dragonhttpprotocol.cpp
-    http/dragonhttpbodyframer.cpp
-    http/dragonicydemuxer.cpp
-    http/dragonhttpsocket.cpp
+    http/radiostream.cpp
+    http/httpprotocol.cpp
+    http/httpbodyframer.cpp
+    http/icydemuxer.cpp
+    http/httpsocket.cpp
     cd/dragoncdtrack.cpp
     cd/dragoncdtoc.cpp
     cd/dragoncdtocreader.cpp
-    cd/dragoncdurl.cpp
+    cd/cdurl.cpp
 )
 
 if(LIBCDIO_FOUND)
-    list(APPEND _dragon_stream_sources cd/dragoncddisc.cpp cd/dragoncdstream.cpp)
+    list(APPEND _dragon_stream_sources cd/cddisc.cpp cd/cdstream.cpp)
 endif()
 
 add_library(dragon_stream_objs OBJECT ${_dragon_stream_sources})

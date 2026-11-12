@@ -13,7 +13,7 @@
 #include <memory>
 
 class DragonPlayer;
-class DragonAudioSink;
+class AudioSink;
 class DragonAudioOutputPrivate;
 
 /*!
@@ -192,9 +192,9 @@ private:
     ~DragonAudioOutput() override;
     friend class DragonPlayer;
     friend class DragonPlayerPrivate;
-    friend class DragonDiagnostics;
+    friend class Diagnostics;
 
-    DragonAudioSink *sink() const;
+    AudioSink *sink() const;
 
     std::unique_ptr<DragonAudioOutputPrivate> d;
 };

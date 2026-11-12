@@ -141,5 +141,5 @@ private:
     std::unique_ptr<DragonCdTocReaderPrivate> d;
 
     friend class DragonCdTocReaderPrivate;
-    friend class DragonCdTocAcquireJob;
+    friend class CdTocAcquireJob;
 };

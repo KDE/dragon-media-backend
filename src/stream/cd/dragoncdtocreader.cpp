@@ -6,7 +6,7 @@
 #include <dragoncdtocreader.h>
 
 #ifdef DRAGON_HAVE_LIBCDIO
-#include "dragoncddisc.h"
+#include "cddisc.h"
 #endif
 
 #include <KLocalizedString>
@@ -35,10 +35,10 @@ public:
     QString pendingDevice;
 };
 
-class DragonCdTocAcquireJob : public QRunnable
+class CdTocAcquireJob : public QRunnable
 {
 public:
-    DragonCdTocAcquireJob(DragonCdTocReader *reader, QString device)
+    CdTocAcquireJob(DragonCdTocReader *reader, QString device)
         : m_reader(reader)
         , m_device(std::move(device))
     {
@@ -51,7 +51,7 @@ public:
         QString errorMessage;
 
 #ifdef DRAGON_HAVE_LIBCDIO
-        auto disc = DragonCdDisc::acquire(m_device);
+        auto disc = CdDisc::acquire(m_device);
         if (disc) {
             toc = disc.value()->toc();
         } else {
@@ -89,7 +89,7 @@ void DragonCdTocReaderPrivate::requestToc(const QString &device)
 
     running = true;
     runningDevice = device;
-    QThreadPool::globalInstance()->start(new DragonCdTocAcquireJob(q, device));
+    QThreadPool::globalInstance()->start(new CdTocAcquireJob(q, device));
 }
 
 void DragonCdTocReaderPrivate::workerDone(const DragonCdToc &toc, const QString &errorMessage)

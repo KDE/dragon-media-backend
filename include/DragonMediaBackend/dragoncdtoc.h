@@ -198,7 +198,7 @@ private:
     QSharedDataPointer<DragonCdTocPrivate> d;
 
     friend class DragonCdTocPrivate;
-    friend class DragonCdDisc;
+    friend class CdDisc;
 };
 
 Q_DECLARE_METATYPE(DragonCdToc)

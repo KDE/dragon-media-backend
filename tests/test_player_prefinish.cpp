@@ -12,7 +12,7 @@
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
-#include "player/dragondiagnostics.h"
+#include "player/diagnostics.h"
 #include <DragonPlayer>
 
 #include <QSignalSpy>
@@ -218,7 +218,7 @@ void TestPlayerPrefinish::testAboutToFinishResetsOnSeekBack()
 void TestPlayerPrefinish::testAboutToFinishResetsOnGaplessTransition()
 {
     DragonPlayer player;
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
     PlayerHelper helper(&player);
 
     player.setPrefinishMark(2500ms);
@@ -435,7 +435,7 @@ void TestPlayerPrefinish::testSeekAfterPromotionBeforeTrackStarted()
     PlayerHelper helper(&player);
     player.setPrefinishMark(2500ms);
 
-    DragonDiagnostics diagnostics(&player);
+    Diagnostics diagnostics(&player);
 
     QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
     QVERIFY(helper.playAndWait());
