@@ -3,10 +3,13 @@
         "Authors": [
             {
                 "Name": "Ian Monroe",
+                "Name[ar]": "يان مونرو",
                 "Name[ca]": "Ian Monroe",
                 "Name[nl]": "Ian Monroe",
                 "Name[pt_BR]": "Ian Monroe",
-                "Name[tr]": "Ian Monroe"
+                "Name[sl]": "Ian Monroe",
+                "Name[tr]": "Ian Monroe",
+                "Name[uk]": "Ian Monroe"
             }
         ],
         "Category": "Audio",
@@ -14,14 +17,18 @@
         "Description[ca]": "Sortida d'àudio del PipeWire per al Dragon Media Backend",
         "Description[nl]": "PipeWire audio-uitvoer voor Dragon-media Backend",
         "Description[pt_BR]": "Saída de áudio via PipeWire para o Dragon Media Backend",
+        "Description[sl]": "Zvočni izhod PipeWire za Dragon Media Backend",
         "Description[tr]": "Dragon Ortam Arka Ucu için PipeWire ses çıkışı",
+        "Description[uk]": "Виведення звуку з PipeWire для мультимедійного модуля Dragon",
         "EnabledByDefault": true,
         "Icon": "audio-card",
         "Name": "PipeWire Audio Sink",
         "Name[ca]": "Conducte d'àudio del PipeWire",
         "Name[nl]": "PipeWire-audio-uitvoer",
         "Name[pt_BR]": "Saída de áudio do PipeWire",
+        "Name[sl]": "Zvočni ponor PipeWire",
         "Name[tr]": "PipeWire Ses Havuzu",
+        "Name[uk]": "Приймач звуку PipeWire",
         "ServiceTypes": [
             "DragonMediaBackend/AudioSink"
         ],
