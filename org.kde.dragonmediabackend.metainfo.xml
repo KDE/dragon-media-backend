@@ -11,12 +11,17 @@ SPDX-License-Identifier: CC0-1.0
   <name xml:lang="ca">Dragon Media Backend</name>
   <name xml:lang="nl">Dragon media-backend</name>
   <name xml:lang="pt-BR">Backend Dragon Media</name>
+  <name xml:lang="sl">Dragon Media Backend</name>
   <name xml:lang="tr">Dragon Ortam Arka Ucu</name>
+  <name xml:lang="uk">Мультимедійний модуль Dragon</name>
   <summary>Audio playback library for music players</summary>
+  <summary xml:lang="ar">مكتبة تشغيل الصوت لتطبيقات تشغيل الموسيقى</summary>
   <summary xml:lang="ca">Biblioteca de reproducció d'àudio per a reproductors de música</summary>
   <summary xml:lang="nl">Bibliotheek voor het afspelen van audio in muziekspelers</summary>
   <summary xml:lang="pt-BR">Biblioteca de reprodução de áudio para reprodutores de música</summary>
+  <summary xml:lang="sl">Knjižnica za predvajanje zvoka za glasbene predvajalnike</summary>
   <summary xml:lang="tr">Müzikçalarlar için ses çalma kitaplığı</summary>
+  <summary xml:lang="uk">Бібліотека відтворення звукових даних для програвачів звукових даних</summary>
   <description>
     <p>
       Dragon Media Backend is a Qt C++ library intended for desktop music players.
@@ -26,7 +31,9 @@ SPDX-License-Identifier: CC0-1.0
     <p xml:lang="ca">Dragon Media Backend és una biblioteca C++ amb Qt destinada als reproductors de música d'escriptori. Pot reproduir qualsevol format d'àudio que el FFmpeg descodifiqui i emet a través d'un sistema de connectors de conductes d'àudio amb suport per al PipeWire, PulseAudio i SDL.</p>
     <p xml:lang="nl">Dragon media-backend is een Qt C++-bibliotheek die bedoeld is voor muziekspelers op het bureaublad. De bibliotheek kan elk audioformaat afspelen dat door FFmpeg wordt gedecodeerd en voert het geluid uit via een plug-in-systeem van audio-uitvoer, met ondersteuning voor PipeWire, PulseAudio en SDL.</p>
     <p xml:lang="pt-BR">O Backend Dragon Media é uma biblioteca em C++ (utilizando Qt) voltada para reprodutores de música para desktop. Ele é capaz de reproduzir qualquer formato de áudio que o FFmpeg consiga decodificar, enviando a saída por meio de um sistema de plugins de destinos de áudio com suporte para PipeWire, PulseAudio e SDL.</p>
+    <p xml:lang="sl">Dragon Media Backend je knjižnica Qt C++, namenjena namiznim predvajalnikom glasbe. Predvaja lahko kateri koli zvočni format, ki ga dekodira FFmpeg, zvok pa usmerja prek sistema vtičnikov z podporo za PipeWire, PulseAudio in SDL.</p>
     <p xml:lang="tr">Dragon Ortam Arka Ucu, masaüstü müzikçalarlara yönelik bir Qt C++ kitaplığıdır. FFmpeg’in kodunu çözdüğü ve PipeWire, PulseAudio ve SDL desteğine sahip bir ses havuzları eklenti sistemi aracılığıyla çıkardığı herhangi bir ses biçimini oynatabilir.</p>
+    <p xml:lang="uk">Мультимедійний модуль Dragon — це бібліотека мовою C++ (з використанням Qt), призначена для стільничних музичних програвачів. Він здатен відтворювати будь-які звукові формати, підтримку яких передбачено декодером FFmpeg, і виводити звук через систему звукових приймачів із підтримкою PipeWire, PulseAudio та SDL.</p>
     <p>
       It also calculates FFTs for audio visualizations, can play music over KDE's
       KIO system, plays audio CDs and provides basic audio CD track information,
@@ -35,7 +42,9 @@ SPDX-License-Identifier: CC0-1.0
     <p xml:lang="ca">També calcula FFT per a visualitzacions d'àudio, pot reproduir música sobre el sistema KIO de KDE, reproduir CD d'àudio i proporciona informació bàsica de pistes dels CD d'àudio, i admet metadades ICY per a fluxos de ràdio.</p>
     <p xml:lang="nl">Het berekent tevens FFT's voor audiovisualisaties, kan muziek afspelen via het KIO-systeem van KDE, speelt audio-cd's af en biedt basisinformatie over de nummers op een audio-cd, en ondersteunt ICY-metadata voor radio-streams.</p>
     <p xml:lang="pt-BR">Também calcula FFTs para visualizações de áudio, pode reproduzir músicas por meio do sistema KIO do KDE, toca CDs de áudio e fornece informações básicas sobre as faixas desses CDs, além de oferecer suporte a metadados ICY para transmissões de rádio.</p>
+    <p xml:lang="sl">Prav tako izračunava FFT-je za zvočne vizualizacije, lahko predvaja glasbo prek sistema KIO v okolju KDE, predvaja zvočne CD-je in zagotavlja osnovne podatke o skladbah na njih, podpira pa tudi metapodatke ICY za radijske prenose.</p>
     <p xml:lang="tr">Aynı zamanda ses görselleştirmeleri için FFT’leri hesaplar, KDE’nin KIO sistemi üzerinden müzik çalabilir, ses CD’lerini çalar ve temel ses CD’si parça bilgilerini sağlar ve radyo akışları için ICY üst verilerini destekler.</p>
+    <p xml:lang="uk">Він також обчислює швидке перетворення Фур’є (FFT) для візуалізації звуку, може відтворювати музику через систему KIO середовища KDE, програє звукові компакт-диски і надає базову інформацію про доріжки на них, а також підтримує метадані ICY для радіотрансляцій.</p>
   </description>
   <url type="homepage">https://invent.kde.org/libraries/dragon-media-backend</url>
   <url type="help">https://eean.dev/dragon-media-backend/api/</url>
