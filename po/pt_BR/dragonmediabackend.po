@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-11-03 22:11+0000\n"
+"POT-Creation-Date: 2026-11-12 04:48+0000\n"
 "PO-Revision-Date: 2026-11-10 06:24-0300\n"
 "Last-Translator: Marcus Gama <marcus.gama@gmail.com>\n"
 "Language-Team: Brazilian Portuguese <kde-i18n-pt_BR@kde.org>\n"
@@ -17,57 +17,57 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 "X-Generator: Lokalize 26.08.3\n"
 
-#: decoder/dragondecodepipeline.cpp:452
+#: decoder/decodepipeline.cpp:452
 #, kde-format
 msgid "Failed to create decoder"
 msgstr "Falha ao criar decodificador"
 
-#: decoder/dragondecodepipeline.cpp:687
+#: decoder/decodepipeline.cpp:687
 #, kde-format
 msgid "Stream error"
 msgstr "Erro de transmissão"
 
-#: decoder/dragondecoder.cpp:199
+#: decoder/decoder.cpp:199
 #, kde-format
 msgid "Failed to initialize media input"
 msgstr "Falha ao inicializar a entrada de mídia"
 
-#: decoder/dragondecoder.cpp:203
+#: decoder/decoder.cpp:203
 #, kde-format
 msgid "Failed to open media container"
 msgstr "Falha ao abrir o contêiner de mídia"
 
-#: decoder/dragondecoder.cpp:207
+#: decoder/decoder.cpp:207
 #, kde-format
 msgid "No supported audio stream found"
 msgstr "Nenhum fluxo de áudio compatível foi encontrado"
 
-#: decoder/dragondecoder.cpp:211
+#: decoder/decoder.cpp:211
 #, kde-format
 msgid "Audio codec setup failed"
 msgstr "Falha na configuração do codec de áudio"
 
-#: decoder/dragondecoder.cpp:215
+#: decoder/decoder.cpp:215
 #, kde-format
 msgid "Audio resampler setup failed"
 msgstr "Falha na configuração do reamostrador de áudio"
 
-#: decoder/dragondecoder.cpp:219
+#: decoder/decoder.cpp:219
 #, kde-format
 msgid "Failed to allocate decoder resources"
 msgstr "Falha ao alocar recursos do decodificador"
 
-#: decoder/dragondecoder.cpp:238
+#: decoder/decoder.cpp:238
 #, kde-format
 msgid "Decoder not initialized"
 msgstr "Decodificador não inicializado"
 
-#: decoder/dragondecoder.cpp:518
+#: decoder/decoder.cpp:518
 #, kde-format
 msgid "Resampler reinitialization failed after seek"
 msgstr "A reinicialização do reamostrador falhou após a busca"
 
-#: decoder/dragondecoder.cpp:561
+#: decoder/decoder.cpp:561
 #, kde-format
 msgid "Read error after %1 attempts: %2"
 msgstr "Erro de leitura após %1 tentativas: %2"
@@ -97,139 +97,139 @@ msgstr "Falha ao abrir a fonte de mídia"
 msgid "Network error"
 msgstr "Erro de rede"
 
-#: sink/dragonnullaudiosink.cpp:16
+#: sink/nullaudiosink.cpp:16
 #, kde-format
 msgid "Could not find any audio sink plugins."
 msgstr "Não foi possível encontrar nenhum plugin de destino de áudio."
 
-#: sink/dragonpipewireaudiosink.cpp:193
+#: sink/pipewireaudiosink.cpp:193
 #, kde-format
 msgid "PipeWire: failed to create thread loop"
 msgstr "PipeWire: falha ao criar loop de thread"
 
-#: sink/dragonpipewireaudiosink.cpp:231
+#: sink/pipewireaudiosink.cpp:231
 #, kde-format
 msgid "PipeWire: failed to create stream"
 msgstr "PipeWire: falha ao criar o fluxo"
 
-#: sink/dragonpipewireaudiosink.cpp:256
+#: sink/pipewireaudiosink.cpp:256
 #, kde-format
 msgid "PipeWire: failed to build audio format"
 msgstr "PipeWire: falha ao criar formato de áudio"
 
-#: sink/dragonpipewireaudiosink.cpp:265
+#: sink/pipewireaudiosink.cpp:265
 #, kde-format
 msgid "PipeWire: failed to connect stream"
 msgstr "PipeWire: falha ao conectar fluxo"
 
-#: sink/dragonpipewireaudiosink.cpp:272
+#: sink/pipewireaudiosink.cpp:272
 #, kde-format
 msgid "PipeWire: failed to start thread loop"
 msgstr "PipeWire: falha ao iniciar o loop de thread"
 
-#: sink/dragonpulseaudiosink.cpp:248
+#: sink/pulseaudiosink.cpp:248
 #, kde-format
 msgid "PulseAudio: failed to create mainloop"
 msgstr "PulseAudio: falha ao criar o loop principal"
 
-#: sink/dragonpulseaudiosink.cpp:255
+#: sink/pulseaudiosink.cpp:255
 #, kde-format
 msgid "PulseAudio: failed to start mainloop"
 msgstr "PulseAudio: falha ao iniciar o loop principal"
 
-#: sink/dragonpulseaudiosink.cpp:269
+#: sink/pulseaudiosink.cpp:269
 #, kde-format
 msgid "PulseAudio: failed to get mainloop API"
 msgstr "PulseAudio: falha ao obter a API do loop principal"
 
-#: sink/dragonpulseaudiosink.cpp:294
+#: sink/pulseaudiosink.cpp:294
 #, kde-format
 msgid "PulseAudio: failed to create context"
 msgstr "PulseAudio: falha ao criar contexto"
 
-#: sink/dragonpulseaudiosink.cpp:304
+#: sink/pulseaudiosink.cpp:304
 #, kde-format
 msgid "PulseAudio: failed to connect context"
 msgstr "PulseAudio: falha ao conectar o contexto"
 
-#: sink/dragonpulseaudiosink.cpp:316
+#: sink/pulseaudiosink.cpp:316
 #, kde-format
 msgid "PulseAudio: context not ready"
 msgstr "PulseAudio: contexto não está pronto"
 
-#: sink/dragonpulseaudiosink.cpp:414
+#: sink/pulseaudiosink.cpp:414
 #, kde-format
 msgid "PulseAudio: failed to init channel map"
 msgstr "PulseAudio: falha ao inicializar o mapa de canais"
 
-#: sink/dragonpulseaudiosink.cpp:423
+#: sink/pulseaudiosink.cpp:423
 #, kde-format
 msgid "PulseAudio: failed to create stream proplist"
 msgstr "PulseAudio: falha ao criar proplist de fluxo"
 
-#: sink/dragonpulseaudiosink.cpp:442
+#: sink/pulseaudiosink.cpp:442
 #, kde-format
 msgid "PulseAudio: failed to create stream"
 msgstr "PulseAudio: falha ao criar fluxo"
 
-#: sink/dragonpulseaudiosink.cpp:469
+#: sink/pulseaudiosink.cpp:469
 #, kde-format
 msgid "PulseAudio: failed to connect stream"
 msgstr "PulseAudio: falha ao conectar fluxo"
 
-#: sink/dragonpulseaudiosink.cpp:482
+#: sink/pulseaudiosink.cpp:482
 #, kde-format
 msgid "PulseAudio: stream not ready"
 msgstr "PulseAudio: fluxo não está pronto"
 
-#: stream/cd/dragoncddisc.cpp:111
+#: stream/cd/cddisc.cpp:111
 #, kde-format
 msgid "The CD has no tracks."
 msgstr "O CD não tem faixas."
 
-#: stream/cd/dragoncddisc.cpp:148
+#: stream/cd/cddisc.cpp:148
 #, kde-format
 msgid "The disc is not an Audio CD."
 msgstr "O disco não é um CD de áudio."
 
-#: stream/cd/dragoncddisc.cpp:189
+#: stream/cd/cddisc.cpp:189
 #, kde-format
 msgid "Could not open the CD device. Check that a disc is present."
 msgstr ""
 "Não foi possível abrir o dispositivo de CD. Verifique se há um disco "
 "inserido."
 
-#: stream/cd/dragoncdstream.cpp:117
+#: stream/cd/cdstream.cpp:117
 #, kde-format
 msgid "The audiocd:/ URL does not name a track to play."
 msgstr "A URL audiocd:/ não especifica uma faixa para reproduzir."
 
-#: stream/cd/dragoncdstream.cpp:155
+#: stream/cd/cdstream.cpp:155
 #, kde-format
 msgid "Track not found on the CD: %1"
 msgstr "Faixa não encontrada no CD: %1"
 
-#: stream/cd/dragoncdstream.cpp:159
+#: stream/cd/cdstream.cpp:159
 #, kde-format
 msgid "CD track %1 is not an audio track."
 msgstr "A faixa %1 do CD não é uma faixa de áudio."
 
-#: stream/cd/dragoncdstream.cpp:166
+#: stream/cd/cdstream.cpp:166
 #, kde-format
 msgid "Could not determine the length of CD track %1."
 msgstr "Não foi possível determinar a duração da faixa %1 do CD."
 
-#: stream/cd/dragoncdstream.cpp:284
+#: stream/cd/cdstream.cpp:284
 #, kde-format
 msgid "The CD is no longer available."
 msgstr "O CD não está mais disponível."
 
-#: stream/cd/dragoncdstream.cpp:289
+#: stream/cd/cdstream.cpp:289
 #, kde-format
 msgid "Attempted to read past the end of the CD track."
 msgstr "Tentativa de leitura além do fim da faixa de CD."
 
-#: stream/cd/dragoncdstream.cpp:297
+#: stream/cd/cdstream.cpp:296
 #, kde-format
 msgid "Error reading the CD. The disc may have been ejected."
 msgstr "Erro ao ler o CD. O disco pode ter sido ejetado."
@@ -239,59 +239,59 @@ msgstr "Erro ao ler o CD. O disco pode ter sido ejetado."
 msgid "This build of Dragon Media Backend was made without CD support."
 msgstr "Esta compilação do Dragon Media Backend foi criada sem suporte a CD."
 
-#: stream/http/dragonhttpprotocol.cpp:227 stream/http/dragonhttpsocket.cpp:247
-#: stream/http/dragonhttpsocket.cpp:340
+#: stream/http/httpprotocol.cpp:227 stream/http/httpsocket.cpp:247
+#: stream/http/httpsocket.cpp:340
 #, kde-format
 msgid "Malformed response"
 msgstr "Resposta malformada"
 
-#: stream/http/dragonhttpsocket.cpp:31
+#: stream/http/httpsocket.cpp:31
 #, kde-format
 msgid "Stream stopped sending data"
 msgstr "O fluxo parou de enviar dados"
 
-#: stream/http/dragonhttpsocket.cpp:88
+#: stream/http/httpsocket.cpp:88
 #, kde-format
 msgid "Invalid stream URL: %1"
 msgstr "URL de fluxo inválida: %1"
 
-#: stream/http/dragonhttpsocket.cpp:104 stream/http/dragonhttpsocket.cpp:458
+#: stream/http/httpsocket.cpp:104 stream/http/httpsocket.cpp:457
 #, kde-format
 msgid "Connection closed"
 msgstr "Conexão encerrada"
 
-#: stream/http/dragonhttpsocket.cpp:367 stream/http/dragonhttpsocket.cpp:377
+#: stream/http/httpsocket.cpp:366 stream/http/httpsocket.cpp:376
 #, kde-format
 msgid "Server responded with status %1"
 msgstr "O servidor respondeu com o status %1"
 
-#: stream/http/dragonhttpsocket.cpp:373
+#: stream/http/httpsocket.cpp:372
 #, kde-format
 msgid "Proxy requires authentication"
 msgstr "O proxy requer autenticação"
 
-#: stream/http/dragonhttpsocket.cpp:384
+#: stream/http/httpsocket.cpp:383
 #, kde-format
 msgid "Server returned unexpected byte range"
 msgstr "O servidor retornou um intervalo de bytes inesperado"
 
-#: stream/http/dragonhttpsocket.cpp:389
+#: stream/http/httpsocket.cpp:388
 #, kde-format
 msgid "Server ignored requested byte range"
 msgstr "O servidor ignorou o intervalo de bytes solicitado"
 
-#: stream/http/dragonhttpsocket.cpp:400 stream/http/dragonhttpsocket.cpp:410
-#: stream/http/dragonhttpsocket.cpp:414 stream/http/dragonhttpsocket.cpp:417
+#: stream/http/httpsocket.cpp:399 stream/http/httpsocket.cpp:409
+#: stream/http/httpsocket.cpp:413 stream/http/httpsocket.cpp:416
 #, kde-format
 msgid "Unusable redirect address"
 msgstr "Endereço de redirecionamento inutilizável"
 
-#: stream/http/dragonhttpsocket.cpp:403
+#: stream/http/httpsocket.cpp:402
 #, kde-format
 msgid "Too many redirects"
 msgstr "Muitos redirecionamentos"
 
-#: stream/http/dragonradiostream.cpp:246
+#: stream/http/radiostream.cpp:246
 #, kde-format
 msgid "Network error: %1"
 msgstr "Erro de rede: %1"

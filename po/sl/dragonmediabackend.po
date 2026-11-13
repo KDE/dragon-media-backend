@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-11-03 22:11+0000\n"
+"POT-Creation-Date: 2026-11-12 04:48+0000\n"
 "PO-Revision-Date: 2026-11-11 09:41+0100\n"
 "Last-Translator: Matjaž Jeran <matjaz.jeran@amis.net>\n"
 "Language-Team: Slovenian <lugos-slo@lugos.si>\n"
@@ -15,57 +15,57 @@ msgstr ""
 "Plural-Forms: nplurals=4; plural=(n%100==1 ? 1 : n%100==2 ? 2 : n%100==3 || n"
 "%100==4 ? 3 : 0);\n"
 
-#: decoder/dragondecodepipeline.cpp:452
+#: decoder/decodepipeline.cpp:452
 #, kde-format
 msgid "Failed to create decoder"
 msgstr "Ustvarjanje dekoderja ni uspelo"
 
-#: decoder/dragondecodepipeline.cpp:687
+#: decoder/decodepipeline.cpp:687
 #, kde-format
 msgid "Stream error"
 msgstr "Napaka v toku"
 
-#: decoder/dragondecoder.cpp:199
+#: decoder/decoder.cpp:199
 #, kde-format
 msgid "Failed to initialize media input"
 msgstr "Neuspela inicializacija vhoda medija"
 
-#: decoder/dragondecoder.cpp:203
+#: decoder/decoder.cpp:203
 #, kde-format
 msgid "Failed to open media container"
 msgstr "Odpiranje vsebnika medija ni uspelo"
 
-#: decoder/dragondecoder.cpp:207
+#: decoder/decoder.cpp:207
 #, kde-format
 msgid "No supported audio stream found"
 msgstr "Ni najdenega podprtega zvočnega toka"
 
-#: decoder/dragondecoder.cpp:211
+#: decoder/decoder.cpp:211
 #, kde-format
 msgid "Audio codec setup failed"
 msgstr "Nastavitev zvočnega kodeka ni uspela"
 
-#: decoder/dragondecoder.cpp:215
+#: decoder/decoder.cpp:215
 #, kde-format
 msgid "Audio resampler setup failed"
 msgstr "Nastavitev avdio vzorčevalnika ni uspela"
 
-#: decoder/dragondecoder.cpp:219
+#: decoder/decoder.cpp:219
 #, kde-format
 msgid "Failed to allocate decoder resources"
 msgstr "Dodelitev virov dekoderja ni uspela"
 
-#: decoder/dragondecoder.cpp:238
+#: decoder/decoder.cpp:238
 #, kde-format
 msgid "Decoder not initialized"
 msgstr "Dekoder ni inicializiran"
 
-#: decoder/dragondecoder.cpp:518
+#: decoder/decoder.cpp:518
 #, kde-format
 msgid "Resampler reinitialization failed after seek"
 msgstr "Ponovna inicializacija vzorčevalnika ni uspela po iskanju"
 
-#: decoder/dragondecoder.cpp:561
+#: decoder/decoder.cpp:561
 #, kde-format
 msgid "Read error after %1 attempts: %2"
 msgstr "Napaka pri branju po %1 poskusih: %2"
@@ -95,138 +95,138 @@ msgstr "Odpiranje vira medija ni uspelo"
 msgid "Network error"
 msgstr "Omrežna napaka"
 
-#: sink/dragonnullaudiosink.cpp:16
+#: sink/nullaudiosink.cpp:16
 #, kde-format
 msgid "Could not find any audio sink plugins."
 msgstr "Ni bilo mogoče najti kakršnegakoli vtičnika za avdio odtok"
 
-#: sink/dragonpipewireaudiosink.cpp:193
+#: sink/pipewireaudiosink.cpp:193
 #, kde-format
 msgid "PipeWire: failed to create thread loop"
 msgstr "PipeWire: ni uspelo ustvariti zanke niti"
 
-#: sink/dragonpipewireaudiosink.cpp:231
+#: sink/pipewireaudiosink.cpp:231
 #, kde-format
 msgid "PipeWire: failed to create stream"
 msgstr "PipeWire: ni uspelo ustvariti toka"
 
-#: sink/dragonpipewireaudiosink.cpp:256
+#: sink/pipewireaudiosink.cpp:256
 #, kde-format
 msgid "PipeWire: failed to build audio format"
 msgstr "PipeWire: ni uspelo zgraditi zvočne oblike"
 
-#: sink/dragonpipewireaudiosink.cpp:265
+#: sink/pipewireaudiosink.cpp:265
 #, kde-format
 msgid "PipeWire: failed to connect stream"
 msgstr "PipeWire: ni uspelo povezati toka"
 
-#: sink/dragonpipewireaudiosink.cpp:272
+#: sink/pipewireaudiosink.cpp:272
 #, kde-format
 msgid "PipeWire: failed to start thread loop"
 msgstr "PipeWire: ni uspelo zagnati zanke niti"
 
-#: sink/dragonpulseaudiosink.cpp:248
+#: sink/pulseaudiosink.cpp:248
 #, kde-format
 msgid "PulseAudio: failed to create mainloop"
 msgstr "PulseAudio: ni uspelo ustvariti glavne zanke"
 
-#: sink/dragonpulseaudiosink.cpp:255
+#: sink/pulseaudiosink.cpp:255
 #, kde-format
 msgid "PulseAudio: failed to start mainloop"
 msgstr "PulseAudio: ni uspelo zagnati glavne zanke"
 
-#: sink/dragonpulseaudiosink.cpp:269
+#: sink/pulseaudiosink.cpp:269
 #, kde-format
 msgid "PulseAudio: failed to get mainloop API"
 msgstr "PulseAudio: ni uspelo pridobiti API-ja glavne zanke"
 
-#: sink/dragonpulseaudiosink.cpp:294
+#: sink/pulseaudiosink.cpp:294
 #, kde-format
 msgid "PulseAudio: failed to create context"
 msgstr "PulseAudio: ni uspelo ustvariti konteksta"
 
-#: sink/dragonpulseaudiosink.cpp:304
+#: sink/pulseaudiosink.cpp:304
 #, kde-format
 msgid "PulseAudio: failed to connect context"
 msgstr "PulseAudio: ni uspelo povezati konteksta"
 
-#: sink/dragonpulseaudiosink.cpp:316
+#: sink/pulseaudiosink.cpp:316
 #, kde-format
 msgid "PulseAudio: context not ready"
 msgstr "PulseAudio: kontekst ni pripravljen"
 
-#: sink/dragonpulseaudiosink.cpp:414
+#: sink/pulseaudiosink.cpp:414
 #, kde-format
 msgid "PulseAudio: failed to init channel map"
 msgstr "PulseAudio: ni uspelo inicializirati preslikave kanalov"
 
-#: sink/dragonpulseaudiosink.cpp:423
+#: sink/pulseaudiosink.cpp:423
 #, kde-format
 msgid "PulseAudio: failed to create stream proplist"
 msgstr "PulseAudio: ni uspelo ustvariti seznama lastnosti toka"
 
-#: sink/dragonpulseaudiosink.cpp:442
+#: sink/pulseaudiosink.cpp:442
 #, kde-format
 msgid "PulseAudio: failed to create stream"
 msgstr "PulseAudio: ni uspelo ustvariti toka"
 
-#: sink/dragonpulseaudiosink.cpp:469
+#: sink/pulseaudiosink.cpp:469
 #, kde-format
 msgid "PulseAudio: failed to connect stream"
 msgstr "PulseAudio: ni uspelo povezati toka"
 
-#: sink/dragonpulseaudiosink.cpp:482
+#: sink/pulseaudiosink.cpp:482
 #, kde-format
 msgid "PulseAudio: stream not ready"
 msgstr "PulseAudio: tok ni pripravljen"
 
-#: stream/cd/dragoncddisc.cpp:111
+#: stream/cd/cddisc.cpp:111
 #, kde-format
 msgid "The CD has no tracks."
 msgstr "CD nima skladb."
 
-#: stream/cd/dragoncddisc.cpp:148
+#: stream/cd/cddisc.cpp:148
 #, kde-format
 msgid "The disc is not an Audio CD."
 msgstr "Plošča ni zvočni CD."
 
-#: stream/cd/dragoncddisc.cpp:189
+#: stream/cd/cddisc.cpp:189
 #, kde-format
 msgid "Could not open the CD device. Check that a disc is present."
 msgstr ""
 "Naprave za CD ni bilo mogoče odpreti. Preverite, ali je vstavljena plošča."
 
-#: stream/cd/dragoncdstream.cpp:117
+#: stream/cd/cdstream.cpp:117
 #, kde-format
 msgid "The audiocd:/ URL does not name a track to play."
 msgstr "Naslov URL audiocd:/ ne določa skladbe za predvajanje."
 
-#: stream/cd/dragoncdstream.cpp:155
+#: stream/cd/cdstream.cpp:155
 #, kde-format
 msgid "Track not found on the CD: %1"
 msgstr "Skladba na CD-ju ni bila najdena: %1"
 
-#: stream/cd/dragoncdstream.cpp:159
+#: stream/cd/cdstream.cpp:159
 #, kde-format
 msgid "CD track %1 is not an audio track."
 msgstr "Skladba %1 na CD-ju ni zvočna skladba."
 
-#: stream/cd/dragoncdstream.cpp:166
+#: stream/cd/cdstream.cpp:166
 #, kde-format
 msgid "Could not determine the length of CD track %1."
 msgstr "Ni bilo mogoče določiti dolžine skladbe %1 na CD-ju."
 
-#: stream/cd/dragoncdstream.cpp:284
+#: stream/cd/cdstream.cpp:284
 #, kde-format
 msgid "The CD is no longer available."
 msgstr "CD ni več na voljo."
 
-#: stream/cd/dragoncdstream.cpp:289
+#: stream/cd/cdstream.cpp:289
 #, kde-format
 msgid "Attempted to read past the end of the CD track."
 msgstr "Poskus branja prek konca skladbe na CD-ju."
 
-#: stream/cd/dragoncdstream.cpp:297
+#: stream/cd/cdstream.cpp:296
 #, kde-format
 msgid "Error reading the CD. The disc may have been ejected."
 msgstr "Napaka pri branju CD-ja. Plošča je bila morda izvržena."
@@ -238,59 +238,59 @@ msgstr ""
 "Ta različica programa Dragon Media Backend je bila izdelana brez podpore za "
 "CD-je."
 
-#: stream/http/dragonhttpprotocol.cpp:227 stream/http/dragonhttpsocket.cpp:247
-#: stream/http/dragonhttpsocket.cpp:340
+#: stream/http/httpprotocol.cpp:227 stream/http/httpsocket.cpp:247
+#: stream/http/httpsocket.cpp:340
 #, kde-format
 msgid "Malformed response"
 msgstr "Nepravilno oblikovan odziv"
 
-#: stream/http/dragonhttpsocket.cpp:31
+#: stream/http/httpsocket.cpp:31
 #, kde-format
 msgid "Stream stopped sending data"
 msgstr "Pretok je prenehal pošiljati podatke"
 
-#: stream/http/dragonhttpsocket.cpp:88
+#: stream/http/httpsocket.cpp:88
 #, kde-format
 msgid "Invalid stream URL: %1"
 msgstr "Neveljaven naslov URL pretoka: %1"
 
-#: stream/http/dragonhttpsocket.cpp:104 stream/http/dragonhttpsocket.cpp:458
+#: stream/http/httpsocket.cpp:104 stream/http/httpsocket.cpp:457
 #, kde-format
 msgid "Connection closed"
 msgstr "Povezava je zaprta"
 
-#: stream/http/dragonhttpsocket.cpp:367 stream/http/dragonhttpsocket.cpp:377
+#: stream/http/httpsocket.cpp:366 stream/http/httpsocket.cpp:376
 #, kde-format
 msgid "Server responded with status %1"
 msgstr "Strežnik se je odzval s statusom %1"
 
-#: stream/http/dragonhttpsocket.cpp:373
+#: stream/http/httpsocket.cpp:372
 #, kde-format
 msgid "Proxy requires authentication"
 msgstr "Posredniški strežnik (proxy) zahteva avtentikacijo"
 
-#: stream/http/dragonhttpsocket.cpp:384
+#: stream/http/httpsocket.cpp:383
 #, kde-format
 msgid "Server returned unexpected byte range"
 msgstr "Strežnik je vrnil nepričakovan obseg bajtov"
 
-#: stream/http/dragonhttpsocket.cpp:389
+#: stream/http/httpsocket.cpp:388
 #, kde-format
 msgid "Server ignored requested byte range"
 msgstr "Strežnik je prezrl zahtevani obseg bajtov"
 
-#: stream/http/dragonhttpsocket.cpp:400 stream/http/dragonhttpsocket.cpp:410
-#: stream/http/dragonhttpsocket.cpp:414 stream/http/dragonhttpsocket.cpp:417
+#: stream/http/httpsocket.cpp:399 stream/http/httpsocket.cpp:409
+#: stream/http/httpsocket.cpp:413 stream/http/httpsocket.cpp:416
 #, kde-format
 msgid "Unusable redirect address"
 msgstr "Neuporaben naslov za preusmeritev"
 
-#: stream/http/dragonhttpsocket.cpp:403
+#: stream/http/httpsocket.cpp:402
 #, kde-format
 msgid "Too many redirects"
 msgstr "Preveč preusmeritev"
 
-#: stream/http/dragonradiostream.cpp:246
+#: stream/http/radiostream.cpp:246
 #, kde-format
 msgid "Network error: %1"
 msgstr "Omrežna napaka: %1"
