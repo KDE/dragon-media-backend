@@ -8,6 +8,10 @@
                 "Name[nl]": "Ian Monroe",
                 "Name[pt_BR]": "Ian Monroe",
                 "Name[sl]": "Ian Monroe",
+                "Name[sr@ijekavian]": "Ијан Монро",
+                "Name[sr@ijekavianlatin]": "Ijan Monro",
+                "Name[sr@latin]": "Ijan Monro",
+                "Name[sr]": "Ијан Монро",
                 "Name[tr]": "Ian Monroe",
                 "Name[uk]": "Ian Monroe"
             }
@@ -19,6 +23,10 @@
         "Description[nl]": "SDL3 audio-uitvoer voor Dragon-media Backend",
         "Description[pt_BR]": "Saída de áudio via SDL3 para o Dragon Media Backend",
         "Description[sl]": "Zvočni izhod SDL3 za Dragon Media Backend",
+        "Description[sr@ijekavian]": "SDL3 аудио излаз за Змајеву медијску позадину",
+        "Description[sr@ijekavianlatin]": "SDL3 audio izlaz za Zmajevu medijsku pozadinu",
+        "Description[sr@latin]": "SDL3 audio izlaz za Zmajevu medijsku pozadinu",
+        "Description[sr]": "SDL3 аудио излаз за Змајеву медијску позадину",
         "Description[tr]": "Dragon Ortam Arka Ucu için SDL3 ses çıkışı",
         "Description[uk]": "Виведення звуку з SDL3 для мультимедійного модуля Dragon",
         "EnabledByDefault": true,
@@ -29,6 +37,10 @@
         "Name[nl]": "SDL3 audio-uitvoer",
         "Name[pt_BR]": "Saída de áudio do SDL3",
         "Name[sl]": "Zvočni ponor SDL3",
+        "Name[sr@ijekavian]": "Аудио излаз SDL3",
+        "Name[sr@ijekavianlatin]": "Audio izlaz SDL3",
+        "Name[sr@latin]": "Audio izlaz SDL3",
+        "Name[sr]": "Аудио излаз SDL3",
         "Name[tr]": "SDL3 Ses Havuzu",
         "Name[uk]": "Приймач звуку SDL3",
         "ServiceTypes": [

@@ -8,6 +8,10 @@
                 "Name[nl]": "Ian Monroe",
                 "Name[pt_BR]": "Ian Monroe",
                 "Name[sl]": "Ian Monroe",
+                "Name[sr@ijekavian]": "Ијан Монро",
+                "Name[sr@ijekavianlatin]": "Ijan Monro",
+                "Name[sr@latin]": "Ijan Monro",
+                "Name[sr]": "Ијан Монро",
                 "Name[tr]": "Ian Monroe",
                 "Name[uk]": "Ian Monroe"
             }
@@ -19,6 +23,10 @@
         "Description[nl]": "PipeWire audio-uitvoer voor Dragon-media Backend",
         "Description[pt_BR]": "Saída de áudio via PipeWire para o Dragon Media Backend",
         "Description[sl]": "Zvočni izhod PipeWire za Dragon Media Backend",
+        "Description[sr@ijekavian]": "PipeWire аудио излаз за Змајеву медијску позадину",
+        "Description[sr@ijekavianlatin]": "PipeWire audio izlaz za Zmajevu medijsku pozadinu",
+        "Description[sr@latin]": "PipeWire audio izlaz za Zmajevu medijsku pozadinu",
+        "Description[sr]": "PipeWire аудио излаз за Змајеву медијску позадину",
         "Description[tr]": "Dragon Ortam Arka Ucu için PipeWire ses çıkışı",
         "Description[uk]": "Виведення звуку з PipeWire для мультимедійного модуля Dragon",
         "EnabledByDefault": true,
@@ -29,6 +37,10 @@
         "Name[nl]": "PipeWire-audio-uitvoer",
         "Name[pt_BR]": "Saída de áudio do PipeWire",
         "Name[sl]": "Zvočni ponor PipeWire",
+        "Name[sr@ijekavian]": "Аудио излаз PipeWire",
+        "Name[sr@ijekavianlatin]": "Audio izlaz PipeWire",
+        "Name[sr@latin]": "Audio izlaz PipeWire",
+        "Name[sr]": "Аудио излаз PipeWire",
         "Name[tr]": "PipeWire Ses Havuzu",
         "Name[uk]": "Приймач звуку PipeWire",
         "ServiceTypes": [

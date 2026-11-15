@@ -8,6 +8,10 @@
                 "Name[nl]": "Ian Monroe",
                 "Name[pt_BR]": "Ian Monroe",
                 "Name[sl]": "Ian Monroe",
+                "Name[sr@ijekavian]": "Ијан Монро",
+                "Name[sr@ijekavianlatin]": "Ijan Monro",
+                "Name[sr@latin]": "Ijan Monro",
+                "Name[sr]": "Ијан Монро",
                 "Name[tr]": "Ian Monroe",
                 "Name[uk]": "Ian Monroe"
             }
@@ -19,6 +23,10 @@
         "Description[nl]": "PulseAudio audio-uitvoer voor Dragon-media Backend",
         "Description[pt_BR]": "Saída de áudio via PulseAudio para o Dragon Media Backend",
         "Description[sl]": "Zvočni izhod PulseAudio za Dragon Media Backend",
+        "Description[sr@ijekavian]": "Пулс‑аудио аудио излаз за Змајеву медијску позадину",
+        "Description[sr@ijekavianlatin]": "PulseAudio audio izlaz za Zmajevu medijsku pozadinu",
+        "Description[sr@latin]": "PulseAudio audio izlaz za Zmajevu medijsku pozadinu",
+        "Description[sr]": "Пулс‑аудио аудио излаз за Змајеву медијску позадину",
         "Description[tr]": "Dragon Ortam Arka Ucu için PulseAudio ses çıkışı",
         "Description[uk]": "Виведення звуку з PulseAudio для мультимедійного модуля Dragon",
         "EnabledByDefault": true,
@@ -29,6 +37,10 @@
         "Name[nl]": "PulseAudio audio-uitvoer",
         "Name[pt_BR]": "Saída de áudio do PulseAudio",
         "Name[sl]": "Zvočni ponor PulseAudio",
+        "Name[sr@ijekavian]": "Аудио излаз Пулс‑аудија",
+        "Name[sr@ijekavianlatin]": "Audio izlaz PulseAudija",
+        "Name[sr@latin]": "Audio izlaz PulseAudija",
+        "Name[sr]": "Аудио излаз Пулс‑аудија",
         "Name[tr]": "PulseAudio Ses Havuzu",
         "Name[uk]": "Приймач звуку PulseAudio",
         "ServiceTypes": [
