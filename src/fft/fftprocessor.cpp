@@ -57,16 +57,6 @@ void FftProcessor::setConsumer(Pipe<PcmBlock>::Consumer consumer)
     m_consumer = std::move(consumer);
 }
 
-void FftProcessor::setChannelCount(int channels)
-{
-    m_channelCount.store(std::max(1, channels), std::memory_order_relaxed);
-}
-
-void FftProcessor::setSampleRate(int sampleRate)
-{
-    m_sampleRate.store(sampleRate, std::memory_order_relaxed);
-}
-
 void FftProcessor::setFftMode(FftMode mode)
 {
     m_fftMode.store(mode, std::memory_order_relaxed);
@@ -80,15 +70,15 @@ void FftProcessor::setFftRate(int rate)
 void FftProcessor::reset()
 {
     m_prevBarFrequencies.fill(-80.0f);
+    m_sampleHistory.fill(0.0f);
     m_historyWritePos = 0;
     m_historyTotalSamples = 0;
     m_lastFrameAtSample = 0;
     m_newestBlockPts = {};
-    m_sampleHistory.fill(0.0f);
-    {
-        std::scoped_lock lock(m_frameMutex);
-        m_latestFrame = {};
-    }
+    // Unknown again: the first valid block of the next stream re-establishes
+    // the in-band format.
+    m_sampleRate = 0;
+    m_channelCount = 0;
 }
 
 void FftProcessor::transformReal(std::span<const float, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output)
@@ -99,14 +89,6 @@ void FftProcessor::transformReal(std::span<const float, FFT_SIZE> input, std::sp
 void FftProcessor::setFrameCallback(FrameCallback cb)
 {
     m_frameCallback = std::move(cb);
-}
-
-DragonFftFrame FftProcessor::takeLatestFrame()
-{
-    std::scoped_lock lock(m_frameMutex);
-    DragonFftFrame result = std::move(m_latestFrame);
-    m_latestFrame = {};
-    return result;
 }
 
 void FftProcessor::processLoop(const std::stop_token &st)
@@ -130,7 +112,14 @@ void FftProcessor::processLoop(const std::stop_token &st)
         }
         prevMode = mode;
 
-        const int sr = m_sampleRate.load(std::memory_order_relaxed);
+        const int sr = m_sampleRate;
+        if (sr <= 0) {
+            // Format not yet known: no block with valid metadata has
+            // arrived; just keep draining.
+            std::ignore = drainPipeToHistory(st);
+            m_consumer.waitFor(1, st);
+            continue;
+        }
         const int actualRate = std::max(1, m_fftRate.load(std::memory_order_relaxed));
         const size_t hopSamples = static_cast<size_t>(sr) / static_cast<size_t>(actualRate);
         const bool blockMode = hopSamples >= FFT_SIZE;
@@ -184,13 +173,25 @@ void FftProcessor::processLoop(const std::stop_token &st)
 bool FftProcessor::drainPipeToHistory(const std::stop_token &st)
 {
     bool gotAny = false;
-    const int ch = m_channelCount.load(std::memory_order_relaxed);
 
     while (m_consumer.ready() && !st.stop_requested()) {
         m_consumer.readSomeWith(m_consumer.ready(), [&](std::span<const PcmBlock> b1, std::span<const PcmBlock> b2) {
             auto processBlock = [&](const PcmBlock &blk) {
+                if (blk.sampleRate <= 0 || blk.channels <= 0) {
+                    qCWarning(dragonMediaBackendFft) << "ignoring PcmBlock without valid format metadata";
+                    return;
+                }
+                if (blk.sampleRate != m_sampleRate || blk.channels != m_channelCount) {
+                    // In-band format switch: no samples consumed under the
+                    // previous channel count are valid against the new one.
+                    resetFormatHistory();
+                    m_sampleRate = blk.sampleRate;
+                    m_channelCount = blk.channels;
+                }
+
                 m_newestBlockPts = blk.pts;
 
+                const int ch = m_channelCount;
                 for (size_t i = 0; i + ch <= blk.count; i += ch) {
                     float sum = 0;
                     for (int c = 0; c < ch; ++c)
@@ -210,6 +211,15 @@ bool FftProcessor::drainPipeToHistory(const std::stop_token &st)
         gotAny = true;
     }
     return gotAny;
+}
+
+void FftProcessor::resetFormatHistory()
+{
+    m_sampleHistory.fill(0.0f);
+    m_historyWritePos = 0;
+    m_historyTotalSamples = 0;
+    m_lastFrameAtSample = 0;
+    m_prevBarFrequencies.fill(-80.0f);
 }
 
 void FftProcessor::readWindowEndingAt(const size_t endPos, std::span<float, FFT_SIZE> out)
@@ -279,7 +289,7 @@ float FftProcessor::computeMelBin(std::span<const std::complex<float>, FFT_SIZE 
 void FftProcessor::fillDetailedBins(std::span<float> frequenciesDb, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq) const
 {
     const float melMin = hzToMel(MIN_FREQ);
-    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
+    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate) / 2.0f));
 
     for (auto [i, bin] : compat::views::enumerate(frequenciesDb)) {
         const float t0 = static_cast<float>(i) / static_cast<float>(frequenciesDb.size());
@@ -291,7 +301,7 @@ void FftProcessor::fillDetailedBins(std::span<float> frequenciesDb, std::span<co
 void FftProcessor::fillBarBins(std::span<float> barData, std::span<const std::complex<float>, FFT_SIZE / 2> fftOut, float binToFreq, float decayRate)
 {
     const float melMin = hzToMel(MIN_FREQ);
-    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate.load(std::memory_order_relaxed)) / 2.0f));
+    const float melMax = hzToMel(std::min(MAX_FREQ, static_cast<float>(m_sampleRate) / 2.0f));
 
     for (auto [i, bin] : compat::views::enumerate(barData)) {
         const float t0 = static_cast<float>(i) / static_cast<float>(barData.size());
@@ -307,11 +317,6 @@ void FftProcessor::fillBarBins(std::span<float> barData, std::span<const std::co
 
 void FftProcessor::emitFrame(const DragonFftFrame &frame)
 {
-    {
-        std::scoped_lock lock(m_frameMutex);
-        m_latestFrame = frame;
-    }
-
     if (m_frameCallback) {
         m_frameCallback(frame);
     }

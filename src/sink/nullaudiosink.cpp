@@ -34,50 +34,11 @@ bool NullAudioSink::probe()
     return true;
 }
 
-void NullAudioSink::open(int sampleRate, int channels)
+std::expected<std::unique_ptr<AudioSinkStream>, QString> NullAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer)
 {
-    // Report the broken install on every open attempt; DragonPlayer's generic
-    // open-failure handling sees isDeviceOpen() == false and refuses playback.
     Q_UNUSED(sampleRate);
     Q_UNUSED(channels);
-    Q_EMIT errorOccurred(nullDeviceErrorMessage());
-}
-
-void NullAudioSink::close()
-{
-}
-
-void NullAudioSink::pause()
-{
-}
-
-void NullAudioSink::resume()
-{
-}
-
-void NullAudioSink::setGain(float)
-{
-}
-
-qint64 NullAudioSink::deviceQueuedSamples() const
-{
-    return 0;
-}
-
-bool NullAudioSink::isDeviceOpen() const
-{
-    // Never open: there is no device, and open() always fails by contract.
-    // The player refuses playback-state transitions to sinks that are not
-    // open after an open() attempt, so playback never starts and position
-    // tracking never begins.
-    return false;
-}
-
-bool NullAudioSink::isPaused() const
-{
-    return false;
-}
-
-void NullAudioSink::clearStream()
-{
+    Q_UNUSED(renderer);
+    // Report the broken install on every stream-creation attempt.
+    return std::unexpected(nullDeviceErrorMessage());
 }

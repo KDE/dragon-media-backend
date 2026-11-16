@@ -5,7 +5,7 @@
 
 #include <QtTest>
 
-#include "mixer/fadeenvelope.h"
+#include "voice/fadeenvelope.h"
 
 #include <algorithm>
 #include <chrono>
@@ -19,6 +19,19 @@
 #include <vector>
 
 using namespace std::chrono_literals;
+
+namespace
+{
+
+// The hold budget is only observable through the difference between the
+// budgets: the decay budget (holdEnvelope=false) stays put while the hold
+// budget (holdEnvelope=true) is consumed.
+[[nodiscard]] std::size_t holdFramesRemaining(const FadeOutEnvelope &fadeOut)
+{
+    return fadeOut.remainingBudgetFrames(true) - fadeOut.remainingBudgetFrames(false);
+}
+
+}
 
 class TestDragonFadeEnvelope : public QObject
 {
@@ -50,10 +63,7 @@ private Q_SLOTS:
     void testEqualPowerIdentity();
     void testAsymmetricFadeGain();
 
-    // applyGainRamp & mixWithGainRamp
     void testGainRampInvalidAndEmptyInputs();
-    void testMixWithGainRampSpanMismatch();
-    void testMixWithGainRampClamping();
     void testApplyGainRampStereoLinear();
     void testFadeSpanSIMD();
     void testFadeSpanLinearAndUnaligned();
@@ -229,7 +239,6 @@ void TestDragonFadeEnvelope::testFadeInDefaultAndReset()
     QVERIFY(!fadeIn.isActive());
     QVERIFY(!fadeIn.isWaitingForFirstSample());
     QCOMPARE(fadeIn.totalFrames(), std::int64_t{0});
-    QCOMPARE(fadeIn.positionFrames(), std::int64_t{0});
     QCOMPARE(fadeIn.currentGain(), 1.0f);
 
     // advance on inactive envelope returns flat 1.0
@@ -287,15 +296,18 @@ void TestDragonFadeEnvelope::testFormatReopen()
     // Configured while device is closed (sampleRate == 0): inactive until reopened.
     fadeIn.configure(500ms, 0);
     QVERIFY(!fadeIn.isActive());
-    QCOMPARE(fadeIn.positionFrames(), std::int64_t{0});
+    QVERIFY(!fadeIn.isWaitingForFirstSample());
 
     fadeIn.onFormatReopen(48000);
     QVERIFY(fadeIn.isActive());
     QVERIFY(fadeIn.isWaitingForFirstSample());
     QCOMPARE(fadeIn.totalFrames(), std::int64_t{24000});
 
-    // Reopening mid-fade tears down the envelope.
-    std::ignore = fadeIn.advanceChunk(1000);
+    // Reopening mid-fade tears down the envelope: the fade has actually
+    // progressed past the first sample before the reopen.
+    const auto midRamp = fadeIn.advanceChunk(1000);
+    QVERIFY(midRamp.end > midRamp.start);
+    QVERIFY(fadeIn.currentGain() > 0.0f && fadeIn.currentGain() < 1.0f);
     QVERIFY(!fadeIn.isWaitingForFirstSample());
     fadeIn.onFormatReopen(44100);
     QVERIFY(!fadeIn.isActive());
@@ -312,7 +324,7 @@ void TestDragonFadeEnvelope::testFadeOutRemainingBudgetFrames()
     // 1000ms fade, 200ms hold at 1000Hz -> 1000 curve frames, 200 hold frames
     fadeOut.configure({.duration = 1000ms, .holdMax = 200ms, .incomingHasFadeIn = true, .sampleRate = 1000});
     QVERIFY(fadeOut.isActive());
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{200});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{200});
     QCOMPARE(fadeOut.remainingBudgetFrames(false), std::size_t{1000});
     QCOMPARE(fadeOut.remainingBudgetFrames(true), std::size_t{1200});
 
@@ -320,14 +332,14 @@ void TestDragonFadeEnvelope::testFadeOutRemainingBudgetFrames()
     const auto rHold = fadeOut.advanceChunk(100, true);
     QCOMPARE(rHold.start, 1.0f);
     QCOMPARE(rHold.end, 1.0f);
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{100});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{100});
     QCOMPARE(fadeOut.remainingBudgetFrames(false), std::size_t{1000});
     QCOMPARE(fadeOut.remainingBudgetFrames(true), std::size_t{1100});
 
     // Reset clears everything
     fadeOut.reset();
     QVERIFY(!fadeOut.isActive());
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{0});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{0});
     QCOMPARE(fadeOut.remainingBudgetFrames(true), std::size_t{0});
 }
 
@@ -335,47 +347,47 @@ void TestDragonFadeEnvelope::testFadeOutHoldConfigurationGuards()
 {
     FadeOutEnvelope fadeOut;
 
-    // Helper lambda to setup envelope with non-zero holdRemainingFrames
+    // Helper lambda to setup envelope with a non-zero hold budget
     auto setupHold = [&fadeOut]() {
         fadeOut.configure({.duration = 500ms, .holdMax = 200ms, .incomingHasFadeIn = true, .sampleRate = 1000});
         QVERIFY(fadeOut.isActive());
-        QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{200});
+        QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{200});
     };
 
-    // holdMax > 0 but incomingHasFadeIn == false -> holdRemainingFrames resets to 0
+    // holdMax > 0 but incomingHasFadeIn == false -> hold budget resets to 0
     setupHold();
     fadeOut.configure({.duration = 500ms, .holdMax = 200ms, .incomingHasFadeIn = false, .sampleRate = 1000});
     QVERIFY(fadeOut.isActive());
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{0});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{0});
 
-    // holdMax == 0 with incomingHasFadeIn == true -> holdRemainingFrames resets to 0
+    // holdMax == 0 with incomingHasFadeIn == true -> hold budget resets to 0
     setupHold();
     fadeOut.configure({.duration = 500ms, .holdMax = 0ms, .incomingHasFadeIn = true, .sampleRate = 1000});
     QVERIFY(fadeOut.isActive());
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{0});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{0});
 
-    // holdMax < 0 (-50ms) with incomingHasFadeIn == true -> holdRemainingFrames resets to 0
+    // holdMax < 0 (-50ms) with incomingHasFadeIn == true -> hold budget resets to 0
     setupHold();
     fadeOut.configure({.duration = 500ms, .holdMax = -50ms, .incomingHasFadeIn = true, .sampleRate = 1000});
     QVERIFY(fadeOut.isActive());
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{0});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{0});
 
     // duration == 0 (inactive curve) with incomingHasFadeIn == true and holdMax > 0 -> resets to 0
     setupHold();
     fadeOut.configure({.duration = 0ms, .holdMax = 200ms, .incomingHasFadeIn = true, .sampleRate = 1000});
     QVERIFY(!fadeOut.isActive());
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{0});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{0});
 
     // sampleRate <= 0 (0 and -1000) -> resets to 0
     setupHold();
     fadeOut.configure({.duration = 500ms, .holdMax = 200ms, .incomingHasFadeIn = true, .sampleRate = 0});
     QVERIFY(!fadeOut.isActive());
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{0});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{0});
 
     setupHold();
     fadeOut.configure({.duration = 500ms, .holdMax = 200ms, .incomingHasFadeIn = true, .sampleRate = -1000});
     QVERIFY(!fadeOut.isActive());
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{0});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{0});
 }
 
 void TestDragonFadeEnvelope::testFadeOutPartialHoldAndBypass()
@@ -384,38 +396,40 @@ void TestDragonFadeEnvelope::testFadeOutPartialHoldAndBypass()
     FadeOutEnvelope fadeOut;
     fadeOut.configure({.duration = 1000ms, .holdMax = 200ms, .incomingHasFadeIn = true, .sampleRate = 1000});
 
-    // Advance 75 frames held twice -> 150 frames consumed, 50 hold frames remaining
+    // Advance 75 frames held twice -> 150 hold frames consumed, 50 remaining
     std::ignore = fadeOut.advanceChunk(75, /*holdEnvelope=*/true);
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{125});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{125});
     std::ignore = fadeOut.advanceChunk(75, /*holdEnvelope=*/true);
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{50});
-    QCOMPARE(fadeOut.positionFrames(), std::int64_t{0});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{50});
+    // The cosine decay has not started: full decay budget remains and gain is still unity.
+    QCOMPARE(fadeOut.remainingBudgetFrames(false), std::size_t{1000});
+    QCOMPARE(fadeOut.currentGain(), 1.0f);
 
     // Advance 100 frames with holdEnvelope=false -> bypasses hold and advances curve directly
     const auto rBypass = fadeOut.advanceChunk(100, /*holdEnvelope=*/false);
     QVERIFY(rBypass.end < rBypass.start);
-    QCOMPARE(fadeOut.positionFrames(), std::int64_t{100});
+    QCOMPARE(fadeOut.remainingBudgetFrames(false), std::size_t{900});
     // Hold frames should remain intact since hold wasn't requested
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{50});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{50});
 }
 
 void TestDragonFadeEnvelope::testFadeOutAdvanceChunkEdgeCases()
 {
-    // advanceChunk(0, true) and advanceChunk(-5, true) while holdRemainingFrames() > 0
-    // Verifies chunkFrames <= 0 early return does not modify m_holdRemainingFrames
+    // advanceChunk(0, true) and advanceChunk(-5, true) while hold frames remain
+    // Verifies chunkFrames <= 0 early return does not modify the hold budget
     FadeOutEnvelope fadeOut;
     fadeOut.configure({.duration = 1000ms, .holdMax = 200ms, .incomingHasFadeIn = true, .sampleRate = 1000});
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{200});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{200});
 
     const auto rZero = fadeOut.advanceChunk(0, /*holdEnvelope=*/true);
     QCOMPARE(rZero.start, 1.0f);
     QCOMPARE(rZero.end, 1.0f);
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{200});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{200});
 
     const auto rNeg = fadeOut.advanceChunk(-5, /*holdEnvelope=*/true);
     QCOMPARE(rNeg.start, 1.0f);
     QCOMPARE(rNeg.end, 1.0f);
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{200});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{200});
 
     // Holding when currentGain() != 1.0f:
     // With initialGain = 0.6f
@@ -425,7 +439,7 @@ void TestDragonFadeEnvelope::testFadeOutAdvanceChunkEdgeCases()
     const auto rHoldInit = fadeOutInitial.advanceChunk(50, /*holdEnvelope=*/true);
     QCOMPARE(rHoldInit.start, 0.6f);
     QCOMPARE(rHoldInit.end, 0.6f);
-    QCOMPARE(fadeOutInitial.holdRemainingFrames(), std::int64_t{150});
+    QCOMPARE(holdFramesRemaining(fadeOutInitial), std::size_t{150});
 
     // 2b. Holding after curve advance (currentGain < 1.0f)
     FadeOutEnvelope fadeOutMid;
@@ -434,14 +448,15 @@ void TestDragonFadeEnvelope::testFadeOutAdvanceChunkEdgeCases()
     QVERIFY(rBypass.end < rBypass.start);
     const float gainAfterBypass = fadeOutMid.currentGain();
     QVERIFY(gainAfterBypass < 1.0f);
-    QCOMPARE(fadeOutMid.holdRemainingFrames(), std::int64_t{200});
+    QCOMPARE(holdFramesRemaining(fadeOutMid), std::size_t{200});
 
     // Now hold: must return flat ramp at gainAfterBypass, not 1.0f
     const auto rHoldAfterBypass = fadeOutMid.advanceChunk(50, /*holdEnvelope=*/true);
     QCOMPARE(rHoldAfterBypass.start, gainAfterBypass);
     QCOMPARE(rHoldAfterBypass.end, gainAfterBypass);
-    QCOMPARE(fadeOutMid.holdRemainingFrames(), std::int64_t{150});
-    QCOMPARE(fadeOutMid.positionFrames(), std::int64_t{100});
+    QCOMPARE(holdFramesRemaining(fadeOutMid), std::size_t{150});
+    QCOMPARE(fadeOutMid.remainingBudgetFrames(false), std::size_t{900});
+    QCOMPARE(fadeOutMid.currentGain(), gainAfterBypass);
 }
 
 void TestDragonFadeEnvelope::testInterruptedFadeInitialGain()
@@ -477,13 +492,14 @@ void TestDragonFadeEnvelope::testSlowLoadHold()
     const auto ramp = fadeOut.advanceChunk(200, /*holdEnvelope=*/true);
     QVERIFY(qFuzzyCompare(ramp.start, 1.0f));
     QVERIFY(qFuzzyCompare(ramp.end, 1.0f));
-    QCOMPARE(fadeOut.positionFrames(), std::int64_t{0});
-    QCOMPARE(fadeOut.holdRemainingFrames(), std::int64_t{0});
+    // Hold consumed only the hold budget: the decay curve has not started.
+    QCOMPARE(fadeOut.remainingBudgetFrames(false), std::size_t{1000});
+    QCOMPARE(holdFramesRemaining(fadeOut), std::size_t{0});
 
     // Hold budget exhausted: the envelope advances again.
     const auto ramp2 = fadeOut.advanceChunk(100, /*holdEnvelope=*/true);
     QVERIFY(ramp2.end < ramp2.start);
-    QCOMPARE(fadeOut.positionFrames(), std::int64_t{100});
+    QCOMPARE(fadeOut.remainingBudgetFrames(false), std::size_t{900});
 
     // Chunk-boundary quantization: if hold budget is smaller than chunk size,
     // clear hold and begin ramping smoothly across the chunk.
@@ -491,8 +507,8 @@ void TestDragonFadeEnvelope::testSlowLoadHold()
     fadeOut2.configure({.duration = 1000ms, .holdMax = 50ms, .incomingHasFadeIn = true, .sampleRate = 1000});
 
     const auto ramp3 = fadeOut2.advanceChunk(100, /*holdEnvelope=*/true);
-    QCOMPARE(fadeOut2.holdRemainingFrames(), std::int64_t{0});
-    QCOMPARE(fadeOut2.positionFrames(), std::int64_t{100});
+    QCOMPARE(holdFramesRemaining(fadeOut2), std::size_t{0});
+    QCOMPARE(fadeOut2.remainingBudgetFrames(false), std::size_t{900});
     QVERIFY(ramp3.end < ramp3.start);
 }
 
@@ -600,128 +616,6 @@ void TestDragonFadeEnvelope::testGainRampInvalidAndEmptyInputs()
     std::span<float> emptyDst;
     applyGainRamp(emptyDst, 2, {0.0f, 0.0f});
     applyGainRamp(emptyDst, 2, {0.0f, 1.0f});
-
-    // mixWithGainRamp with invalid channels (flat and non-flat ramps)
-    std::vector<float> src = {0.5f, 0.5f, 0.5f, 0.5f};
-    mixWithGainRamp(data, src, 0, {1.0f, 1.0f});
-    QCOMPARE(data, copy);
-    mixWithGainRamp(data, src, -2, {1.0f, 1.0f});
-    QCOMPARE(data, copy);
-    mixWithGainRamp(data, src, 0, {0.0f, 1.0f});
-    QCOMPARE(data, copy);
-    mixWithGainRamp(data, src, -2, {0.0f, 1.0f});
-    QCOMPARE(data, copy);
-
-    // mixWithGainRamp with empty spans
-    std::span<const float> emptySrc;
-    mixWithGainRamp(data, emptySrc, 2, {1.0f, 1.0f});
-    QCOMPARE(data, copy);
-    mixWithGainRamp(data, emptySrc, 2, {0.0f, 1.0f});
-    QCOMPARE(data, copy);
-
-    std::vector<float> emptyDstVec;
-    mixWithGainRamp(emptyDstVec, src, 2, {1.0f, 1.0f});
-    QVERIFY(emptyDstVec.empty());
-    mixWithGainRamp(emptyDstVec, src, 2, {0.0f, 1.0f});
-    QVERIFY(emptyDstVec.empty());
-
-    mixWithGainRamp(emptyDstVec, emptySrc, 2, {0.0f, 1.0f});
-    QVERIFY(emptyDstVec.empty());
-}
-
-void TestDragonFadeEnvelope::testMixWithGainRampSpanMismatch()
-{
-    // Fast-path {1.0f, 1.0f}:
-    // src smaller than dst: only first src.size() samples modified
-    std::vector<float> dst = {0.1f, 0.1f, 0.1f, 0.1f, 0.9f, 0.9f};
-    const std::vector<float> src = {0.2f, 0.2f};
-    mixWithGainRamp(dst, src, 2, {1.0f, 1.0f});
-
-    QVERIFY(qFuzzyCompare(dst[0], 0.3f));
-    QVERIFY(qFuzzyCompare(dst[1], 0.3f));
-    // Unmodified elements beyond src.size()
-    QCOMPARE(dst[2], 0.1f);
-    QCOMPARE(dst[3], 0.1f);
-    QCOMPARE(dst[4], 0.9f);
-    QCOMPARE(dst[5], 0.9f);
-
-    // dst smaller than src: safely mixes dst.size() without reading out of bounds
-    std::vector<float> dstSmall = {0.2f, 0.2f};
-    const std::vector<float> srcLarge = {0.3f, 0.3f, 10.0f, 10.0f};
-    mixWithGainRamp(dstSmall, srcLarge, 2, {1.0f, 1.0f});
-    QVERIFY(qFuzzyCompare(dstSmall[0], 0.5f));
-    QVERIFY(qFuzzyCompare(dstSmall[1], 0.5f));
-
-    // Ramped path {0.2f, 0.8f} with mismatched spans:
-    // src smaller than dst: sampleCount = min(6, 4) = 4 (2 stereo frames)
-    // gainStep computed from sampleCount (frames = 2), not dst.size() (frames = 3)
-    std::vector<float> dstRamped = {0.1f, 0.2f, 0.3f, 0.4f, 0.9f, 0.9f};
-    const std::vector<float> srcRamped = {0.5f, 0.5f, 0.5f, 0.5f};
-    mixWithGainRamp(dstRamped, srcRamped, 2, {0.2f, 0.8f});
-    // frames = 2, gainStep = (0.8 - 0.2) / 2 = 0.3f.
-    // Frame 0: g = 0.2 -> dst[0] = 0.1 + 0.5*0.2 = 0.2f, dst[1] = 0.2 + 0.5*0.2 = 0.3f
-    // Frame 1: g = 0.5 -> dst[2] = 0.3 + 0.5*0.5 = 0.55f, dst[3] = 0.4 + 0.5*0.5 = 0.65f
-    // Tail untouched: dst[4], dst[5]
-    QVERIFY(qFuzzyCompare(dstRamped[0], 0.2f));
-    QVERIFY(qFuzzyCompare(dstRamped[1], 0.3f));
-    QVERIFY(qFuzzyCompare(dstRamped[2], 0.55f));
-    QVERIFY(qFuzzyCompare(dstRamped[3], 0.65f));
-    QCOMPARE(dstRamped[4], 0.9f);
-    QCOMPARE(dstRamped[5], 0.9f);
-
-    // dst smaller than src: sampleCount = min(2, 6) = 2 (1 stereo frame)
-    std::vector<float> dstSmallRamped = {0.1f, 0.2f};
-    const std::vector<float> srcLargeRamped = {0.5f, 0.5f, 10.0f, 10.0f, 20.0f, 20.0f};
-    mixWithGainRamp(dstSmallRamped, srcLargeRamped, 2, {0.4f, 0.8f});
-    // frames = 1, gainStep = 0.4, Frame 0: g = 0.4 -> dst[0] = 0.1 + 0.5*0.4 = 0.3f, dst[1] = 0.2 + 0.5*0.4 = 0.4f
-    QVERIFY(qFuzzyCompare(dstSmallRamped[0], 0.3f));
-    QVERIFY(qFuzzyCompare(dstSmallRamped[1], 0.4f));
-}
-
-void TestDragonFadeEnvelope::testMixWithGainRampClamping()
-{
-    // Constant unity {1.0f, 1.0f} clamping to [-1.0f, 1.0f]
-    std::vector<float> dstPos = {0.8f, -0.8f};
-    std::vector<float> srcPos = {0.5f, -0.5f};
-    mixWithGainRamp(dstPos, srcPos, 2, {1.0f, 1.0f});
-    QCOMPARE(dstPos[0], 1.0f);
-    QCOMPARE(dstPos[1], -1.0f);
-
-    // Constant non-unity {0.5f, 0.5f} clamping
-    std::vector<float> dstConst = {0.7f, -0.7f};
-    std::vector<float> srcConst = {0.8f, -0.8f}; // 0.7 + 0.8 * 0.5 = 1.1 -> 1.0f
-    mixWithGainRamp(dstConst, srcConst, 2, {0.5f, 0.5f});
-    QCOMPARE(dstConst[0], 1.0f);
-    QCOMPARE(dstConst[1], -1.0f);
-
-    // Stereo ramping {0.0f, 1.0f} clamping with positive and negative clamping lanes
-    std::vector<float> dstStereo = {0.8f, -0.8f, 0.8f, -0.8f};
-    std::vector<float> srcStereo = {0.5f, -0.5f, 0.5f, -0.5f};
-    mixWithGainRamp(dstStereo, srcStereo, 2, {0.0f, 1.0f});
-    // Frame 0: g=0.0 -> dst unmodified
-    // Frame 1: g=0.5 -> 0.8 + 0.25 = 1.05 -> clamped to 1.0f; -0.8 - 0.25 = -1.05 -> clamped to -1.0f
-    QVERIFY(qFuzzyCompare(dstStereo[0], 0.8f));
-    QVERIFY(qFuzzyCompare(dstStereo[1], -0.8f));
-    QCOMPARE(dstStereo[2], 1.0f);
-    QCOMPARE(dstStereo[3], -1.0f);
-
-    // Multichannel (channels=3) ramping and trailing remainder clamping
-    // 5 samples: 1 full 3-channel frame + 2 trailing remainder samples
-    std::vector<float> dstMulti = {0.8f, -0.8f, 0.5f, 0.8f, -0.8f};
-    std::vector<float> srcMulti = {0.5f, -0.5f, 0.5f, 0.5f, -0.5f};
-    mixWithGainRamp(dstMulti, srcMulti, 3, {0.5f, 1.0f});
-    // Frame 0 (f=0, g=0.5):
-    // ch 0: 0.8 + 0.5 * 0.5 = 1.05 -> clamped to 1.0f
-    // ch 1: -0.8 + (-0.5) * 0.5 = -1.05 -> clamped to -1.0f
-    // ch 2: 0.5 + 0.5 * 0.5 = 0.75f (unclamped)
-    // Trailing remainder (indices 3, 4 with ramp.end = 1.0f):
-    // idx 3: 0.8 + 0.5 * 1.0 = 1.3 -> clamped to 1.0f
-    // idx 4: -0.8 + (-0.5) * 1.0 = -1.3 -> clamped to -1.0f
-    QCOMPARE(dstMulti[0], 1.0f);
-    QCOMPARE(dstMulti[1], -1.0f);
-    QVERIFY(qFuzzyCompare(dstMulti[2], 0.75f));
-    QCOMPARE(dstMulti[3], 1.0f);
-    QCOMPARE(dstMulti[4], -1.0f);
 }
 
 void TestDragonFadeEnvelope::testApplyGainRampStereoLinear()
@@ -763,30 +657,6 @@ void TestDragonFadeEnvelope::testFadeSpanSIMD()
     for (std::size_t i = 0; i < buffer.size(); ++i) {
         QVERIFY(qFuzzyCompare(buffer[i], original[i] * 0.5f));
     }
-
-    // mixWithGainRamp fast-path tests
-    std::vector<float> dst = {0.2f, -0.1f, 0.3f, -0.4f};
-    const std::vector<float> src = {0.5f, 0.5f, -0.5f, -0.5f};
-    const auto dstOrig = dst;
-
-    // Fast-path: ramp 0.0 -> 0.0 (no-op)
-    mixWithGainRamp(dst, src, 2, {0.0f, 0.0f});
-    QCOMPARE(dst, dstOrig);
-
-    // Fast-path: ramp 1.0 -> 1.0 (clamped vector sum)
-    mixWithGainRamp(dst, src, 2, {1.0f, 1.0f});
-    for (std::size_t i = 0; i < dst.size(); ++i) {
-        const float expected = std::clamp(dstOrig[i] + src[i], -1.0f, 1.0f);
-        QVERIFY(qFuzzyCompare(dst[i], expected));
-    }
-
-    // Fast-path: flat constant gain (0.5)
-    dst = dstOrig;
-    mixWithGainRamp(dst, src, 2, {0.5f, 0.5f});
-    for (std::size_t i = 0; i < dst.size(); ++i) {
-        const float expected = std::clamp(dstOrig[i] + src[i] * 0.5f, -1.0f, 1.0f);
-        QVERIFY(qFuzzyCompare(dst[i], expected));
-    }
 }
 
 void TestDragonFadeEnvelope::testFadeSpanLinearAndUnaligned()
@@ -805,16 +675,6 @@ void TestDragonFadeEnvelope::testFadeSpanLinearAndUnaligned()
         QVERIFY(qFuzzyCompare(multi[static_cast<std::size_t>(3 + c)], 0.4f));
     }
     QVERIFY(qFuzzyCompare(multi[6], 0.6f));
-
-    // mixWithGainRamp on sub-frame + trailing remainder applies ramp.end cleanly.
-    std::vector<float> dst(5, 0.1f); // 2 stereo frames + 1 trailing sample
-    const std::vector<float> src(5, 1.0f);
-    mixWithGainRamp(dst, src, 2, {0.0f, 0.5f});
-    QVERIFY(qFuzzyCompare(dst[0], 0.1f));
-    QVERIFY(qFuzzyCompare(dst[1], 0.1f));
-    QVERIFY(qFuzzyCompare(dst[2], 0.35f));
-    QVERIFY(qFuzzyCompare(dst[3], 0.35f));
-    QVERIFY(qFuzzyCompare(dst[4], 0.6f));
 }
 
 QTEST_GUILESS_MAIN(TestDragonFadeEnvelope)

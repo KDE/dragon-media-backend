@@ -4,7 +4,6 @@
  */
 
 #include "audiosink.h"
-#include "mixer/mixer.h"
 
 #include <QCoreApplication>
 #include <QGuiApplication>
@@ -16,11 +15,6 @@ AudioSink::AudioSink(QObject *parent)
 }
 
 AudioSink::~AudioSink() = default;
-
-void AudioSink::setMuted(bool muted)
-{
-    Q_UNUSED(muted);
-}
 
 void AudioSink::setStreamName(const QString &name)
 {
@@ -54,12 +48,23 @@ std::size_t AudioSink::preferredCallbackSamples(int sampleRate, int channels) co
     return 0;
 }
 
-void AudioSink::setMixer(Mixer *mixer)
+AudioSinkStream::AudioSinkStream(AudioSinkStreamRenderer &renderer, QObject *parent)
+    : QObject(parent)
+    , m_renderer(renderer)
 {
-    m_mixer = mixer;
 }
 
-Mixer *AudioSink::mixer() const
+AudioSinkStream::~AudioSinkStream()
 {
-    return m_mixer;
+    std::ignore = close();
+}
+
+bool AudioSinkStream::close()
+{
+    if (m_closed) {
+        return m_quiesced;
+    }
+    m_closed = true;
+    m_quiesced = closeStream();
+    return m_quiesced;
 }

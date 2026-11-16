@@ -14,8 +14,76 @@
 
 #include <atomic>
 #include <cstddef>
+#include <expected>
+#include <memory>
 #include <mutex>
 
+class SdlAudioSink;
+
+/**
+ * One SDL_AudioStream bound to the sink's shared device, rendering one voice
+ * at its native format (SDL converts/resamples into the device format and
+ * sums all bound streams).
+ *
+ * A per-stream paused flag suppresses rendering and outputs silence without
+ * advancing the voice's envelopes; when every stream is paused the device
+ * itself pauses, preserving immediate silence like the single-stream code.
+ */
+class SdlAudioSinkStream : public AudioSinkStream
+{
+    Q_OBJECT
+    Q_DISABLE_COPY_MOVE(SdlAudioSinkStream)
+
+public:
+    SdlAudioSinkStream(SdlAudioSink &sink,
+                       SDL_AudioStream *stream,
+                       SDL_AudioDeviceID deviceId,
+                       int sampleRate,
+                       int channels,
+                       AudioSinkStreamRenderer &renderer);
+    ~SdlAudioSinkStream() override
+    {
+        std::ignore = close();
+    }
+
+    void pause() override;
+    void resume() override;
+    [[nodiscard]] bool isPaused() const override;
+
+    void setGain(float linearGain) override;
+    void setMuted(bool muted) override;
+    void clearStream() override;
+    [[nodiscard]] qint64 deviceQueuedSamples() const override;
+
+    [[nodiscard]] int audioBufferFrames() const override;
+    [[nodiscard]] std::optional<std::chrono::microseconds> audioBufferDuration() const override;
+
+private:
+    friend class SdlAudioSink;
+
+    [[nodiscard]] bool closeStream() override;
+    void applyStreamGainLocked();
+
+    static void SDLCALL getCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
+
+    SdlAudioSink &m_sink;
+    SDL_AudioStream *m_stream;
+    SDL_AudioDeviceID m_deviceId;
+    const int m_sampleRate;
+    const int m_channels;
+
+    float m_gain = 1.0f;
+    bool m_muted = false;
+    std::atomic<bool> m_paused{false};
+    CallbackQuiesce m_quiesce;
+};
+
+/**
+ * SDL3 backend connection: initializes the SDL audio subsystem once and owns
+ * one audio device while at least one stream exists. The device opens on the
+ * first createStream() and closes when the last stream closes (which also
+ * flushes the disk driver's capture file used by the end-to-end tests).
+ */
 class SdlAudioSink : public AudioSink
 {
     Q_OBJECT
@@ -26,47 +94,34 @@ public:
     ~SdlAudioSink() override;
 
     [[nodiscard]] bool probe() override;
-
-    void open(int sampleRate, int channels) override;
-    void close() override;
-    void pause() override;
-    void resume() override;
-    void setGain(float linearGain) override;
-    void clearStream() override;
-    [[nodiscard]] qint64 deviceQueuedSamples() const override;
-    [[nodiscard]] bool isDeviceOpen() const override;
-    [[nodiscard]] bool isPaused() const override;
+    [[nodiscard]] std::expected<std::unique_ptr<AudioSinkStream>, QString>
+    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer) override;
 
     void setStreamName(const QString &name) override;
-
-    // Diagnostic helpers
-    [[nodiscard]] int audioBufferFrames() const override;
-    [[nodiscard]] std::optional<std::chrono::microseconds> audioBufferDuration() const override;
 
     [[nodiscard]] std::size_t preferredCallbackSamples(int sampleRate, int channels) const override;
 
 private:
-    static void SDLCALL audioStreamCallback(void *userdata, SDL_AudioStream *stream, int additional_amount, int total_amount);
+    friend class SdlAudioSinkStream;
 
-    struct AudioSession {
-        SDL_AudioStream *stream = nullptr;
-        SDL_AudioDeviceID deviceId = 0;
-    };
+    [[nodiscard]] bool openDeviceLocked();
+    void closeDeviceLocked();
+    void streamClosed(SdlAudioSinkStream *stream, bool quiesced);
+    void streamPauseChanged(bool paused);
 
-    std::atomic<AudioSession *> m_session{nullptr};
-
-    // Serializes the main-thread control methods (pause/resume/setGain/
-    // clearStream/deviceQueuedSamples) against close()'s teardown of the
-    // native session. Never taken on the RT audio callback path.
+    // Serializes the main-thread control methods (stream creation, device
+    // open/close) against stream teardown. Never taken on the RT callback
+    // path (the quiesce handshake handles that side).
     mutable std::mutex m_mainMutex;
 
-    // Quiesce handshake between the RT audio callback and close().
-    CallbackQuiesce m_quiesce;
+    SDL_AudioDeviceID m_deviceId = 0;
+    int m_liveStreams = 0;
+    int m_pausedStreams = 0;
 
-    // Set when close() could not quiesce its callback within the bounded
-    // wait: the native session is deliberately leaked into a detached
-    // "zombie" state instead of risking a use-after-free.
+    // Set when a stream close could not quiesce its callback: the native
+    // stream and device are deliberately leaked instead of risking a
+    // use-after-free, and new streams are refused.
     bool m_poisoned = false;
-
-    std::atomic<float> m_cachedGain{1.0f};
 };
+
+static_assert(sizeof(float) == 4, "we assume 32-bit float");

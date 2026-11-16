@@ -98,20 +98,6 @@ void FftPipeline::restartThread()
     startThread();
 }
 
-void FftPipeline::setSampleRate(int sampleRate)
-{
-    if (m_fftProcessor) {
-        m_fftProcessor->setSampleRate(sampleRate);
-    }
-}
-
-void FftPipeline::setChannelCount(int channels)
-{
-    if (m_fftProcessor) {
-        m_fftProcessor->setChannelCount(channels);
-    }
-}
-
 void FftPipeline::setMode(DragonSpectrumAnalyzer::Mode mode)
 {
     const bool wasOn = (m_currentMode != DragonSpectrumAnalyzer::Mode::Off);

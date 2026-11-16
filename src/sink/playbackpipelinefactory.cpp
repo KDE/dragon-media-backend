@@ -5,7 +5,6 @@
 
 #include "playbackpipelinefactory.h"
 #include "audiosink.h"
-#include "mixer/mixer.h"
 #include "nullaudiosink.h"
 #include "playbackpipeline.h"
 

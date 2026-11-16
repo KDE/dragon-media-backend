@@ -17,6 +17,7 @@ using namespace Qt::StringLiterals;
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <cmath>
 #include <mutex>
 #include <numbers>
@@ -39,6 +40,92 @@ bool isBarEmpty(const DragonFftFrame &frame)
         return v == 0.0f;
     });
 }
+
+bool allFinite(std::span<const float> values)
+{
+    return std::all_of(values.begin(), values.end(), [](float v) {
+        return std::isfinite(v);
+    });
+}
+
+// The processor no longer stores a "latest frame": tests observe frames through
+// the production setFrameCallback() path instead. The callback runs on the
+// thread that runs processLoop(), so the captured frames are guarded by a mutex
+// while the invocation count stays atomic for quiescence polling.
+class FrameCapture
+{
+public:
+    void capture(DragonFftFrame frame)
+    {
+        std::scoped_lock lock(m_mutex);
+        m_frames.push_back(std::move(frame));
+        frameCount.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    // The most recently emitted frame, or a null frame if none was emitted yet.
+    [[nodiscard]] DragonFftFrame latest() const
+    {
+        std::scoped_lock lock(m_mutex);
+        return m_frames.empty() ? DragonFftFrame() : m_frames.back();
+    }
+
+    [[nodiscard]] std::vector<DragonFftFrame> frames() const
+    {
+        std::scoped_lock lock(m_mutex);
+        return m_frames;
+    }
+
+    std::atomic<int> frameCount{0};
+
+private:
+    mutable std::mutex m_mutex;
+    std::vector<DragonFftFrame> m_frames;
+};
+
+// Writes blocks that deliberately carry no in-band format metadata. The
+// processor must ignore these.
+size_t writeBlocksWithoutFormat(Pipe<PcmBlock>::Producer producer, std::span<const float> data)
+{
+    const size_t blocksNeeded = (data.size() + PcmBlock::MAX_SAMPLES - 1) / PcmBlock::MAX_SAMPLES;
+    return producer.writeSomeWith(blocksNeeded, [&](std::span<PcmBlock> b1, std::span<PcmBlock> b2) {
+        size_t srcOffset = 0;
+        size_t blockIdx = 0;
+        auto fillDst = [&](std::span<PcmBlock> dst) {
+            for (size_t i = 0; i < dst.size() && srcOffset < data.size(); ++i, ++blockIdx) {
+                const size_t toCopy = std::min(data.size() - srcOffset, PcmBlock::MAX_SAMPLES);
+                dst[i].count = toCopy;
+                dst[i].pts = std::chrono::microseconds(blockIdx * 1000);
+                // sampleRate and channels stay at their default of 0.
+                for (size_t j = 0; j < toCopy; ++j, ++srcOffset) {
+                    dst[i].samples[j] = data[srcOffset];
+                }
+            }
+        };
+        fillDst(b1);
+        fillDst(b2);
+    });
+}
+
+// processLoop() runs on the jthread's own stop token so that the thread is
+// still stopped and joined when an assertion fails and the test returns early.
+[[nodiscard]] std::jthread startProcessorThread(FftProcessor &processor)
+{
+    return std::jthread([&processor](std::stop_token st) {
+        processor.processLoop(st);
+    });
+}
+
+// The processor emits its first frame only once a block carrying a valid
+// format has arrived, which can take a pipe wait cycle; wait for it instead
+// of only waiting for the frame counter to stop moving.
+[[nodiscard]] bool waitForFirstFrame(const std::atomic<int> &frameCount, int timeoutMs = 5000)
+{
+    return QTest::qWaitFor(
+        [&frameCount]() {
+            return frameCount.load(std::memory_order_relaxed) > 0;
+        },
+        timeoutMs);
+}
 }
 
 class TestFftProcessor : public QObject
@@ -51,9 +138,7 @@ private Q_SLOTS:
 
     void testConstruction();
     void testSetQueue();
-    void testSetSampleRate();
     void testReset();
-    void testTakeLatestFrameEmpty();
 
     void testProcessLoopSineWave();
     void testProcessLoopSilence();
@@ -65,7 +150,6 @@ private Q_SLOTS:
     void testFftProducesOutputAboveThreshold_data();
     void testFftProducesOutputAboveThreshold();
     void testFrameTimestamp();
-    void testSampleRateChange();
 
     void testFftModeOff();
     void testFftModeBarsOnly();
@@ -79,6 +163,8 @@ private Q_SLOTS:
 
     void testFftFrequencyLocalization();
     void testFftMultiTonePeaks();
+
+    void testInBandFormatSwitchAtBlockBoundary();
 
 private:
     std::vector<float> createSineWave(float frequency, int sampleRate, int numSamples);
@@ -120,10 +206,28 @@ void TestFftProcessor::testHannWindow()
 
 void TestFftProcessor::testConstruction()
 {
+    Pipe<PcmBlock> pipe(256);
+
+    // A freshly constructed processor has no format yet, so it must not emit
+    // any frames before the first valid in-band block arrives.
     FftProcessor processor;
-    auto frame = processor.takeLatestFrame();
-    QVERIFY(isFrequenciesEmpty(frame));
-    QVERIFY(isBarEmpty(frame));
+    processor.setConsumer(pipe.consumer());
+    processor.setFftMode(FftProcessor::FftMode::Both);
+
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
+    });
+
+    auto processorThread = startProcessorThread(processor);
+
+    QTest::qWait(100);
+    processorThread.request_stop();
+    processorThread.join();
+
+    QVERIFY2(capture.frameCount.load() == 0, "A processor without format metadata should emit no frames");
+    QVERIFY(isFrequenciesEmpty(capture.latest()));
+    QVERIFY(isBarEmpty(capture.latest()));
 }
 
 void TestFftProcessor::testSetQueue()
@@ -132,67 +236,85 @@ void TestFftProcessor::testSetQueue()
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    QVERIFY(isFrequenciesEmpty(processor.takeLatestFrame()));
-}
+    processor.setFftMode(FftProcessor::FftMode::Both);
 
-void TestFftProcessor::testSetSampleRate()
-{
-    FftProcessor processor;
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
+    });
 
-    processor.setSampleRate(48000);
-    QVERIFY(isFrequenciesEmpty(processor.takeLatestFrame()));
+    // Blocks without in-band format metadata are consumed but ignored: the
+    // processor has no sample rate or channel count to work with.
+    auto sineWave = createSineWave(440.0f, 44100, static_cast<int>(FftProcessor::FFT_SIZE));
+    const auto written = writeBlocksWithoutFormat(pipe.producer(), sineWave);
+    QVERIFY2(written > 0, "writeBlocksWithoutFormat wrote zero blocks pipe may be full or data empty");
 
-    processor.setSampleRate(44100);
-    QVERIFY(isFrequenciesEmpty(processor.takeLatestFrame()));
+    auto processorThread = startProcessorThread(processor);
+
+    QTest::qWait(300);
+    processorThread.request_stop();
+    processorThread.join();
+
+    QVERIFY2(capture.frameCount.load() == 0, "Blocks without valid format metadata should be ignored");
+    QVERIFY(isFrequenciesEmpty(capture.latest()));
+    QVERIFY(isBarEmpty(capture.latest()));
 }
 
 void TestFftProcessor::testReset()
 {
     Pipe<PcmBlock> pipe(256);
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     auto sineWave = createSineWave(440.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    const auto written = writeBlocks(pipe.producer(), sineWave);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
+    });
+
+    const auto written = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks");
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
-
-    quiescencePolling(frameCount, 5000);
-    stopSource.request_stop();
+    QVERIFY2(QTest::qWaitFor(
+                 [&]() {
+                     return capture.frameCount.load(std::memory_order_relaxed) > 0;
+                 },
+                 5000),
+             "Should have produced at least one frame");
+    const int framesBeforeReset = quiescencePolling(capture.frameCount, 5000);
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frameBefore = processor.takeLatestFrame();
-    QVERIFY2(!isFrequenciesEmpty(frameBefore), "Should have frequency data before reset");
+    QVERIFY2(framesBeforeReset > 0, "Should have frequency data before reset");
+    QVERIFY2(!isFrequenciesEmpty(capture.latest()), "Should have frequency data before reset");
+    QVERIFY2(!isBarEmpty(capture.latest()), "Should have bar data before reset");
 
+    // reset() drops the accumulated history and forgets the format. Feeding
+    // less than one FFT window of new samples must therefore not produce a
+    // frame: the format has to be re-established by the first valid block and
+    // the history rebuilt from scratch.
     processor.reset();
-    auto frameAfter = processor.takeLatestFrame();
-    QVERIFY2(isFrequenciesEmpty(frameAfter), "Frequency data should be empty after reset");
-    QVERIFY2(isBarEmpty(frameAfter), "Bar data should be empty after reset");
-}
 
-void TestFftProcessor::testTakeLatestFrameEmpty()
-{
-    FftProcessor processor;
-    processor.setSampleRate(44100);
+    std::vector<float> halfWindow = createSineWave(440.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE) / 2);
+    const auto writtenAfterReset = writeBlocks(pipe.producer(), halfWindow, sampleRate, channels);
+    QVERIFY2(writtenAfterReset > 0, "writeBlocks wrote zero blocks");
 
-    auto frame = processor.takeLatestFrame();
-    QVERIFY(isFrequenciesEmpty(frame));
-    QVERIFY(isBarEmpty(frame));
+    std::jthread processorThreadAfterReset([&](std::stop_token st) {
+        processor.processLoop(st);
+    });
+
+    QTest::qWait(200);
+    processorThreadAfterReset.request_stop();
+    processorThreadAfterReset.join();
+
+    QVERIFY2(capture.frameCount.load() == framesBeforeReset,
+             qPrintable(u"Reset should have discarded the history: had %1 frames, now %2"_s.arg(framesBeforeReset).arg(capture.frameCount.load())));
 }
 
 std::vector<float> TestFftProcessor::createSineWave(float frequency, int sampleRate, int numSamples)
@@ -214,39 +336,36 @@ std::vector<float> TestFftProcessor::createSilence(int numSamples)
 void TestFftProcessor::testProcessLoopSineWave()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     constexpr float freq = 440.0f;
     auto sineWave = createSineWave(freq, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
 
-    const auto written1 = writeBlocks(pipe.producer(), sineWave);
+    const auto written1 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount, 5000);
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frame = processor.takeLatestFrame();
+    auto frame = capture.latest();
     QVERIFY2(!isFrequenciesEmpty(frame), "FFT frame should have frequency data");
     QVERIFY2(!isBarEmpty(frame), "FFT frame should have bar data");
-    QVERIFY2(frameCount.load() > 0, "Frame callback should have been invoked");
+    QVERIFY2(capture.frameCount.load() > 0, "Frame callback should have been invoked");
 
     float peakMag = -80.0f;
     int peakBin = 0;
@@ -273,34 +392,31 @@ void TestFftProcessor::testProcessLoopSineWave()
 void TestFftProcessor::testProcessLoopSilence()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     auto silence = createSilence(static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
-    const auto written = writeBlocks(pipe.producer(), silence);
+    const auto written = writeBlocks(pipe.producer(), silence, sampleRate, channels);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount, 5000);
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frame = processor.takeLatestFrame();
+    auto frame = capture.latest();
 
     QVERIFY2(!isFrequenciesEmpty(frame), "Silence should still produce a frame with frequency data");
 
@@ -315,42 +431,34 @@ void TestFftProcessor::testProcessLoopSilence()
 void TestFftProcessor::testProcessLoopMultipleFrames()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     auto sine1kHz = createSineWave(1000.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
 
     for (int frame = 0; frame < 3; ++frame) {
-        const auto written = writeBlocks(pipe.producer(), sine1kHz);
+        const auto written = writeBlocks(pipe.producer(), sine1kHz, sampleRate, channels);
         QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
     }
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::vector<DragonFftFrame> frames;
-    std::mutex framesMutex;
-    std::atomic<int> frameCount{0};
-
-    processor.setFrameCallback([&](DragonFftFrame frame) {
-        std::scoped_lock lock(framesMutex);
-        frames.push_back(std::move(frame));
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount);
+    QTRY_VERIFY_WITH_TIMEOUT(capture.frameCount.load(std::memory_order_relaxed) > 0, 5000);
+    quiescencePolling(capture.frameCount);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
-    std::scoped_lock lock(framesMutex);
+    const auto frames = capture.frames();
     QVERIFY2(frames.size() >= 2, qPrintable(QString("Expected at least 2 frames from 3x FFT_SIZE data, got %1"_L1).arg(frames.size())));
 
     for (const auto &frame : frames) {
@@ -364,81 +472,78 @@ void TestFftProcessor::testProcessLoopMultipleFrames()
 void TestFftProcessor::testFrameCallbackInvoked()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     auto noise = createSineWave(2000.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
-    const auto written = writeBlocks(pipe.producer(), noise);
+    const auto written = writeBlocks(pipe.producer(), noise, sampleRate, channels);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::atomic<int> callbackCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        callbackCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(callbackCount, 5000);
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
-    QVERIFY2(callbackCount.load() >= 1, qPrintable(u"Callback should be invoked at least once, got %1"_s.arg(callbackCount.load())));
+    QVERIFY2(capture.frameCount.load() >= 1, qPrintable(u"Callback should be invoked at least once, got %1"_s.arg(capture.frameCount.load())));
 }
 
 void TestFftProcessor::testPeakHoldDecay()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
 
     Pipe<PcmBlock> pipe(256);
 
     auto sine = createSineWave(1000.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE) * 2);
     auto silence = createSilence(static_cast<int>(FftProcessor::FFT_SIZE) * 4);
 
-    const auto writtenSine = writeBlocks(pipe.producer(), sine);
+    const auto writtenSine = writeBlocks(pipe.producer(), sine, sampleRate, channels);
     QVERIFY2(writtenSine > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::vector<float> peakValues;
-    std::mutex mutex;
-    std::atomic<int> frameCount{0};
-
-    processor.setFrameCallback([&](const DragonFftFrame &frame) {
-        std::scoped_lock lock(mutex);
-        if (!isBarEmpty(frame)) {
-            float maxVal = *std::max_element(frame.bars().begin(), frame.bars().end());
-            peakValues.push_back(maxVal);
-        }
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount, 5000);
-    const auto writtenSilence = writeBlocks(pipe.producer(), silence);
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
+    const int framesAfterSine = capture.frameCount.load(std::memory_order_relaxed);
+    const auto writtenSilence = writeBlocks(pipe.producer(), silence, sampleRate, channels);
     QVERIFY2(writtenSilence > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
-    quiescencePolling(frameCount, 5000);
+    // The silence only yields further frames once enough samples have
+    // accumulated, which needs a pipe wait cycle: wait for actual progress
+    // rather than for the counter to stop moving.
+    QTRY_VERIFY_WITH_TIMEOUT(capture.frameCount.load(std::memory_order_relaxed) > framesAfterSine, 5000);
+    quiescencePolling(capture.frameCount, 5000);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
-    std::scoped_lock lock(mutex);
+    std::vector<float> peakValues;
+    for (const auto &frame : capture.frames()) {
+        if (!isBarEmpty(frame)) {
+            peakValues.push_back(*std::max_element(frame.bars().begin(), frame.bars().end()));
+        }
+    }
+
     QVERIFY2(peakValues.size() >= 2, qPrintable(u"Expected at least 2 frames for decay verification, got %1"_s.arg(peakValues.size())));
 
     float initialPeak = peakValues.front();
@@ -460,34 +565,31 @@ void TestFftProcessor::testPeakHoldDecay()
 void TestFftProcessor::testBarDataSizeValidation()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     constexpr float freq = 1000.0f;
     auto sineWave = createSineWave(freq, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
-    const auto written2 = writeBlocks(pipe.producer(), sineWave);
+    const auto written2 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written2 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount, 5000);
-    stopSource.request_stop();
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frame = processor.takeLatestFrame();
+    auto frame = capture.latest();
 
     QVERIFY(frame.bars().size() == static_cast<size_t>(FftProcessor::NUM_BAR_BINS));
 
@@ -514,33 +616,30 @@ void TestFftProcessor::testFftProducesOutputAboveThreshold()
     QFETCH(float, frequency);
     QFETCH(int, sampleRate);
 
+    constexpr int channels = 1;
     auto sineWave = createSineWave(frequency, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
-    const auto written3 = writeBlocks(pipe.producer(), sineWave);
+    const auto written3 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written3 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount, 5000);
-    stopSource.request_stop();
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frame = processor.takeLatestFrame();
+    auto frame = capture.latest();
 
     float peakMag = -80.0f;
     for (const float &mag : frame.frequencies()) {
@@ -563,16 +662,15 @@ void TestFftProcessor::testFftProducesOutputAboveThreshold()
 void TestFftProcessor::testFrameTimestamp()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
-    const auto written1 = writeBlocks(pipe.producer(), sineWave);
+    const auto written1 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
     std::optional<std::chrono::microseconds> firstTimestamp;
@@ -585,70 +683,30 @@ void TestFftProcessor::testFrameTimestamp()
         frameCount.fetch_add(1, std::memory_order_relaxed);
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
+    QTRY_VERIFY_WITH_TIMEOUT(frameCount.load(std::memory_order_relaxed) > 0, 5000);
     quiescencePolling(frameCount, 5000);
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
     QVERIFY(firstTimestamp.has_value());
     QVERIFY(firstTimestamp->count() > 0);
 }
 
-void TestFftProcessor::testSampleRateChange()
-{
-    Pipe<PcmBlock> pipe(256);
-
-    FftProcessor processor;
-    processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-
-    processor.setSampleRate(44100);
-    processor.setFftMode(FftProcessor::FftMode::Both);
-
-    auto sine44k = createSineWave(1000.0f, 44100, static_cast<int>(FftProcessor::FFT_SIZE));
-    const auto written = writeBlocks(pipe.producer(), sine44k);
-    QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
-
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
-    });
-
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
-
-    quiescencePolling(frameCount, 5000);
-
-    processor.setSampleRate(48000);
-
-    QTest::qWait(100);
-    stopSource.request_stop();
-    processorThread.join();
-
-    auto frame = processor.takeLatestFrame();
-    QVERIFY2(!isFrequenciesEmpty(frame), "Frame should be produced after sample rate change");
-}
-
 void TestFftProcessor::testFftModeOff()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
 
-    const auto written2 = writeBlocks(pipe.producer(), sineWave);
+    const auto written2 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written2 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Off);
 
     std::atomic<int> callbackCount{0};
@@ -656,14 +714,11 @@ void TestFftProcessor::testFftModeOff()
         callbackCount.fetch_add(1);
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
     QTest::qWait(300);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
     QVERIFY2(callbackCount.load() == 0, qPrintable(QString("Off mode should produce zero frames, got %1"_L1).arg(callbackCount.load())));
@@ -672,133 +727,125 @@ void TestFftProcessor::testFftModeOff()
 void TestFftProcessor::testFftModeBarsOnly()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
-    const auto written3 = writeBlocks(pipe.producer(), sineWave);
+    const auto written3 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written3 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::BarsOnly);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount, 5000);
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frame = processor.takeLatestFrame();
+    auto frame = capture.latest();
     QVERIFY2(!isBarEmpty(frame), "BarsOnly mode should produce barData");
     QVERIFY2(frame.bars().size() == static_cast<size_t>(FftProcessor::NUM_BAR_BINS),
              qPrintable(QString("barData should have %1 elements, got %2"_L1).arg(FftProcessor::NUM_BAR_BINS).arg(frame.bars().size())));
     QVERIFY2(isFrequenciesEmpty(frame), "BarsOnly mode should not produce frequenciesDb");
-    QVERIFY2(frameCount.load() > 0, "Callback should have been invoked");
+    QVERIFY2(capture.frameCount.load() > 0, "Callback should have been invoked");
 }
 
 void TestFftProcessor::testFftModeDetailedOnly()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
-    const auto written4 = writeBlocks(pipe.producer(), sineWave);
+    const auto written4 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written4 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::DetailedOnly);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount, 5000);
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frame = processor.takeLatestFrame();
+    auto frame = capture.latest();
     QVERIFY2(!isFrequenciesEmpty(frame), "DetailedOnly mode should produce frequenciesDb");
     QVERIFY2(frame.frequencies().size() == static_cast<size_t>(FftProcessor::NUM_LOG_BINS),
              qPrintable(QString("frequenciesDb should have %1 elements, got %2"_L1).arg(FftProcessor::NUM_LOG_BINS).arg(frame.frequencies().size())));
     QVERIFY2(isBarEmpty(frame), "DetailedOnly mode should not produce barData");
-    QVERIFY2(frameCount.load() > 0, "Callback should have been invoked");
+    QVERIFY2(capture.frameCount.load() > 0, "Callback should have been invoked");
 }
 
 void TestFftProcessor::testFftModeSwitch()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     auto sineWave = createSineWave(1000.0f, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    const auto written5 = writeBlocks(pipe.producer(), sineWave);
+    const auto written5 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written5 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    quiescencePolling(frameCount, 5000);
-    int framesPhase1 = frameCount.load();
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
+    int framesPhase1 = capture.frameCount.load();
     QVERIFY2(framesPhase1 >= 1, qPrintable(QString("Both mode should produce at least 1 frame, got %1"_L1).arg(framesPhase1)));
 
     processor.setFftMode(FftProcessor::FftMode::Off);
-    int framesPhase2Start = frameCount.load();
+    int framesPhase2Start = capture.frameCount.load();
 
-    const auto written6 = writeBlocks(pipe.producer(), sineWave);
+    const auto written6 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written6 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     QTest::qWait(300);
-    int framesPhase2End = frameCount.load();
+    int framesPhase2End = capture.frameCount.load();
     QVERIFY2(framesPhase2End == framesPhase2Start,
              qPrintable(QString("Off mode should not produce new frames: started at %1, ended at %2"_L1).arg(framesPhase2Start).arg(framesPhase2End)));
 
     processor.setFftMode(FftProcessor::FftMode::BarsOnly);
-    const auto written7 = writeBlocks(pipe.producer(), sineWave);
+    const auto written7 = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written7 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    quiescencePolling(frameCount, 5000);
-    int framesPhase3 = frameCount.load();
+    QTRY_VERIFY_WITH_TIMEOUT(capture.frameCount.load(std::memory_order_relaxed) > framesPhase2End, 5000);
+    quiescencePolling(capture.frameCount, 5000);
+    int framesPhase3 = capture.frameCount.load();
     QVERIFY2(framesPhase3 > framesPhase2End,
              qPrintable(QString("BarsOnly mode should resume producing frames: had %1, now %2"_L1).arg(framesPhase2End).arg(framesPhase3)));
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frame = processor.takeLatestFrame();
+    auto frame = capture.latest();
     QVERIFY2(!isBarEmpty(frame), "Latest frame should have barData after switching to BarsOnly");
     QVERIFY2(isFrequenciesEmpty(frame), "Latest frame should not have frequenciesDb in BarsOnly mode");
 }
@@ -818,32 +865,27 @@ void TestFftProcessor::testFrameCountForThreeSecondsStereo()
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(channels);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
     // Dump the entire 3-second burst (matches what the SDL dummy driver does in CI).
-    const auto written = writeBlocks(pipe.producer(), audio);
+    const auto written = writeBlocks(pipe.producer(), audio, sampleRate, channels);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     // Wait for the processor to drain all blocks and emit all owed frames.
     // A fixed qWait(500) is flaky under CPU contention: the processor thread
     // may not drain all 259 blocks in time when prior tests have loaded the
     // scheduler. Polling for quiescence makes the test deterministic.
-    QTRY_VERIFY_WITH_TIMEOUT(frameCount.load(std::memory_order_relaxed) > 0, 5000);
-    const int count = quiescencePolling(frameCount);
+    QTRY_VERIFY_WITH_TIMEOUT(capture.frameCount.load(std::memory_order_relaxed) > 0, 5000);
+    const int count = quiescencePolling(capture.frameCount);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
     // Total mono samples after downmix: 264600 / 2 = 132300.
@@ -867,31 +909,26 @@ void TestFftProcessor::testConfigurableRate()
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(channels);
-    processor.setSampleRate(sampleRate);
     processor.setFftRate(30);
     processor.setFftMode(FftProcessor::FftMode::Both);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    const auto written = writeBlocks(pipe.producer(), audio);
+    const auto written = writeBlocks(pipe.producer(), audio, sampleRate, channels);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    QTRY_VERIFY_WITH_TIMEOUT(frameCount.load(std::memory_order_relaxed) > 0, 5000);
-    quiescencePolling(frameCount);
+    QTRY_VERIFY_WITH_TIMEOUT(capture.frameCount.load(std::memory_order_relaxed) > 0, 5000);
+    quiescencePolling(capture.frameCount);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
-    const int count = frameCount.load(std::memory_order_relaxed);
+    const int count = capture.frameCount.load(std::memory_order_relaxed);
 
     QVERIFY2(count >= 80, qPrintable(u"Too few frames (%1) for 3-second burst at 30 Hz expected ~88"_s.arg(count)));
     QVERIFY2(count <= 95, qPrintable(u"Too many frames (%1) for 3-second burst at 30 Hz"_s.arg(count)));
@@ -906,62 +943,57 @@ void TestFftProcessor::testFftResumesAfterModeToggle()
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(channels);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::BarsOnly);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
     // Feed a large burst to build up a deep history simulates a long-running session.
     constexpr int totalFloats = sampleRate * 10 * channels;
     auto audio = createSilence(totalFloats);
-    const auto written1 = writeBlocks(pipe.producer(), audio);
+    const auto written1 = writeBlocks(pipe.producer(), audio, sampleRate, channels);
     QVERIFY2(written1 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     // Wait for the processor to actually start emitting frames before measuring.
     // Under ASAN, thread startup + first FFT can exceed the quiescence stability window.
     QVERIFY2(QTest::qWaitFor(
                  [&]() {
-                     return frameCount.load(std::memory_order_relaxed) > 0;
+                     return capture.frameCount.load(std::memory_order_relaxed) > 0;
                  },
                  30000),
              "Should have produced at least one frame during initial playback");
 
-    quiescencePolling(frameCount, 30000);
-    int framesPhase1 = frameCount.load(std::memory_order_relaxed);
+    quiescencePolling(capture.frameCount, 30000);
+    int framesPhase1 = capture.frameCount.load(std::memory_order_relaxed);
     QVERIFY2(framesPhase1 > 0, "Should have produced frames during initial playback");
 
     // Turn Off thread goes to sleep but history stays filled.
     processor.setFftMode(FftProcessor::FftMode::Off);
-    frameCount.store(0, std::memory_order_relaxed);
+    capture.frameCount.store(0, std::memory_order_relaxed);
     QTest::qWait(100);
 
     // Turn back On with a small amount of NEW data.
     auto newAudio = createSilence(static_cast<int>(FftProcessor::FFT_SIZE));
-    const auto written2 = writeBlocks(pipe.producer(), newAudio);
+    const auto written2 = writeBlocks(pipe.producer(), newAudio, sampleRate, channels);
     QVERIFY2(written2 > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
     processor.setFftMode(FftProcessor::FftMode::BarsOnly);
 
     // Wait for the processor to drain and emit frames from the new data.
     QVERIFY2(QTest::qWaitFor(
                  [&]() {
-                     return frameCount.load(std::memory_order_relaxed) > 0;
+                     return capture.frameCount.load(std::memory_order_relaxed) > 0;
                  },
                  30000),
              "Should resume producing frames after re-enable");
 
-    quiescencePolling(frameCount, 30000);
-    int framesPhase2 = frameCount.load(std::memory_order_relaxed);
+    quiescencePolling(capture.frameCount, 30000);
+    int framesPhase2 = capture.frameCount.load(std::memory_order_relaxed);
 
-    stopSource.request_stop();
+    processorThread.request_stop();
     processorThread.join();
 
     // The key invariant is that the thread does NOT hang and does emit SOME frames.
@@ -978,8 +1010,6 @@ void TestFftProcessor::testFftStopTokenHonoredInInnerLoop()
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(channels);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::BarsOnly);
 
     std::atomic<int> frameCount{0};
@@ -992,20 +1022,17 @@ void TestFftProcessor::testFftStopTokenHonoredInInnerLoop()
     // the inner while-loop to have a lot of work to do.
     constexpr int totalFloats = sampleRate * 30 * channels;
     auto audio = createSilence(totalFloats);
-    const auto written = writeBlocks(pipe.producer(), audio);
+    const auto written = writeBlocks(pipe.producer(), audio, sampleRate, channels);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
     // Wait just long enough for the processor to enter its inner loop.
     QTest::qWait(50);
 
     // Now request stop. Without the inner-loop stop-token check, the join()
     // would block indefinitely while the thread churns through the backlog.
-    stopSource.request_stop();
+    processorThread.request_stop();
 
     // The thread should exit promptly (well under 5 seconds) now that
     // the inner while-loop also checks st.stop_requested().
@@ -1021,35 +1048,32 @@ void TestFftProcessor::testFftStopTokenHonoredInInnerLoop()
 void TestFftProcessor::testFftFrequencyLocalization()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     constexpr float inputFreq = 1000.0f;
 
     auto sineWave = createSineWave(inputFreq, sampleRate, static_cast<int>(FftProcessor::FFT_SIZE));
 
     Pipe<PcmBlock> pipe(256);
-    const auto written = writeBlocks(pipe.producer(), sineWave);
+    const auto written = writeBlocks(pipe.producer(), sineWave, sampleRate, channels);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::DetailedOnly);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount, 5000);
-    stopSource.request_stop();
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frame = processor.takeLatestFrame();
+    auto frame = capture.latest();
     QVERIFY2(!isFrequenciesEmpty(frame), "Should have frequency data");
     QVERIFY2(frame.frequencies().size() == static_cast<size_t>(FftProcessor::NUM_LOG_BINS),
              qPrintable(u"Expected %1 bins, got %2"_s.arg(FftProcessor::NUM_LOG_BINS).arg(frame.frequencies().size())));
@@ -1082,6 +1106,7 @@ void TestFftProcessor::testFftFrequencyLocalization()
 void TestFftProcessor::testFftMultiTonePeaks()
 {
     constexpr int sampleRate = 44100;
+    constexpr int channels = 1;
     constexpr float freq1 = 440.0f;
     constexpr float freq2 = 5000.0f;
 
@@ -1094,30 +1119,26 @@ void TestFftProcessor::testFftMultiTonePeaks()
     }
 
     Pipe<PcmBlock> pipe(256);
-    const auto written = writeBlocks(pipe.producer(), wave);
+    const auto written = writeBlocks(pipe.producer(), wave, sampleRate, channels);
     QVERIFY2(written > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
 
     FftProcessor processor;
     processor.setConsumer(pipe.consumer());
-    processor.setChannelCount(1);
-    processor.setSampleRate(sampleRate);
     processor.setFftMode(FftProcessor::FftMode::DetailedOnly);
 
-    std::atomic<int> frameCount{0};
-    processor.setFrameCallback([&](DragonFftFrame) {
-        frameCount.fetch_add(1, std::memory_order_relaxed);
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
     });
 
-    std::stop_source stopSource;
-    std::jthread processorThread([&](std::stop_token) {
-        processor.processLoop(stopSource.get_token());
-    });
+    auto processorThread = startProcessorThread(processor);
 
-    quiescencePolling(frameCount, 5000);
-    stopSource.request_stop();
+    QVERIFY(waitForFirstFrame(capture.frameCount));
+    quiescencePolling(capture.frameCount, 5000);
+    processorThread.request_stop();
     processorThread.join();
 
-    auto frame = processor.takeLatestFrame();
+    auto frame = capture.latest();
     QVERIFY2(!isFrequenciesEmpty(frame), "Should have frequency data");
 
     const float melMin = 2595.0f * std::log10(1.0f + FftProcessor::MIN_FREQ / 700.0f);
@@ -1166,6 +1187,78 @@ void TestFftProcessor::testFftMultiTonePeaks()
 
     qDebug() << "Multi-tone: " << freq1 << "Hz -> bin" << peak1Bin << "(expected" << expectedBin1 << ")" << freq2 << "Hz -> bin" << peak2Bin << "(expected"
              << expectedBin2 << ")";
+}
+
+void TestFftProcessor::testInBandFormatSwitchAtBlockBoundary()
+{
+    constexpr int firstRate = 44100;
+    constexpr int firstChannels = 2;
+    constexpr int secondRate = 48000;
+    constexpr int secondChannels = 1;
+
+    Pipe<PcmBlock> pipe(256);
+
+    FftProcessor processor;
+    processor.setConsumer(pipe.consumer());
+    processor.setFftMode(FftProcessor::FftMode::Both);
+
+    FrameCapture capture;
+    processor.setFrameCallback([&capture](DragonFftFrame frame) {
+        capture.capture(std::move(frame));
+    });
+
+    auto processorThread = startProcessorThread(processor);
+
+    // Phase 1: interleaved stereo sine at 44100. The block metadata is the
+    // only source of format information.
+    auto stereo = createSineWave(440.0f, firstRate, static_cast<int>(FftProcessor::FFT_SIZE) * firstChannels * 2);
+    const auto writtenFirst = writeBlocks(pipe.producer(), stereo, firstRate, firstChannels);
+    QVERIFY2(writtenFirst > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&]() {
+                     return capture.frameCount.load(std::memory_order_relaxed) > 0;
+                 },
+                 5000),
+             "Should have produced frames under the first format");
+    quiescencePolling(capture.frameCount, 5000);
+    const int framesFirstFormat = capture.frameCount.load(std::memory_order_relaxed);
+    QVERIFY2(framesFirstFormat >= 2, qPrintable(u"Expected several frames under the first format, got %1"_s.arg(framesFirstFormat)));
+
+    // Phase 2: the format switches to 48000/mono exactly at a block boundary.
+    // The processor resets its format-dependent history and continues.
+    auto mono = createSineWave(1000.0f, secondRate, static_cast<int>(FftProcessor::FFT_SIZE) * 2);
+    const auto writtenSecond = writeBlocks(pipe.producer(), mono, secondRate, secondChannels);
+    QVERIFY2(writtenSecond > 0, "writeBlocks wrote zero blocks pipe may be full or data empty");
+
+    QVERIFY2(QTest::qWaitFor(
+                 [&]() {
+                     return capture.frameCount.load(std::memory_order_relaxed) > framesFirstFormat;
+                 },
+                 5000),
+             "Frames must keep flowing after an in-band format switch");
+    quiescencePolling(capture.frameCount, 5000);
+
+    processorThread.request_stop();
+    processorThread.join();
+
+    const int framesAfterSwitch = capture.frameCount.load(std::memory_order_relaxed);
+    QVERIFY2(framesAfterSwitch > framesFirstFormat,
+             qPrintable(u"Format switch must not stall the pipeline: had %1 frames before, %2 after"_s.arg(framesFirstFormat).arg(framesAfterSwitch)));
+
+    const auto frame = capture.latest();
+    QVERIFY2(!isFrequenciesEmpty(frame), "Frame after the format switch should have frequency data");
+    QVERIFY2(!isBarEmpty(frame), "Frame after the format switch should have bar data");
+    QVERIFY(frame.frequencies().size() == static_cast<size_t>(FftProcessor::NUM_LOG_BINS));
+    QVERIFY(frame.bars().size() == static_cast<size_t>(FftProcessor::NUM_BAR_BINS));
+
+    // Values computed right after a format switch must be sane: no NaN/inf from
+    // overflowing or dividing by a stale format.
+    QVERIFY2(allFinite(frame.frequencies()), "Detailed values after the format switch should be finite");
+    QVERIFY2(allFinite(frame.bars()), "Bar values after the format switch should be finite");
+    for (const float &val : frame.bars()) {
+        QVERIFY2(val >= -85.0f && val <= 10.0f, qPrintable(u"Bar value out of range after format switch: %1"_s.arg(val)));
+    }
 }
 
 QTEST_MAIN(TestFftProcessor)

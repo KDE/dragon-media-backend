@@ -31,8 +31,6 @@ public:
     FftPipeline(FftPipeline &&) = delete;
     FftPipeline &operator=(FftPipeline &&) = delete;
 
-    void setSampleRate(int sampleRate);
-    void setChannelCount(int channels);
     void setMode(DragonSpectrumAnalyzer::Mode mode);
     void setFftRate(int rate);
     [[nodiscard]] DragonSpectrumAnalyzer::Mode mode() const;

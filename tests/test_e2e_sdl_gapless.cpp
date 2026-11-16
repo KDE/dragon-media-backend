@@ -35,22 +35,20 @@ static constexpr int kSampleRate = 44100;
 static constexpr int kDefaultChannels = 2;
 static constexpr int kDurationFrames = 132300; // ~3 seconds at 44100Hz
 
-static std::vector<float> readRawS16LeAsFloat(const QString &path)
+static std::vector<float> readRawF32Le(const QString &path)
 {
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
         return {};
     }
 
-    QByteArray data = file.readAll();
+    const QByteArray data = file.readAll();
     file.close();
 
-    const size_t numSamples = static_cast<size_t>(data.size()) / sizeof(int16_t);
-    const auto *raw = reinterpret_cast<const int16_t *>(data.constData());
+    const size_t numSamples = static_cast<size_t>(data.size()) / sizeof(float);
     std::vector<float> pcm(numSamples);
-    constexpr float scale = 1.0f / 32768.0f;
-    for (size_t i = 0; i < numSamples; ++i) {
-        pcm[i] = static_cast<float>(raw[i]) * scale;
+    if (numSamples > 0) {
+        std::memcpy(pcm.data(), data.constData(), numSamples * sizeof(float));
     }
     return pcm;
 }
@@ -155,7 +153,7 @@ void TestSdlGapless::testGaplessSameFormat()
 
     QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
 
-    auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
+    auto capturedPcm = readRawF32Le(m_pcmCapturePath);
     const int capturedFrames = static_cast<int>(capturedPcm.size()) / kDefaultChannels;
     const int expectedTotalFrames = fixtureA.totalFrames + fixtureB.totalFrames;
     QVERIFY2(capturedFrames >= expectedTotalFrames,
@@ -221,7 +219,7 @@ void TestSdlGapless::testCrossfadeSameFormat()
     player.stop(); // flush the disk capture on all platforms
 
     QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
-    auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
+    auto capturedPcm = readRawF32Le(m_pcmCapturePath);
     QVERIFY2(capturedPcm.size() > 2u * static_cast<size_t>(kSampleRate), "Capture too short");
 
     std::vector<double> mag440;
@@ -443,7 +441,7 @@ void TestSdlGapless::testSingleTrackIntegrity()
     player.stop();
 
     QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
-    auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
+    auto capturedPcm = readRawF32Le(m_pcmCapturePath);
     const int capturedFrames = static_cast<int>(capturedPcm.size()) / channels;
     qDebug() << "Single-track: captured=" << capturedFrames << "expected=" << durationFrames;
     QVERIFY2(capturedFrames > 0, "Captured PCM empty");
@@ -504,7 +502,7 @@ void TestSdlGapless::testTrackStartNotWiped()
         player.stop();
 
         QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
-        const auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
+        const auto capturedPcm = readRawF32Le(m_pcmCapturePath);
         const int capturedFrames = static_cast<int>(capturedPcm.size()) / channels;
         QVERIFY2(capturedFrames > 0, "Captured PCM empty");
 
@@ -548,7 +546,7 @@ void TestSdlGapless::testTrackStartNotWiped()
         player.stop();
 
         QVERIFY2(QFileInfo::exists(m_pcmCapturePath), "SDL disk driver should have written PCM capture file");
-        const auto capturedPcm = readRawS16LeAsFloat(m_pcmCapturePath);
+        const auto capturedPcm = readRawF32Le(m_pcmCapturePath);
         const int capturedFrames = static_cast<int>(capturedPcm.size()) / channels;
         QVERIFY2(capturedFrames > 0, "Captured PCM empty");
 

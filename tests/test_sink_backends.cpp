@@ -58,9 +58,6 @@ private Q_SLOTS:
     // Backend smoke tests
     void testNullSinkStillPasses();
     void testSdlLifecycleWithDummyDriver();
-
-    // Crossfade wait latency
-    void testCrossfadeWaitWakeupLatency();
 };
 
 void TestSinkBackends::testQuiesceIdleByDefault()
@@ -222,6 +219,8 @@ void TestSinkBackends::testNullSinkStillPasses()
     QVERIFY(!pipeline.isPaused());
     QCOMPARE(pipeline.deviceQueuedSamples(), qint64(0));
 
+    Pipe<float> pipe;
+    pipeline.setAudioPipe(&pipe);
     pipeline.open(44100, 2);
     pipeline.setVolume(0.5f);
     pipeline.setMuted(true);
@@ -233,9 +232,9 @@ void TestSinkBackends::testNullSinkStillPasses()
 
 void TestSinkBackends::testSdlLifecycleWithDummyDriver()
 {
-    // The SDL backend with the dummy audio driver: exercises the new
-    // open()-ordering (session published before the device runs) and the
-    // main-thread serialization of pause/resume/setGain/clearStream/
+    // The SDL backend with the dummy audio driver: exercises the stream
+    // lifecycle (device opened by the first stream, closed by the last) and
+    // the main-thread serialization of pause/resume/setGain/clearStream/
     // deviceQueuedSamples against close(), without audio hardware.
     EnvGuard guard({
         {"DRAGON_AUDIO_SINK", QByteArray("dragonsdlaudiosink")},
@@ -248,6 +247,8 @@ void TestSinkBackends::testSdlLifecycleWithDummyDriver()
     QCOMPARE(selectedSink, DragonAudioOutput::Backend::SDL);
     QVERIFY(pipeline->probe());
 
+    Pipe<float> pipe;
+    pipeline->setAudioPipe(&pipe);
     pipeline->open(44100, 2);
     QVERIFY2(pipeline->isDeviceOpen(), "SDL dummy-driver device should open synchronously");
 
@@ -259,58 +260,21 @@ void TestSinkBackends::testSdlLifecycleWithDummyDriver()
     pipeline->resume();
     QVERIFY(!pipeline->isPaused());
     pipeline->setVolume(0.5f);
+    pipeline->setMuted(true);
+    QVERIFY(pipeline->muted());
+    pipeline->setVolume(0.25f);
     pipeline->setMuted(false);
+    QVERIFY(!pipeline->muted());
     QVERIFY(pipeline->deviceQueuedSamples() >= 0);
     pipeline->clearStream();
 
-    // Reopen path: open() closes the previous session first.
+    // Reopen path: open() closes the previous stream first.
     pipeline->open(48000, 2);
     QVERIFY(pipeline->isDeviceOpen());
     QVERIFY(pipeline->hasFormat(48000, 2));
 
     pipeline->close();
     QVERIFY(!pipeline->isDeviceOpen());
-}
-
-void TestSinkBackends::testCrossfadeWaitWakeupLatency()
-{
-    PlaybackPipeline pipeline(std::make_unique<NullAudioSink>());
-    pipeline.open(44100, 2);
-
-    Pipe<float> pipeA;
-    Pipe<float> pipeB;
-    QVERIFY(pipeline.armCrossfade(&pipeA, &pipeB, 1000ms, 1000ms) > 0);
-    QVERIFY(pipeline.isCrossfadePending());
-
-    std::atomic<bool> waitThreadReady{false};
-    std::atomic<bool> waitResult{false};
-    std::chrono::steady_clock::time_point ackTime;
-    std::chrono::steady_clock::time_point returnTime;
-
-    std::thread waitThread([&]() {
-        waitThreadReady.store(true, std::memory_order_release);
-        const bool ok = pipeline.waitForPendingCrossfade(500ms);
-        returnTime = std::chrono::steady_clock::now();
-        waitResult.store(ok, std::memory_order_release);
-    });
-
-    while (!waitThreadReady.load(std::memory_order_acquire)) {
-        std::this_thread::yield();
-    }
-    // Give waitThread a moment to enter waitForPendingCrossfade
-    std::this_thread::sleep_for(10ms);
-
-    // Audio thread renders, which claims and acknowledges the switch
-    ackTime = std::chrono::steady_clock::now();
-    std::ignore = pipeline.sink()->mixer()->render(1024, 0us);
-
-    waitThread.join();
-
-    QVERIFY(waitResult.load());
-    const auto latency = std::chrono::duration_cast<std::chrono::microseconds>(returnTime - ackTime);
-    qDebug() << "Consume-ack wakeup latency:" << latency.count() << "us";
-    // Assert wakeup bound: strictly within 1 ms (was: within 2 ms due to cv sleep slices)
-    QVERIFY2(latency < 1000us, qPrintable(u"Wakeup latency %1 us exceeded 1000 us bound"_s.arg(latency.count())));
 }
 
 QTEST_MAIN(TestSinkBackends)

@@ -424,8 +424,9 @@ bool Decoder::setupCodec(DecodeSession &session)
     }
 
     session.codecCtx.reset(codecCtx.release());
-    session.sampleRate = (m_targetFormat.sampleRate > 0) ? m_targetFormat.sampleRate : session.codecCtx->sample_rate;
-    session.nbChannels = (m_targetFormat.channels > 0) ? m_targetFormat.channels : session.codecCtx->ch_layout.nb_channels;
+    // Native-format decode: the audio server resamples each voice's stream.
+    session.sampleRate = session.codecCtx->sample_rate;
+    session.nbChannels = session.codecCtx->ch_layout.nb_channels;
     return true;
 }
 
@@ -433,14 +434,10 @@ bool Decoder::setupResampler(DecodeSession &session)
 {
     SwrContext *rawSwrCtx = nullptr;
     AVChannelLayout outLayout{};
-    if (m_targetFormat.channels > 0 && m_targetFormat.channels != session.codecCtx->ch_layout.nb_channels) {
-        av_channel_layout_default(&outLayout, session.nbChannels);
-    } else {
-        if (const int err = av_channel_layout_copy(&outLayout, &session.codecCtx->ch_layout); err < 0) {
-            m_hadFatalError.store(true, std::memory_order_relaxed);
-            qCCritical(dragonMediaBackendDecoder) << "Failed to copy channel layout:" << avErrorString(err);
-            return false;
-        }
+    if (const int err = av_channel_layout_copy(&outLayout, &session.codecCtx->ch_layout); err < 0) {
+        m_hadFatalError.store(true, std::memory_order_relaxed);
+        qCCritical(dragonMediaBackendDecoder) << "Failed to copy channel layout:" << avErrorString(err);
+        return false;
     }
     auto layoutGuard = qScopeGuard([&]() {
         av_channel_layout_uninit(&outLayout);

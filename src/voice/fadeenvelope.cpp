@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <numbers>
+#include <ranges>
 
 using namespace std::chrono_literals;
 
@@ -21,27 +22,6 @@ namespace
         return 0;
     }
     return std::max<std::int64_t>(1, (ms * sampleRate) / 1000);
-}
-
-void runLinearRamp(std::size_t frames, int channels, GainRamp ramp, auto &&stereoFn, auto &&sampleFn) noexcept
-{
-    const float gainStep = (ramp.end - ramp.start) / static_cast<float>(frames);
-    if (channels == 2) {
-        for (std::size_t f = 0; f < frames; ++f) {
-            const float g = ramp.start + static_cast<float>(f) * gainStep;
-            stereoFn(2 * f, g);
-        }
-        return;
-    }
-
-    const auto ch = static_cast<std::size_t>(channels);
-    for (std::size_t f = 0; f < frames; ++f) {
-        const float g = ramp.start + static_cast<float>(f) * gainStep;
-        const std::size_t frameOffset = f * ch;
-        for (std::size_t c = 0; c < ch; ++c) {
-            sampleFn(frameOffset + c, g);
-        }
-    }
 }
 
 }
@@ -164,11 +144,6 @@ std::int64_t FadeInEnvelope::totalFrames() const noexcept
     return m_curve.totalFrames();
 }
 
-std::int64_t FadeInEnvelope::positionFrames() const noexcept
-{
-    return m_curve.positionFrames();
-}
-
 float FadeInEnvelope::currentGain() const noexcept
 {
     return m_curve.currentGain();
@@ -203,16 +178,6 @@ bool FadeOutEnvelope::isActive() const noexcept
 std::int64_t FadeOutEnvelope::totalFrames() const noexcept
 {
     return m_curve.totalFrames();
-}
-
-std::int64_t FadeOutEnvelope::positionFrames() const noexcept
-{
-    return m_curve.positionFrames();
-}
-
-std::int64_t FadeOutEnvelope::holdRemainingFrames() const noexcept
-{
-    return m_holdRemainingFrames;
 }
 
 std::size_t FadeOutEnvelope::remainingBudgetFrames(bool holdEnvelope) const noexcept
@@ -265,65 +230,20 @@ void applyGainRamp(std::span<float> dst, int channels, GainRamp ramp) noexcept
         return;
     }
 
+    // The per-frame loop auto-vectorizes into a single FMADD-varying-scalar
+    // pass; the trailing partial frame falls back to the end gain.
     const auto ch = static_cast<std::size_t>(channels);
     const std::size_t frames = dst.size() / ch;
-    if (frames > 0) {
-        runLinearRamp(
-            frames,
-            channels,
-            ramp,
-            [dst](std::size_t base, float g) noexcept {
-                dst[base] *= g;
-                dst[base + 1] *= g;
-            },
-            [dst](std::size_t idx, float g) noexcept {
-                dst[idx] *= g;
-            });
+    const float gainStep = (ramp.end - ramp.start) / static_cast<float>(frames);
+    const float firstGain = ramp.start;
+    for (std::size_t f = 0; f < frames; ++f) {
+        const float g = firstGain + static_cast<float>(f) * gainStep;
+        const std::size_t base = f * ch;
+        for (std::size_t c = 0; c < ch; ++c) {
+            dst[base + c] *= g;
+        }
     }
     for (std::size_t i = frames * ch; i < dst.size(); ++i) {
         dst[i] *= ramp.end;
-    }
-}
-
-void mixWithGainRamp(std::span<float> dst, std::span<const float> src, int channels, GainRamp ramp) noexcept
-{
-    const std::size_t sampleCount = std::min(dst.size(), src.size());
-    if (channels <= 0 || sampleCount == 0) {
-        return;
-    }
-    if (ramp.start == ramp.end) {
-        if (ramp.start == 0.0f) {
-            return;
-        }
-        if (ramp.start == 1.0f) {
-            for (std::size_t i = 0; i < sampleCount; ++i) {
-                dst[i] = std::clamp(dst[i] + src[i], -1.0f, 1.0f);
-            }
-            return;
-        }
-        const float g = ramp.start;
-        for (std::size_t i = 0; i < sampleCount; ++i) {
-            dst[i] = std::clamp(dst[i] + src[i] * g, -1.0f, 1.0f);
-        }
-        return;
-    }
-
-    const auto ch = static_cast<std::size_t>(channels);
-    const std::size_t frames = sampleCount / ch;
-    if (frames > 0) {
-        runLinearRamp(
-            frames,
-            channels,
-            ramp,
-            [dst, src](std::size_t base, float g) noexcept {
-                dst[base] = std::clamp(dst[base] + src[base] * g, -1.0f, 1.0f);
-                dst[base + 1] = std::clamp(dst[base + 1] + src[base + 1] * g, -1.0f, 1.0f);
-            },
-            [dst, src](std::size_t idx, float g) noexcept {
-                dst[idx] = std::clamp(dst[idx] + src[idx] * g, -1.0f, 1.0f);
-            });
-    }
-    for (std::size_t i = frames * ch; i < sampleCount; ++i) {
-        dst[i] = std::clamp(dst[i] + src[i] * ramp.end, -1.0f, 1.0f);
     }
 }

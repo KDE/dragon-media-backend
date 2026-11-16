@@ -8,6 +8,9 @@
 #include "audiosink.h"
 #include "dragonmediabackend_export.h"
 
+#include <expected>
+#include <memory>
+
 class DRAGONMEDIABACKEND_EXPORT NullAudioSink : public AudioSink
 {
     Q_OBJECT
@@ -18,13 +21,11 @@ public:
     ~NullAudioSink() override = default;
 
     [[nodiscard]] bool probe() override;
-    void open(int sampleRate, int channels) override;
-    void close() override;
-    void pause() override;
-    void resume() override;
-    void setGain(float linearGain) override;
-    [[nodiscard]] qint64 deviceQueuedSamples() const override;
-    [[nodiscard]] bool isDeviceOpen() const override;
-    [[nodiscard]] bool isPaused() const override;
-    void clearStream() override;
+    [[nodiscard]] std::expected<std::unique_ptr<AudioSinkStream>, QString>
+    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer) override;
+
+    // The null sink never has a device: stream creation always fails by
+    // contract (with the existing missing-plugin error) and there is no
+    // timer-driven playback. The player sees isDeviceOpen() == false and
+    // refuses playback-state transitions.
 };

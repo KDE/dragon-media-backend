@@ -28,15 +28,6 @@ public:
     DragonSpectrumAnalyzer::Mode currentMode = DragonSpectrumAnalyzer::Mode::Off;
     int currentRate = 60;
 
-    void syncFormat()
-    {
-        auto *priv = player ? player->d.get() : nullptr;
-        if (priv) {
-            fftPipeline.setSampleRate(priv->currentSampleRate);
-            fftPipeline.setChannelCount(priv->currentChannels);
-        }
-    }
-
     void attachTap()
     {
         auto *priv = player ? player->d.get() : nullptr;
@@ -69,7 +60,6 @@ DragonSpectrumAnalyzer::DragonSpectrumAnalyzer(DragonPlayer *player, QObject *pa
 
     connect(player, &DragonPlayer::trackChanged, this, [this]() {
         if (d->currentMode != DragonSpectrumAnalyzer::Mode::Off) {
-            d->syncFormat();
             d->fftPipeline.restart();
         }
     });
@@ -79,7 +69,6 @@ DragonSpectrumAnalyzer::DragonSpectrumAnalyzer(DragonPlayer *player, QObject *pa
             d->fftPipeline.stop();
             Q_EMIT activeChanged(false);
         } else if (newState == DragonPlayer::PlaybackState::PlayingState && d->currentMode != DragonSpectrumAnalyzer::Mode::Off) {
-            d->syncFormat();
             d->attachTap();
             d->fftPipeline.restart();
             Q_EMIT activeChanged(true);
@@ -121,7 +110,6 @@ void DragonSpectrumAnalyzer::setMode(Mode mode)
 
     if (mode != DragonSpectrumAnalyzer::Mode::Off) {
         if (wasOff) {
-            d->syncFormat();
             d->attachTap();
         }
         d->fftPipeline.setMode(mode);

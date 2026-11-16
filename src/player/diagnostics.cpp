@@ -106,7 +106,10 @@ bool Diagnostics::isAudioActive() const
     }
     bool hasOutput = (priv->audioOutput && priv->audioOutput->playbackPipeline());
     bool isOpen = hasOutput ? priv->audioOutput->playbackPipeline()->isDeviceOpen() : false;
-    return hasOutput && isOpen && priv->currentPlaybackState != DragonPlayer::PlaybackState::StoppedState;
+    // During a crossfade's loading window the pending primary has no stream
+    // yet, but the outgoing voice is still audibly fading.
+    bool isFading = hasOutput ? priv->audioOutput->playbackPipeline()->isCrossfading() : false;
+    return hasOutput && (isOpen || isFading) && priv->currentPlaybackState != DragonPlayer::PlaybackState::StoppedState;
 }
 
 int Diagnostics::audioUnderrunCount() const

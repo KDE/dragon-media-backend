@@ -450,10 +450,9 @@ bool DecodePipeline::promoteNext(std::unique_lock<std::mutex> &lock)
     return true;
 }
 
-QCoro::Task<InitResult> DecodePipeline::initializeSession(QUrl source, Decoder::TargetAudioFormat targetFormat)
+QCoro::Task<InitResult> DecodePipeline::initializeSession(QUrl source)
 {
-    qCDebug(dragonMediaBackendDecode) << "initializeSession(" << source.toString() << ") targetFormat=" << targetFormat.sampleRate << "x"
-                                      << targetFormat.channels;
+    qCDebug(dragonMediaBackendDecode) << "initializeSession(" << source.toString() << ")";
 
     m_retiring.store(false, std::memory_order_release);
     m_retiringSamplesRemaining.store(0, std::memory_order_release);
@@ -487,10 +486,6 @@ QCoro::Task<InitResult> DecodePipeline::initializeSession(QUrl source, Decoder::
     if (!session) {
         qCDebug(dragonMediaBackendDecode) << "initializeSession decoder creation FAILED";
         co_return makeErrorResult(i18n("Failed to create decoder"));
-    }
-
-    if (session->decoder) {
-        session->decoder->setTargetFormat(targetFormat);
     }
 
     {

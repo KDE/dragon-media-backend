@@ -76,8 +76,6 @@ private:
     void applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent);
     void reportDeviceOpenFailure();
 
-    void writeToQueues(std::span<const float> pcm, const std::stop_token &st);
-
     struct PipelineSlot {
         explicit PipelineSlot(DragonPlayer *parent)
             : decodePipeline(parent)
@@ -143,7 +141,7 @@ private:
 
     void writeToSlotQueue(PipelineSlot &slot, std::span<const float> pcm, const std::stop_token &st);
 
-    bool onPipelineBoundary(const DecodePipeline::BoundaryEvent &event);
+    bool onPipelineBoundary(PipelineSlot &slot, const DecodePipeline::BoundaryEvent &event);
 
     struct PendingTrack {
         QUrl url;
@@ -180,11 +178,11 @@ private:
     void invalidateQueuedContent();
 
     // Shared teardown sequence: abandon any staged/active crossfade, close
-    // the sink (quiescing the audio callback) and fully reset mixer + clock
+    // the sink (quiescing the audio callback) and fully reset the voices + clock
     // (which also un-sticks a stale EOS claim state).
     void teardownPipeline();
 
-    QCoro::Task<void> startLoad(PipelineSlot &slot, QUrl source, uint64_t generation, Decoder::TargetAudioFormat targetFormat = {});
+    QCoro::Task<void> startLoad(PipelineSlot &slot, QUrl source, uint64_t generation);
 
     void setPlaybackState(DragonPlayer::PlaybackState state);
     void setStatus(DragonPlayer::MediaStatus status);

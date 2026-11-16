@@ -15,7 +15,6 @@
 #include <complex>
 #include <functional>
 #include <memory>
-#include <mutex>
 #include <span>
 #include <stop_token>
 
@@ -46,9 +45,6 @@ public:
 
     void setConsumer(Pipe<PcmBlock>::Consumer consumer);
 
-    void setChannelCount(int channels);
-
-    void setSampleRate(int sampleRate);
     using FftMode = DragonSpectrumAnalyzer::Mode;
 
     void setFftMode(FftMode mode);
@@ -58,16 +54,19 @@ public:
 
     void processLoop(const std::stop_token &st);
 
-    [[nodiscard]] DragonFftFrame takeLatestFrame();
-
     void reset();
 
     static void applyHannWindow(std::span<float> data);
 
 private:
     Pipe<PcmBlock>::Consumer m_consumer;
-    std::atomic<int> m_channelCount{2};
-    std::atomic<int> m_sampleRate{44100};
+
+    // Active input format, carried in-band on every PcmBlock; FFT-thread
+    // confined (drainPipeToHistory is the only writer and the loop the only
+    // reader). 0 = unknown until the first valid block arrives.
+    int m_sampleRate = 0;
+    int m_channelCount = 0;
+
     std::atomic<FftMode> m_fftMode{FftMode::Off};
     std::atomic<int> m_fftRate{60};
 
@@ -77,6 +76,7 @@ private:
     void transformReal(std::span<const float, FFT_SIZE> input, std::span<std::complex<float>, FFT_SIZE / 2> output);
 
     bool drainPipeToHistory(const std::stop_token &st);
+    void resetFormatHistory();
     void readWindowEndingAt(size_t endPos, std::span<float, FFT_SIZE> out);
     bool historyHasEnoughForWindow() const;
 
@@ -92,9 +92,6 @@ private:
     void emitFrame(const DragonFftFrame &frame);
 
     FrameCallback m_frameCallback;
-
-    std::mutex m_frameMutex;
-    DragonFftFrame m_latestFrame;
 
     static constexpr size_t HISTORY_SIZE = FFT_SIZE * 2;
 

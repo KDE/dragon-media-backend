@@ -27,7 +27,7 @@
  * sample counter, the boundary ring that drives track starts and format
  * stalls, the end-of-stream claim state, the read/written/position counters,
  * the sample format, the producer gate, and the underrun counter. The
- * sample-domain work (crossfade envelopes, mixing) stays in Mixer,
+ * sample-domain work (fade envelopes, rendering) stays in the owning Voice,
  * which consults this clock from its render path.
  *
  * Threading contract:
@@ -161,16 +161,16 @@ public:
         return static_cast<qint64>(m_producerState.samples());
     }
     void resetPositionTracking();
-    // Zero the written counter only; part of the quiesced mixer resets.
+    // Zero the written counter only; part of the quiesced voice resets.
     void resetWrittenCounter();
 
     [[nodiscard]] int underrunCount() const
     {
         return m_underrunCount.load(std::memory_order_relaxed);
     }
-    // Count one starvation quantum; Mixer decides when a silent render
-    // actually is an underrun (it owns the fade state that suppresses the
-    // count during fades).
+    // Count one starvation quantum; the owning Voice decides when a silent
+    // render actually is an underrun (it owns the fade state that suppresses
+    // the count during fades).
     void noteUnderrun();
 
     // Full teardown (quiesced: audio callback stopped). Drains the boundary

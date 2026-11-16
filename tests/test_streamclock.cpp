@@ -307,7 +307,7 @@ void TestStreamClock::testPositionTrackingReset()
     QCOMPARE(clock.totalSamplesWritten(), 0);
     QCOMPARE(clock.positionOffset(), 0ms);
 
-    // resetWrittenCounter (the mixer reset path) clears only the counter.
+    // resetWrittenCounter (the primary Voice stream reopen) clears only the counter.
     clock.setPositionOffset(500ms);
     clock.noteSamplesRendered(99);
     clock.resetWrittenCounter();

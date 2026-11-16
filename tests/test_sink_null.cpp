@@ -10,6 +10,7 @@
 
 #include "test_utils.h"
 
+#include "player/pipe.h"
 #include "sink/nullaudiosink.h"
 #include "sink/playbackpipeline.h"
 #include "sink/playbackpipelinefactory.h"
@@ -111,6 +112,9 @@ void TestSinkNull::testNullSinkMethods()
     // Opening records the format and reports the broken install, but the
     // device never becomes open: that is the contract DragonPlayer's generic
     // open-failure handling relies on to refuse playback.
+    Pipe<float> pipe;
+    pipeline.setAudioPipe(&pipe);
+
     QSignalSpy errorSpy(&pipeline, &PlaybackPipeline::errorOccurred);
     pipeline.open(44100, 2);
     QVERIFY(!pipeline.isDeviceOpen());

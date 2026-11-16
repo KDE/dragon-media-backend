@@ -16,6 +16,7 @@
 #include "sink/playbackpipelinefactory.h"
 #include "sink/producerstate.h"
 #include "sink/streamclock.h"
+#include "voice/voice.h"
 
 #include <QGuiApplication>
 #include <QJsonArray>
@@ -477,6 +478,9 @@ void TestAudioOutput::testPositionMsCalculation()
     auto output = createPlaybackPipeline();
     QVERIFY(output);
 
+    Pipe<float> pipe(65536);
+    output->setAudioPipe(&pipe);
+
     QVERIFY(output->position() == 0ms);
     QVERIFY(output->totalSamplesWritten() == 0);
 
@@ -733,6 +737,9 @@ void TestAudioOutput::testQueueReadyApi()
 {
     auto output = createPlaybackPipeline();
     QVERIFY(output);
+
+    Pipe<float> pipe(65536);
+    output->setAudioPipe(&pipe);
 
     QVERIFY(output->isQueueReady());
 
@@ -1369,11 +1376,11 @@ void TestAudioOutput::testSamplesProducedConcurrentFlushRace()
 
 void TestAudioOutput::testEosPublicationOrderRace()
 {
-    StreamClock clock;
-    Mixer mixer{clock};
-    clock.setFormat(44100, 2);
     Pipe<float> pipe(65536);
-    mixer.setAudioPipe(&pipe);
+    Voice voice{&pipe, 1, Voice::Notifiers{}};
+    voice.setFormat(44100, 2);
+    std::ignore = voice.publishInitialStream(0ms);
+    StreamClock &clock = voice.clock();
 
     std::atomic<bool> stop{false};
     std::atomic<int> staleEosObserved{0};
@@ -1394,11 +1401,11 @@ void TestAudioOutput::testEosPublicationOrderRace()
         // Flush resets counters and m_eosState to None, but leaves m_eosSample = 50
         clock.setPositionOffset(0ms);
         clock.armSwitch();
-        std::ignore = mixer.render(0, 0us);
+        std::ignore = voice.render(0, 0us);
 
         // Stream 2: consumer reads 100 samples
         fillQueue(&pipe, std::vector<float>(100, 0.5f));
-        std::ignore = mixer.render(100, 0us);
+        std::ignore = voice.render(100, 0us);
 
         // Producer writes 10,000 samples
         clock.samplesProduced(clock.streamEpoch(), 10000);
@@ -1410,7 +1417,7 @@ void TestAudioOutput::testEosPublicationOrderRace()
         // Flush for next iteration
         clock.setPositionOffset(0ms);
         clock.armSwitch();
-        std::ignore = mixer.render(0, 0us);
+        std::ignore = voice.render(0, 0us);
     }
 
     stop.store(true, std::memory_order_relaxed);
@@ -1483,8 +1490,17 @@ void TestAudioOutput::testStartupExternalVolumeRestored()
     constexpr float restoredGain = 0.5f;
     constexpr float expectedSlider = 1.0f - std::exp(-restoredGain * 4.60517018599f);
 
-    Q_EMIT output->sink()->externalVolumeRestored(restoredGain);
-    QCoreApplication::processEvents();
+    Pipe<float> pipe(65536);
+    output->setAudioPipe(&pipe);
+    output->open(44100, 2);
+    auto *stream = output->primaryStream();
+    QVERIFY2(stream != nullptr, "open() must have created the primary stream");
+    // The externalVolumeRestored handler is a same-thread direct connection,
+    // so adoption is complete when the emit returns. Deliberately no
+    // processEvents() here: a real server-side volume report posted from the
+    // backend thread would be dispatched and overwrite the adopted value
+    // before the assertion.
+    Q_EMIT stream->externalVolumeRestored(restoredGain);
 
     // Restored volume must be adopted into volume()
     QVERIFY(qAbs(output->volume() - expectedSlider) < 0.01f);

@@ -7,8 +7,8 @@
 
 #include "audiosink.h"
 #include "dragonmediabackend_export.h"
-#include "mixer/mixer.h"
 #include "streamclock.h"
+#include "voice/voice.h"
 
 #include <QObject>
 #include <QString>
@@ -16,20 +16,20 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
-#include <semaphore>
 
 template<typename T>
 class Pipe;
 struct PcmBlock;
-class AudioSink;
 
 /**
- * Glue between the three parts of the audio output: a StreamClock
- * (stream-progress state machine: epoch, boundaries, EOS, position), a
- * Mixer (sample-domain mixing engine), and a AudioSink (one
- * concrete audio backend, selected by the factory).
+ * Glue between the audio-output parts: the backend connection (one AudioSink),
+ * the primary Voice and the optional fading Voice (each a StreamClock, a
+ * fixed pipe and its own server-side AudioSinkStream), and the volume/mute
+ * policy (slider <-> linear gain curve).
  */
 class DRAGONMEDIABACKEND_EXPORT PlaybackPipeline : public QObject
 {
@@ -44,103 +44,98 @@ public:
     PlaybackPipeline(PlaybackPipeline &&) = delete;
     PlaybackPipeline &operator=(PlaybackPipeline &&) = delete;
 
-    // The owned backend (SDL3 / PipeWire / PulseAudio / null).
+    // The owned backend connection (SDL3 / PipeWire / PulseAudio / null).
     [[nodiscard]] AudioSink *sink() const
     {
         return m_sink.get();
+    }
+
+    // The current primary voice's backend stream (null while the primary is
+    // pending or its stream is closed). Narrow test/diagnostics surface:
+    // production code talks to the voices through the pipeline.
+    [[nodiscard]] AudioSinkStream *primaryStream() const
+    {
+        return m_primary ? m_primary->stream() : nullptr;
     }
 
     [[nodiscard]] bool probe() const
     {
         return m_sink->probe();
     }
+
+    // Create or reopen only the primary stream (a pending primary gets its
+    // first stream; a running primary is reopened at the new format). The
+    // fading voice and its stream are untouched.
     void open(int sampleRate, int channels);
+    // Close only the primary stream (quiescing its callback), matching the
+    // format-reopen call sites; the voices keep their pipes and clocks.
     void close()
     {
-        m_sink->close();
+        if (m_primary) {
+            std::ignore = m_primary->closeStream();
+        }
     }
-    void pause()
-    {
-        m_sink->pause();
-    }
-    void resume()
-    {
-        m_sink->resume();
-    }
-    void clearStream()
-    {
-        m_sink->clearStream();
-    }
-    [[nodiscard]] qint64 deviceQueuedSamples() const
-    {
-        return m_sink->deviceQueuedSamples();
-    }
+    // Both voice streams pause; callbacks stop pulling samples so the
+    // crossfade freezes.
+    void pause();
+    void resume();
+    void clearStream();
+    [[nodiscard]] qint64 deviceQueuedSamples() const;
     [[nodiscard]] bool isDeviceOpen() const
     {
-        return m_sink->isDeviceOpen();
+        return m_primary && m_primary->stream() != nullptr;
     }
-    [[nodiscard]] bool isPaused() const
-    {
-        return m_sink->isPaused();
-    }
+    [[nodiscard]] bool isPaused() const;
 
-    [[nodiscard]] std::optional<std::chrono::microseconds> audioBufferDuration() const
-    {
-        return m_sink->audioBufferDuration();
-    }
-    [[nodiscard]] int audioBufferFrames() const
-    {
-        return m_sink->audioBufferFrames();
-    }
+    [[nodiscard]] std::optional<std::chrono::microseconds> audioBufferDuration() const;
+    [[nodiscard]] int audioBufferFrames() const;
     [[nodiscard]] int underrunCount() const
     {
-        return m_clock.underrunCount();
+        return m_primary ? m_primary->clock().underrunCount() : 0;
     }
 
-    // Quiesced-only contract: the primary pipe is installed either at
-    // construction (before any device exists) or while the audio callback is
-    // stopped (the device is closed, e.g. after a teardown flush). While a
-    // device is open, the primary pipe only ever changes via the audio
-    // thread's switch consumption (latch/flush).
-    void setAudioPipe(Pipe<float> *pipe)
-    {
-        Q_ASSERT(!m_sink || !m_sink->isDeviceOpen());
-        m_mixer.setAudioPipe(pipe);
-    }
-    void setFftPipe(Pipe<PcmBlock> *pipe)
-    {
-        m_mixer.setFftPipe(pipe);
-    }
+    // Quiesced-only contract: install the pipe a fresh pending primary voice
+    // renders from, destroying any fading voice. Called before any stream
+    // exists or while the audio callback is stopped.
+    void setAudioPipe(Pipe<float> *pipe);
+    // Attach the single visualization pipe to the primary voice (nullptr
+    // detaches, waiting for in-flight writers).
+    void setFftPipe(Pipe<PcmBlock> *pipe);
 
     void closeGate()
     {
-        m_clock.closeGate();
+        if (m_primary) {
+            m_primary->clock().closeGate();
+        }
     }
     bool reopenIfIdle()
     {
-        return m_clock.reopenIfIdle();
+        return m_primary && m_primary->clock().reopenIfIdle();
     }
     [[nodiscard]] bool isQueueReady() const
     {
-        return m_clock.isQueueReady();
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return !m_primary || m_primary->clock().isQueueReady();
     }
-    // True while a switch request (flush/crossfade) is staged and not yet
-    // consumed by the audio thread. Diagnostics-facing name kept for the
-    // "a deferred flush is pending" check.
+    [[nodiscard]] bool isQueueReadyForPipe(const Pipe<float> *pipe) const
+    {
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return !m_primary || m_primary->pipe() != pipe || m_primary->clock().isQueueReady();
+    }
+    // True while the primary voice has an armed (staged, unconsumed) flush.
     [[nodiscard]] bool isFlushPending() const
     {
-        return m_clock.isSwitchArmed() || m_mixer.isCrossfadePending();
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return m_primary && m_primary->clock().isSwitchArmed();
     }
 
-    // Publish the given position offset and stage the stream switch that
-    // applies it. When the device is open and running, the switch is consumed
-    // by the audio thread (deferred flush); when the device is closed or the
-    // sink paused, the flush runs synchronously with the callback quiesced and
-    // the stream is published before returning. Either way the returned epoch
-    // is the one the next stream publishes.
-    std::uint64_t setPositionOffset(std::chrono::milliseconds offset,
-                                    Pipe<float> *primaryPipe = nullptr,
-                                    std::chrono::milliseconds fadeInDuration = std::chrono::milliseconds{0});
+    // Publish the given position offset and apply it either as a hard switch
+    // (different non-null pipe: the pending replacement voice's initial
+    // epoch is returned), a deferred flush consumed by the audio thread
+    // (running stream), or a synchronous flush (paused/closed stream).
+    [[nodiscard]] std::uint64_t setPositionOffset(std::chrono::milliseconds offset,
+                                                  Pipe<float> *primaryPipe = nullptr,
+                                                  std::chrono::milliseconds fadeInDuration = std::chrono::milliseconds{0});
 
     [[nodiscard]] float volume() const;
     void setVolume(float volume);
@@ -157,122 +152,177 @@ public:
     }
     [[nodiscard]] bool hasFormat(int sampleRate, int channels) const
     {
-        return m_clock.hasFormat(sampleRate, channels);
+        return m_primary && m_primary->clock().hasFormat(sampleRate, channels);
     }
     [[nodiscard]] qint64 totalSamplesWritten() const
     {
-        return m_clock.totalSamplesWritten();
+        return m_primary ? m_primary->clock().totalSamplesWritten() : 0;
     }
     void resetPositionTracking()
     {
-        m_clock.resetPositionTracking();
+        if (m_primary) {
+            m_primary->clock().resetPositionTracking();
+        }
     }
 
     [[nodiscard]] qint64 streamSamplesRead() const
     {
-        return m_clock.streamSamplesRead();
+        return m_primary ? m_primary->clock().streamSamplesRead() : 0;
     }
 
     [[nodiscard]] qint64 producerSamples() const
     {
-        return m_clock.producerSamples();
+        return m_primary ? m_primary->clock().producerSamples() : 0;
     }
 
     [[nodiscard]] std::chrono::milliseconds position() const;
 
-    // Clear crossfade staging, channel state and the full stream-clock state;
-    // only ever called with the audio callback quiesced (after close()).
-    // The full clock reset un-sticks a stale Claimed/Emitted EOS so the next
-    // stream can arm end-of-stream again.
-    void reset()
-    {
-        m_mixer.reset();
-        m_clock.reset();
-    }
+    // Destroy the fading voice and reset the primary voice in place (its
+    // callback quiesced): only ever called with the audio callbacks stopped
+    // (after close()). The clock reset un-sticks a stale Claimed/Emitted EOS
+    // so the next stream can arm end-of-stream again, while the producer
+    // epoch and sample counters survive for diagnostics.
+    void reset();
 
     [[nodiscard]] bool
     boundaryTrackStart(std::uint32_t trackId, int sampleRate, int channels, std::optional<std::chrono::milliseconds> duration, std::uint64_t epochTag)
     {
-        return m_clock.boundaryTrackStart(trackId, sampleRate, channels, duration, epochTag);
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return m_primary && m_primary->clock().boundaryTrackStart(trackId, sampleRate, channels, duration, epochTag);
+    }
+
+    [[nodiscard]] bool boundaryTrackStartForPipe(const Pipe<float> *pipe,
+                                                 std::uint32_t trackId,
+                                                 int sampleRate,
+                                                 int channels,
+                                                 std::optional<std::chrono::milliseconds> duration,
+                                                 std::uint64_t epochTag)
+    {
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return m_primary && m_primary->pipe() == pipe && m_primary->clock().boundaryTrackStart(trackId, sampleRate, channels, duration, epochTag);
     }
 
     [[nodiscard]] bool boundaryEndOfStream(std::uint64_t epochTag)
     {
-        return m_clock.boundaryEndOfStream(epochTag);
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return m_primary && m_primary->clock().boundaryEndOfStream(epochTag);
+    }
+
+    [[nodiscard]] bool boundaryEndOfStreamForPipe(const Pipe<float> *pipe, std::uint64_t epochTag)
+    {
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return m_primary && m_primary->pipe() == pipe && m_primary->clock().boundaryEndOfStream(epochTag);
     }
 
     [[nodiscard]] bool retractEndOfStream()
     {
-        return m_clock.retractEndOfStream();
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return m_primary && m_primary->clock().retractEndOfStream();
+    }
+
+    [[nodiscard]] bool retractEndOfStreamForPipe(const Pipe<float> *pipe)
+    {
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return m_primary && m_primary->pipe() == pipe && m_primary->clock().retractEndOfStream();
     }
 
     void samplesProduced(std::uint64_t epochTag, std::size_t count)
     {
-        m_clock.samplesProduced(epochTag, count);
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        if (m_primary) {
+            m_primary->clock().samplesProduced(epochTag, count);
+        }
+    }
+
+    void samplesProducedForPipe(const Pipe<float> *pipe, std::uint64_t epochTag, std::size_t count)
+    {
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        if (m_primary && m_primary->pipe() == pipe) {
+            m_primary->clock().samplesProduced(epochTag, count);
+        }
     }
 
     [[nodiscard]] std::uint64_t streamEpoch() const
     {
-        return m_clock.streamEpoch();
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return m_primary ? m_primary->clock().streamEpoch() : 0;
+    }
+
+    [[nodiscard]] std::uint64_t streamEpochForPipe(const Pipe<float> *pipe) const
+    {
+        std::scoped_lock lock(m_primaryVoiceMutex);
+        return (m_primary && m_primary->pipe() == pipe) ? m_primary->clock().streamEpoch() : 0;
     }
 
     [[nodiscard]] bool endOfStreamPending() const
     {
-        return m_clock.endOfStreamPending();
+        return m_primary && m_primary->clock().endOfStreamPending();
     }
 
     [[nodiscard]] int currentSampleRate() const
     {
-        return m_clock.currentSampleRate();
+        return m_primary ? m_primary->clock().currentSampleRate() : 0;
     }
     [[nodiscard]] int currentChannels() const
     {
-        return m_clock.currentChannels();
+        return m_primary ? m_primary->clock().currentChannels() : 0;
     }
 
     [[nodiscard]] bool endOfStreamArmed() const
     {
-        return m_clock.endOfStreamArmed();
+        return m_primary && m_primary->clock().endOfStreamArmed();
     }
 
     [[nodiscard]] bool tryClaimDrained()
     {
-        return m_clock.tryClaimDrained();
+        return m_primary && m_primary->clock().tryClaimDrained();
     }
 
     [[nodiscard]] bool takeDrainedEmission()
     {
-        return m_clock.takeDrainedEmission();
+        return m_primary && m_primary->clock().takeDrainedEmission();
     }
 
-    [[nodiscard]] bool waitForPendingCrossfade(std::chrono::milliseconds timeout = std::chrono::milliseconds(150));
-
-    // Arm a crossfade and return the epoch the new stream will publish under
-    // (minted at staging time, before anything reaches the audio thread). On
-    // timeout waiting for a previous switch, the stuck request is superseded
-    // with a flush carrying the new primary pipe, so the audio thread installs
-    // the rotated slot's pipe either way (one switch path for both outcomes).
+    // Arm a crossfade and return the (voice-local) epoch the incoming stream
+    // publishes under, minted synchronously at staging time. Creates the
+    // pending incoming Voice — no backend stream exists for it until open()
+    // learns its native format. The outgoing voice keeps its stream and gets
+    // a fade-out request configured from its current gain.
     [[nodiscard]] std::uint64_t
     armCrossfade(Pipe<float> *fadingPipe, Pipe<float> *newPrimaryPipe, std::chrono::milliseconds fadeOutDuration, std::chrono::milliseconds fadeInDuration);
 
-    [[nodiscard]] bool isCrossfadePending() const noexcept
-    {
-        return m_mixer.isCrossfadePending();
-    }
-
+    // A fading Voice exists.
     [[nodiscard]] bool isCrossfading() const noexcept
     {
-        return m_mixer.isCrossfading();
+        return m_fading != nullptr;
     }
 
     [[nodiscard]] bool isFadingPipe(const Pipe<float> *pipe) const noexcept
     {
-        return m_mixer.isFadingPipe(pipe);
+        return pipe != nullptr && m_fading && m_fading->pipe() == pipe;
     }
 
     [[nodiscard]] bool isPrimaryPipe(const Pipe<float> *pipe) const noexcept
     {
-        return m_mixer.isPrimaryPipe(pipe);
+        return pipe != nullptr && m_primary && m_primary->pipe() == pipe;
+    }
+
+    // Destroy the fading voice immediately, without the completion callback:
+    // for explicit stop, hard switch, seek and teardown, where the player is
+    // already performing the matching decoder cancellation.
+    void abortFadingVoice()
+    {
+        destroyFadingVoice();
+    }
+
+    // Installed by the player; invoked on the Qt main thread after the
+    // fading voice ended (fade completed, pipe drained, or fading-stream
+    // error) and was destroyed. The player stops and drains the matching
+    // fading slot by pipe identity.
+    using FadingVoiceEndedCallback = std::function<void(Pipe<float> *pipe, const QString &error)>;
+    void setFadingVoiceEndedCallback(FadingVoiceEndedCallback callback)
+    {
+        m_fadingVoiceEndedCallback = std::move(callback);
     }
 
 Q_SIGNALS:
@@ -290,19 +340,34 @@ private Q_SLOTS:
     void onExternalVolumeRestored(float linearGain);
 
 private:
-    // Declaration order matters: the sink is destroyed before the mixer and
-    // the clock, so the sink's audio callbacks (which render from the
-    // mixer, which consults the clock) are quiesced by its destructor while
-    // both are still alive.
-    StreamClock m_clock;
-    Mixer m_mixer;
+    [[nodiscard]] std::unique_ptr<Voice> makeVoice(Pipe<float> *pipe);
+    void connectStreamSignals(AudioSinkStream *stream, std::uint64_t generation, Pipe<float> *pipe, bool firstStream);
+    void applyGainToVoices();
+    void destroyFadingVoice();
+    void dropVoice(std::unique_ptr<Voice> voice);
+    void onFadingVoiceEnded(Pipe<float> *pipe, const QString &error);
+
+    // Declaration order matters: the fading voice is destroyed before the
+    // primary voice (which owns the CrossfadeLink the fading voice's render
+    // reads) and before the sink connection.
     std::unique_ptr<AudioSink> m_sink;
+    mutable std::mutex m_primaryVoiceMutex;
+    std::unique_ptr<Voice> m_primary;
+    std::unique_ptr<Voice> m_fading;
+
+    std::uint64_t m_nextVoiceGeneration = 1;
+    std::uint64_t m_primaryGeneration = 0;
+    std::uint64_t m_fadingGeneration = 0;
+
+    FadingVoiceEndedCallback m_fadingVoiceEndedCallback;
 
     float m_volume = 1.0f;
     bool m_muted = false;
+    // Mirrors the old sink-level gain cache: streams are created with the
+    // cached gain only once the user actually changed volume, so a
+    // server-restored volume can still be adopted for the first stream.
+    bool m_gainSetByPipeline = false;
+    bool m_firstStream = true;
 
-    // Crossfade-wait support: gated counting semaphore signaled lock-freely
-    // from the audio thread only when waitForPendingCrossfade() is waiting.
-    std::atomic<bool> m_switchAckWaiting{false};
-    std::counting_semaphore<> m_switchAckSemaphore{0};
+    Pipe<PcmBlock> *m_fftPipe = nullptr;
 };

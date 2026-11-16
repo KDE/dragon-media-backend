@@ -54,7 +54,7 @@ if(ANDROID)
     )
     target_link_libraries(dragonsdlaudiosink PRIVATE SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
 else()
-    target_link_libraries(dragonsdlaudiosink PRIVATE DragonMediaBackend SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
+    target_link_libraries(dragonsdlaudiosink PRIVATE DragonMediaBackend SDL3::SDL3 KF6::CoreAddons KF6::I18n Qt6::Gui)
 endif()
 
 # useful for applications that fetch us via ContentFetch

@@ -39,7 +39,7 @@ public:
     DecodePipeline(DecodePipeline &&) = delete;
     DecodePipeline &operator=(DecodePipeline &&) = delete;
 
-    QCoro::Task<DragonMediaBackend::InitResult> initializeSession(QUrl source, Decoder::TargetAudioFormat targetFormat = {});
+    QCoro::Task<DragonMediaBackend::InitResult> initializeSession(QUrl source);
     void setNextSource(const QUrl &next);
 
     void clearNextSource();

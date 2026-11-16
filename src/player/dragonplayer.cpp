@@ -49,31 +49,46 @@ DragonPlayerPrivate::DragonPlayerPrivate(DragonPlayer *player, DragonAudioOutput
 
 void DragonPlayerPrivate::applyRequestedState(int sampleRate, int channels, DragonPlayer::PlaybackState intent)
 {
+    auto *sink = audioOutput ? audioOutput->playbackPipeline() : nullptr;
+
     switch (intent) {
     case DragonPlayer::PlaybackState::PlayingState:
-        if (!audioOutput->playbackPipeline()->isDeviceOpen() || !audioOutput->playbackPipeline()->hasFormat(sampleRate, channels)) {
-            audioOutput->playbackPipeline()->open(sampleRate, channels);
+        if (!sink->isDeviceOpen() || !sink->hasFormat(sampleRate, channels)) {
+            sink->open(sampleRate, channels);
         } else {
-            audioOutput->playbackPipeline()->resume();
+            sink->resume();
         }
-        if (!audioOutput->playbackPipeline()->isDeviceOpen()) {
+        if (!sink->isDeviceOpen() && sink->isCrossfading()) {
+            // The incoming stream could not be created while the outgoing
+            // fade still holds the only server stream: abort the fade under
+            // player control and retry the primary stream solo.
+            fadingSlot().decodePipeline.stopSession();
+            sink->abortFadingVoice();
+            sink->open(sampleRate, channels);
+        }
+        if (!sink->isDeviceOpen()) {
             reportDeviceOpenFailure();
             return;
         }
-        audioOutput->playbackPipeline()->reopenIfIdle();
+        sink->reopenIfIdle();
         setPlaybackState(DragonPlayer::PlaybackState::PlayingState);
         break;
 
     case DragonPlayer::PlaybackState::PausedState:
-        if (!audioOutput->playbackPipeline()->isDeviceOpen() || !audioOutput->playbackPipeline()->hasFormat(sampleRate, channels)) {
-            audioOutput->playbackPipeline()->open(sampleRate, channels);
+        if (!sink->isDeviceOpen() || !sink->hasFormat(sampleRate, channels)) {
+            sink->open(sampleRate, channels);
         }
-        if (!audioOutput->playbackPipeline()->isDeviceOpen()) {
+        if (!sink->isDeviceOpen() && sink->isCrossfading()) {
+            fadingSlot().decodePipeline.stopSession();
+            sink->abortFadingVoice();
+            sink->open(sampleRate, channels);
+        }
+        if (!sink->isDeviceOpen()) {
             reportDeviceOpenFailure();
             return;
         }
-        audioOutput->playbackPipeline()->reopenIfIdle();
-        audioOutput->playbackPipeline()->pause();
+        sink->reopenIfIdle();
+        sink->pause();
         setPlaybackState(DragonPlayer::PlaybackState::PausedState);
         break;
 
@@ -164,7 +179,7 @@ void DragonPlayerPrivate::onPlaybackFormatChangeRequired(int sampleRate, int cha
     sink->reopenIfIdle();
 }
 
-bool DragonPlayerPrivate::onPipelineBoundary(const DecodePipeline::BoundaryEvent &event)
+bool DragonPlayerPrivate::onPipelineBoundary(PipelineSlot &slot, const DecodePipeline::BoundaryEvent &event)
 {
     PlaybackPipeline *sink = audioOutput ? audioOutput->playbackPipeline() : nullptr;
 
@@ -182,11 +197,11 @@ bool DragonPlayerPrivate::onPipelineBoundary(const DecodePipeline::BoundaryEvent
         // is retracted as long as the sink has not played past it. If it has,
         // the audio really ended: the next source starts as a regular track
         // from the drained() handler instead.
-        if (!sink->retractEndOfStream()) {
-            qCDebug(dragonMediaBackendPlayer) << "boundary: sink already drained, refusing gapless handoff of" << event.url.toString();
+        if (!sink->retractEndOfStreamForPipe(&slot.audioPipe)) {
+            qCDebug(dragonMediaBackendPlayer) << "boundary: sink already drained or demoted, refusing gapless handoff of" << event.url.toString();
             return false;
         }
-        if (sink->streamEpoch() != producerEpoch) {
+        if (sink->streamEpochForPipe(&slot.audioPipe) != producerEpoch) {
             qCDebug(dragonMediaBackendPlayer) << "boundary: stream superseded by a flush, refusing gapless handoff of" << event.url.toString();
             return false;
         }
@@ -195,7 +210,7 @@ bool DragonPlayerPrivate::onPipelineBoundary(const DecodePipeline::BoundaryEvent
             std::scoped_lock lock(m_pendingTracksMutex);
             m_pendingTracks.insert(trackId, PendingTrack{event.url, event.sampleRate, event.channels, event.duration, event.seekable});
         }
-        if (!sink->boundaryTrackStart(trackId, event.sampleRate, event.channels, event.duration, producerEpoch)) {
+        if (!sink->boundaryTrackStartForPipe(&slot.audioPipe, trackId, event.sampleRate, event.channels, event.duration, producerEpoch)) {
             std::scoped_lock lock(m_pendingTracksMutex);
             m_pendingTracks.remove(trackId);
             qCWarning(dragonMediaBackendPlayer) << "boundary ring full; the track switch of" << event.url.toString() << "will not be reported at play time";
@@ -205,7 +220,7 @@ bool DragonPlayerPrivate::onPipelineBoundary(const DecodePipeline::BoundaryEvent
     }
     case DecodePipeline::BoundaryEvent::Kind::EndOfStream: {
         const std::uint64_t producerEpoch = m_producerStreamEpoch.load(std::memory_order_acquire);
-        if (sink && !sink->boundaryEndOfStream(producerEpoch)) {
+        if (sink && !sink->boundaryEndOfStreamForPipe(&slot.audioPipe, producerEpoch)) {
             qCWarning(dragonMediaBackendPlayer) << "boundary: could not arm end of stream (one is already armed or claimed)";
         }
         return true;
@@ -323,7 +338,7 @@ void DragonPlayerPrivate::writeToSlotQueue(PipelineSlot &slot, std::span<const f
     }
 
     if (isPrimarySlot(slot) && slot.contentEpoch.load(std::memory_order_acquire) == token) {
-        while (sink && !sink->isQueueReady() && !st.stop_requested()) {
+        while (sink && !sink->isQueueReadyForPipe(&slot.audioPipe) && !st.stop_requested()) {
             std::this_thread::sleep_for(500us);
         }
         if (st.stop_requested()) {
@@ -340,7 +355,7 @@ void DragonPlayerPrivate::writeToSlotQueue(PipelineSlot &slot, std::span<const f
             });
 
             if (written > 0 && sink) {
-                sink->samplesProduced(streamEpoch, written);
+                sink->samplesProducedForPipe(&slot.audioPipe, streamEpoch, written);
             }
             return;
         }
@@ -466,6 +481,27 @@ void DragonPlayerPrivate::init()
     audioOutput->playbackPipeline()->setAudioPipe(&primarySlot().audioPipe);
     audioOutput->playbackPipeline()->setFftPipe(nullptr);
 
+    // Bounded cleanup when a fading voice ends on its own (fade completed,
+    // early EOF, or a fading-stream error): stop and drain the matching
+    // fading slot by pipe identity so its decoder cannot remain blocked on
+    // a pipe nobody reads anymore. Normally retirement has already stopped
+    // the decoder; for a stalled producer this is the bounded path.
+    audioOutput->playbackPipeline()->setFadingVoiceEndedCallback([this](Pipe<float> *pipe, const QString &error) {
+        for (auto &slot : m_slots) {
+            if (&slot.audioPipe != pipe) {
+                continue;
+            }
+            invalidateSlotContent(slot);
+            slot.decodePipeline.stopSession();
+            slot.audioPipe.consumer().drain();
+            slot.audioPipe.setProducerDone(false);
+            break;
+        }
+        if (!error.isEmpty()) {
+            qCWarning(dragonMediaBackendPlayer) << "fading voice ended with a stream error:" << error;
+        }
+    });
+
     positionEstimator = new PositionEstimator(this);
     positionEstimator->setDevicePositionCallback([this]() -> std::optional<std::chrono::milliseconds> {
         if (audioOutput->playbackPipeline()->isDeviceOpen()) {
@@ -544,7 +580,7 @@ void DragonPlayerPrivate::init()
             if (event.kind == DecodePipeline::BoundaryEvent::Kind::EndOfStream) {
                 slot.audioPipe.setProducerDone(true);
             }
-            return onPipelineBoundary(event);
+            return onPipelineBoundary(slot, event);
         });
 
         slot.decodePipeline.setRetireFinishedCallback([&slot]() {
@@ -669,6 +705,8 @@ DragonPlayer::~DragonPlayer()
         d->aliveGuard->alive = false;
     }
     d->stopPipeline();
+    delete d->audioOutput;
+    d->audioOutput = nullptr;
 }
 
 DragonAudioOutput *DragonPlayer::audioOutput() const
@@ -735,7 +773,7 @@ qreal DragonPlayer::bufferProgress() const
     return d->currentBufferProgress;
 }
 
-QCoro::Task<void> DragonPlayerPrivate::startLoad(PipelineSlot &slot, QUrl source, uint64_t generation, Decoder::TargetAudioFormat targetFormat)
+QCoro::Task<void> DragonPlayerPrivate::startLoad(PipelineSlot &slot, QUrl source, uint64_t generation)
 {
     auto aliveGuard = this->aliveGuard;
 
@@ -744,7 +782,7 @@ QCoro::Task<void> DragonPlayerPrivate::startLoad(PipelineSlot &slot, QUrl source
         co_return;
     }
 
-    auto result = co_await slot.decodePipeline.initializeSession(source, targetFormat);
+    auto result = co_await slot.decodePipeline.initializeSession(source);
 
     if (!aliveGuard || !aliveGuard->alive) {
         co_return;
@@ -869,17 +907,14 @@ void DragonPlayer::setSource(const QUrl &source, const DragonSourceOptions &opti
 
         std::ignore = d->rotateSlots();
 
-        // Arm the crossfade in the sink before calling retireAfter() so that if retireAfter() completes synchronously (when the pipe already
-        // buffers the whole fade-out), its retire-finished callback sets producerDone = true on the fading slot's pipe. The returned epoch
-        // is minted at staging time: the new stream publishes under exactly this epoch, so the slot records it before anything is latched.
         const auto epoch = sink->armCrossfade(&outgoing.audioPipe, &incoming.audioPipe, crossfadeDuration, crossfadeDuration);
         incoming.streamEpoch.store(epoch, std::memory_order_release);
 
-        // Retire the outgoing slot in-place for the remaining fade-out samples (plus the slow-load hold window when fading in, so a slow
-        // network load can hold the outgoing envelope without starving the retiring pipe).
-        const int sinkRate = std::max(1, sink->currentSampleRate());
-        const int sinkCh = std::max(1, sink->currentChannels());
-        const std::int64_t totalFadeOutSamples = ((crossfadeDuration + Mixer::kSlowLoadHoldMax).count() * sinkRate * sinkCh) / 1000;
+        // Retire the outgoing slot in-place for the remaining fade-out samples, budgeted in the outgoing
+        // track's native format
+        const int outgoingRate = std::max(1, d->currentSampleRate);
+        const int outgoingChannels = std::max(1, d->currentChannels);
+        const std::int64_t totalFadeOutSamples = ((crossfadeDuration + Voice::kSlowLoadHoldMax).count() * outgoingRate * outgoingChannels) / 1000;
         const std::int64_t bufferedSamples = static_cast<std::int64_t>(outgoing.audioPipe.consumer().ready());
         outgoing.decodePipeline.retireAfter(totalFadeOutSamples - bufferedSamples);
     } else {
@@ -978,14 +1013,12 @@ void DragonPlayer::setSource(const QUrl &source, const DragonSourceOptions &opti
 
     const uint64_t generation = d->loadGeneration;
     const QUrl sourceToLoad = d->currentSource;
-    const Decoder::TargetAudioFormat targetFormat =
-        shouldCrossfade ? Decoder::TargetAudioFormat{sink->currentSampleRate(), sink->currentChannels()} : Decoder::TargetAudioFormat{};
     auto *slotToLoad = &d->primarySlot();
     auto *priv = d.get();
     QMetaObject::invokeMethod(
         priv,
-        [priv, slotToLoad, sourceToLoad, generation, targetFormat]() {
-            priv->startLoad(*slotToLoad, sourceToLoad, generation, targetFormat);
+        [priv, slotToLoad, sourceToLoad, generation]() {
+            priv->startLoad(*slotToLoad, sourceToLoad, generation);
         },
         Qt::QueuedConnection);
 }
@@ -1049,10 +1082,9 @@ void DragonPlayer::setPosition(std::chrono::milliseconds position)
 
     auto *sink = d->audioOutput ? d->audioOutput->playbackPipeline() : nullptr;
     if (sink && sink->isCrossfading()) {
-        // A seek abandons the fade: the flush staged below drains the fading
-        // pipe on the audio thread's switch consumption, and the retiring
-        // producer unblocks once its pipe is no longer the sink's fading pipe.
+        // A seek abandons the fade
         d->fadingSlot().decodePipeline.stopSession();
+        sink->abortFadingVoice();
     }
 
     // Hard-hold the producers while the seek re-positions the decoder; the

@@ -16,4 +16,9 @@ struct PcmBlock {
     std::array<float, MAX_SAMPLES> samples{};
     size_t count = 0;
     std::chrono::microseconds pts;
+    // In-band format metadata: every produced block carries its native
+    // format (positive values), and the FFT consumer resets its
+    // format-dependent history whenever it changes.
+    int sampleRate = 0;
+    int channels = 0;
 };

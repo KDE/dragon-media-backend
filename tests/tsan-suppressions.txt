@@ -75,3 +75,6 @@ race:QArrayData::reallocateUnaligned
 
 race:QQueuedMetaCallEvent::~QQueuedMetaCallEvent
 race:queuedConnectionTypes
+# QMetaObject::invokeMethod(obj, lambda, Qt::QueuedConnection) constructs QCallableObject
+# in instrumented code and hands it off through uninstrumented libQt6Core.so.6's QMutex.
+race:invokeMethodCallableHelper

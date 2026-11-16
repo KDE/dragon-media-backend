@@ -12,7 +12,6 @@
 #include "pipewireaudiosink.h"
 
 #include "dragonmediabackend_audio_logging.h"
-#include "mixer/mixer.h"
 
 #include <KLocalizedString>
 #include <KPluginFactory>
@@ -27,12 +26,17 @@ K_PLUGIN_CLASS_WITH_JSON(PipeWireAudioSink, "pipewire_sink.json")
 #include <chrono>
 #include <cstring>
 #include <span>
+#include <utility>
 #include <vector>
 
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 
 static constexpr int PW_POD_BUFFER_LENGTH = 1024;
 static constexpr uint32_t kDefaultQuantumFrames = 1024;
+
+namespace
+{
 
 struct PwThreadLoopDeleter {
     void operator()(pw_thread_loop *loop) const noexcept
@@ -115,22 +119,30 @@ private:
     pw_thread_loop *m_loop;
 };
 
-struct PipeWireAudioSink::PwState {
-    PwThreadLoopPtr loop;
-    PwStreamPtr stream;
-    spa_hook streamListener{};
-};
-
 static constexpr pw_stream_events s_streamEvents = [] {
     struct pw_stream_events ev{};
     ev.version = PW_VERSION_STREAM_EVENTS;
-    ev.process = PipeWireAudioSink::onProcess;
-    ev.state_changed = PipeWireAudioSink::onStateChanged;
-    ev.control_info = PipeWireAudioSink::onControlInfo;
-    ev.param_changed = PipeWireAudioSink::onParamChanged;
-    ev.drained = PipeWireAudioSink::onDrained;
+    ev.process = PipeWireAudioSinkStream::onProcess;
+    ev.state_changed = PipeWireAudioSinkStream::onStateChanged;
+    ev.control_info = PipeWireAudioSinkStream::onControlInfo;
+    ev.param_changed = PipeWireAudioSinkStream::onParamChanged;
+    ev.drained = PipeWireAudioSinkStream::onDrained;
     return ev;
 }();
+
+} // namespace
+
+struct PipeWireAudioSinkStream::PwStream {
+    PwStreamPtr handle;
+};
+
+struct PipeWireAudioSink::PwState {
+    PwThreadLoopPtr loop;
+    PwContextPtr context;
+    PwCorePtr core;
+
+    std::vector<PipeWireAudioSinkStream *> streams;
+};
 
 PipeWireAudioSink::PipeWireAudioSink(QObject *parent, const QVariantList &args)
     : AudioSink(parent)
@@ -143,7 +155,7 @@ PipeWireAudioSink::PipeWireAudioSink(QObject *parent, const QVariantList &args)
 
 PipeWireAudioSink::~PipeWireAudioSink()
 {
-    PipeWireAudioSink::close();
+    disconnect();
     // No pw_deinit() here: other PipeWire users in this process (other
     // sinks, other libraries) must not have the global library state
     // pulled out from under them by one sink instance going away.
@@ -184,217 +196,103 @@ std::size_t PipeWireAudioSink::preferredCallbackSamples(int sampleRate, int chan
     return std::max(static_cast<std::size_t>(kDefaultQuantumFrames), kMaxQuantumFrames) * static_cast<std::size_t>(std::max(1, channels));
 }
 
-void PipeWireAudioSink::open(int sampleRate, int channels)
+bool PipeWireAudioSink::ensureConnected()
 {
-    qCDebug(dragonMediaBackendAudio) << "PipeWire open" << sampleRate << channels;
-
-    if (m_open.load(std::memory_order_acquire)) {
-        qCDebug(dragonMediaBackendAudio) << "open() called while already open closing old session";
-        close();
+    if (m_pw->loop && m_pw->context && m_pw->core) {
+        return true;
     }
-
-    m_firstVolumeReportSeen.store(false, std::memory_order_relaxed);
-    m_gainSetByPipeline.store(false, std::memory_order_relaxed);
+    if (m_poisoned) {
+        return false;
+    }
 
     PwThreadLoopPtr loop(pw_thread_loop_new("dragon-pw", nullptr));
     if (!loop) {
         qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to create thread loop";
-        Q_EMIT errorOccurred(i18n("PipeWire: failed to create thread loop"));
-        return;
+        return false;
     }
 
-    PwPropertiesPtr props(pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_MEDIA_ROLE, "Music", nullptr));
-
-    const QString appName = QGuiApplication::applicationDisplayName();
-    const QByteArray appNameUtf8 = appName.toUtf8();
-    const char *nodeName = appNameUtf8.isEmpty() ? "DragonMediaBackend" : appNameUtf8.constData();
-
-    pw_properties_set(props.get(), PW_KEY_APP_NAME, nodeName);
-    pw_properties_set(props.get(), PW_KEY_NODE_NAME, nodeName);
-    pw_properties_set(props.get(), PW_KEY_NODE_DESCRIPTION, nodeName);
-
-    const QString mediaName = resolvedStreamName();
-    const QByteArray mediaNameUtf8 = mediaName.toUtf8();
-    pw_properties_set(props.get(), PW_KEY_MEDIA_NAME, mediaNameUtf8.constData());
-
-    pw_properties_set(props.get(), PW_KEY_NODE_ALWAYS_PROCESS, "true");
-
-    const QString appIconName = applicationIconName();
-    if (!appIconName.isEmpty()) {
-        const QByteArray appIconNameUtf8 = appIconName.toUtf8();
-        pw_properties_set(props.get(), PW_KEY_APP_ICON_NAME, appIconNameUtf8.constData());
-        pw_properties_set(props.get(), PW_KEY_APP_ID, appIconNameUtf8.constData());
+    PwContextPtr context(pw_context_new(pw_thread_loop_get_loop(loop.get()), nullptr, 0));
+    if (!context) {
+        qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to create context";
+        return false;
     }
 
-    const QByteArray testSinkName = qgetenv("DRAGON_PW_TEST_SINK_NAME");
-    if (!testSinkName.isEmpty()) {
-        pw_properties_set(props.get(), PW_KEY_TARGET_OBJECT, testSinkName.constData());
-        qCDebug(dragonMediaBackendAudio) << "PipeWire: overriding target to" << testSinkName;
-    }
-
-    // pw_stream_new_simple takes ownership of props release the unique_ptr so it doesn't double-free.
-    PwStreamPtr stream(pw_stream_new_simple(pw_thread_loop_get_loop(loop.get()), nodeName, props.release(), &s_streamEvents, this));
-
-    if (!stream) {
-        qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to create stream";
-        Q_EMIT errorOccurred(i18n("PipeWire: failed to create stream"));
-        return;
-    }
-
-    uint8_t podBuffer[PW_POD_BUFFER_LENGTH];
-    spa_pod_builder b = SPA_POD_BUILDER_INIT(podBuffer, sizeof(podBuffer));
-
-    spa_audio_info_raw audioInfo = SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_F32,
-                                                           .flags = 0,
-                                                           .rate = static_cast<uint32_t>(sampleRate),
-                                                           .channels = static_cast<uint32_t>(channels),
-                                                           .position = {});
-
-    // Explicit channel positions for mono and stereo.
-    // For >2 channels, PipeWire infers positions from the channel count.
-    if (channels == 1) {
-        audioInfo.position[0] = SPA_AUDIO_CHANNEL_MONO;
-    } else if (channels == 2) {
-        audioInfo.position[0] = SPA_AUDIO_CHANNEL_FL;
-        audioInfo.position[1] = SPA_AUDIO_CHANNEL_FR;
-    }
-
-    const spa_pod *params = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &audioInfo);
-    if (!params) {
-        qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to build audio format pod";
-        Q_EMIT errorOccurred(i18n("PipeWire: failed to build audio format"));
-        return;
-    }
-
-    constexpr auto streamFlags = static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
-
-    int res = pw_stream_connect(stream.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, streamFlags, &params, 1);
+    int res = pw_thread_loop_start(loop.get());
     if (res != 0) {
-        qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to connect stream:" << res;
-        Q_EMIT errorOccurred(i18n("PipeWire: failed to connect stream"));
-        return;
-    }
-
-    // Set initial channel volumes under the loop lock
-    {
-        const auto ch = static_cast<uint32_t>(mixer()->clock().currentChannels());
-        m_volumesScratch.assign(ch, m_cachedGain.load(std::memory_order_relaxed));
-        PwThreadLoopLock lock(loop.get());
-        pw_stream_set_control(stream.get(), SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
-    }
-
-    // Transfer ownership to m_pw and publish m_open before starting thread loop
-    m_pw->loop = std::move(loop);
-    m_pw->stream = std::move(stream);
-
-    m_paused.store(false, std::memory_order_release);
-    m_open.store(true, std::memory_order_seq_cst);
-
-    res = pw_thread_loop_start(m_pw->loop.get());
-    if (res != 0) {
-        m_open.store(false, std::memory_order_seq_cst);
-        m_pw->stream.reset();
-        m_pw->loop.reset();
         qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to start thread loop:" << res;
-        Q_EMIT errorOccurred(i18n("PipeWire: failed to start thread loop"));
+        return false;
+    }
+
+    PwCorePtr core;
+    {
+        PwThreadLoopLock lock(loop.get());
+        core.reset(pw_context_connect(context.get(), nullptr, 0));
+    }
+    if (!core) {
+        qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to connect core";
+        return false;
+    }
+
+    m_pw->loop = std::move(loop);
+    m_pw->context = std::move(context);
+    m_pw->core = std::move(core);
+    qCDebug(dragonMediaBackendAudio) << "PipeWire connection established";
+    return true;
+}
+
+void PipeWireAudioSink::disconnect()
+{
+    if (!m_pw->loop) {
         return;
     }
 
-    qCDebug(dragonMediaBackendAudio) << "PipeWire audio device opened";
-}
-
-void PipeWireAudioSink::close()
-{
-    qCDebug(dragonMediaBackendAudio) << "PipeWire close()";
-
-    m_open.store(false, std::memory_order_seq_cst);
-    m_paused.store(false, std::memory_order_release);
-
-    if (m_pw->loop && m_pw->stream) {
-        {
-            PwThreadLoopLock lock(m_pw->loop.get());
-            pw_stream_set_active(m_pw->stream.get(), false);
-            pw_stream_disconnect(m_pw->stream.get());
-        }
-
-        // Wait for onProcess (which runs on the pw data thread, outside the
-        // loop lock) to finish BEFORE destroying the stream. New onProcess
-        // invocations bail out at their entry while close() is in progress,
-        // so this is bounded.
-        m_quiesce.beginClose();
-        const bool quiesced = m_quiesce.waitForIdle(std::chrono::milliseconds(500));
-        if (!quiesced) {
-            m_poisoned = true;
-            qCCritical(dragonMediaBackendAudio)
-                << "PipeWire close(): callbacks did not quiesce within 500ms; leaking the pw stream and loop (zombie state) to avoid a use-after-free";
-            // Deliberately leak: release the stream/loop without destroying
-            // or stopping them, so a still-running onProcess can keep
-            // dereferencing valid objects. close() stays marked as in
-            // progress so any future callback bails out immediately.
-            m_pw->stream.release();
-            m_pw->loop.release();
-            return;
-        }
-        m_quiesce.endClose();
-
-        {
-            PwThreadLoopLock lock(m_pw->loop.get());
-            m_pw->stream.reset();
-        }
+    {
+        PwThreadLoopLock lock(m_pw->loop.get());
+        // Streams must have been closed (and unregistered) by their owning
+        // voices before the connection goes away.
+        Q_ASSERT(m_pw->streams.empty());
+        m_pw->core.reset();
+        m_pw->context.reset();
     }
-
     m_pw->loop.reset();
-
-    qCDebug(dragonMediaBackendAudio) << "PipeWire close() complete";
 }
 
-void PipeWireAudioSink::pause()
+void PipeWireAudioSink::registerStream(PipeWireAudioSinkStream *stream)
 {
-    m_paused.store(true, std::memory_order_release);
-
-    if (m_pw->loop && m_pw->stream) {
-        PwThreadLoopLock lock(m_pw->loop.get());
-        pw_stream_set_active(m_pw->stream.get(), false);
-    }
+    PwThreadLoopLock lock(m_pw->loop.get());
+    m_pw->streams.push_back(stream);
 }
 
-void PipeWireAudioSink::resume()
+void PipeWireAudioSink::unregisterStream(PipeWireAudioSinkStream *stream)
 {
-    m_paused.store(false, std::memory_order_release);
-
-    if (m_pw->loop && m_pw->stream) {
-        PwThreadLoopLock lock(m_pw->loop.get());
-        pw_stream_set_active(m_pw->stream.get(), true);
+    if (!m_pw->loop) {
+        return;
     }
+    PwThreadLoopLock lock(m_pw->loop.get());
+    std::erase(m_pw->streams, stream);
 }
 
-void PipeWireAudioSink::setGain(float linearGain)
+std::expected<std::unique_ptr<AudioSinkStream>, QString> PipeWireAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer)
 {
-    m_gainSetByPipeline.store(true, std::memory_order_relaxed);
-    m_cachedGain.store(linearGain, std::memory_order_relaxed);
+    qCDebug(dragonMediaBackendAudio) << "PipeWire createStream" << sampleRate << channels;
 
-    if (m_pw->stream && m_open.load(std::memory_order_acquire)) {
-        PwThreadLoopLock lock(m_pw->loop.get());
-        setChannelVolumes(linearGain);
+    if (!ensureConnected()) {
+        return std::unexpected(i18n("PipeWire: connection to the PipeWire server failed"));
     }
-}
 
-void PipeWireAudioSink::setMuted(bool muted)
-{
-    m_cachedMuted.store(muted, std::memory_order_relaxed);
-
-    if (m_pw->stream && m_open.load(std::memory_order_acquire)) {
-        float muteVal = muted ? 1.0f : 0.0f;
-        PwThreadLoopLock lock(m_pw->loop.get());
-        pw_stream_set_control(m_pw->stream.get(), SPA_PROP_mute, 1, &muteVal, 0);
+    auto stream = std::make_unique<PipeWireAudioSinkStream>(*this, sampleRate, channels, renderer);
+    if (!stream->connectToCore()) {
+        return std::unexpected(i18n("PipeWire: failed to connect stream"));
     }
+    registerStream(stream.get());
+    return stream;
 }
 
 void PipeWireAudioSink::setStreamName(const QString &name)
 {
     AudioSink::setStreamName(name);
 
-    if (!m_pw->stream || !m_open.load(std::memory_order_acquire)) {
+    if (!m_pw->loop) {
         return;
     }
 
@@ -407,32 +305,230 @@ void PipeWireAudioSink::setStreamName(const QString &name)
     const spa_dict dict = SPA_DICT_INIT_ARRAY(items);
 
     PwThreadLoopLock lock(m_pw->loop.get());
-    pw_stream_update_properties(m_pw->stream.get(), &dict);
+    for (auto *stream : m_pw->streams) {
+        if (auto *pwStream = stream->m_stream ? stream->m_stream->handle.get() : nullptr) {
+            pw_stream_update_properties(pwStream, &dict);
+        }
+    }
     qCDebug(dragonMediaBackendAudio) << "PipeWire: setStreamName() updated media.name to:" << mediaName;
 }
 
-void PipeWireAudioSink::clearStream()
+PipeWireAudioSinkStream::PipeWireAudioSinkStream(PipeWireAudioSink &sink, int sampleRate, int channels, AudioSinkStreamRenderer &renderer)
+    : AudioSinkStream(renderer)
+    , m_sink(sink)
+    , m_sampleRate(sampleRate)
+    , m_channels(channels)
+    , m_stream(std::make_unique<PwStream>())
 {
-    if (m_pw->stream && m_pw->loop) {
-        PwThreadLoopLock lock(m_pw->loop.get());
-        pw_stream_flush(m_pw->stream.get(), false);
+}
+
+PipeWireAudioSinkStream::~PipeWireAudioSinkStream()
+{
+    std::ignore = close();
+}
+
+bool PipeWireAudioSinkStream::connectToCore()
+{
+    auto *state = m_sink.m_pw.get();
+    PwPropertiesPtr props(pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_MEDIA_ROLE, "Music", nullptr));
+
+    const QString appName = QGuiApplication::applicationDisplayName();
+    const QByteArray appNameUtf8 = appName.toUtf8();
+    const char *nodeName = appNameUtf8.isEmpty() ? "DragonMediaBackend" : appNameUtf8.constData();
+
+    pw_properties_set(props.get(), PW_KEY_APP_NAME, nodeName);
+    pw_properties_set(props.get(), PW_KEY_NODE_NAME, nodeName);
+    pw_properties_set(props.get(), PW_KEY_NODE_DESCRIPTION, nodeName);
+
+    const QString mediaName = m_sink.resolvedStreamName();
+    const QByteArray mediaNameUtf8 = mediaName.toUtf8();
+    pw_properties_set(props.get(), PW_KEY_MEDIA_NAME, mediaNameUtf8.constData());
+
+    pw_properties_set(props.get(), PW_KEY_NODE_ALWAYS_PROCESS, "true");
+    if (m_sampleRate > 0) {
+        pw_properties_setf(props.get(), PW_KEY_NODE_RATE, "1/%d", m_sampleRate);
+    }
+
+    const QString appIconName = AudioSink::applicationIconName();
+    if (!appIconName.isEmpty()) {
+        const QByteArray appIconNameUtf8 = appIconName.toUtf8();
+        pw_properties_set(props.get(), PW_KEY_APP_ICON_NAME, appIconNameUtf8.constData());
+        pw_properties_set(props.get(), PW_KEY_APP_ID, appIconNameUtf8.constData());
+    }
+
+    const QByteArray testSinkName = qgetenv("DRAGON_PW_TEST_SINK_NAME");
+    if (!testSinkName.isEmpty()) {
+        pw_properties_set(props.get(), PW_KEY_TARGET_OBJECT, testSinkName.constData());
+        qCDebug(dragonMediaBackendAudio) << "PipeWire: overriding target to" << testSinkName;
+    }
+
+    {
+        PwThreadLoopLock lock(state->loop.get());
+        m_stream->handle.reset(pw_stream_new(state->core.get(), nodeName, props.release()));
+        if (!m_stream->handle) {
+            qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to create stream";
+            return false;
+        }
+        pw_stream_add_listener(m_stream->handle.get(), &m_streamListener, &s_streamEvents, this);
+    }
+
+    uint8_t podBuffer[PW_POD_BUFFER_LENGTH];
+    spa_pod_builder b = SPA_POD_BUILDER_INIT(podBuffer, sizeof(podBuffer));
+
+    spa_audio_info_raw audioInfo = SPA_AUDIO_INFO_RAW_INIT(.format = SPA_AUDIO_FORMAT_F32,
+                                                           .flags = 0,
+                                                           .rate = static_cast<uint32_t>(m_sampleRate),
+                                                           .channels = static_cast<uint32_t>(m_channels),
+                                                           .position = {});
+
+    // Explicit channel positions for mono and stereo.
+    // For >2 channels, PipeWire infers positions from the channel count.
+    if (m_channels == 1) {
+        audioInfo.position[0] = SPA_AUDIO_CHANNEL_MONO;
+    } else if (m_channels == 2) {
+        audioInfo.position[0] = SPA_AUDIO_CHANNEL_FL;
+        audioInfo.position[1] = SPA_AUDIO_CHANNEL_FR;
+    }
+
+    const spa_pod *params = spa_format_audio_raw_build(&b, SPA_PARAM_EnumFormat, &audioInfo);
+    if (!params) {
+        qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to build audio format pod";
+        return false;
+    }
+
+    constexpr auto streamFlags = static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
+
+    {
+        // pw_stream_connect() requires the thread-loop lock: calling it from
+        // an unlocked context corrupts the client-server protocol.
+        PwThreadLoopLock lock(state->loop.get());
+        int res = pw_stream_connect(m_stream->handle.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, streamFlags, &params, 1);
+        if (res != 0) {
+            qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to connect stream:" << res;
+            return false;
+        }
+
+        // Set initial channel volumes under the same lock
+        const auto ch = static_cast<uint32_t>(m_channels);
+        m_volumesScratch.assign(ch, m_cachedGain.load(std::memory_order_relaxed));
+        pw_stream_set_control(m_stream->handle.get(), SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
+    }
+
+    m_paused.store(false, std::memory_order_release);
+    m_open.store(true, std::memory_order_seq_cst);
+    return true;
+}
+
+bool PipeWireAudioSinkStream::closeStream()
+{
+    m_open.store(false, std::memory_order_seq_cst);
+    m_paused.store(false, std::memory_order_release);
+
+    if (!m_sink.m_pw->loop || !m_stream->handle) {
+        return true;
+    }
+
+    {
+        PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+        pw_stream_set_active(m_stream->handle.get(), false);
+        pw_stream_disconnect(m_stream->handle.get());
+    }
+
+    // Wait for onProcess (which runs on the pw data thread, outside the
+    // loop lock) to finish BEFORE destroying the stream. New onProcess
+    // invocations bail out at their entry while close is in progress, so
+    // this is bounded.
+    m_quiesce.beginClose();
+    const bool quiesced = m_quiesce.waitForIdle(500ms);
+    if (!quiesced) {
+        qCCritical(dragonMediaBackendAudio)
+            << "PipeWire stream close(): callbacks did not quiesce within 500ms; leaking the pw stream (zombie state) to avoid a use-after-free";
+        m_sink.m_poisoned = true;
+        // Deliberately leak: release the stream without destroying it, so a
+        // still-running onProcess can keep dereferencing a valid object.
+        m_sink.unregisterStream(this);
+        std::ignore = m_stream.release();
+        return false;
+    }
+    m_quiesce.endClose();
+
+    {
+        PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+        m_stream->handle.reset();
+    }
+    m_sink.unregisterStream(this);
+    return true;
+}
+
+void PipeWireAudioSinkStream::pause()
+{
+    m_paused.store(true, std::memory_order_release);
+
+    if (m_sink.m_pw->loop && m_stream->handle) {
+        PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+        pw_stream_set_active(m_stream->handle.get(), false);
     }
 }
 
-void PipeWireAudioSink::setChannelVolumes(float linearGain)
+void PipeWireAudioSinkStream::resume()
 {
-    const auto ch = static_cast<uint32_t>(mixer()->clock().currentChannels());
-    m_volumesScratch.assign(ch, linearGain);
-    pw_stream_set_control(m_pw->stream.get(), SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
+    m_paused.store(false, std::memory_order_release);
+
+    if (m_sink.m_pw->loop && m_stream->handle) {
+        PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+        pw_stream_set_active(m_stream->handle.get(), true);
+    }
 }
 
-qint64 PipeWireAudioSink::deviceQueuedSamples() const
+bool PipeWireAudioSinkStream::isPaused() const
 {
-    if (!m_pw->loop || !m_pw->stream) {
+    return m_paused.load(std::memory_order_acquire);
+}
+
+void PipeWireAudioSinkStream::setGain(float linearGain)
+{
+    m_gainSetByPipeline.store(true, std::memory_order_relaxed);
+    m_cachedGain.store(linearGain, std::memory_order_relaxed);
+
+    if (m_sink.m_pw->loop && m_stream->handle && m_open.load(std::memory_order_acquire)) {
+        PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+        setChannelVolumes(linearGain);
+    }
+}
+
+void PipeWireAudioSinkStream::setMuted(bool muted)
+{
+    m_cachedMuted.store(muted, std::memory_order_relaxed);
+
+    if (m_sink.m_pw->loop && m_stream->handle && m_open.load(std::memory_order_acquire)) {
+        float muteVal = muted ? 1.0f : 0.0f;
+        PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+        pw_stream_set_control(m_stream->handle.get(), SPA_PROP_mute, 1, &muteVal, 0);
+    }
+}
+
+void PipeWireAudioSinkStream::clearStream()
+{
+    if (m_sink.m_pw->loop && m_stream->handle) {
+        PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+        pw_stream_flush(m_stream->handle.get(), false);
+    }
+}
+
+void PipeWireAudioSinkStream::setChannelVolumes(float linearGain)
+{
+    const auto ch = static_cast<uint32_t>(m_channels);
+    m_volumesScratch.assign(ch, linearGain);
+    pw_stream_set_control(m_stream->handle.get(), SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
+}
+
+qint64 PipeWireAudioSinkStream::deviceQueuedSamples() const
+{
+    if (!m_sink.m_pw->loop || !m_stream->handle) {
         return 0;
     }
-    PwThreadLoopLock lock(m_pw->loop.get());
-    auto *stream = m_pw->stream.get();
+    PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+    auto *stream = m_stream->handle.get();
     if (!stream) {
         return 0;
     }
@@ -445,13 +541,13 @@ qint64 PipeWireAudioSink::deviceQueuedSamples() const
     return static_cast<qint64>(time.queued) / sizeof(float);
 }
 
-int PipeWireAudioSink::audioBufferFrames() const
+int PipeWireAudioSinkStream::audioBufferFrames() const
 {
-    if (!m_pw->loop || !m_pw->stream) {
+    if (!m_sink.m_pw->loop || !m_stream->handle) {
         return -1;
     }
-    PwThreadLoopLock lock(m_pw->loop.get());
-    auto *stream = m_pw->stream.get();
+    PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+    auto *stream = m_stream->handle.get();
     if (!stream) {
         return -1;
     }
@@ -461,44 +557,33 @@ int PipeWireAudioSink::audioBufferFrames() const
         return -1;
     }
 
-    const int channels = mixer() ? mixer()->clock().currentChannels() : 0;
-    if (channels <= 0) {
+    if (m_channels <= 0) {
         return -1;
     }
-    return static_cast<int>(time.queued / (channels * sizeof(float)));
+    return static_cast<int>(time.queued / (m_channels * sizeof(float)));
 }
 
-std::optional<std::chrono::microseconds> PipeWireAudioSink::audioBufferDuration() const
+std::optional<std::chrono::microseconds> PipeWireAudioSinkStream::audioBufferDuration() const
 {
     const int frames = audioBufferFrames();
-    const int sampleRate = mixer() ? mixer()->clock().currentSampleRate() : 0;
-    if (frames < 0 || sampleRate <= 0) {
+    if (frames < 0 || m_sampleRate <= 0) {
         return std::nullopt;
     }
-    return std::chrono::microseconds{(static_cast<qint64>(frames) * 1000000) / mixer()->clock().currentSampleRate()};
+    return std::chrono::microseconds{(static_cast<qint64>(frames) * 1000000) / m_sampleRate};
 }
 
-bool PipeWireAudioSink::isDeviceOpen() const
+void PipeWireAudioSinkStream::onProcess(void *userdata)
 {
-    return m_open.load(std::memory_order_acquire);
-}
-
-bool PipeWireAudioSink::isPaused() const
-{
-    return m_paused.load(std::memory_order_acquire);
-}
-
-void PipeWireAudioSink::onProcess(void *userdata)
-{
-    auto *self = static_cast<PipeWireAudioSink *>(userdata);
+    auto *self = static_cast<PipeWireAudioSinkStream *>(userdata);
     if (!self) {
         return;
     }
 
-    // Quiesce handshake with close(): onProcess runs on the pw data thread
-    // outside the loop lock, so it must bail out before touching the stream
-    // when close() is in progress. The guard's destructor is a fetch_sub
-    // plus an atomic notify, never a mutex, so it is safe on this RT path.
+    // Quiesce handshake with closeStream(): onProcess runs on the pw data
+    // thread outside the loop lock, so it must bail out before touching the
+    // stream when close is in progress. The guard's destructor is a
+    // fetch_sub plus an atomic notify, never a mutex, so it is safe on this
+    // RT path.
     CallbackQuiesce::ScopedCallback guard(self->m_quiesce);
     if (guard.closing()) {
         return;
@@ -514,7 +599,7 @@ void PipeWireAudioSink::onProcess(void *userdata)
         audioThreadNamed = true;
     }
 
-    auto *stream = self->m_pw->stream.get();
+    auto *stream = self->m_stream->handle.get();
     if (!stream) {
         return;
     }
@@ -530,13 +615,8 @@ void PipeWireAudioSink::onProcess(void *userdata)
         return;
     }
 
-    if (!self->mixer()) {
-        pw_stream_queue_buffer(stream, pwBuf);
-        return;
-    }
-    const int channels = self->mixer()->clock().currentChannels();
-    const int sampleRate = self->mixer()->clock().currentSampleRate();
-    if (channels <= 0 || sampleRate <= 0) {
+    const int channels = self->m_channels;
+    if (channels <= 0) {
         pw_stream_queue_buffer(stream, pwBuf);
         return;
     }
@@ -563,12 +643,7 @@ void PipeWireAudioSink::onProcess(void *userdata)
         return;
     }
 
-    const size_t maxSamples = requestedFrames * self->mixer()->clock().currentChannels();
-
-    if (maxSamples == 0) {
-        pw_stream_queue_buffer(stream, pwBuf);
-        return;
-    }
+    const size_t maxSamples = requestedFrames * static_cast<size_t>(channels);
 
     pw_time pwt{};
     qint64 latencyUs = 0;
@@ -579,11 +654,11 @@ void PipeWireAudioSink::onProcess(void *userdata)
     auto now = std::chrono::steady_clock::now().time_since_epoch();
     auto pts = std::chrono::duration_cast<std::chrono::microseconds>(now) + std::chrono::microseconds(latencyUs);
 
-    auto pcm = self->mixer()->render(maxSamples, pts);
+    auto pcm = self->renderer().render(maxSamples, pts);
 
     auto *dst = static_cast<float *>(spaBuf->datas[0].data);
 
-    if (pcm.empty() && self->mixer()->clock().tryClaimDrained()) {
+    if (pcm.empty() && self->renderer().tryClaimDrained()) {
         spaBuf->datas[0].chunk->size = 0;
         spaBuf->datas[0].chunk->flags = SPA_CHUNK_FLAG_EMPTY;
         pwBuf->size = 0;
@@ -592,7 +667,7 @@ void PipeWireAudioSink::onProcess(void *userdata)
         return;
     }
 
-    if (pcm.empty() && self->mixer()->clock().endOfStreamArmed()) {
+    if (pcm.empty() && self->renderer().endOfStreamArmed()) {
         // Post-EOS (drain armed or already claimed): queue an empty buffer
         // instead of a full quantum of silence. This keeps the stream
         // consuming (and eventually idle) without perpetually rendering
@@ -629,9 +704,55 @@ void PipeWireAudioSink::onProcess(void *userdata)
     pw_stream_queue_buffer(stream, pwBuf);
 }
 
-void PipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const pw_stream_control *control)
+void PipeWireAudioSinkStream::handleSinkInputVolumes(float avgGain)
 {
-    auto *self = static_cast<PipeWireAudioSink *>(userdata);
+    const bool isFirstReport = !m_firstVolumeReportSeen.exchange(true, std::memory_order_relaxed);
+    const bool neverSetGain = !m_gainSetByPipeline.load(std::memory_order_relaxed);
+
+    float cached = m_cachedGain.load(std::memory_order_relaxed);
+    if (qAbs(avgGain - cached) < 0.001f) {
+        return;
+    }
+    m_cachedGain.store(avgGain, std::memory_order_relaxed);
+
+    if (isFirstReport && neverSetGain) {
+        qCDebug(dragonMediaBackendAudio) << "PipeWire stream-restore volume via control_info, avgGain:" << avgGain;
+        QMetaObject::invokeMethod(
+            this,
+            [this, avgGain]() {
+                Q_EMIT externalVolumeRestored(avgGain);
+            },
+            Qt::QueuedConnection);
+    } else {
+        qCDebug(dragonMediaBackendAudio) << "PipeWire external volume change via control_info, avgGain:" << avgGain;
+        QMetaObject::invokeMethod(
+            this,
+            [this, avgGain]() {
+                Q_EMIT externalVolumeChanged(avgGain);
+            },
+            Qt::QueuedConnection);
+    }
+}
+
+void PipeWireAudioSinkStream::handleSinkInputMuted(bool muted)
+{
+    if (muted == m_cachedMuted.load(std::memory_order_relaxed)) {
+        return;
+    }
+    m_cachedMuted.store(muted, std::memory_order_relaxed);
+
+    qCDebug(dragonMediaBackendAudio) << "PipeWire external mute change, muted:" << muted;
+    QMetaObject::invokeMethod(
+        this,
+        [this, muted]() {
+            Q_EMIT externalMutedChanged(muted);
+        },
+        Qt::QueuedConnection);
+}
+
+void PipeWireAudioSinkStream::onControlInfo(void *userdata, uint32_t id, const pw_stream_control *control)
+{
+    auto *self = static_cast<PipeWireAudioSinkStream *>(userdata);
     if (!self || !control || control->n_values == 0) {
         return;
     }
@@ -643,54 +764,15 @@ void PipeWireAudioSink::onControlInfo(void *userdata, uint32_t id, const pw_stre
         for (uint32_t i = 0; i < control->n_values; ++i) {
             sum += control->values[i];
         }
-        const float avgGain = sum / static_cast<float>(control->n_values);
-
-        const bool isFirstReport = !self->m_firstVolumeReportSeen.exchange(true, std::memory_order_relaxed);
-        const bool neverSetGain = !self->m_gainSetByPipeline.load(std::memory_order_relaxed);
-
-        float cached = self->m_cachedGain.load(std::memory_order_relaxed);
-        if (qAbs(avgGain - cached) < 0.001f) {
-            return;
-        }
-        self->m_cachedGain.store(avgGain, std::memory_order_relaxed);
-
-        if (isFirstReport && neverSetGain) {
-            qCDebug(dragonMediaBackendAudio) << "PipeWire stream-restore volume via control_info, avgGain:" << avgGain;
-            QMetaObject::invokeMethod(
-                self,
-                [self, avgGain]() {
-                    Q_EMIT self->externalVolumeRestored(avgGain);
-                },
-                Qt::QueuedConnection);
-        } else {
-            qCDebug(dragonMediaBackendAudio) << "PipeWire external volume change via control_info, avgGain:" << avgGain;
-            QMetaObject::invokeMethod(
-                self,
-                [self, avgGain]() {
-                    Q_EMIT self->externalVolumeChanged(avgGain);
-                },
-                Qt::QueuedConnection);
-        }
+        self->handleSinkInputVolumes(sum / static_cast<float>(control->n_values));
     } else if (id == SPA_PROP_mute) {
-        const bool muted = control->values[0] >= 0.5f;
-        if (muted == self->m_cachedMuted.load(std::memory_order_relaxed)) {
-            return;
-        }
-        self->m_cachedMuted.store(muted, std::memory_order_relaxed);
-
-        qCDebug(dragonMediaBackendAudio) << "PipeWire external mute change via control_info, muted:" << muted;
-        QMetaObject::invokeMethod(
-            self,
-            [self, muted]() {
-                Q_EMIT self->externalMutedChanged(muted);
-            },
-            Qt::QueuedConnection);
+        self->handleSinkInputMuted(control->values[0] >= 0.5f);
     }
 }
 
-void PipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const spa_pod *param)
+void PipeWireAudioSinkStream::onParamChanged(void *userdata, uint32_t id, const spa_pod *param)
 {
-    auto *self = static_cast<PipeWireAudioSink *>(userdata);
+    auto *self = static_cast<PipeWireAudioSinkStream *>(userdata);
     if (!self || !param) {
         return;
     }
@@ -702,7 +784,7 @@ void PipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const spa_po
     }
 
     // SPA_PROP_volume is deliberately not handled here: stream gain is
-    // owned through channelVolumes (set in open() and observed in
+    // owned through channelVolumes (set at creation and observed in
     // onControlInfo). Handling volume here as well made the same external
     // change emit externalVolumeChanged twice, potentially with differing
     // values (mono volume vs averaged channel volumes).
@@ -710,27 +792,13 @@ void PipeWireAudioSink::onParamChanged(void *userdata, uint32_t id, const spa_po
     bool muted = false;
     if (const spa_pod_prop *prop = spa_pod_find_prop(param, nullptr, SPA_PROP_mute); prop != nullptr && spa_pod_get_bool(&prop->value, &muted) == 0) {
         qCDebug(dragonMediaBackendAudio) << "PipeWire param_changed SPA_PROP_mute:" << muted;
-
-        // The same external mute change also arrives via onControlInfo; the
-        // m_cachedMuted dedup makes only the first observation emit
-        // externalMutedChanged, whichever path delivers it.
-        if (muted == self->m_cachedMuted.load(std::memory_order_relaxed)) {
-            return;
-        }
-        self->m_cachedMuted.store(muted, std::memory_order_relaxed);
-
-        QMetaObject::invokeMethod(
-            self,
-            [self, muted]() {
-                Q_EMIT self->externalMutedChanged(muted);
-            },
-            Qt::QueuedConnection);
+        self->handleSinkInputMuted(muted);
     }
 }
 
-void PipeWireAudioSink::onStateChanged(void *userdata, enum pw_stream_state old, enum pw_stream_state state, const char *error)
+void PipeWireAudioSinkStream::onStateChanged(void *userdata, enum pw_stream_state old, enum pw_stream_state state, const char *error)
 {
-    auto *self = static_cast<PipeWireAudioSink *>(userdata);
+    auto *self = static_cast<PipeWireAudioSinkStream *>(userdata);
     qCDebug(dragonMediaBackendAudio) << "PipeWire stream state changed from" << pw_stream_state_as_string(old) << "to" << pw_stream_state_as_string(state);
     if (state == PW_STREAM_STATE_ERROR) {
         const QString errorMsg = error ? QString::fromUtf8(error) : QStringLiteral("PipeWire stream error");
@@ -744,13 +812,13 @@ void PipeWireAudioSink::onStateChanged(void *userdata, enum pw_stream_state old,
     }
 }
 
-void PipeWireAudioSink::onDrained(void *userdata)
+void PipeWireAudioSinkStream::onDrained(void *userdata)
 {
-    auto *self = static_cast<PipeWireAudioSink *>(userdata);
+    auto *self = static_cast<PipeWireAudioSinkStream *>(userdata);
     QMetaObject::invokeMethod(
         self,
         [self]() {
-            if (self->mixer() && self->mixer()->clock().takeDrainedEmission()) {
+            if (self->renderer().takeDrainedEmission()) {
                 Q_EMIT self->drained();
             }
         },

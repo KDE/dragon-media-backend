@@ -62,7 +62,6 @@ public:
     [[nodiscard]] bool isActive() const noexcept;
     [[nodiscard]] bool isWaitingForFirstSample() const noexcept;
     [[nodiscard]] std::int64_t totalFrames() const noexcept;
-    [[nodiscard]] std::int64_t positionFrames() const noexcept;
     [[nodiscard]] float currentGain() const noexcept;
     [[nodiscard]] GainRamp advanceChunk(std::int64_t chunkFrames) noexcept;
 
@@ -89,8 +88,6 @@ public:
 
     [[nodiscard]] bool isActive() const noexcept;
     [[nodiscard]] std::int64_t totalFrames() const noexcept;
-    [[nodiscard]] std::int64_t positionFrames() const noexcept;
-    [[nodiscard]] std::int64_t holdRemainingFrames() const noexcept;
     [[nodiscard]] std::size_t remainingBudgetFrames(bool holdEnvelope) const noexcept;
     [[nodiscard]] float currentGain() const noexcept;
     [[nodiscard]] GainRamp advanceChunk(std::int64_t chunkFrames, bool holdEnvelope = false) noexcept;
@@ -100,8 +97,5 @@ private:
     std::int64_t m_holdRemainingFrames = 0;
 };
 
-// Auto-vectorizing in-place linear gain ramp for primary or flush-tail buffer slices.
+// Auto-vectorizing in-place linear gain ramp for one voice's rendered PCM.
 DRAGONMEDIABACKEND_EXPORT void applyGainRamp(std::span<float> dst, int channels, GainRamp ramp) noexcept;
-
-// Auto-vectorizing zero-copy linear gain ramp + mix from src into dst.
-DRAGONMEDIABACKEND_EXPORT void mixWithGainRamp(std::span<float> dst, std::span<const float> src, int channels, GainRamp ramp) noexcept;

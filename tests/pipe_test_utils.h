@@ -41,7 +41,10 @@ inline size_t writeAll(Pipe<float>::Producer producer, std::span<const float> da
 }
 
 #include "fft/pcmblock.h"
-inline size_t writeBlocks(Pipe<PcmBlock>::Producer producer, std::span<const float> data)
+// Every block written carries valid in-band format metadata: the FFT
+// pipeline takes its sample rate and channel count from the blocks
+// themselves, so format-less blocks would be ignored.
+inline size_t writeBlocks(Pipe<PcmBlock>::Producer producer, std::span<const float> data, int sampleRate = 44100, int channels = 2)
 {
     size_t blocksNeeded = (data.size() + PcmBlock::MAX_SAMPLES - 1) / PcmBlock::MAX_SAMPLES;
     size_t written = producer.writeSomeWith(blocksNeeded, [&](std::span<PcmBlock> b1, std::span<PcmBlock> b2) {
@@ -52,6 +55,8 @@ inline size_t writeBlocks(Pipe<PcmBlock>::Producer producer, std::span<const flo
                 size_t toCopy = std::min(data.size() - srcOffset, PcmBlock::MAX_SAMPLES);
                 dst[i].count = toCopy;
                 dst[i].pts = std::chrono::microseconds(blockIdx * 1000);
+                dst[i].sampleRate = sampleRate;
+                dst[i].channels = channels;
                 for (size_t j = 0; j < toCopy; ++j, ++srcOffset) {
                     dst[i].samples[j] = data[srcOffset];
                 }
