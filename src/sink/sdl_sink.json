@@ -4,6 +4,7 @@
             {
                 "Name": "Ian Monroe",
                 "Name[ar]": "يان مونرو",
+                "Name[ca@valencia]": "Ian Monroe",
                 "Name[ca]": "Ian Monroe",
                 "Name[nl]": "Ian Monroe",
                 "Name[pt_BR]": "Ian Monroe",
@@ -19,6 +20,7 @@
         "Category": "Audio",
         "Description": "SDL3 audio output for Dragon Media Backend",
         "Description[ar]": "خرج صوت SDL3 لواجهة Dragon Media الخلفية",
+        "Description[ca@valencia]": "Eixida d'àudio de SDL3 per a Dragon Media Backend",
         "Description[ca]": "Sortida d'àudio del SDL3 per al Dragon Media Backend",
         "Description[nl]": "SDL3 audio-uitvoer voor Dragon-media Backend",
         "Description[pt_BR]": "Saída de áudio via SDL3 para o Dragon Media Backend",
@@ -33,6 +35,7 @@
         "Icon": "audio-card",
         "Name": "SDL3 Audio Sink",
         "Name[ar]": "مصبّ صوت SDL3",
+        "Name[ca@valencia]": "Conducte d'àudio de SDL3",
         "Name[ca]": "Conducte d'àudio del SDL3",
         "Name[nl]": "SDL3 audio-uitvoer",
         "Name[pt_BR]": "Saída de áudio do SDL3",

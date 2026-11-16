@@ -4,6 +4,7 @@
             {
                 "Name": "Ian Monroe",
                 "Name[ar]": "يان مونرو",
+                "Name[ca@valencia]": "Ian Monroe",
                 "Name[ca]": "Ian Monroe",
                 "Name[nl]": "Ian Monroe",
                 "Name[pt_BR]": "Ian Monroe",
@@ -19,6 +20,7 @@
         "Category": "Audio",
         "Description": "PipeWire audio output for Dragon Media Backend",
         "Description[ar]": "خرج صوت PipeWire لواجهة Dragon Media الخلفية",
+        "Description[ca@valencia]": "Eixida d'àudio de PipeWire per a Dragon Media Backend",
         "Description[ca]": "Sortida d'àudio del PipeWire per al Dragon Media Backend",
         "Description[nl]": "PipeWire audio-uitvoer voor Dragon-media Backend",
         "Description[pt_BR]": "Saída de áudio via PipeWire para o Dragon Media Backend",
@@ -33,6 +35,7 @@
         "Icon": "audio-card",
         "Name": "PipeWire Audio Sink",
         "Name[ar]": "مصبّ صوت PipeWire",
+        "Name[ca@valencia]": "Conducte d'àudio de PipeWire",
         "Name[ca]": "Conducte d'àudio del PipeWire",
         "Name[nl]": "PipeWire-audio-uitvoer",
         "Name[pt_BR]": "Saída de áudio do PipeWire",
