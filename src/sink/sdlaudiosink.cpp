@@ -148,7 +148,8 @@ void SdlAudioSink::closeDeviceLocked()
     }
 }
 
-std::expected<std::unique_ptr<AudioSinkStream>, QString> SdlAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer)
+std::expected<std::unique_ptr<AudioSinkStream>, QString>
+SdlAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit)
 {
     qCDebug(dragonMediaBackendAudio) << "SDL createStream" << sampleRate << channels;
 
@@ -177,6 +178,9 @@ std::expected<std::unique_ptr<AudioSinkStream>, QString> SdlAudioSink::createStr
     }
 
     auto stream = std::make_unique<SdlAudioSinkStream>(*this, rawStream, m_deviceId, sampleRate, channels, renderer);
+    stream->m_gain = volumeInit.linearGain.value_or(1.0f);
+    stream->m_muted = volumeInit.muted;
+    SDL_SetAudioStreamGain(rawStream, volumeInit.muted ? 0.0f : volumeInit.linearGain.value_or(1.0f));
 
     if (!SDL_BindAudioStreams(m_deviceId, &rawStream, 1)) {
         qCCritical(dragonMediaBackendAudio) << "SDL_BindAudioStreams failed:" << SDL_GetError();
@@ -205,12 +209,18 @@ std::expected<std::unique_ptr<AudioSinkStream>, QString> SdlAudioSink::createStr
     return stream;
 }
 
-void SdlAudioSink::streamClosed(SdlAudioSinkStream *stream, bool quiesced)
+void SdlAudioSink::streamClosed(SdlAudioSinkStream *stream, bool quiesced, bool wasPaused)
 {
     std::lock_guard lock(m_mainMutex);
     Q_UNUSED(stream);
     if (m_liveStreams > 0) {
         --m_liveStreams;
+    }
+    if (wasPaused && m_pausedStreams > 0) {
+        --m_pausedStreams;
+    }
+    if (m_liveStreams == 0) {
+        m_pausedStreams = 0;
     }
     if (!quiesced) {
         // The stuck callback may still dereference the native stream (and
@@ -220,6 +230,8 @@ void SdlAudioSink::streamClosed(SdlAudioSinkStream *stream, bool quiesced)
     }
     if (m_liveStreams == 0 && m_deviceId != 0) {
         closeDeviceLocked();
+    } else if (m_deviceId != 0 && m_pausedStreams >= m_liveStreams) {
+        SDL_PauseAudioDevice(m_deviceId);
     }
 }
 
@@ -230,7 +242,7 @@ void SdlAudioSink::streamPauseChanged(bool paused)
         return;
     }
     if (paused) {
-        if (++m_pausedStreams == m_liveStreams) {
+        if (++m_pausedStreams >= m_liveStreams && m_liveStreams > 0) {
             SDL_PauseAudioDevice(m_deviceId);
         }
     } else {
@@ -269,14 +281,16 @@ SdlAudioSinkStream::SdlAudioSinkStream(SdlAudioSink &sink,
 
 void SdlAudioSinkStream::pause()
 {
-    m_paused.store(true, std::memory_order_release);
-    m_sink.streamPauseChanged(true);
+    if (!m_paused.exchange(true, std::memory_order_acq_rel)) {
+        m_sink.streamPauseChanged(true);
+    }
 }
 
 void SdlAudioSinkStream::resume()
 {
-    m_paused.store(false, std::memory_order_release);
-    m_sink.streamPauseChanged(false);
+    if (m_paused.exchange(false, std::memory_order_acq_rel)) {
+        m_sink.streamPauseChanged(false);
+    }
 }
 
 bool SdlAudioSinkStream::isPaused() const
@@ -348,6 +362,8 @@ std::optional<std::chrono::microseconds> SdlAudioSinkStream::audioBufferDuration
 
 bool SdlAudioSinkStream::closeStream()
 {
+    const bool wasPaused = m_paused.exchange(false, std::memory_order_acq_rel);
+
     // Quiesce handshake with the get callback: the guard's destructor is a
     // fetch_sub plus an atomic notify, never a mutex, so it is safe on the
     // RT path. While closing, callbacks bail out before touching anything,
@@ -360,10 +376,9 @@ bool SdlAudioSinkStream::closeStream()
         // Deliberately leak the stream: it stays bound to the device, which
         // the sink also keeps alive, so a still-running callback can keep
         // dereferencing valid objects.
-        m_sink.streamClosed(this, false);
+        m_sink.streamClosed(this, false, wasPaused);
         return false;
     }
-    m_quiesce.endClose();
 
     {
         std::lock_guard lock(m_sink.m_mainMutex);
@@ -376,7 +391,7 @@ bool SdlAudioSinkStream::closeStream()
 
     // Closing the last stream closes the device, which flushes the disk
     // driver's capture file used by the end-to-end tests.
-    m_sink.streamClosed(this, true);
+    m_sink.streamClosed(this, true, wasPaused);
     return true;
 }
 

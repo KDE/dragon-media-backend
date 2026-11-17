@@ -50,6 +50,10 @@ public:
     compat::generator<DragonMediaBackend::DecodeEvent> decodeLoop(std::stop_token st);
 
     void requestSeek(std::chrono::milliseconds position);
+    [[nodiscard]] bool hasPendingSeek() const noexcept
+    {
+        return m_seekRequested.load(std::memory_order_acquire);
+    }
 
     bool hasFatalError() const;
 

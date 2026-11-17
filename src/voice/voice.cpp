@@ -19,22 +19,23 @@ Voice::Voice(Pipe<float> *pipe, std::uint64_t generation, Notifiers notifiers)
     , m_channel(pipe)
     , m_generation(generation)
     , m_notifiers(std::move(notifiers))
+    , m_crossfadeLink(std::make_shared<CrossfadeLink>())
 {
     // The link starts dormant: no outgoing voice is holding or fading. It
     // becomes live when this voice is the incoming of an armed crossfade
     // (demoteToFading resets it on the outgoing voice).
-    m_crossfadeLink.incomingStarted.store(true, std::memory_order_relaxed);
-    m_crossfadeLink.outgoingActive.store(false, std::memory_order_relaxed);
+    m_crossfadeLink->incomingStarted.store(true, std::memory_order_relaxed);
+    m_crossfadeLink->outgoingActive.store(false, std::memory_order_relaxed);
 
     StreamClock::EventHandlers handlers;
-    handlers.trackStarted = [this](std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration) {
+    handlers.trackStarted = [this](std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration, std::uint64_t epoch) {
         if (m_notifiers.trackStarted && m_role.load(std::memory_order_relaxed) == Role::Primary) {
-            m_notifiers.trackStarted(trackId, duration);
+            m_notifiers.trackStarted(m_generation.load(std::memory_order_acquire), trackId, duration, epoch);
         }
     };
-    handlers.formatChangeRequired = [this](int sampleRate, int channels) {
+    handlers.formatChangeRequired = [this](int sampleRate, int channels, std::uint64_t epoch) {
         if (m_notifiers.formatChangeRequired && m_role.load(std::memory_order_relaxed) == Role::Primary) {
-            m_notifiers.formatChangeRequired(sampleRate, channels);
+            m_notifiers.formatChangeRequired(m_generation.load(std::memory_order_acquire), sampleRate, channels, epoch);
         }
     };
     m_clock.setEventHandlers(std::move(handlers));
@@ -42,12 +43,6 @@ Voice::Voice(Pipe<float> *pipe, std::uint64_t generation, Notifiers notifiers)
 
 Voice::~Voice()
 {
-    // Mandatory destruction order: detach the FFT tap (waiting for in-flight
-    // writers) first; the stream (declared last) is then destroyed —
-    // quiescing its callback — before the channel and the clock. If callback
-    // quiescence failed inside the backend, the stream and everything behind
-    // it are leaked into the backend's zombie safeguard together with this
-    // whole voice (the pipeline never frees the Voice object in that case).
     setFftPipe(nullptr);
 
     // Close the backend stream and quiesce its audio callback while this
@@ -117,35 +112,20 @@ void Voice::installStream(std::unique_ptr<AudioSinkStream> stream, std::chrono::
 
 bool Voice::closeStream()
 {
-    if (!m_stream) {
-        return true;
-    }
-    if (!m_stream->close()) {
-        // Zombie safeguard: the backend leaked its native stream and its
-        // callback may still be running. Release ownership here too so the
-        // voice's destructor cannot free the stream object under it; the
-        // pipeline leaks this whole voice instead.
+    if (m_stream && !m_stream->close()) {
         std::ignore = m_stream.release();
+        m_poisoned = true;
         return false;
     }
     m_stream.reset();
-    return true;
+    return !m_poisoned;
 }
 
 std::uint64_t Voice::stageFlush(std::chrono::milliseconds fadeIn)
 {
     const auto epoch = m_clock.reserveEpoch();
-
-    // Even/odd seqlock protocol (single writer on Qt main thread, single
-    // reader on audio thread): bump to odd before writing the payload, then
-    // arm the switch and bump to even so the reader either sees a consistent
-    // pair or retries without a C++ data race.
-    const auto seq = m_flushSeq.load(std::memory_order_relaxed);
-    m_flushSeq.store(seq + 1, std::memory_order_release);
-    m_flushEpoch.store(epoch, std::memory_order_release);
-    m_flushFadeInMs.store(fadeIn.count(), std::memory_order_release);
     m_clock.armSwitch();
-    m_flushSeq.store(seq + 2, std::memory_order_release);
+    m_stagedFlush.store(epoch, fadeIn);
     return epoch;
 }
 
@@ -158,21 +138,21 @@ std::uint64_t Voice::runFlushQuiesced(std::chrono::milliseconds fadeIn)
 
 bool Voice::isFlushPending() const noexcept
 {
-    return m_flushSeq.load(std::memory_order_acquire) != m_flushConsumed.load(std::memory_order_acquire);
+    return m_stagedFlush.isPending();
 }
 
 void Voice::resetForTeardown()
 {
     // Discard any flush staged for a callback that will never run, and the
     // pending fade-in of a stream that was never opened.
-    m_flushConsumed.store(m_flushSeq.load(std::memory_order_acquire), std::memory_order_release);
+    m_stagedFlush.clear();
     m_pendingFadeIn = std::chrono::milliseconds{0};
     m_channel.resetFadeIn();
     m_clock.resetWrittenCounter();
     m_clock.reset();
 }
 
-void Voice::demoteToFading(CrossfadeLink *link, std::chrono::milliseconds fadeOut, bool incomingHasFadeIn)
+void Voice::demoteToFading(std::shared_ptr<CrossfadeLink> link, std::chrono::milliseconds fadeOut, bool incomingHasFadeIn)
 {
     if (link == nullptr) {
         return;
@@ -190,7 +170,9 @@ void Voice::demoteToFading(CrossfadeLink *link, std::chrono::milliseconds fadeOu
     request.incomingHasFadeIn = incomingHasFadeIn;
     m_fadeOutCommand = request;
 
-    m_demotedLink.store(link, std::memory_order_release);
+    CrossfadeLink *const rawLink = link.get();
+    m_demotedLinkOwner = std::move(link);
+    m_demotedLink.store(rawLink, std::memory_order_release);
     m_fadeOutRequest.store(&m_fadeOutCommand, std::memory_order_release);
     m_role.store(Role::Fading, std::memory_order_release);
 }
@@ -198,9 +180,8 @@ void Voice::demoteToFading(CrossfadeLink *link, std::chrono::milliseconds fadeOu
 std::span<const float> Voice::render(std::size_t maxSamples, std::chrono::microseconds estimatedPts)
 {
     const Role role = m_role.load(std::memory_order_acquire);
-    if (role == Role::Primary) {
-        consumePendingFlush();
-    } else {
+    consumePendingFlush(role == Role::Primary);
+    if (role == Role::Fading) {
         consumeFadeOutRequest();
     }
 
@@ -211,7 +192,14 @@ std::span<const float> Voice::render(std::size_t maxSamples, std::chrono::micros
     if (budget == 0) {
         return {};
     }
-    if (m_clock.advanceBoundaries(false, &budget) == StreamClock::BoundaryAdvance::FormatStall || budget == 0) {
+    if (m_clock.advanceBoundaries(false, &budget) == StreamClock::BoundaryAdvance::FormatStall) {
+        if (role == Role::Fading) {
+            m_channel.configureFadeOut({});
+            checkFadingFinished();
+        }
+        return {};
+    }
+    if (budget == 0) {
         return {};
     }
 
@@ -234,7 +222,7 @@ std::span<const float> Voice::render(std::size_t maxSamples, std::chrono::micros
         if (role == Role::Primary) {
             m_channel.applyFadeIn(renderSpan(read), read, channels);
             // First non-empty render: the outgoing slow-load hold may end.
-            m_crossfadeLink.incomingStarted.store(true, std::memory_order_release);
+            m_crossfadeLink->incomingStarted.store(true, std::memory_order_release);
             forwardToFft(renderSpan(read).first(read), estimatedPts);
         } else {
             m_channel.applyFadeOut(renderSpan(read), read, channels, holdForSlowLoad);
@@ -293,42 +281,18 @@ void Voice::preAllocate(std::size_t maxSamples)
     m_renderBuffer.resize(allocation);
 }
 
-void Voice::consumePendingFlush()
+void Voice::consumePendingFlush(bool applyFadeIn)
 {
-    const std::uint64_t consumed = m_flushConsumed.load(std::memory_order_relaxed);
-    std::uint64_t seq = m_flushSeq.load(std::memory_order_acquire);
-    if (seq == consumed) {
-        return;
-    }
-
-    // Read the command under the single-writer even/odd seqlock; a write in
-    // progress (odd seq) or superseded flush (seq changed) is retried.
-    for (int attempts = 0; attempts < 4; ++attempts) {
-        if ((seq & 1u) != 0) {
-            seq = m_flushSeq.load(std::memory_order_acquire);
-            continue;
-        }
-        if (seq == consumed) {
-            return;
-        }
-        const std::uint64_t epoch = m_flushEpoch.load(std::memory_order_acquire);
-        const std::int64_t fadeInMs = m_flushFadeInMs.load(std::memory_order_acquire);
-        const std::uint64_t seqAfter = m_flushSeq.load(std::memory_order_acquire);
-        if (seqAfter != seq) {
-            seq = seqAfter;
-            continue;
-        }
-        consumeFlushBody(epoch, std::chrono::milliseconds{fadeInMs});
-        m_flushConsumed.store(seq, std::memory_order_release);
-        return;
+    if (const auto cmd = m_stagedFlush.take()) {
+        consumeFlushBody(cmd->epoch, cmd->fadeIn, applyFadeIn);
     }
 }
 
-void Voice::consumeFlushBody(std::uint64_t epoch, std::chrono::milliseconds fadeIn)
+void Voice::consumeFlushBody(std::uint64_t epoch, std::chrono::milliseconds fadeIn, bool applyFadeIn)
 {
     m_channel.drainPipe();
     m_channel.resetFadeIn();
-    if (fadeIn > 0ms) {
+    if (applyFadeIn && fadeIn > 0ms) {
         m_channel.configureFadeIn(fadeIn, m_clock.currentSampleRate());
     }
 
@@ -364,7 +328,7 @@ void Voice::noteUnderrunIfUnexpected()
     const bool inInitialFadeLoad = m_channel.isWaitingForFirstSample() && m_clock.streamSamplesRead() == 0;
     // The primary (incoming) voice owns the link; an active outgoing voice
     // suppresses loading-starvation underruns while it holds or fades.
-    const bool outgoingStillActive = m_crossfadeLink.outgoingActive.load(std::memory_order_acquire);
+    const bool outgoingStillActive = m_crossfadeLink->outgoingActive.load(std::memory_order_acquire);
     if (!m_clock.endOfStreamPending() && !outgoingStillActive && !inInitialFadeLoad) {
         m_clock.noteUnderrun();
     }
@@ -378,14 +342,14 @@ void Voice::checkFadingFinished()
 
     const bool pipeDrained = m_channel.producerDone() && m_channel.pipe() != nullptr && m_channel.pipe()->consumer().ready() == 0;
     if (!m_channel.isFadeOutActive() || pipeDrained) {
-        if (auto *link = m_demotedLink.load(std::memory_order_relaxed)) {
+        if (auto *link = m_demotedLink.load(std::memory_order_acquire)) {
             link->outgoingActive.store(false, std::memory_order_release);
         }
         if (m_fadingFinishedPosted.exchange(true, std::memory_order_acq_rel)) {
             return;
         }
         if (m_notifiers.fadingFinished) {
-            m_notifiers.fadingFinished();
+            m_notifiers.fadingFinished(m_generation.load(std::memory_order_acquire));
         }
     }
 }

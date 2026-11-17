@@ -68,12 +68,10 @@ void TestSinkBackends::testQuiesceIdleByDefault()
     QVERIFY(!quiesce.isClosing());
     QVERIFY(quiesce.waitForIdle(std::chrono::milliseconds(100)));
 
-    // A full open/close cycle without any callback in flight.
     quiesce.beginClose();
     QVERIFY(quiesce.isClosing());
     QVERIFY(quiesce.waitForIdle(std::chrono::milliseconds(100)));
-    quiesce.endClose();
-    QVERIFY(!quiesce.isClosing());
+    QVERIFY(quiesce.isClosing());
 }
 
 void TestSinkBackends::testQuiesceCallbackBailsWhileClosing()
@@ -99,7 +97,6 @@ void TestSinkBackends::testQuiesceCallbackBailsWhileClosing()
     // Both guards destroyed: close() may proceed.
     QVERIFY(quiesce.isIdle());
     QVERIFY(quiesce.waitForIdle(std::chrono::milliseconds(100)));
-    quiesce.endClose();
 }
 
 void TestSinkBackends::testQuiesceWaitTimesOutWithCallbackInFlight()
@@ -121,7 +118,6 @@ void TestSinkBackends::testQuiesceWaitTimesOutWithCallbackInFlight()
 
     // Once the in-flight callback exits, the wait succeeds promptly.
     QVERIFY(quiesce.waitForIdle(std::chrono::milliseconds(1000)));
-    quiesce.endClose();
 }
 
 void TestSinkBackends::testQuiesceWaitsForConcurrentCallbacks()
@@ -158,7 +154,6 @@ void TestSinkBackends::testQuiesceWaitsForConcurrentCallbacks()
 
     quiesce.beginClose();
     QVERIFY(quiesce.waitForIdle(std::chrono::milliseconds(500)));
-    quiesce.endClose();
 
     stop.store(true, std::memory_order_relaxed);
     for (auto &t : threads) {
@@ -207,8 +202,6 @@ void TestSinkBackends::testQuiesceWakeupOnCallbackExit()
     QVERIFY(quiesced.load(std::memory_order_acquire));
     // Woken well before the 3s timeout: the callback exited ~50ms in.
     QVERIFY2(timer.elapsed() < 2500, "close() wait should be woken by the callback exit, not by its timeout");
-
-    quiesce.endClose();
 }
 
 void TestSinkBackends::testNullSinkStillPasses()
@@ -227,7 +220,7 @@ void TestSinkBackends::testNullSinkStillPasses()
     pipeline.pause();
     pipeline.resume();
     pipeline.clearStream();
-    pipeline.close();
+    QVERIFY(pipeline.close());
 }
 
 void TestSinkBackends::testSdlLifecycleWithDummyDriver()
@@ -273,7 +266,7 @@ void TestSinkBackends::testSdlLifecycleWithDummyDriver()
     QVERIFY(pipeline->isDeviceOpen());
     QVERIFY(pipeline->hasFormat(48000, 2));
 
-    pipeline->close();
+    QVERIFY(pipeline->close());
     QVERIFY(!pipeline->isDeviceOpen());
 }
 

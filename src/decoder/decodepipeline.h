@@ -48,6 +48,7 @@ public:
 
     void stop();
     bool isActive() const;
+    bool isFinished() const;
     bool hasFatalError() const;
 
     // Seeks the active session's decoder to the given position. Waits for an

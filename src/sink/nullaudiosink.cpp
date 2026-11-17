@@ -34,11 +34,13 @@ bool NullAudioSink::probe()
     return true;
 }
 
-std::expected<std::unique_ptr<AudioSinkStream>, QString> NullAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer)
+std::expected<std::unique_ptr<AudioSinkStream>, QString>
+NullAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit)
 {
     Q_UNUSED(sampleRate);
     Q_UNUSED(channels);
     Q_UNUSED(renderer);
+    Q_UNUSED(volumeInit);
     // Report the broken install on every stream-creation attempt.
     return std::unexpected(nullDeviceErrorMessage());
 }

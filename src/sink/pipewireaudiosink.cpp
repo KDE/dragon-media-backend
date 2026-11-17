@@ -155,6 +155,12 @@ PipeWireAudioSink::PipeWireAudioSink(QObject *parent, const QVariantList &args)
 
 PipeWireAudioSink::~PipeWireAudioSink()
 {
+    if (m_poisoned) {
+        // A poisoned sink deliberately leaks its loop/context/core so a stuck
+        // callback can never dereference destroyed PipeWire objects.
+        std::ignore = m_pw.release();
+        return;
+    }
     disconnect();
     // No pw_deinit() here: other PipeWire users in this process (other
     // sinks, other libraries) must not have the global library state
@@ -198,11 +204,11 @@ std::size_t PipeWireAudioSink::preferredCallbackSamples(int sampleRate, int chan
 
 bool PipeWireAudioSink::ensureConnected()
 {
-    if (m_pw->loop && m_pw->context && m_pw->core) {
-        return true;
-    }
     if (m_poisoned) {
         return false;
+    }
+    if (m_pw->loop && m_pw->context && m_pw->core) {
+        return true;
     }
 
     PwThreadLoopPtr loop(pw_thread_loop_new("dragon-pw", nullptr));
@@ -272,7 +278,8 @@ void PipeWireAudioSink::unregisterStream(PipeWireAudioSinkStream *stream)
     std::erase(m_pw->streams, stream);
 }
 
-std::expected<std::unique_ptr<AudioSinkStream>, QString> PipeWireAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer)
+std::expected<std::unique_ptr<AudioSinkStream>, QString>
+PipeWireAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit)
 {
     qCDebug(dragonMediaBackendAudio) << "PipeWire createStream" << sampleRate << channels;
 
@@ -281,7 +288,7 @@ std::expected<std::unique_ptr<AudioSinkStream>, QString> PipeWireAudioSink::crea
     }
 
     auto stream = std::make_unique<PipeWireAudioSinkStream>(*this, sampleRate, channels, renderer);
-    if (!stream->connectToCore()) {
+    if (!stream->connectToCore(volumeInit)) {
         return std::unexpected(i18n("PipeWire: failed to connect stream"));
     }
     registerStream(stream.get());
@@ -327,8 +334,15 @@ PipeWireAudioSinkStream::~PipeWireAudioSinkStream()
     std::ignore = close();
 }
 
-bool PipeWireAudioSinkStream::connectToCore()
+bool PipeWireAudioSinkStream::connectToCore(const StreamVolumeInit &volumeInit)
 {
+    m_firstVolumeReportSeen.store(false, std::memory_order_relaxed);
+    m_gainSetByPipeline.store(volumeInit.linearGain.has_value(), std::memory_order_relaxed);
+    if (volumeInit.linearGain) {
+        m_cachedGain.store(*volumeInit.linearGain, std::memory_order_relaxed);
+    }
+    m_cachedMuted.store(volumeInit.muted, std::memory_order_relaxed);
+
     auto *state = m_sink.m_pw.get();
     PwPropertiesPtr props(pw_properties_new(PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_MEDIA_ROLE, "Music", nullptr));
 
@@ -398,24 +412,31 @@ bool PipeWireAudioSinkStream::connectToCore()
 
     constexpr auto streamFlags = static_cast<pw_stream_flags>(PW_STREAM_FLAG_AUTOCONNECT | PW_STREAM_FLAG_MAP_BUFFERS | PW_STREAM_FLAG_RT_PROCESS);
 
+    // Mark open before pw_stream_connect() / initial control setup so early
+    // callbacks observe an open stream cleanly; reset on failure below.
+    m_paused.store(false, std::memory_order_release);
+    m_open.store(true, std::memory_order_seq_cst);
+
     {
         // pw_stream_connect() requires the thread-loop lock: calling it from
         // an unlocked context corrupts the client-server protocol.
         PwThreadLoopLock lock(state->loop.get());
         int res = pw_stream_connect(m_stream->handle.get(), PW_DIRECTION_OUTPUT, PW_ID_ANY, streamFlags, &params, 1);
         if (res != 0) {
+            m_open.store(false, std::memory_order_seq_cst);
             qCCritical(dragonMediaBackendAudio) << "PipeWire: failed to connect stream:" << res;
             return false;
         }
 
-        // Set initial channel volumes under the same lock
-        const auto ch = static_cast<uint32_t>(m_channels);
-        m_volumesScratch.assign(ch, m_cachedGain.load(std::memory_order_relaxed));
-        pw_stream_set_control(m_stream->handle.get(), SPA_PROP_channelVolumes, ch, m_volumesScratch.data(), 0);
+        if (volumeInit.linearGain) {
+            setChannelVolumes(*volumeInit.linearGain);
+        }
+        if (volumeInit.muted) {
+            float muteVal = 1.0f;
+            pw_stream_set_control(m_stream->handle.get(), SPA_PROP_mute, 1, &muteVal, 0);
+        }
     }
 
-    m_paused.store(false, std::memory_order_release);
-    m_open.store(true, std::memory_order_seq_cst);
     return true;
 }
 
@@ -428,16 +449,6 @@ bool PipeWireAudioSinkStream::closeStream()
         return true;
     }
 
-    {
-        PwThreadLoopLock lock(m_sink.m_pw->loop.get());
-        pw_stream_set_active(m_stream->handle.get(), false);
-        pw_stream_disconnect(m_stream->handle.get());
-    }
-
-    // Wait for onProcess (which runs on the pw data thread, outside the
-    // loop lock) to finish BEFORE destroying the stream. New onProcess
-    // invocations bail out at their entry while close is in progress, so
-    // this is bounded.
     m_quiesce.beginClose();
     const bool quiesced = m_quiesce.waitForIdle(500ms);
     if (!quiesced) {
@@ -450,10 +461,12 @@ bool PipeWireAudioSinkStream::closeStream()
         std::ignore = m_stream.release();
         return false;
     }
-    m_quiesce.endClose();
 
     {
         PwThreadLoopLock lock(m_sink.m_pw->loop.get());
+        pw_stream_set_active(m_stream->handle.get(), false);
+        spa_hook_remove(&m_streamListener);
+        pw_stream_disconnect(m_stream->handle.get());
         m_stream->handle.reset();
     }
     m_sink.unregisterStream(this);
@@ -757,6 +770,11 @@ void PipeWireAudioSinkStream::onControlInfo(void *userdata, uint32_t id, const p
         return;
     }
 
+    CallbackQuiesce::ScopedCallback guard(self->m_quiesce);
+    if (guard.closing() || !self->m_open.load(std::memory_order_acquire)) {
+        return;
+    }
+
     qCDebug(dragonMediaBackendAudio) << "PipeWire control_info id:" << id;
 
     if (id == SPA_PROP_channelVolumes) {
@@ -774,6 +792,11 @@ void PipeWireAudioSinkStream::onParamChanged(void *userdata, uint32_t id, const 
 {
     auto *self = static_cast<PipeWireAudioSinkStream *>(userdata);
     if (!self || !param) {
+        return;
+    }
+
+    CallbackQuiesce::ScopedCallback guard(self->m_quiesce);
+    if (guard.closing() || !self->m_open.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -799,14 +822,25 @@ void PipeWireAudioSinkStream::onParamChanged(void *userdata, uint32_t id, const 
 void PipeWireAudioSinkStream::onStateChanged(void *userdata, enum pw_stream_state old, enum pw_stream_state state, const char *error)
 {
     auto *self = static_cast<PipeWireAudioSinkStream *>(userdata);
+    if (!self) {
+        return;
+    }
     qCDebug(dragonMediaBackendAudio) << "PipeWire stream state changed from" << pw_stream_state_as_string(old) << "to" << pw_stream_state_as_string(state);
+
+    CallbackQuiesce::ScopedCallback guard(self->m_quiesce);
+    if (guard.closing() || !self->m_open.load(std::memory_order_acquire)) {
+        return;
+    }
+
     if (state == PW_STREAM_STATE_ERROR) {
         const QString errorMsg = error ? QString::fromUtf8(error) : QStringLiteral("PipeWire stream error");
         qCCritical(dragonMediaBackendAudio) << "PipeWire stream entered ERROR state:" << errorMsg;
         QMetaObject::invokeMethod(
             self,
             [self, errorMsg]() {
-                Q_EMIT self->errorOccurred(errorMsg);
+                if (self->m_open.load(std::memory_order_acquire)) {
+                    Q_EMIT self->errorOccurred(errorMsg);
+                }
             },
             Qt::QueuedConnection);
     }
@@ -815,10 +849,19 @@ void PipeWireAudioSinkStream::onStateChanged(void *userdata, enum pw_stream_stat
 void PipeWireAudioSinkStream::onDrained(void *userdata)
 {
     auto *self = static_cast<PipeWireAudioSinkStream *>(userdata);
+    if (!self) {
+        return;
+    }
+
+    CallbackQuiesce::ScopedCallback guard(self->m_quiesce);
+    if (guard.closing() || !self->m_open.load(std::memory_order_acquire)) {
+        return;
+    }
+
     QMetaObject::invokeMethod(
         self,
         [self]() {
-            if (self->renderer().takeDrainedEmission()) {
+            if (self->m_open.load(std::memory_order_acquire) && self->renderer().takeDrainedEmission()) {
                 Q_EMIT self->drained();
             }
         },

@@ -40,7 +40,7 @@ public:
     }
 
     [[nodiscard]] std::expected<std::unique_ptr<AudioSinkStream>, QString>
-    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer) override;
+    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit = {}) override;
 
     void setStreamName(const QString &name) override;
 
@@ -86,10 +86,12 @@ private:
 class FakeAudioSinkStream : public AudioSinkStream
 {
 public:
-    FakeAudioSinkStream(FakeAudioSink &sink, int sampleRate, int channels, AudioSinkStreamRenderer &renderer)
+    FakeAudioSinkStream(FakeAudioSink &sink, int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit = {})
         : AudioSinkStream(renderer)
+        , initialVolumeInit(volumeInit)
         , sampleRate(sampleRate)
         , channels(channels)
+        , lastGain(volumeInit.linearGain.value_or(1.0f))
         , m_sink(sink)
     {
         sink.streamRegistered(this);
@@ -104,6 +106,7 @@ public:
     int pauseCalls = 0;
     int resumeCalls = 0;
     int clearCalls = 0;
+    StreamVolumeInit initialVolumeInit;
     QString recordedName;
     QList<float> gainHistory;
     QList<bool> muteHistory;
@@ -160,6 +163,10 @@ public:
         }
         return renderer().render(maxSamples, pts);
     }
+    [[nodiscard]] AudioSinkStreamRenderer &streamRenderer() const noexcept
+    {
+        return renderer();
+    }
 
     void emitDrained()
     {
@@ -185,26 +192,28 @@ public:
     qint64 queuedSamples = 0;
     int bufferFrames = 0;
     float lastGain = 1.0f;
+    bool failClose = false;
 
 private:
     [[nodiscard]] bool closeStream() override
     {
         closed = true;
         m_sink.streamUnregistered(this);
-        return true;
+        return !failClose;
     }
 
     FakeAudioSink &m_sink;
     bool m_paused = false;
 };
 
-inline std::expected<std::unique_ptr<AudioSinkStream>, QString> FakeAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer)
+inline std::expected<std::unique_ptr<AudioSinkStream>, QString>
+FakeAudioSink::createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit)
 {
     ++m_createAttempts;
     if (m_failStreamsFrom >= 0 && m_createAttempts > m_failStreamsFrom) {
         return std::unexpected(QStringLiteral("injected stream creation failure"));
     }
-    auto stream = std::make_unique<FakeAudioSinkStream>(*this, sampleRate, channels, renderer);
+    auto stream = std::make_unique<FakeAudioSinkStream>(*this, sampleRate, channels, renderer, volumeInit);
     m_createdStreams.push_back(stream.get());
     return stream;
 }

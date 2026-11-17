@@ -132,7 +132,7 @@ void TestSinkNull::testNullSinkMethods()
     // Pause / resume / close
     pipeline.pause();
     pipeline.resume();
-    pipeline.close();
+    QVERIFY(pipeline.close());
     pipeline.clearStream();
 }
 

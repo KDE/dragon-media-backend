@@ -214,6 +214,15 @@ void TestPlayerStreamName::testLiveUpdateSemantics()
 
     if (!viaSdl) {
         QVERIFY(helper.setSourceAndWait(u"gs-16b-2c-44100hz.ogg"_s));
+        QCOMPARE(player.streamName(), QString());
+        QVERIFY2(QTest::qWaitFor(
+                     [&serverProps]() {
+                         return !serverProps().has_value();
+                     },
+                     5000),
+                 "setSource() to a new track should close the previous stream");
+
+        QVERIFY(helper.playAndWait());
         QVERIFY2(QTest::qWaitFor(
                      [&serverProp, &uniqueTag]() {
                          return serverProp(u"media.name"_s) == uniqueTag;

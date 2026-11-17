@@ -6,6 +6,7 @@
 #pragma once
 
 #include "dragonmediabackend_export.h"
+#include "endofstreammarker.h"
 #include "producerstate.h"
 
 #include <QtGlobal>
@@ -44,8 +45,8 @@ class DRAGONMEDIABACKEND_EXPORT StreamClock
 public:
     // Invoked on the audio thread
     struct EventHandlers {
-        std::function<void(std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration)> trackStarted;
-        std::function<void(int sampleRate, int channels)> formatChangeRequired;
+        std::function<void(std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration, std::uint64_t epoch)> trackStarted;
+        std::function<void(int sampleRate, int channels, std::uint64_t epoch)> formatChangeRequired;
     };
 
     StreamClock();
@@ -116,11 +117,11 @@ public:
     [[nodiscard]] bool hasFormat(int sampleRate, int channels) const;
     [[nodiscard]] int currentSampleRate() const
     {
-        return m_sampleRate.load(std::memory_order_relaxed);
+        return m_sampleRate.load(std::memory_order_acquire);
     }
     [[nodiscard]] int currentChannels() const
     {
-        return m_channels.load(std::memory_order_relaxed);
+        return m_channels.load(std::memory_order_acquire);
     }
 
     // Publish a new stream under the epoch minted at staging time
@@ -142,10 +143,7 @@ public:
 
     [[nodiscard]] bool endOfStreamPending() const;
 
-    [[nodiscard]] bool endOfStreamArmed() const
-    {
-        return m_eosState.load(std::memory_order_acquire) != static_cast<std::int8_t>(EosState::None);
-    }
+    [[nodiscard]] bool endOfStreamArmed() const;
 
     [[nodiscard]] bool tryClaimDrained();
 
@@ -154,7 +152,7 @@ public:
     [[nodiscard]] qint64 totalSamplesWritten() const;
     [[nodiscard]] qint64 streamSamplesRead() const
     {
-        return static_cast<qint64>(m_streamSamplesRead.load(std::memory_order_relaxed));
+        return static_cast<qint64>(m_streamSamplesRead.load(std::memory_order_acquire));
     }
     [[nodiscard]] qint64 producerSamples() const
     {
@@ -226,13 +224,6 @@ private:
         std::atomic<std::uint64_t> m_tail{0};
     };
 
-    enum class EosState : std::int8_t {
-        None,
-        Pending,
-        Claimed,
-        Emitted,
-    };
-
     EventHandlers m_handlers;
 
     // Producer side (decode thread)
@@ -249,8 +240,7 @@ private:
     std::atomic<int> m_channels{0};
     std::atomic<ProducerGate> m_gate{ProducerGate::Open};
 
-    alignas(64) std::atomic<std::int8_t> m_eosState{static_cast<std::int8_t>(EosState::None)};
-    std::atomic<std::uint64_t> m_eosSample{0};
+    alignas(64) EndOfStreamMarker m_eos{1};
     std::atomic<bool> m_formatChangePending{false};
     std::atomic<int> m_underrunCount{0};
 };

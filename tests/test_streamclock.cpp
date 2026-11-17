@@ -29,10 +29,10 @@ struct RecordedEvents {
     void installOn(StreamClock &clock)
     {
         StreamClock::EventHandlers handlers;
-        handlers.trackStarted = [this](std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration) {
+        handlers.trackStarted = [this](std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration, std::uint64_t) {
             trackStarted.emplace_back(trackId, duration);
         };
-        handlers.formatChangeRequired = [this](int sampleRate, int channels) {
+        handlers.formatChangeRequired = [this](int sampleRate, int channels, std::uint64_t) {
             formatChangeRequired.emplace_back(sampleRate, channels);
         };
         clock.setEventHandlers(std::move(handlers));
@@ -76,6 +76,8 @@ private Q_SLOTS:
     void testEosEpochTagInterleavings();
     void testClockResetUnsticksStaleEos();
     void testTwoBoundariesInOneQuantum();
+    void testEosConcurrentBoundaryVsEpochSwitchRace();
+    void testReserveEpochInvalidatesClaimedDrainedEmission();
 };
 
 void TestStreamClock::testFreshClockState()
@@ -333,7 +335,7 @@ void TestStreamClock::testBoundaryRingUseAfterPopRace()
     std::atomic<int> corruptionCount{0};
 
     StreamClock::EventHandlers handlers;
-    handlers.trackStarted = [&](std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration) {
+    handlers.trackStarted = [&](std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration, std::uint64_t) {
         if (!duration || duration->count() != static_cast<qint64>(trackId) * 1000) {
             corruptionCount.fetch_add(1, std::memory_order_relaxed);
         }
@@ -567,6 +569,78 @@ void TestStreamClock::testTwoBoundariesInOneQuantum()
     QCOMPARE(clock.advanceBoundaries(true, nullptr), StreamClock::BoundaryAdvance::Crossed);
     QCOMPARE(events.trackStarted.size(), size_t{2});
     QCOMPARE(events.trackStarted[1].first, std::uint32_t{12});
+}
+
+void TestStreamClock::testEosConcurrentBoundaryVsEpochSwitchRace()
+{
+    StreamClock clock;
+    clock.setFormat(44100, 2);
+
+    std::atomic<std::uint64_t> activeEpoch{clock.streamEpoch()};
+    std::atomic<bool> stop{false};
+    std::atomic<int> falseClaims{0};
+    std::atomic<int> producerAttempts{0};
+
+    std::jthread producer([&] {
+        while (!stop.load(std::memory_order_acquire)) {
+            const std::uint64_t epoch = activeEpoch.load(std::memory_order_acquire);
+            clock.samplesProduced(epoch, 64);
+            std::ignore = clock.boundaryEndOfStream(epoch);
+            producerAttempts.fetch_add(1, std::memory_order_relaxed);
+        }
+    });
+
+    for (int i = 0; i < 4000; ++i) {
+        const auto nextEpoch = clock.reserveEpoch();
+        clock.armSwitch();
+        clock.beginStream(nextEpoch);
+
+        // Producer still only knows previous epochs until activeEpoch is published
+        // below. Any EOS leaked from a prior epoch onto nextEpoch would trigger here.
+        clock.noteSamplesRead(64);
+        if (clock.endOfStreamPending() || clock.tryClaimDrained()) {
+            falseClaims.fetch_add(1, std::memory_order_relaxed);
+        }
+
+        activeEpoch.store(nextEpoch, std::memory_order_release);
+        if ((i % 32) == 0) {
+            std::this_thread::yield();
+        }
+    }
+
+    stop.store(true, std::memory_order_release);
+    producer.join();
+
+    QCOMPARE(falseClaims.load(std::memory_order_relaxed), 0);
+    QVERIFY(producerAttempts.load(std::memory_order_relaxed) > 0);
+}
+
+void TestStreamClock::testReserveEpochInvalidatesClaimedDrainedEmission()
+{
+    StreamClock clock;
+    clock.setFormat(44100, 2);
+
+    const auto epoch1 = clock.streamEpoch();
+    clock.samplesProduced(epoch1, 100);
+    QVERIFY(clock.boundaryEndOfStream(epoch1));
+    clock.noteSamplesRead(100);
+    QVERIFY(clock.tryClaimDrained());
+
+    // Simulate a seek or switch staging on the main thread before the queued
+    // drained notification executes takeDrainedEmission().
+    const auto epoch2 = clock.reserveEpoch();
+    QVERIFY(!clock.takeDrainedEmission());
+
+    // Contrast: on the fresh epoch, claiming without a subsequent reserveEpoch()
+    // succeeds once and only once.
+    clock.armSwitch();
+    clock.beginStream(epoch2);
+    clock.samplesProduced(epoch2, 100);
+    QVERIFY(clock.boundaryEndOfStream(epoch2));
+    clock.noteSamplesRead(100);
+    QVERIFY(clock.tryClaimDrained());
+    QVERIFY(clock.takeDrainedEmission());
+    QVERIFY(!clock.takeDrainedEmission());
 }
 
 QTEST_GUILESS_MAIN(TestStreamClock)

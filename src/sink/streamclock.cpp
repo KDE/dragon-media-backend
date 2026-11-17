@@ -45,34 +45,17 @@ bool StreamClock::boundaryTrackStart(std::uint32_t trackId,
 
 bool StreamClock::boundaryEndOfStream(std::uint64_t epochTag)
 {
-    auto expected = static_cast<std::int8_t>(EosState::None);
-    if (m_eosState.load(std::memory_order_relaxed) != expected) {
-        return false;
-    }
-    if (m_producerState.epoch(std::memory_order_acquire) != epochTag) {
+    const auto snap = m_producerState.snapshot(std::memory_order_acquire);
+    if (snap.epoch != epochTag) {
         // The stream was superseded before the EOS could be armed.
         return false;
     }
-    m_eosSample.store(m_producerState.samples(), std::memory_order_release);
-    if (!m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Pending), std::memory_order_acq_rel, std::memory_order_acquire)) {
-        return false;
-    }
-    if (m_producerState.epoch(std::memory_order_acquire) != epochTag) {
-        // A stream switch published a new epoch between the sample read and
-        // the CAS: the EOS would otherwise apply to the new stream with a
-        // bogus (or wrapped) sample count. Retract instead.
-        expected = static_cast<std::int8_t>(EosState::Pending);
-        std::ignore =
-            m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::None), std::memory_order_acq_rel, std::memory_order_acquire);
-        return false;
-    }
-    return true;
+    return m_eos.arm(epochTag, snap.samples);
 }
 
 bool StreamClock::retractEndOfStream()
 {
-    auto expected = static_cast<std::int8_t>(EosState::Pending);
-    return m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::None), std::memory_order_acq_rel, std::memory_order_acquire);
+    return m_eos.retract(streamEpoch());
 }
 
 void StreamClock::samplesProduced(std::uint64_t epochTag, std::size_t count)
@@ -129,23 +112,23 @@ bool StreamClock::isSwitchArmed() const
 
 void StreamClock::setPositionOffset(std::chrono::milliseconds offset)
 {
-    m_positionOffset.store(offset.count(), std::memory_order_relaxed);
+    m_positionOffset.store(offset.count(), std::memory_order_release);
 }
 
 std::chrono::milliseconds StreamClock::positionOffset() const
 {
-    return std::chrono::milliseconds{m_positionOffset.load(std::memory_order_relaxed)};
+    return std::chrono::milliseconds{m_positionOffset.load(std::memory_order_acquire)};
 }
 
 void StreamClock::setFormat(int sampleRate, int channels)
 {
-    m_sampleRate.store(sampleRate, std::memory_order_relaxed);
-    m_channels.store(channels, std::memory_order_relaxed);
+    m_sampleRate.store(sampleRate, std::memory_order_release);
+    m_channels.store(channels, std::memory_order_release);
 }
 
 bool StreamClock::hasFormat(int sampleRate, int channels) const
 {
-    return m_sampleRate.load(std::memory_order_relaxed) == sampleRate && m_channels.load(std::memory_order_relaxed) == channels;
+    return m_sampleRate.load(std::memory_order_acquire) == sampleRate && m_channels.load(std::memory_order_acquire) == channels;
 }
 
 void StreamClock::beginStream(std::uint64_t epoch)
@@ -158,17 +141,16 @@ void StreamClock::beginStream(std::uint64_t epoch)
     }
     m_producerState.reset(epoch, 0);
 
-    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+    m_totalSamplesWritten.store(0, std::memory_order_release);
 
-    m_streamSamplesRead.store(0, std::memory_order_relaxed);
+    m_streamSamplesRead.store(0, std::memory_order_release);
     while (m_boundaries.peek() != nullptr) {
         m_boundaries.pop();
     }
 
-    // Release store so a consumer that later reads Pending/Claimed state
-    // cannot observe a stale m_eosSample from the previous stream.
-    m_eosSample.store(std::numeric_limits<std::uint64_t>::max(), std::memory_order_release);
-    m_eosState.store(static_cast<std::int8_t>(EosState::None), std::memory_order_release);
+    // Must follow the epoch and read-count resets so readers observing None see
+    // the new epoch's zeroed counters.
+    m_eos.reset(epoch);
     m_formatChangePending.store(false, std::memory_order_relaxed);
 
     ProducerGate expected = ProducerGate::SwitchArmed;
@@ -226,8 +208,9 @@ StreamClock::BoundaryAdvance StreamClock::advanceBoundaries(bool afterRead, size
             if (!m_formatChangePending.exchange(true, std::memory_order_acq_rel)) {
                 const int sampleRate = boundary->sampleRate;
                 const int channels = boundary->channels;
+                const std::uint64_t boundaryEpoch = boundary->epoch;
                 if (m_handlers.formatChangeRequired) {
-                    m_handlers.formatChangeRequired(sampleRate, channels);
+                    m_handlers.formatChangeRequired(sampleRate, channels, boundaryEpoch);
                 }
             }
             return BoundaryAdvance::FormatStall;
@@ -236,13 +219,14 @@ StreamClock::BoundaryAdvance StreamClock::advanceBoundaries(bool afterRead, size
         const StreamBoundary boundaryCopy = *boundary;
         m_boundaries.pop();
         m_formatChangePending.store(false, std::memory_order_relaxed);
-        m_positionOffset.store(0, std::memory_order_relaxed);
+        m_positionOffset.store(0, std::memory_order_release);
         m_totalSamplesWritten.store(afterRead ? static_cast<qint64>(samplesRead - boundaryCopy.streamSample) : static_cast<qint64>(0),
-                                    std::memory_order_relaxed);
+                                    std::memory_order_release);
         const std::uint32_t trackId = boundaryCopy.trackId;
         const std::optional<std::chrono::milliseconds> duration = boundaryCopy.duration;
+        const std::uint64_t boundaryEpoch = boundaryCopy.epoch;
         if (m_handlers.trackStarted) {
-            m_handlers.trackStarted(trackId, duration);
+            m_handlers.trackStarted(trackId, duration, boundaryEpoch);
         }
         if (afterRead) {
             result = BoundaryAdvance::Crossed;
@@ -253,49 +237,56 @@ StreamClock::BoundaryAdvance StreamClock::advanceBoundaries(bool afterRead, size
 
 void StreamClock::noteSamplesRead(std::size_t count)
 {
-    m_streamSamplesRead.fetch_add(count, std::memory_order_relaxed);
+    m_streamSamplesRead.fetch_add(count, std::memory_order_release);
 }
 
 void StreamClock::noteSamplesRendered(std::size_t count)
 {
-    m_totalSamplesWritten.fetch_add(static_cast<qint64>(count), std::memory_order_relaxed);
+    m_totalSamplesWritten.fetch_add(static_cast<qint64>(count), std::memory_order_release);
 }
 
 bool StreamClock::endOfStreamPending() const
 {
-    return m_eosState.load(std::memory_order_acquire) == static_cast<std::int8_t>(EosState::Pending)
-        && m_streamSamplesRead.load(std::memory_order_acquire) >= m_eosSample.load(std::memory_order_acquire);
+    return m_eos.reached(streamEpoch(), [this] {
+        return m_streamSamplesRead.load(std::memory_order_acquire);
+    });
+}
+
+bool StreamClock::endOfStreamArmed() const
+{
+    return m_eos.isArmed(streamEpoch());
 }
 
 bool StreamClock::tryClaimDrained()
 {
-    if (!endOfStreamPending()) {
-        return false;
-    }
-    auto expected = static_cast<std::int8_t>(EosState::Pending);
-    return m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Claimed), std::memory_order_acq_rel, std::memory_order_acquire);
+    return m_eos.tryClaim(
+        [this] {
+            return streamEpoch();
+        },
+        [this] {
+            return m_streamSamplesRead.load(std::memory_order_acquire);
+        });
 }
 
 bool StreamClock::takeDrainedEmission()
 {
-    auto expected = static_cast<std::int8_t>(EosState::Claimed);
-    return m_eosState.compare_exchange_strong(expected, static_cast<std::int8_t>(EosState::Emitted), std::memory_order_acq_rel, std::memory_order_acquire);
+    return m_eos.takeEmission(streamEpoch());
 }
 
 qint64 StreamClock::totalSamplesWritten() const
 {
-    return m_totalSamplesWritten.load(std::memory_order_relaxed);
+    return m_totalSamplesWritten.load(std::memory_order_acquire);
 }
 
 void StreamClock::resetPositionTracking()
 {
-    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
-    m_positionOffset.store(0, std::memory_order_relaxed);
+    m_totalSamplesWritten.store(0, std::memory_order_release);
+    m_positionOffset.store(0, std::memory_order_release);
 }
 
 void StreamClock::resetWrittenCounter()
 {
-    m_totalSamplesWritten.store(0, std::memory_order_relaxed);
+    m_totalSamplesWritten.store(0, std::memory_order_release);
 }
 
 void StreamClock::noteUnderrun()
@@ -311,9 +302,8 @@ void StreamClock::reset()
     while (m_boundaries.peek() != nullptr) {
         m_boundaries.pop();
     }
-    m_eosSample.store(std::numeric_limits<std::uint64_t>::max(), std::memory_order_release);
-    m_eosState.store(static_cast<std::int8_t>(EosState::None), std::memory_order_release);
-    m_positionOffset.store(0, std::memory_order_relaxed);
+    m_eos.reset(streamEpoch());
+    m_positionOffset.store(0, std::memory_order_release);
     m_formatChangePending.store(false, std::memory_order_relaxed);
 
     m_gate.store(ProducerGate::Open, std::memory_order_release);

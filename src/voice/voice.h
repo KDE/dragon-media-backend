@@ -6,9 +6,9 @@
 #pragma once
 
 #include "dragonmediabackend_export.h"
-#include "fadeenvelope.h"
 #include "sink/audiosink.h"
 #include "sink/streamclock.h"
+#include "stagedflush.h"
 #include "voicechannel.h"
 
 #include <atomic>
@@ -29,11 +29,10 @@ class AudioSinkStream;
  * Crossfade coordination between the incoming (primary) and outgoing
  * (fading) voice.
  *
- * Owned by the incoming voice for its whole lifetime; the fading voice holds
- * an atomic raw pointer to it that is published before the fade-out is
- * enabled and never cleared or replaced during a callback. The fading voice
- * is always quiesced and destroyed before the primary voice that owns the
- * link, so the raw pointer never dangles inside a callback.
+ * Heap-allocated and shared via std::shared_ptr between the incoming primary
+ * voice and any fading voice demoted against it. If the fading voice fails
+ * callback quiescence and is leaked as a zombie, its shared_ptr keeps the link
+ * alive even after the incoming primary voice is later destroyed.
  */
 struct CrossfadeLink {
     std::atomic<bool> incomingStarted{false};
@@ -65,9 +64,10 @@ public:
     // lock-free and post to the owning thread themselves (the pipeline's
     // closures use queued invocations carrying the voice generation).
     struct Notifiers {
-        std::function<void(std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration)> trackStarted;
-        std::function<void(int sampleRate, int channels)> formatChangeRequired;
-        std::function<void()> fadingFinished;
+        std::function<void(std::uint64_t generation, std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration, std::uint64_t streamEpoch)>
+            trackStarted;
+        std::function<void(std::uint64_t generation, int sampleRate, int channels, std::uint64_t streamEpoch)> formatChangeRequired;
+        std::function<void(std::uint64_t generation)> fadingFinished;
     };
 
     Voice(Pipe<float> *pipe, std::uint64_t generation, Notifiers notifiers);
@@ -80,7 +80,11 @@ public:
 
     [[nodiscard]] std::uint64_t generation() const noexcept
     {
-        return m_generation;
+        return m_generation.load(std::memory_order_acquire);
+    }
+    void setGeneration(std::uint64_t generation) noexcept
+    {
+        m_generation.store(generation, std::memory_order_release);
     }
     [[nodiscard]] Pipe<float> *pipe() const noexcept
     {
@@ -119,19 +123,25 @@ public:
     void configureFadeIn(std::chrono::milliseconds fadeIn);
     void setStream(std::unique_ptr<AudioSinkStream> stream);
     void installStream(std::unique_ptr<AudioSinkStream> stream, std::chrono::milliseconds fadeIn);
-    // Close and drop the stream (quiescing its callback); the voice keeps
-    // its pipe, clock and fade-in state for the reopen. Returns false when
-    // the callback did not quiesce: the backend leaked its native state and
-    // this voice must be leaked with it (the caller keeps the whole voice
-    // alive so the stuck callback keeps a valid renderer).
+    /**
+     * Closes and drops the stream (quiescing its callback), keeping pipe,
+     * clock, and fade-in state for reopen.
+     *
+     * If the backend callback fails to quiesce, the backend leaks its native
+     * stream; this method releases m_stream without destroying it and marks the
+     * voice permanently poisoned (sticky) returning false. Callers must leak
+     * a poisoned Voice rather than destroying it (~Voice()) or running
+     * resetForTeardown()/runFlushQuiesced(), so a stuck callback can never
+     * dereference freed stream, channel, clock, or pipe state.
+     */
     [[nodiscard]] bool closeStream();
+    [[nodiscard]] bool isPoisoned() const noexcept
+    {
+        return m_poisoned;
+    }
 
     // --- Flush (seek) on the primary voice ---
 
-    // Stage a flush for consumption by the next render callback (running
-    // stream): reserve and arm the switch, publish the flush command
-    // (epoch + fade-in) before the release store that arms it. Returns the
-    // reserved epoch.
     [[nodiscard]] std::uint64_t stageFlush(std::chrono::milliseconds fadeIn);
     // Execute the same flush synchronously with the callback quiesced
     // (paused or closed stream). Returns the reserved epoch.
@@ -148,14 +158,14 @@ public:
 
     // --- Crossfade (Qt main thread) ---
 
-    [[nodiscard]] CrossfadeLink *crossfadeLink() noexcept
+    [[nodiscard]] std::shared_ptr<CrossfadeLink> crossfadeLink() const noexcept
     {
-        return &m_crossfadeLink;
+        return m_crossfadeLink;
     }
     // Demote this voice to fading: publish the crossfade link and the
     // fade-out request (configured from the current gain, preserving a
     // partially complete fade-in). Called on the outgoing primary voice.
-    void demoteToFading(CrossfadeLink *link, std::chrono::milliseconds fadeOut, bool incomingHasFadeIn);
+    void demoteToFading(std::shared_ptr<CrossfadeLink> link, std::chrono::milliseconds fadeOut, bool incomingHasFadeIn);
 
     // --- Audio callback thread (AudioSinkStreamRenderer) ---
 
@@ -176,6 +186,13 @@ public:
     void preAllocate(std::size_t maxSamples);
 
 private:
+    friend class TestPlaybackPipeline;
+
+    void clearPoisonForTestCleanup() noexcept
+    {
+        m_poisoned = false;
+    }
+
     enum class Role : std::uint8_t {
         Primary,
         Fading,
@@ -188,9 +205,9 @@ private:
         bool incomingHasFadeIn = false;
     };
 
-    void consumePendingFlush();
+    void consumePendingFlush(bool applyFadeIn = true);
     void consumeFadeOutRequest();
-    void consumeFlushBody(std::uint64_t epoch, std::chrono::milliseconds fadeIn);
+    void consumeFlushBody(std::uint64_t epoch, std::chrono::milliseconds fadeIn, bool applyFadeIn);
     [[nodiscard]] bool crossfadeHoldForSlowLoad() const noexcept;
     void noteUnderrunIfUnexpected();
     void checkFadingFinished();
@@ -207,11 +224,12 @@ private:
     VoiceChannel m_channel;
     std::unique_ptr<AudioSinkStream> m_stream;
 
-    const std::uint64_t m_generation;
+    std::atomic<std::uint64_t> m_generation;
     Notifiers m_notifiers;
 
     std::atomic<Role> m_role{Role::Primary};
-    CrossfadeLink m_crossfadeLink;
+    std::shared_ptr<CrossfadeLink> m_crossfadeLink;
+    std::shared_ptr<CrossfadeLink> m_demotedLinkOwner;
     std::atomic<CrossfadeLink *> m_demotedLink{nullptr};
 
     // Fade-out command: published once per voice lifetime by the Qt main
@@ -220,15 +238,10 @@ private:
     FadeOutRequest m_fadeOutCommand{};
     std::atomic<const FadeOutRequest *> m_fadeOutRequest{nullptr};
 
-    // Flush command block: written by the Qt main thread (single writer),
-    // consumed on the audio callback thread (single reader). Even/odd seqlock
-    // on m_flushSeq ensures the consumer either sees a stable pair or retries.
-    std::atomic<std::uint64_t> m_flushSeq{0};
-    std::atomic<std::uint64_t> m_flushEpoch{0};
-    std::atomic<std::int64_t> m_flushFadeInMs{0};
-    std::atomic<std::uint64_t> m_flushConsumed{0};
+    StagedFlush m_stagedFlush;
 
     std::chrono::milliseconds m_pendingFadeIn{0};
+    bool m_poisoned = false;
 
     std::atomic<bool> m_fadingFinishedPosted{false};
 

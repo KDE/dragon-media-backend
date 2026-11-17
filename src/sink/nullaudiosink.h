@@ -22,7 +22,7 @@ public:
 
     [[nodiscard]] bool probe() override;
     [[nodiscard]] std::expected<std::unique_ptr<AudioSinkStream>, QString>
-    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer) override;
+    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit = {}) override;
 
     // The null sink never has a device: stream creation always fails by
     // contract (with the existing missing-plugin error) and there is no

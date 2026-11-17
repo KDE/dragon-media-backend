@@ -114,6 +114,11 @@ private:
     bool m_quiesced = true;
 };
 
+struct StreamVolumeInit {
+    std::optional<float> linearGain;
+    bool muted = false;
+};
+
 /**
  * SPI for one audio output backend (SDL3, PipeWire, PulseAudio, null).
  *
@@ -149,7 +154,7 @@ public:
     // result means the server accepted a usable stream, not merely that a
     // client object was allocated; failure leaves no registered stream.
     [[nodiscard]] virtual std::expected<std::unique_ptr<AudioSinkStream>, QString>
-    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer) = 0;
+    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit = {}) = 0;
 
     // Live-update the user-visible stream name on every active stream (and
     // remember it for streams created later).

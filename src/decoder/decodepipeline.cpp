@@ -302,6 +302,19 @@ void DecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
 
                                   [&](DecodeEof) {
                                       qCDebug(dragonMediaBackendDecode) << "decode thread DecodeEof received";
+                                      if (!m_retiring.load(std::memory_order_acquire)) {
+                                          // Ensure the sink producer gate and per-slot producerStreamEpoch are
+                                          // synchronized before EndOfStream even when zero audio chunks were
+                                          // yielded (e.g. a 0-sample stream or a seek straight to EOF).
+                                          SamplesCallback callback;
+                                          {
+                                              std::scoped_lock callbackLock(m_samplesCallbackMutex);
+                                              callback = m_samplesCallback;
+                                          }
+                                          if (callback) {
+                                              callback({}, sessionToken);
+                                          }
+                                      }
                                   }},
                        event);
 
@@ -312,17 +325,30 @@ void DecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
     }
 
     qCDebug(dragonMediaBackendDecode) << "decode thread decodeLoop finished";
-    const bool wasStopped = sessionToken.stop_requested();
     const bool fatal = !initResult.success || decoder->hasFatalError();
     const bool wasRetiring = m_retiring.exchange(false, std::memory_order_acq_rel);
-    QUrl finishedSource;
-    {
-        std::scoped_lock relock(m_decoderMutex);
-        finishedSource = m_currentSource;
-        qCDebug(dragonMediaBackendDecode) << "decode thread loopInactive, wasStopped=" << wasStopped << " fatal=" << fatal << " wasRetiring=" << wasRetiring;
 
+    if (!sessionToken.stop_requested() && !fatal && !wasRetiring && !decoder->hasPendingSeek()) {
+        BoundaryCallback boundaryCallback;
+        {
+            std::scoped_lock callbackLock(m_boundaryCallbackMutex);
+            boundaryCallback = m_boundaryCallback;
+        }
+        if (boundaryCallback) {
+            BoundaryEvent event;
+            event.kind = BoundaryEvent::Kind::EndOfStream;
+            boundaryCallback(event);
+        }
+    }
+
+    lock.lock();
+    const bool wasStopped = sessionToken.stop_requested() || m_phase == Phase::Stopped;
+    const QUrl finishedSource = m_currentSource;
+    qCDebug(dragonMediaBackendDecode) << "decode thread loopInactive, wasStopped=" << wasStopped << " fatal=" << fatal << " wasRetiring=" << wasRetiring;
+
+    if (wasStopped || fatal || wasRetiring) {
         if (m_phase == Phase::Decoding) {
-            m_phase = (wasStopped || fatal || wasRetiring) ? Phase::Stopped : Phase::Finished;
+            m_phase = Phase::Stopped;
         }
         if (fatal || wasRetiring) {
             // The fatal sessionFinished below counts as this session's
@@ -333,8 +359,17 @@ void DecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
         if (m_activeSession) {
             m_activeSession->decoder.reset();
         }
+    } else if (m_phase == Phase::Decoding) {
+        if (m_activeSession && m_activeSession->decoder && m_activeSession->decoder->hasPendingSeek()) {
+            m_phase = Phase::Starting;
+            m_endReported = false;
+        } else {
+            m_phase = Phase::Finished;
+        }
     }
+
     if (wasRetiring) {
+        lock.unlock();
         qCDebug(dragonMediaBackendDecode) << "decode thread session retired, invoking retire-finished callback";
         RetireFinishedCallback retireFinished;
         {
@@ -348,6 +383,7 @@ void DecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
         return;
     }
     if (fatal) {
+        lock.unlock();
         qCDebug(dragonMediaBackendDecode) << "decode thread fatal error, emitting sessionFinished for" << finishedSource.toString();
         Q_EMIT sessionFinished(finishedSource, true);
         lock.lock();
@@ -355,22 +391,7 @@ void DecodePipeline::runCurrentSession(std::unique_lock<std::mutex> &lock)
     }
     if (wasStopped) {
         qCDebug(dragonMediaBackendDecode) << "decode thread session was stopped, no completion event";
-        lock.lock();
-        return;
     }
-
-    BoundaryCallback boundaryCallback;
-    {
-        std::scoped_lock callbackLock(m_boundaryCallbackMutex);
-        boundaryCallback = m_boundaryCallback;
-    }
-    if (boundaryCallback) {
-        BoundaryEvent event;
-        event.kind = BoundaryEvent::Kind::EndOfStream;
-        boundaryCallback(event);
-    }
-
-    lock.lock();
 }
 
 void DecodePipeline::finalizeSession(std::unique_lock<std::mutex> &lock)
@@ -708,7 +729,13 @@ void DecodePipeline::setNextSource(const QUrl &next)
 bool DecodePipeline::isActive() const
 {
     std::scoped_lock lock(m_decoderMutex);
-    return m_activeSession && m_activeSession->decoder;
+    return m_activeSession && m_activeSession->decoder && (m_phase == Phase::Starting || m_phase == Phase::Decoding || m_phase == Phase::Promoting);
+}
+
+bool DecodePipeline::isFinished() const
+{
+    std::scoped_lock lock(m_decoderMutex);
+    return m_activeSession && m_activeSession->decoder && m_phase == Phase::Finished;
 }
 
 bool DecodePipeline::hasFatalError() const
@@ -722,15 +749,18 @@ void DecodePipeline::requestSeek(std::chrono::milliseconds position)
     std::unique_lock lock(m_decoderMutex);
     // A seek must target the session that ends up current: a gapless
     // promotion may be in flight (recording its boundary), and seeking the
-    // outgoing track's decoder would be a no-op (its decoder is already
-    // destroyed at EOF). Wait for the promotion to resolve first; the wait
-    // is bounded because the promotion's boundary callback is
-    // non-blocking.
+    // outgoing track's decoder would be a no-op. Wait for the promotion to
+    // resolve first; the wait is bounded and non-blocking.
     m_stateChanged.wait(lock, [this]() {
         return m_phase != Phase::Promoting;
     });
     if (m_activeSession && m_activeSession->decoder) {
         m_activeSession->decoder->requestSeek(position);
+        if (m_phase == Phase::Finished) {
+            m_phase = Phase::Starting;
+            m_endReported = false;
+            m_stateChanged.notify_all();
+        }
     }
 }
 

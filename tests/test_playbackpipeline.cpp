@@ -6,10 +6,13 @@
 #include <QtTest>
 
 #include "fakesink.h"
+#include "fft/pcmblock.h"
 #include "player/pipe.h"
 #include "sink/playbackpipeline.h"
+#include "voice/voice.h"
 
 #include <QCoreApplication>
+#include <QSignalSpy>
 
 #include <atomic>
 #include <chrono>
@@ -17,6 +20,7 @@
 #include <memory>
 #include <span>
 #include <stop_token>
+#include <utility>
 #include <vector>
 
 using namespace std::chrono_literals;
@@ -74,6 +78,34 @@ class TestPlaybackPipeline : public QObject
 {
     Q_OBJECT
 
+private:
+    struct ZombieCleanup {
+        std::vector<Voice *> voices;
+        std::vector<FakeAudioSinkStream *> streams;
+
+        void adopt(Voice *voice, FakeAudioSinkStream *stream)
+        {
+            voices.push_back(voice);
+            streams.push_back(stream);
+        }
+
+        ~ZombieCleanup()
+        {
+            for (auto *stream : streams) {
+                if (stream) {
+                    stream->failClose = false;
+                    delete stream;
+                }
+            }
+            for (auto *voice : voices) {
+                if (voice) {
+                    voice->clearPoisonForTestCleanup();
+                    delete voice;
+                }
+            }
+        }
+    };
+
 private Q_SLOTS:
     void testFadeInFromClosedPreservedAcrossFormatReopen();
     void testArmCrossfadeCreatesPendingVoiceWithoutStream();
@@ -86,6 +118,13 @@ private Q_SLOTS:
     void testFadingCompletionNotifiesByPipeIdentity();
     void testHardSwitchDestroysBothVoices();
     void testResetReinstatesPendingPrimary();
+    void testQueuedFormatChangeDroppedAcrossResetAndFlush();
+    void testInitialVolumeInitPassedToCreateStream();
+    void testDropVoiceDetachesFftBeforeZombieClose();
+    void testCloseStreamPoisonIsSticky();
+    void testOpenResetSeekAfterPoisonReplacePrimary();
+    void testDestructorWithPoisonedFadingVoiceLeaksInsteadOfFreeing();
+    void testCrossfadeLinkOutlivesZombieFadingVoiceAcrossHardSwitch();
 };
 
 void TestPlaybackPipeline::testFadeInFromClosedPreservedAcrossFormatReopen()
@@ -113,7 +152,7 @@ void TestPlaybackPipeline::testFadeInFromClosedPreservedAcrossFormatReopen()
 
     // Conversely, staging a 0ms fade-in before open() clears any prior
     // unstarted fade-in.
-    pipeline.close();
+    QVERIFY(pipeline.close());
     std::ignore = pipeline.setPositionOffset(0ms, &pipe, 1000ms);
     std::ignore = pipeline.setPositionOffset(0ms, &pipe, 0ms);
     pipeline.open(44100, 2);
@@ -315,7 +354,7 @@ void TestPlaybackPipeline::testStreamNameFansOutAndAppliesToNewStreams()
     QCOMPARE(liveStream(pipeline, 1)->recordedName, QStringLiteral("Track 2"));
 
     // Closed streams disappear while the shared connection remains.
-    pipeline.close();
+    QVERIFY(pipeline.close());
     QCOMPARE(fakeSinkOf(pipeline)->liveStreams().size(), size_t{1});
     QVERIFY(pipeline.probe());
 }
@@ -432,7 +471,7 @@ void TestPlaybackPipeline::testResetReinstatesPendingPrimary()
 
     // reset() destroys both voices after their callbacks are quiesced and
     // reinstates a fresh pending primary around the current primary pipe.
-    pipeline.close();
+    QVERIFY(pipeline.close());
     pipeline.reset();
     QVERIFY(!pipeline.isCrossfading());
     QVERIFY(pipeline.isPrimaryPipe(&pipeB));
@@ -445,6 +484,362 @@ void TestPlaybackPipeline::testResetReinstatesPendingPrimary()
     const auto out = drainSpan(liveStream(pipeline, 0)->pump(2048));
     QCOMPARE(out.size(), size_t{2048});
     QVERIFY(qAbs(out[0] - 0.5f) < 1e-6f);
+}
+
+void TestPlaybackPipeline::testQueuedFormatChangeDroppedAcrossResetAndFlush()
+{
+    PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+    Pipe<float> pipe;
+    pipeline.setAudioPipe(&pipe);
+
+    QSignalSpy formatSpy(&pipeline, &PlaybackPipeline::formatChangeRequired);
+    QSignalSpy trackSpy(&pipeline, &PlaybackPipeline::trackStarted);
+
+    // Part 1: Queued formatChangeRequired (and trackStarted) emitted before close()/reset()
+    // must be dropped when processed afterwards.
+    pipeline.open(44100, 2);
+    const auto ep1 = pipeline.streamEpoch();
+    writeAll(pipe, makeConstant(0.5f, 1024, kTestChannels));
+    pipeline.samplesProduced(ep1, 2048);
+    QVERIFY(pipeline.boundaryTrackStart(2, 48000, 2, 1000ms, ep1));
+
+    QCOMPARE(liveStream(pipeline, 0)->pump(2048).size(), size_t{2048});
+    QVERIFY(liveStream(pipeline, 0)->pump(2048).empty());
+
+    QVERIFY(pipeline.close());
+    pipeline.reset();
+    QCoreApplication::processEvents();
+    QVERIFY(formatSpy.isEmpty());
+    QVERIFY(trackSpy.isEmpty());
+
+    // Part 2: Queued formatChangeRequired emitted before a staged flush (setPositionOffset)
+    // must likewise be discarded by the epoch check once processed.
+    pipe.consumer().drain();
+    pipeline.open(44100, 2);
+    const auto ep2 = pipeline.streamEpoch();
+    writeAll(pipe, makeConstant(0.5f, 1024, kTestChannels));
+    pipeline.samplesProduced(ep2, 2048);
+    QVERIFY(pipeline.boundaryTrackStart(3, 48000, 2, 1000ms, ep2));
+
+    QCOMPARE(liveStream(pipeline, 0)->pump(2048).size(), size_t{2048});
+    QVERIFY(liveStream(pipeline, 0)->pump(2048).empty());
+
+    std::ignore = pipeline.setPositionOffset(500ms);
+    QVERIFY(pipeline.isFlushPending());
+
+    QCoreApplication::processEvents();
+    QVERIFY(formatSpy.isEmpty());
+    QVERIFY(trackSpy.isEmpty());
+}
+
+void TestPlaybackPipeline::testInitialVolumeInitPassedToCreateStream()
+{
+    PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+    Pipe<float> pipeA;
+    Pipe<float> pipeB;
+    pipeline.setAudioPipe(&pipeA);
+
+    // Before setVolume() / setMuted(): linearGain must be std::nullopt so
+    // PipeWire/PulseAudio can honor server stream-restore.
+    pipeline.open(44100, 2);
+    QCOMPARE(fakeSinkOf(pipeline)->liveStreams().size(), size_t{1});
+    QVERIFY(!liveStream(pipeline, 0)->initialVolumeInit.linearGain.has_value());
+    QCOMPARE(liveStream(pipeline, 0)->initialVolumeInit.muted, false);
+    QVERIFY(liveStream(pipeline, 0)->gainHistory.isEmpty());
+    QVERIFY(liveStream(pipeline, 0)->muteHistory.isEmpty());
+
+    // After setVolume() / setMuted(): reopening passes explicit initial volume & mute
+    // directly into createStream(), without post-creation setGain/setMuted calls.
+    QVERIFY(pipeline.close());
+    pipeline.setVolume(0.5f);
+    pipeline.setMuted(true);
+    pipeline.open(44100, 2);
+
+    const float expectedGain = -std::log(1.0f - 0.5f) / kLog100;
+    QVERIFY(liveStream(pipeline, 0)->initialVolumeInit.linearGain.has_value());
+    QVERIFY(qAbs(*liveStream(pipeline, 0)->initialVolumeInit.linearGain - expectedGain) < 1e-4f);
+    QCOMPARE(liveStream(pipeline, 0)->initialVolumeInit.muted, true);
+    QVERIFY(liveStream(pipeline, 0)->gainHistory.isEmpty());
+    QVERIFY(liveStream(pipeline, 0)->muteHistory.isEmpty());
+
+    // Crossfade incoming stream also receives the initial volume and mute at creation.
+    writeAll(pipeA, makeConstant(0.5f, kTestFrames, kTestChannels));
+    pipeline.samplesProduced(pipeline.streamEpoch(), static_cast<std::size_t>(kTestFrames) * kTestChannels);
+    liveStream(pipeline, 0)->resume();
+    std::ignore = liveStream(pipeline, 0)->pump(2048);
+
+    std::ignore = pipeline.armCrossfade(&pipeA, &pipeB, 500ms, 500ms);
+    pipeline.open(48000, 2);
+    QCOMPARE(fakeSinkOf(pipeline)->liveStreams().size(), size_t{2});
+    QVERIFY(liveStream(pipeline, 1)->initialVolumeInit.linearGain.has_value());
+    QVERIFY(qAbs(*liveStream(pipeline, 1)->initialVolumeInit.linearGain - expectedGain) < 1e-4f);
+    QCOMPARE(liveStream(pipeline, 1)->initialVolumeInit.muted, true);
+    QVERIFY(liveStream(pipeline, 1)->gainHistory.isEmpty());
+    QVERIFY(liveStream(pipeline, 1)->muteHistory.isEmpty());
+}
+
+void TestPlaybackPipeline::testDropVoiceDetachesFftBeforeZombieClose()
+{
+    Pipe<float> pipeA;
+    Pipe<float> pipeB;
+    Pipe<PcmBlock> fftPipe;
+    PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+    // Destroy the intentionally leaked zombie Voice and its released stream
+    // last-declared / first-destroyed so ASan/LSan sees zero leaks and ~Voice
+    // runs while pipes & FakeAudioSink live.
+    ZombieCleanup zombieCleanup;
+
+    pipeline.setAudioPipe(&pipeA);
+    pipeline.setFftPipe(&fftPipe);
+    pipeline.open(44100, 2);
+
+    writeAll(pipeA, makeConstant(0.5f, 1024, kTestChannels));
+    pipeline.samplesProduced(pipeline.streamEpoch(), 2048);
+    QCOMPARE(liveStream(pipeline, 0)->pump(2048).size(), size_t{2048});
+    QVERIFY(fftPipe.consumer().ready() > 0);
+    fftPipe.consumer().drain();
+
+    FakeAudioSinkStream *oldStream = liveStream(pipeline, 0);
+    QPointer<FakeAudioSinkStream> oldStreamPtr(oldStream);
+    auto *oldVoice = static_cast<Voice *>(&oldStream->streamRenderer());
+    oldStream->failClose = true;
+
+    // Hard switch invokes dropVoice(oldPrimary), which must detach m_fftPipe BEFORE
+    // closeStream() fails and leaks the zombie voice + stream.
+    const auto newEpoch = pipeline.setPositionOffset(0ms, &pipeB, 0ms);
+    zombieCleanup.adopt(oldVoice, oldStream);
+    QVERIFY2(!oldStreamPtr.isNull(), "Leaked zombie stream/voice should remain alive when closeStream() returns false");
+
+    // Pump the stuck/leaked zombie stream again: it still renders PCM cleanly,
+    // yet produces zero blocks into fftPipe because its FFT tap is already detached.
+    writeAll(pipeA, makeConstant(0.25f, 1024, kTestChannels));
+    QCOMPARE(oldStream->pump(2048).size(), size_t{2048});
+    QCOMPARE(fftPipe.consumer().ready(), size_t{0});
+
+    pipeline.open(44100, 2);
+    writeAll(pipeB, makeConstant(0.75f, 1024, kTestChannels));
+    pipeline.samplesProduced(newEpoch, 2048);
+    QCOMPARE(liveStream(pipeline, 0)->pump(2048).size(), size_t{2048});
+    QVERIFY(fftPipe.consumer().ready() > 0);
+}
+
+void TestPlaybackPipeline::testCloseStreamPoisonIsSticky()
+{
+    PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+    ZombieCleanup zombieCleanup;
+    Pipe<float> pipe;
+    pipeline.setAudioPipe(&pipe);
+    pipeline.open(44100, 2);
+
+    FakeAudioSinkStream *stream = liveStream(pipeline, 0);
+    QPointer<FakeAudioSinkStream> streamPtr(stream);
+    auto *voice = static_cast<Voice *>(&stream->streamRenderer());
+    stream->failClose = true;
+
+    QVERIFY(!pipeline.close());
+    QVERIFY(voice->isPoisoned());
+    QVERIFY(!pipeline.isDeviceOpen());
+    QVERIFY(!streamPtr.isNull());
+
+    // Poison is sticky: repeat closeStream() / close() calls must continue
+    // returning false even though m_stream is now nullptr.
+    QVERIFY(!voice->closeStream());
+    QVERIFY(!pipeline.close());
+
+    // When the pipeline later drops the poisoned primary, it leaks it once.
+    zombieCleanup.adopt(voice, stream);
+    pipeline.reset();
+    QVERIFY(!streamPtr.isNull());
+}
+
+void TestPlaybackPipeline::testOpenResetSeekAfterPoisonReplacePrimary()
+{
+    // 1) open() after poison (pre-close failure): replaces poisoned primary,
+    //    emits errorOccurred, never frees the poisoned voice, and subsequent
+    //    open() creates a working stream on the fresh primary.
+    {
+        Pipe<float> pipe;
+        PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+        ZombieCleanup zombieCleanup;
+        pipeline.setAudioPipe(&pipe);
+        pipeline.open(44100, 2);
+
+        FakeAudioSinkStream *oldStream = liveStream(pipeline, 0);
+        QPointer<FakeAudioSinkStream> oldStreamPtr(oldStream);
+        auto *oldVoice = static_cast<Voice *>(&oldStream->streamRenderer());
+        oldStream->failClose = true;
+
+        QSignalSpy errorSpy(&pipeline, &PlaybackPipeline::errorOccurred);
+        pipeline.open(48000, 2);
+        zombieCleanup.adopt(oldVoice, oldStream);
+
+        QCOMPARE(errorSpy.count(), 1);
+        QVERIFY(!pipeline.isDeviceOpen());
+        QVERIFY(pipeline.isPrimaryPipe(&pipe));
+        QVERIFY(!oldStreamPtr.isNull());
+        QVERIFY(oldVoice->isPoisoned());
+
+        pipeline.open(48000, 2);
+        QVERIFY(pipeline.isDeviceOpen());
+        FakeAudioSinkStream *newStream = liveStream(pipeline, 0);
+        QVERIFY(newStream != oldStream);
+        QVERIFY(&newStream->streamRenderer() != oldVoice);
+        writeAll(pipe, makeConstant(0.5f, 1024, kTestChannels));
+        QCOMPARE(newStream->pump(2048).size(), size_t{2048});
+    }
+
+    // 2) reset() after poison: replaces primary without calling resetForTeardown()
+    //    on the poisoned voice.
+    {
+        Pipe<float> pipe;
+        PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+        ZombieCleanup zombieCleanup;
+        pipeline.setAudioPipe(&pipe);
+        pipeline.open(44100, 2);
+
+        FakeAudioSinkStream *oldStream = liveStream(pipeline, 0);
+        QPointer<FakeAudioSinkStream> oldStreamPtr(oldStream);
+        auto *oldVoice = static_cast<Voice *>(&oldStream->streamRenderer());
+
+        writeAll(pipe, makeConstant(0.5f, 1024, kTestChannels));
+        QCOMPARE(oldStream->pump(2048).size(), size_t{2048});
+        QVERIFY(oldVoice->clock().totalSamplesWritten() > 0);
+        oldVoice->setPendingFadeIn(777ms);
+        std::ignore = oldVoice->stageFlush(333ms);
+        QVERIFY(oldVoice->isFlushPending());
+
+        oldStream->failClose = true;
+        QVERIFY(!pipeline.close());
+        pipeline.reset();
+        zombieCleanup.adopt(oldVoice, oldStream);
+
+        QVERIFY(!oldStreamPtr.isNull());
+        QVERIFY(oldVoice->isPoisoned());
+        QVERIFY2(oldVoice->isFlushPending(), "resetForTeardown() must not run on a poisoned voice");
+        QCOMPARE(oldVoice->pendingFadeIn(), 777ms);
+        QVERIFY(oldVoice->clock().totalSamplesWritten() > 0);
+        QVERIFY(pipeline.isPrimaryPipe(&pipe));
+        QVERIFY(!pipeline.isDeviceOpen());
+
+        pipeline.open(44100, 2);
+        QVERIFY(pipeline.isDeviceOpen());
+        QVERIFY(&liveStream(pipeline, 0)->streamRenderer() != oldVoice);
+    }
+
+    // 3) Paused/closed seek (setPositionOffset) after poison: replaces primary
+    //    without calling runFlushQuiesced() on the poisoned voice.
+    {
+        Pipe<float> pipe;
+        PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+        ZombieCleanup zombieCleanup;
+        pipeline.setAudioPipe(&pipe);
+        pipeline.open(44100, 2);
+
+        FakeAudioSinkStream *oldStream = liveStream(pipeline, 0);
+        QPointer<FakeAudioSinkStream> oldStreamPtr(oldStream);
+        auto *oldVoice = static_cast<Voice *>(&oldStream->streamRenderer());
+        const auto oldEpoch = oldVoice->clock().streamEpoch();
+
+        writeAll(pipe, makeConstant(0.5f, 1024, kTestChannels));
+        oldStream->pause();
+        oldStream->failClose = true;
+
+        const auto seekEpoch = pipeline.setPositionOffset(1234ms);
+        zombieCleanup.adopt(oldVoice, oldStream);
+
+        QVERIFY(seekEpoch > 0);
+        QVERIFY(!oldStreamPtr.isNull());
+        QVERIFY(oldVoice->isPoisoned());
+        // runFlushQuiesced() would have updated positionOffset, drained the pipe,
+        // and advanced the old voice's streamEpoch.
+        QCOMPARE(oldVoice->clock().positionOffset(), 0ms);
+        QCOMPARE(oldVoice->clock().streamEpoch(), oldEpoch);
+        QCOMPARE(pipe.consumer().ready(), size_t{2048});
+
+        QVERIFY(pipeline.isPrimaryPipe(&pipe));
+        QCOMPARE(pipeline.position(), 1234ms);
+        pipeline.open(44100, 2);
+        QVERIFY(pipeline.isDeviceOpen());
+        QVERIFY(&liveStream(pipeline, 0)->streamRenderer() != oldVoice);
+    }
+}
+
+void TestPlaybackPipeline::testDestructorWithPoisonedFadingVoiceLeaksInsteadOfFreeing()
+{
+    Pipe<float> pipeA;
+    Pipe<float> pipeB;
+    ZombieCleanup zombieCleanup;
+
+    QPointer<FakeAudioSinkStream> fadingStreamPtr;
+    QPointer<FakeAudioSinkStream> primaryStreamPtr;
+    Voice *fadingVoice = nullptr;
+
+    {
+        PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+        pipeline.setAudioPipe(&pipeA);
+        pipeline.open(44100, 2);
+        writeAll(pipeA, makeConstant(0.5f, kTestFrames, kTestChannels));
+        QCOMPARE(liveStream(pipeline, 0)->pump(2048).size(), size_t{2048});
+
+        std::ignore = pipeline.armCrossfade(&pipeA, &pipeB, 1000ms, 1000ms);
+        pipeline.open(44100, 2);
+
+        FakeAudioSinkStream *fadingStream = liveStream(pipeline, 0);
+        fadingStreamPtr = fadingStream;
+        fadingVoice = static_cast<Voice *>(&fadingStream->streamRenderer());
+        primaryStreamPtr = liveStream(pipeline, 1);
+        fadingStream->failClose = true;
+
+        zombieCleanup.adopt(fadingVoice, fadingStream);
+    }
+
+    QVERIFY2(primaryStreamPtr.isNull(), "Unpoisoned primary voice should be destroyed by ~PlaybackPipeline()");
+    QVERIFY2(!fadingStreamPtr.isNull(), "Poisoned fading voice/stream must be leaked by ~PlaybackPipeline()");
+    QVERIFY(fadingVoice->isPoisoned());
+    // Stuck callback can still safely pull from the leaked fading voice under ASan.
+    QCOMPARE(fadingStreamPtr->pump(2048).size(), size_t{2048});
+}
+
+void TestPlaybackPipeline::testCrossfadeLinkOutlivesZombieFadingVoiceAcrossHardSwitch()
+{
+    Pipe<float> pipeA;
+    Pipe<float> pipeB;
+    Pipe<float> pipeC;
+    PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+    ZombieCleanup zombieCleanup;
+
+    pipeline.setAudioPipe(&pipeA);
+    pipeline.open(44100, 2);
+    writeAll(pipeA, makeConstant(0.5f, kTestFrames, kTestChannels));
+    QCOMPARE(liveStream(pipeline, 0)->pump(2048).size(), size_t{2048});
+
+    // Arm crossfade: pipeB's primary voice shares the CrossfadeLink, while pipeA's
+    // demoted fading voice holds a reference to it and is in slow-load hold
+    // because pipeB has not rendered yet.
+    std::ignore = pipeline.armCrossfade(&pipeA, &pipeB, 500ms, 500ms);
+    pipeline.open(44100, 2);
+
+    FakeAudioSinkStream *fadingStream = liveStream(pipeline, 0);
+    QPointer<FakeAudioSinkStream> fadingStreamPtr(fadingStream);
+    auto *fadingVoice = static_cast<Voice *>(&fadingStream->streamRenderer());
+    QPointer<FakeAudioSinkStream> primaryBStreamPtr(liveStream(pipeline, 1));
+    fadingStream->failClose = true;
+
+    // Hard switch to pipeC: destroys pipeB's primary voice (the original link
+    // owner) and leaks pipeA's zombie fading voice.
+    std::ignore = pipeline.setPositionOffset(0ms, &pipeC, 0ms);
+    zombieCleanup.adopt(fadingVoice, fadingStream);
+
+    QVERIFY2(primaryBStreamPtr.isNull(), "Incoming primary voice B should be destroyed on hard switch");
+    QVERIFY2(!fadingStreamPtr.isNull(), "Zombie fading voice A must remain alive");
+
+    // Pump the leaked zombie fading voice after primary B was destroyed: it
+    // reads CrossfadeLink::incomingStarted (slow-load hold) and writes
+    // CrossfadeLink::outgoingActive on completion without UAF.
+    QCOMPARE(fadingStream->pump(2048).size(), size_t{2048});
+    pipeA.consumer().drain();
+    pipeA.setProducerDone(true);
+    QVERIFY(fadingStream->pump(2048).empty());
 }
 
 QTEST_GUILESS_MAIN(TestPlaybackPipeline)

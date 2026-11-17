@@ -778,23 +778,26 @@ void TestPlayerBasics::testFormatChangeRequiredRespectsFlushPending()
 {
     DragonPlayer player;
     Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    player.play();
+    QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
 
     auto *sink = diag.playbackPipeline();
     QVERIFY(sink);
+    QVERIFY(sink->isDeviceOpen());
 
     QVERIFY(diag.isQueueReady());
     QVERIFY(!diag.isFlushPending());
 
-    sink->open(44100, 2);
-    QVERIFY(sink->isDeviceOpen());
-
     // Induce a pending flush (as when seeking while playing)
-    sink->setPositionOffset(1000ms);
+    std::ignore = sink->setPositionOffset(1000ms);
     QVERIFY(diag.isFlushPending());
     QVERIFY(!diag.isQueueReady());
 
-    // Emit formatChangeRequired from sink. DragonPlayerPrivate::onSinkFormatChangeRequired
-    // is connected via Qt::QueuedConnection.
+    // Emit formatChangeRequired from sink. DragonPlayerPrivate::onPlaybackFormatChangeRequired
+    // is connected via Qt::QueuedConnection and reopens the sink preserving any pending flush.
     Q_EMIT sink->formatChangeRequired(48000, 2);
     QCoreApplication::processEvents();
 
@@ -802,21 +805,23 @@ void TestPlayerBasics::testFormatChangeRequiredRespectsFlushPending()
     QVERIFY(diag.isFlushPending());
 
     // While a flush is pending, the queue MUST remain gated (!isQueueReady).
-    // In unpatched code, onSinkFormatChangeRequired called setQueueReady(true) unconditionally.
     QVERIFY2(!diag.isQueueReady(), "Queue must remain gated (!isQueueReady) when flush is pending");
 
-    sink->close();
+    player.stop();
 }
 
 void TestPlayerBasics::testFormatChangeRequiredUngatesQueueWhenNoFlushPending()
 {
     DragonPlayer player;
     Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    player.play();
+    QTRY_COMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
 
     auto *sink = diag.playbackPipeline();
     QVERIFY(sink);
-
-    sink->open(44100, 2);
     QVERIFY(sink->isDeviceOpen());
 
     // Gate the queue while no flush is pending
@@ -832,7 +837,7 @@ void TestPlayerBasics::testFormatChangeRequiredUngatesQueueWhenNoFlushPending()
     QVERIFY(!diag.isFlushPending());
     QVERIFY2(diag.isQueueReady(), "Queue should be un-gated when formatChangeRequired runs with no pending flush");
 
-    sink->close();
+    player.stop();
 }
 
 QTEST_MAIN(TestPlayerBasics)

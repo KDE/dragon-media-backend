@@ -67,13 +67,9 @@ public:
     // first stream; a running primary is reopened at the new format). The
     // fading voice and its stream are untouched.
     void open(int sampleRate, int channels);
-    // Close only the primary stream (quiescing its callback), matching the
-    // format-reopen call sites; the voices keep their pipes and clocks.
-    void close()
+    [[nodiscard]] bool close()
     {
-        if (m_primary) {
-            std::ignore = m_primary->closeStream();
-        }
+        return !m_primary || m_primary->closeStream();
     }
     // Both voice streams pause; callbacks stop pulling samples so the
     // crossfade freezes.
@@ -343,8 +339,10 @@ private:
     [[nodiscard]] std::unique_ptr<Voice> makeVoice(Pipe<float> *pipe);
     void connectStreamSignals(AudioSinkStream *stream, std::uint64_t generation, Pipe<float> *pipe, bool firstStream);
     void applyGainToVoices();
+    void destroyVoices();
     void destroyFadingVoice();
     void dropVoice(std::unique_ptr<Voice> voice);
+    std::uint64_t replacePrimaryVoice(Pipe<float> *pipe, std::chrono::milliseconds offset, std::chrono::milliseconds fadeInDuration);
     void onFadingVoiceEnded(Pipe<float> *pipe, const QString &error);
 
     // Declaration order matters: the fading voice is destroyed before the

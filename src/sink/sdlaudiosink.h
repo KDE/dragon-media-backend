@@ -95,7 +95,7 @@ public:
 
     [[nodiscard]] bool probe() override;
     [[nodiscard]] std::expected<std::unique_ptr<AudioSinkStream>, QString>
-    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer) override;
+    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit = {}) override;
 
     void setStreamName(const QString &name) override;
 
@@ -106,7 +106,7 @@ private:
 
     [[nodiscard]] bool openDeviceLocked();
     void closeDeviceLocked();
-    void streamClosed(SdlAudioSinkStream *stream, bool quiesced);
+    void streamClosed(SdlAudioSinkStream *stream, bool quiesced, bool wasPaused);
     void streamPauseChanged(bool paused);
 
     // Serializes the main-thread control methods (stream creation, device

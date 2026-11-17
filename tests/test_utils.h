@@ -148,7 +148,7 @@ inline bool waitForPipelinePrimed(Diagnostics &diagnostics, int timeoutMs = 5000
 {
     return QTest::qWaitFor(
         [&diagnostics]() {
-            return diagnostics.decodeQueueSize() > 0;
+            return diagnostics.audioSamplesRead() > 0 && diagnostics.decodeQueueSize() > 0;
         },
         timeoutMs);
 }

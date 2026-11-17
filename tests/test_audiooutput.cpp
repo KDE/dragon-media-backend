@@ -97,6 +97,8 @@ private Q_SLOTS:
     void testSamplesProducedStaleEpochDiscarded();
     void testSamplesProducedConcurrentFlushRace();
     void testEosPublicationOrderRace();
+    void testSdlPausedSeekAndCrossfadePauseCount();
+    void testPulseAudioSecondStreamFailurePreservesFirstStream();
 
 private:
     void fillQueue(Pipe<float> *pipe, const std::vector<float> &data);
@@ -282,7 +284,7 @@ void TestAudioOutput::testStreamNameServerRoundTrip()
             },
             5000);
         if (!visible) {
-            fresh->close();
+            QVERIFY(fresh->close());
             if (backend == u"dragonsdlaudiosink"_s) {
                 QSKIP("SDL stream not visible in PipeWire (SDL audio not using its PipeWire driver)");
             }
@@ -296,7 +298,7 @@ void TestAudioOutput::testStreamNameServerRoundTrip()
                      5000),
                  "a fresh stream with no stored name should fall back to the application name for media.name");
 
-        fresh->close();
+        QVERIFY(fresh->close());
         QVERIFY2(QTest::qWaitFor(
                      [&serverProps]() {
                          return !serverProps().has_value();
@@ -357,7 +359,7 @@ void TestAudioOutput::testStreamNameServerRoundTrip()
                  "an empty stream name should reset media.name to the application name");
     }
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testStreamNameLiveUpdate()
@@ -418,7 +420,7 @@ void TestAudioOutput::testStreamNameLiveUpdate()
                 return serverProps().has_value();
             },
             5000)) {
-        output->close();
+        QVERIFY(output->close());
         if (viaSdl) {
             QSKIP("SDL stream not visible in PipeWire (SDL audio not using its PipeWire driver)");
         }
@@ -441,7 +443,7 @@ void TestAudioOutput::testStreamNameLiveUpdate()
                  5000),
              "an empty stream name should reset media.name to the application name");
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testSdlStreamNameHints()
@@ -484,7 +486,7 @@ void TestAudioOutput::testPositionMsCalculation()
     QVERIFY(output->position() == 0ms);
     QVERIFY(output->totalSamplesWritten() == 0);
 
-    output->setPositionOffset(1000ms);
+    std::ignore = output->setPositionOffset(1000ms);
     QVERIFY2(output->position() == 1000ms, "position() should reflect the offset set via setPositionOffset");
 }
 
@@ -512,7 +514,7 @@ void TestAudioOutput::testReset()
     fillQueue(&pipe, std::vector<float>(4096, 0.5f));
     QTest::qWait(100);
 
-    output->close();
+    QVERIFY(output->close());
     output->reset();
     QVERIFY(output->position() == 0ms);
     QVERIFY(output->totalSamplesWritten() == 0);
@@ -523,10 +525,10 @@ void TestAudioOutput::testStopWithoutStart()
     auto output = createPlaybackPipeline();
     QVERIFY(output);
 
-    output->close();
+    QVERIFY(output->close());
     QVERIFY(!output->isDeviceOpen());
 
-    output->close();
+    QVERIFY(output->close());
     QVERIFY(!output->isDeviceOpen());
 }
 
@@ -542,7 +544,7 @@ void TestAudioOutput::testStartStopLifecycle()
 
     QTest::qWait(100);
 
-    output->close();
+    QVERIFY(output->close());
 
     QVERIFY(!output->isDeviceOpen());
 
@@ -561,7 +563,7 @@ void TestAudioOutput::testMultipleStartStopCycles()
     for (int i = 0; i < 3; ++i) {
         output->open(44100, 2);
         QTest::qWait(50);
-        output->close();
+        QVERIFY(output->close());
         output->reset();
     }
 
@@ -589,7 +591,7 @@ void TestAudioOutput::testAudioDataProcessing()
     qint64 samples = output->totalSamplesWritten();
     QVERIFY2(samples > 0, qPrintable(u"Expected some samples to be processed, got %1"_s.arg(samples)));
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testPositionTrackingWithData()
@@ -611,7 +613,7 @@ void TestAudioOutput::testPositionTrackingWithData()
     QVERIFY2(posMs >= 100ms && posMs <= 800ms,
              qPrintable(u"Expected position in [100, 800]ms after feeding 1s of audio (44100 stereo), got %1 ms"_s.arg(posMs.count())));
 
-    output->close();
+    QVERIFY(output->close());
     output->reset();
 
     QVERIFY(output->position() == 0ms);
@@ -641,7 +643,7 @@ void TestAudioOutput::testQueueBehavior()
 
     QVERIFY2(output2->totalSamplesWritten() > 0, "Second sink should have consumed samples from pipe");
 
-    output2->close();
+    QVERIFY(output2->close());
     QVERIFY2(!output2->isDeviceOpen(), "Second sink should be closed after close()");
 }
 
@@ -660,7 +662,7 @@ void TestAudioOutput::testStartWhileAlreadyStarted()
     QVERIFY(output->isDeviceOpen());
     QVERIFY(output->hasFormat(48000, 2));
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testStopWithActiveCallbacks()
@@ -680,7 +682,7 @@ void TestAudioOutput::testStopWithActiveCallbacks()
 
     fillQueue(&pipe, std::vector<float>(4096, 0.3f));
 
-    output->close();
+    QVERIFY(output->close());
     QVERIFY(!output->isDeviceOpen());
 
     output->reset();
@@ -705,7 +707,7 @@ void TestAudioOutput::testRapidStartStopCycles()
 
         fillQueue(&pipe, std::vector<float>(2048, 0.3f));
 
-        output->close();
+        QVERIFY(output->close());
         QVERIFY(!output->isDeviceOpen());
         output->reset();
     }
@@ -726,7 +728,7 @@ void TestAudioOutput::testStopDuringStarvation()
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-    output->close();
+    QVERIFY(output->close());
     QVERIFY(!output->isDeviceOpen());
 
     output->reset();
@@ -774,7 +776,7 @@ void TestAudioOutput::testFlushOpensGate()
     output->closeGate();
     QVERIFY(!output->isQueueReady());
 
-    output->setPositionOffset(0ms);
+    std::ignore = output->setPositionOffset(0ms);
 
     QTest::qWait(100);
 
@@ -782,7 +784,7 @@ void TestAudioOutput::testFlushOpensGate()
 
     QCOMPARE(pipe.consumer().ready(), size_t(0));
 
-    output->close();
+    QVERIFY(output->close());
     QVERIFY(!output->isDeviceOpen());
 }
 
@@ -809,7 +811,7 @@ void TestAudioOutput::testStartPaused()
     QVERIFY(output->isDeviceOpen());
     QVERIFY(output->hasFormat(44100, 2));
 
-    output->close();
+    QVERIFY(output->close());
     QVERIFY(!output->isDeviceOpen());
 }
 
@@ -850,7 +852,7 @@ void TestAudioOutput::testPauseResumeCycle()
     QVERIFY(output->isDeviceOpen());
     QVERIFY(!output->isPaused());
 
-    output->close();
+    QVERIFY(output->close());
     QVERIFY(!output->isDeviceOpen());
 }
 
@@ -874,7 +876,7 @@ void TestAudioOutput::testIsPausedBasic()
     output->resume();
     QVERIFY(!output->isPaused());
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testIsPausedAfterStop()
@@ -889,7 +891,7 @@ void TestAudioOutput::testIsPausedAfterStop()
     output->pause();
     QVERIFY(output->isPaused());
 
-    output->close();
+    QVERIFY(output->close());
     QVERIFY(!output->isPaused());
     QVERIFY(!output->isDeviceOpen());
 }
@@ -920,7 +922,7 @@ void TestAudioOutput::testSeekWhilePaused()
     QVERIFY(!output->isQueueReady());
 
     const std::chrono::milliseconds seekTarget{30000};
-    output->setPositionOffset(seekTarget);
+    std::ignore = output->setPositionOffset(seekTarget);
 
     const std::chrono::milliseconds posAfterSeek = output->position();
     QCOMPARE(posAfterSeek, seekTarget);
@@ -932,7 +934,7 @@ void TestAudioOutput::testSeekWhilePaused()
     output->resume();
     QVERIFY(!output->isPaused());
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testPositionStabilityDuringPause()
@@ -963,7 +965,7 @@ void TestAudioOutput::testPositionStabilityDuringPause()
     const std::chrono::milliseconds posAfterResume = output->position();
     QVERIFY2(posAfterResume >= posAtPause, "Position must not go backward after resume from pause");
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testPositionAdvancesSmoothlyDuringPlayback()
@@ -990,7 +992,7 @@ void TestAudioOutput::testPositionAdvancesSmoothlyDuringPlayback()
         samples.push_back(output->position());
     }
 
-    output->close();
+    QVERIFY(output->close());
 
     for (qsizetype i = 1; i < samples.size(); ++i) {
         QVERIFY2(samples[i] >= samples[i - 1] - 50ms,
@@ -1156,7 +1158,7 @@ void TestAudioOutput::testDrainCallback()
 
     QVERIFY(!output->boundaryEndOfStream(output->streamEpoch()));
 
-    output->setPositionOffset(std::chrono::milliseconds{0});
+    std::ignore = output->setPositionOffset(std::chrono::milliseconds{0});
     output->resume();
 
     fillQueue(&pipe, std::vector<float>(8820, 0.5f));
@@ -1180,7 +1182,7 @@ void TestAudioOutput::testDrainCallback()
     QTest::qWait(150);
     QCOMPARE(drainSpy.count(), countAfterFirstDrain + 1);
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testDrainRepeatCycles()
@@ -1218,11 +1220,11 @@ void TestAudioOutput::testDrainRepeatCycles()
         QTest::qWait(50);
         QCOMPARE(drainSpy.count(), countBefore + 1);
 
-        output->setPositionOffset(std::chrono::milliseconds{0});
+        std::ignore = output->setPositionOffset(std::chrono::milliseconds{0});
         output->resume();
     }
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testBoundaryStaleEpochTagDiscarded()
@@ -1246,7 +1248,7 @@ void TestAudioOutput::testBoundaryStaleEpochTagDiscarded()
 
     QTRY_COMPARE_WITH_TIMEOUT(trackSpy.count(), 1, 5000);
 
-    output->setPositionOffset(std::chrono::milliseconds{0});
+    std::ignore = output->setPositionOffset(std::chrono::milliseconds{0});
     QTRY_VERIFY2(output->streamEpoch() > epoch, "flush should bump the stream epoch");
 
     fillQueue(&pipe, std::vector<float>(8820, 0.5f));
@@ -1263,7 +1265,7 @@ void TestAudioOutput::testBoundaryStaleEpochTagDiscarded()
     QTest::qWait(300);
     QCOMPARE(trackSpy.count(), 1);
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testProducerStateUnit()
@@ -1327,7 +1329,7 @@ void TestAudioOutput::testSamplesProducedStaleEpochDiscarded()
     QCOMPARE(output->producerSamples(), 1000);
 
     // Flush supersedes the epoch and resets producerSamples to 0
-    output->setPositionOffset(std::chrono::milliseconds{0});
+    std::ignore = output->setPositionOffset(std::chrono::milliseconds{0});
     QTRY_VERIFY2(output->streamEpoch() > initialEpoch, "flush should bump the stream epoch");
     QCOMPARE(output->producerSamples(), 0);
 
@@ -1340,7 +1342,7 @@ void TestAudioOutput::testSamplesProducedStaleEpochDiscarded()
     output->samplesProduced(currentEpoch, 500);
     QCOMPARE(output->producerSamples(), 500);
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testSamplesProducedConcurrentFlushRace()
@@ -1476,7 +1478,7 @@ void TestAudioOutput::testVolumeChangeWhilePlaying()
     QTRY_VERIFY(!output->muted());
     QVERIFY(muteSpy.count() >= 1);
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testStartupExternalVolumeRestored()
@@ -1550,22 +1552,22 @@ void TestAudioOutput::testExternalVolumeChangePropagates()
     if (backend == u"dragonpulseaudiosink"_s) {
         uint32_t sinkInputIndex = 0;
         if (!findSinkInputByApplicationName(uniqueTag, sinkInputIndex)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("Could not locate PulseAudio sink-input for test stream");
         }
         if (!setSinkInputVolume(sinkInputIndex, 30)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("pactl set-sink-input-volume failed");
         }
         changed = true;
     } else {
         uint32_t nodeId = 0;
         if (!findPwNodeByApplicationName(uniqueTag, nodeId)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("Could not locate PipeWire node for test stream");
         }
         if (!setPwNodeVolume(nodeId, 0.3f)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("pw-cli set-param failed");
         }
         changed = true;
@@ -1580,7 +1582,7 @@ void TestAudioOutput::testExternalVolumeChangePropagates()
         QVERIFY2(propagated, "External volume change should propagate to PlaybackPipeline::volumeChanged()");
     }
 
-    output->close();
+    QVERIFY(output->close());
 }
 
 void TestAudioOutput::testExternalMuteChangePropagates()
@@ -1621,22 +1623,22 @@ void TestAudioOutput::testExternalMuteChangePropagates()
     if (backend == u"dragonpulseaudiosink"_s) {
         uint32_t sinkInputIndex = 0;
         if (!findSinkInputByApplicationName(uniqueTag, sinkInputIndex)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("Could not locate PulseAudio sink-input for test stream");
         }
         if (!setSinkInputMute(sinkInputIndex, true)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("pactl set-sink-input-mute failed");
         }
         changed = true;
     } else {
         uint32_t nodeId = 0;
         if (!findPwNodeByApplicationName(uniqueTag, nodeId)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("Could not locate PipeWire node for test stream");
         }
         if (!setPwNodeMute(nodeId, true)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("pw-cli set-param (mute) failed");
         }
         changed = true;
@@ -1657,22 +1659,22 @@ void TestAudioOutput::testExternalMuteChangePropagates()
     if (backend == u"dragonpulseaudiosink"_s) {
         uint32_t sinkInputIndex = 0;
         if (!findSinkInputByApplicationName(uniqueTag, sinkInputIndex)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("Could not locate PulseAudio sink-input for test stream");
         }
         if (!setSinkInputMute(sinkInputIndex, false)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("pactl set-sink-input-mute failed");
         }
         changed = true;
     } else {
         uint32_t nodeId = 0;
         if (!findPwNodeByApplicationName(uniqueTag, nodeId)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("Could not locate PipeWire node for test stream");
         }
         if (!setPwNodeMute(nodeId, false)) {
-            output->close();
+            QVERIFY(output->close());
             QSKIP("pw-cli set-param (unmute) failed");
         }
         changed = true;
@@ -1687,7 +1689,126 @@ void TestAudioOutput::testExternalMuteChangePropagates()
         QVERIFY2(propagated, "External unmute change should propagate to PlaybackPipeline::mutedChanged()");
     }
 
-    output->close();
+    QVERIFY(output->close());
+}
+
+void TestAudioOutput::testSdlPausedSeekAndCrossfadePauseCount()
+{
+    if (currentSinkBackend() != u"dragonsdlaudiosink"_s) {
+        QSKIP("SDL paused-stream accounting test requires dragonsdlaudiosink");
+    }
+
+    auto output = createPlaybackPipeline();
+    QVERIFY(output);
+
+    Pipe<float> pipeA(65536);
+    output->setAudioPipe(&pipeA);
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    fillQueue(&pipeA, std::vector<float>(32000, 0.5f));
+    output->samplesProduced(output->streamEpoch(), 32000);
+    QTRY_VERIFY_WITH_TIMEOUT(output->totalSamplesWritten() > 0, 5000);
+
+    // Pausing, seeking while paused (which closes the paused stream), reopening,
+    // and calling pause() again (including idempotent repeat) must pause SDL.
+    output->pause();
+    QVERIFY(output->isPaused());
+    std::ignore = output->setPositionOffset(500ms);
+    QVERIFY(!output->isDeviceOpen());
+
+    pipeA.consumer().drain();
+    fillQueue(&pipeA, std::vector<float>(32000, 0.5f));
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+    output->samplesProduced(output->streamEpoch(), 32000);
+
+    output->pause();
+    output->pause();
+    QVERIFY(output->isPaused());
+
+    QTest::qWait(50);
+    const qint64 writtenWhilePaused = output->totalSamplesWritten();
+    QTest::qWait(150);
+    QCOMPARE(output->totalSamplesWritten(), writtenWhilePaused);
+
+    // Idempotent resume must decrement the paused count cleanly and resume playback.
+    output->resume();
+    output->resume();
+    QVERIFY(!output->isPaused());
+    QTRY_VERIFY_WITH_TIMEOUT(output->totalSamplesWritten() > writtenWhilePaused, 5000);
+
+    // Closing two paused crossfade streams and resetting to one stream must not
+    // leave phantom paused counts behind.
+    Pipe<float> pipeB(65536);
+    std::ignore = output->armCrossfade(&pipeA, &pipeB, 500ms, 500ms);
+    output->open(44100, 2);
+    QVERIFY(output->isCrossfading());
+    output->pause();
+    QVERIFY(output->isPaused());
+    QVERIFY(output->close());
+    output->reset();
+
+    Pipe<float> pipeC(65536);
+    output->setAudioPipe(&pipeC);
+    output->open(44100, 2);
+    fillQueue(&pipeC, std::vector<float>(32000, 0.5f));
+    output->samplesProduced(output->streamEpoch(), 32000);
+    QVERIFY(!output->isPaused());
+
+    output->pause();
+    QVERIFY(output->isPaused());
+    QTest::qWait(50);
+    const qint64 singleStreamPausedSamples = output->totalSamplesWritten();
+    QTest::qWait(150);
+    QCOMPARE(output->totalSamplesWritten(), singleStreamPausedSamples);
+
+    output->resume();
+    QVERIFY(!output->isPaused());
+    QTRY_VERIFY_WITH_TIMEOUT(output->totalSamplesWritten() > singleStreamPausedSamples, 5000);
+
+    QVERIFY(output->close());
+}
+
+void TestAudioOutput::testPulseAudioSecondStreamFailurePreservesFirstStream()
+{
+    if (currentSinkBackend() != u"dragonpulseaudiosink"_s) {
+        QSKIP("PulseAudio multi-stream failure test requires dragonpulseaudiosink");
+    }
+
+    auto output = createPlaybackPipeline();
+    QVERIFY(output);
+
+    Pipe<float> pipeA(65536);
+    output->setAudioPipe(&pipeA);
+    output->open(44100, 2);
+    QVERIFY(output->isDeviceOpen());
+
+    fillQueue(&pipeA, std::vector<float>(32000, 0.5f));
+    output->samplesProduced(output->streamEpoch(), 32000);
+    QTRY_VERIFY_WITH_TIMEOUT(output->totalSamplesWritten() > 0, 5000);
+
+    // Failing to create a second stream on the shared connection (invalid channel count)
+    // must keep the PulseAudio context and active first stream intact without asserting.
+    Voice dummyRenderer(&pipeA, 99, Voice::Notifiers{});
+    auto failedSecond = output->sink()->createStream(44100, 99, dummyRenderer);
+    QVERIFY(!failedSecond.has_value());
+
+    const qint64 writtenBefore = output->totalSamplesWritten();
+    fillQueue(&pipeA, std::vector<float>(16000, 0.5f));
+    output->samplesProduced(output->streamEpoch(), 16000);
+    QTRY_VERIFY_WITH_TIMEOUT(output->totalSamplesWritten() > writtenBefore, 5000);
+
+    // Same failure via PlaybackPipeline crossfade open keeps failure local until abort.
+    Pipe<float> pipeB(65536);
+    std::ignore = output->armCrossfade(&pipeA, &pipeB, 500ms, 500ms);
+    output->open(44100, 99);
+    QVERIFY(!output->isDeviceOpen());
+    QVERIFY(output->isCrossfading());
+
+    output->abortFadingVoice();
+    QVERIFY(!output->isCrossfading());
+    QVERIFY(output->close());
 }
 
 QTEST_MAIN(TestAudioOutput)

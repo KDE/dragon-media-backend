@@ -89,6 +89,10 @@ private:
         // stale stream epoch the sink rejects.
         std::atomic<uint64_t> contentEpoch{0};
         std::atomic<uint64_t> streamEpoch{1};
+        // The stream epoch this slot's decode thread last observed after
+        // clearing the sink producer gate. Stamped on TrackStart/EndOfStream
+        // boundaries so boundaries of a superseded stream are rejected.
+        std::atomic<std::uint64_t> producerStreamEpoch{1};
     };
 
     // Two rotating (decode pipeline, audio pipe) slots. Crossfading needs the
@@ -167,13 +171,6 @@ private:
     // and thereby guarantees the pending entry exists) and before the flush
     // is armed.
     void resolvePendingTrackForSeek();
-
-    // The stream epoch the decode thread's producer last observed before a
-    // write (see PlaybackPipeline::streamEpoch()). Decode-thread confined
-    // writer; read on the decode thread when recording boundaries. A
-    // TrackStart boundary is stamped with it so boundaries of a superseded
-    // stream are discarded instead of firing in the new one.
-    std::atomic<std::uint64_t> m_producerStreamEpoch{0};
 
     void invalidateQueuedContent();
 

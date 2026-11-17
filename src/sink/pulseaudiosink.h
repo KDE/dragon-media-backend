@@ -68,7 +68,7 @@ public:
 private:
     friend class PulseAudioSink;
 
-    [[nodiscard]] bool connectStream();
+    [[nodiscard]] bool connectStream(const StreamVolumeInit &volumeInit);
     [[nodiscard]] bool closeStream() override;
 
     void applyVolume(float linearGain);
@@ -131,7 +131,7 @@ public:
 
     [[nodiscard]] bool probe() override;
     [[nodiscard]] std::expected<std::unique_ptr<AudioSinkStream>, QString>
-    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer) override;
+    createStream(int sampleRate, int channels, AudioSinkStreamRenderer &renderer, StreamVolumeInit volumeInit = {}) override;
 
     void setStreamName(const QString &name) override;
 

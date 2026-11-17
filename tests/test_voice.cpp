@@ -56,16 +56,10 @@ std::unique_ptr<Voice> makeVoice(Pipe<float> *pipe, std::uint64_t generation, Vo
     return std::make_unique<Voice>(pipe, generation, std::move(notifiers));
 }
 
-std::atomic<bool> &finishedFlag()
-{
-    static std::atomic<bool> flag{false};
-    return flag;
-}
-
 Voice::Notifiers fadingFinishedNotifiers(std::atomic<bool> &flag)
 {
     Voice::Notifiers notifiers;
-    notifiers.fadingFinished = [&flag]() {
+    notifiers.fadingFinished = [&flag](std::uint64_t) {
         flag.store(true, std::memory_order_release);
     };
     return notifiers;
@@ -93,6 +87,9 @@ private Q_SLOTS:
     void testSeekGatingNearEos();
     void testCrossfadeMidPrimaryFadeInPreservesOutgoingGain();
     void testFadeCompletionReleasesUnderrunSuppression();
+    void testFadingVoiceFormatStallTerminatesCleanly();
+    void testDemotedVoiceDrainsStagedFlushBeforeFadeOut();
+    void testPackedFlushStagingAndOverwrite();
 };
 
 void TestVoice::testLatchHasZeroSwapWindowDropout()
@@ -363,6 +360,119 @@ void TestVoice::testFadeCompletionReleasesUnderrunSuppression()
     // underruns count again (outgoingActive suppression released).
     QVERIFY(incoming->render(2048).empty());
     QCOMPARE(incoming->clock().underrunCount(), 1);
+}
+
+void TestVoice::testFadingVoiceFormatStallTerminatesCleanly()
+{
+    Pipe<float> pipeA;
+    Pipe<float> pipeB;
+
+    std::atomic<bool> finished{false};
+    auto incoming = makeVoice(&pipeB, 2);
+    std::ignore = incoming->publishInitialStream(0ms);
+    incoming->setPendingFadeIn(0ms);
+
+    auto outgoing = makeVoice(&pipeA, 1, fadingFinishedNotifiers(finished));
+    outgoing->setFormat(44100, kTestChannels);
+    const auto epoch = outgoing->publishInitialStream(0ms);
+
+    // 1024 stereo frames = 2048 samples at 44100 Hz followed by a 48000 Hz boundary
+    // and buffered samples of the next track so the pipe is non-empty at the boundary.
+    writeAll(pipeA, makeConstant(0.5f, 1024, kTestChannels));
+    outgoing->clock().samplesProduced(epoch, 2048);
+    QVERIFY(outgoing->clock().boundaryTrackStart(2, 48000, kTestChannels, 1000ms, epoch));
+    writeAll(pipeA, makeConstant(0.25f, 1024, kTestChannels));
+    outgoing->clock().samplesProduced(epoch, 2048);
+
+    QCOMPARE(drainSpan(outgoing->render(1024)).size(), size_t{1024});
+
+    outgoing->demoteToFading(incoming->crossfadeLink(), 1000ms, false);
+    QVERIFY(incoming->crossfadeLink()->outgoingActive.load(std::memory_order_acquire));
+
+    QCOMPARE(drainSpan(outgoing->render(2048)).size(), size_t{1024});
+    QVERIFY(!finished.load(std::memory_order_acquire));
+
+    // Next pull hits BoundaryAdvance::FormatStall on Role::Fading: must finish
+    // cleanly, emit fadingFinished, and release outgoingActive on the link.
+    QVERIFY(outgoing->render(2048).empty());
+    QVERIFY(finished.load(std::memory_order_acquire));
+    QVERIFY(!incoming->crossfadeLink()->outgoingActive.load(std::memory_order_acquire));
+    QVERIFY(incoming->render(2048).empty());
+    QCOMPARE(incoming->clock().underrunCount(), 1);
+}
+
+void TestVoice::testDemotedVoiceDrainsStagedFlushBeforeFadeOut()
+{
+    Pipe<float> pipeA;
+    Pipe<float> pipeB;
+
+    auto incoming = makeVoice(&pipeB, 2);
+    std::ignore = incoming->publishInitialStream(0ms);
+    incoming->setPendingFadeIn(0ms);
+
+    auto outgoing = makeVoice(&pipeA, 1);
+    outgoing->setFormat(44100, kTestChannels);
+    const auto epoch1 = outgoing->publishInitialStream(0ms);
+
+    // Stale pre-seek audio (0.25f) sitting in the outgoing pipe when a seek
+    // flush is staged immediately before demotion to Role::Fading.
+    writeAll(pipeA, makeConstant(0.25f, 1024, kTestChannels));
+    outgoing->clock().samplesProduced(epoch1, 2048);
+    const auto epoch2 = outgoing->stageFlush(0ms);
+    QVERIFY(outgoing->isFlushPending());
+    QVERIFY(!outgoing->clock().isQueueReady());
+
+    outgoing->demoteToFading(incoming->crossfadeLink(), 1000ms, false);
+
+    // First render on the fading voice must consume the pending flush, drain all
+    // stale pre-seek samples, publish epoch2, and open the producer gate.
+    QVERIFY(outgoing->render(2048).empty());
+    QVERIFY(!outgoing->isFlushPending());
+    QCOMPARE(pipeA.consumer().ready(), size_t{0});
+    QCOMPARE(outgoing->clock().streamEpoch(), epoch2);
+    QVERIFY(outgoing->clock().isQueueReady());
+
+    // Post-seek samples (0.8f) arrive and fade out cleanly without any 0.25f splice.
+    // The prior dry-pipe starvation quantum advanced the 1000ms fade-out by 1024 frames.
+    writeAll(pipeA, makeConstant(0.8f, 1024, kTestChannels));
+    outgoing->clock().samplesProduced(epoch2, 2048);
+    const auto out = drainSpan(outgoing->render(2048));
+    QCOMPARE(out.size(), size_t{2048});
+    const float expectedFirstSample = 0.8f * std::cos((1024.0f / 44100.0f) * (std::numbers::pi_v<float> * 0.5f));
+    QVERIFY(qAbs(out[0] - expectedFirstSample) < 1e-3f);
+    QVERIFY(out[out.size() - 2] < out[0]);
+}
+
+void TestVoice::testPackedFlushStagingAndOverwrite()
+{
+    Pipe<float> pipe;
+    writeAll(pipe, makeConstant(0.5f, kTestFrames, kTestChannels));
+
+    auto primary = makeVoice(&pipe, 1);
+    primary->setFormat(44100, kTestChannels);
+    std::ignore = primary->publishInitialStream(0ms);
+
+    // Stage a slow 1500ms flush, then overwrite with a 500ms flush before render()
+    // consumes it; only the newer epoch and fade-in duration should apply.
+    const auto ep1 = primary->stageFlush(1500ms);
+    QVERIFY(primary->isFlushPending());
+    const auto ep2 = primary->stageFlush(500ms);
+    QVERIFY(ep2 > ep1);
+    QVERIFY(primary->isFlushPending());
+
+    QVERIFY(primary->render(2048).empty());
+    QVERIFY(!primary->isFlushPending());
+    QCOMPARE(primary->clock().streamEpoch(), ep2);
+
+    // At 500ms @ 44100 Hz (= 22050 frames), 1024 stereo frames advances to
+    // t = 1024 / 22050; equal-power fade-in reaches sin(t * pi / 2) (~0.0729).
+    writeAll(pipe, makeConstant(0.5f, kTestFrames, kTestChannels));
+    primary->clock().samplesProduced(ep2, static_cast<std::size_t>(kTestFrames) * kTestChannels);
+    const auto out = drainSpan(primary->render(2048));
+    QCOMPARE(out.size(), size_t{2048});
+    const float expectedFrameEndGain = std::sin((1023.0f / 22050.0f) * (std::numbers::pi_v<float> * 0.5f));
+    const float expectedLastSample = 0.5f * expectedFrameEndGain;
+    QVERIFY2(qAbs(out.back() - expectedLastSample) < 1e-3f, "Overwritten fade-in duration must match 500ms, not 1500ms");
 }
 
 QTEST_GUILESS_MAIN(TestVoice)

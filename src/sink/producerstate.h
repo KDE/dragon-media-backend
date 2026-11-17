@@ -28,6 +28,17 @@ public:
     {
     }
 
+    struct Snapshot {
+        std::uint64_t epoch = 0;
+        std::uint64_t samples = 0;
+    };
+
+    [[nodiscard]] Snapshot snapshot(std::memory_order order = std::memory_order_acquire) const noexcept
+    {
+        const auto state = m_state.load(order);
+        return {unpackEpoch(state), unpackSamples(state)};
+    }
+
     [[nodiscard]] std::uint64_t epoch(std::memory_order order = std::memory_order_acquire) const noexcept
     {
         return unpackEpoch(m_state.load(order));

@@ -96,6 +96,12 @@ private Q_SLOTS:
     void testCrossfadeSlotStreamEpochFollowsClock();
     void testClearSourceDuringCrossfadeStopsPlayback();
     void testFadeInFromStoppedState();
+    void testSeekNearEosAndPostDecodeEofTail();
+    void testStopDuringLoadingMediaThenPlayReachesEos();
+    void testPausePlayDuringCrossfadeLoadingFreezesPosition();
+    void testFatalDecodeErrorDuringCrossfadeStopsFadingVoice();
+    void testSetDifferentSourceWhilePlayingClosesDeviceAndStaysStopped();
+    void testSeekWhileStoppedDoesNotOpenDeviceAndPlaysFromTarget();
 };
 
 void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
@@ -1057,6 +1063,183 @@ void TestPlayerPlayback::testFadeInFromStoppedState()
     QVERIFY2(advanced, "Playback with standalone fade-in from StoppedState must advance");
 
     player.stop();
+}
+
+void TestPlayerPlayback::testSeekNearEosAndPostDecodeEofTail()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    // Part 1: Seek near EOF while active decoding is running reaches EndOfMedia cleanly.
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QTRY_VERIFY_WITH_TIMEOUT(diag.audioPosition() > 100ms, 5000);
+
+    const auto dur = player.duration();
+    QVERIFY(dur.has_value() && *dur > 1000ms);
+    player.setPosition(*dur - 25ms);
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::EndOfMedia, 6000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    // Part 2: Seek after the decoder has reached Phase::Finished (!hasActiveDecoder())
+    // while the buffered pipe tail is still playing out.
+    QVERIFY(helper.setSourceAndWait(u"gs-3s-2c-44100hz.ogg"_s));
+    QVERIFY(helper.playAndWait());
+
+    QTRY_VERIFY_WITH_TIMEOUT(player.playbackState() == DragonPlayer::PlaybackState::PlayingState && player.status() == DragonPlayer::MediaStatus::LoadedMedia
+                                 && !diag.hasActiveDecoder(),
+                             6000);
+
+    player.setPosition(1500ms);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::EndOfMedia, 6000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayerPlayback::testStopDuringLoadingMediaThenPlayReachesEos()
+{
+    EnvGuard slowOpenGuard({{"DRAGON_TEST_SLOW_OPEN", QByteArray("1")}});
+
+    DragonPlayer player;
+    Diagnostics diag(&player);
+
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s)));
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::LoadingMedia);
+    QTest::qWait(100);
+
+    player.stop();
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::LoadedMedia, 5000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    player.play();
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::EndOfMedia, 8000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    QVERIFY(diag.producerSamples() > 0);
+    QCOMPARE(diag.producerSamples(), diag.audioSamplesRead());
+}
+
+void TestPlayerPlayback::testPausePlayDuringCrossfadeLoadingFreezesPosition()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QVERIFY(diag.isAudioActive());
+
+    EnvGuard slowOpenGuard({{"DRAGON_TEST_SLOW_OPEN", QByteArray("1")}});
+    DragonSourceOptions opts;
+    opts.setCrossfadeDuration(2000ms);
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)), opts);
+
+    QCOMPARE(player.status(), DragonPlayer::MediaStatus::LoadingMedia);
+    QVERIFY(diag.playbackPipeline()->isCrossfading());
+    QVERIFY(!diag.playbackPipeline()->isDeviceOpen());
+
+    QTest::qWait(150);
+    QCOMPARE(player.position(), 0ms);
+
+    player.pause();
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PausedState);
+    QVERIFY(diag.playbackPipeline()->isPaused());
+    QTest::qWait(120);
+    QCOMPARE(player.position(), 0ms);
+
+    player.play();
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY(!diag.playbackPipeline()->isPaused());
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::LoadedMedia, 5000);
+    QVERIFY(diag.playbackPipeline()->isDeviceOpen());
+    QTRY_VERIFY_WITH_TIMEOUT(player.position() > 50ms, 5000);
+
+    player.stop();
+}
+
+void TestPlayerPlayback::testFatalDecodeErrorDuringCrossfadeStopsFadingVoice()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QVERIFY(diag.isAudioActive());
+
+    DragonSourceOptions opts;
+    opts.setCrossfadeDuration(2000ms);
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"does_not_exist_crossfade_error.mp3"_s)), opts);
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::InvalidMedia, 5000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY(player.error() != DragonPlayer::Error::NoError);
+    QVERIFY(!diag.playbackPipeline()->isCrossfading());
+    QVERIFY(!diag.playbackPipeline()->isDeviceOpen());
+}
+
+void TestPlayerPlayback::testSetDifferentSourceWhilePlayingClosesDeviceAndStaysStopped()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QVERIFY(helper.playAndWait());
+    QVERIFY(diag.playbackPipeline()->isDeviceOpen());
+
+    // Switching to a different URL without crossfade while playing must close
+    // the active stream immediately and remain closed in StoppedState once loaded.
+    player.setSource(QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s)));
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY2(!diag.playbackPipeline()->isDeviceOpen(), "Audio stream must close immediately on non-crossfade setSource(differentUrl)");
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QTest::qWait(150);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY2(!diag.playbackPipeline()->isDeviceOpen(), "Audio stream must stay closed after new source finishes loading in StoppedState");
+    QCOMPARE(diag.audioSamplesRead(), qint64{0});
+}
+
+void TestPlayerPlayback::testSeekWhileStoppedDoesNotOpenDeviceAndPlaysFromTarget()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    QVERIFY(helper.setSourceAndWait(u"sample-3s.mp3"_s));
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY(!diag.playbackPipeline()->isDeviceOpen());
+
+    const auto dur = player.duration();
+    QVERIFY(dur.has_value() && *dur > 2500ms);
+
+    // Seek near EOF while in StoppedState (before play() has ever been called).
+    // Must not open the audio device, and once the decoder finishes buffering the
+    // short remaining tail into audioPipe, play() must play from 2500ms without reloading.
+    player.setPosition(2500ms);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY2(!diag.playbackPipeline()->isDeviceOpen(), "setPosition() in StoppedState must not open the audio device");
+    VERIFY_POSITION_NEAR(player.position(), 2500ms, 50ms);
+
+    QTRY_VERIFY_WITH_TIMEOUT(!diag.hasActiveDecoder(), 5000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY(!diag.playbackPipeline()->isDeviceOpen());
+
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+    player.play();
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY2(!SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::LoadingMedia),
+             "play() after StoppedState seek near EOF must not reload the source from 0ms");
+    VERIFY_POSITION_NEAR(player.position(), 2500ms, 250ms);
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::EndOfMedia, 5000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
 }
 
 QTEST_MAIN(TestPlayerPlayback)

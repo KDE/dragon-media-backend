@@ -56,13 +56,6 @@ public:
         m_closing.store(true, std::memory_order_seq_cst);
     }
 
-    // Only call after native teardown completes; a timed-out close must remain
-    // closed so a wedged callback can never touch torn-down state.
-    void endClose()
-    {
-        m_closing.store(false, std::memory_order_seq_cst);
-    }
-
     [[nodiscard]] bool isClosing() const
     {
         return m_closing.load(std::memory_order_seq_cst);
