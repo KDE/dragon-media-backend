@@ -91,6 +91,8 @@ private:
     QLabel *m_timeLabel = nullptr;
 
     QSlider *m_volumeSlider = nullptr;
+    QSlider *m_crossfadeSlider = nullptr;
+    QLabel *m_crossfadeValueLabel = nullptr;
 
     QCheckBox *m_fftCheckBox = nullptr;
 

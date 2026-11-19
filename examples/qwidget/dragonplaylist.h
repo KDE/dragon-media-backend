@@ -52,6 +52,9 @@ public:
     [[nodiscard]] bool gaplessEnabled() const;
     void setGaplessEnabled(bool enabled);
 
+    [[nodiscard]] std::chrono::milliseconds crossfadeDuration() const;
+    void setCrossfadeDuration(std::chrono::milliseconds duration);
+
     void playNext();
     void playPrevious();
     void setCurrentIndex(int index);
@@ -61,6 +64,7 @@ Q_SIGNALS:
     void tracksChanged();
     void entryMetadataChanged(int index);
     void gaplessEnabledChanged(bool enabled);
+    void crossfadeDurationChanged(std::chrono::milliseconds duration);
 
 private:
     void updatePlayerQueue();
@@ -70,4 +74,5 @@ private:
     QList<Entry> m_tracks;
     int m_currentIndex = -1;
     bool m_gaplessEnabled = true;
+    std::chrono::milliseconds m_crossfadeDuration{std::chrono::seconds{2}};
 };

@@ -166,6 +166,23 @@ void MainWindow::setupUi()
     hVolLayout->addStretch();
     vLayout->addLayout(hVolLayout);
 
+    auto *hCrossfadeLayout = new QHBoxLayout();
+    auto *crossfadeLabel = new QLabel(i18n("Crossfade:"), this);
+    crossfadeLabel->setMinimumWidth(60);
+    m_crossfadeSlider = new QSlider(Qt::Horizontal, this);
+    m_crossfadeSlider->setRange(0, 10);
+    m_crossfadeSlider->setValue(2);
+    m_crossfadeSlider->setTickPosition(QSlider::TicksBelow);
+    m_crossfadeSlider->setTickInterval(1);
+    m_crossfadeSlider->setMaximumWidth(200);
+    m_crossfadeValueLabel = new QLabel(i18n("%1 s", 2), this);
+    m_crossfadeValueLabel->setMinimumWidth(36);
+    hCrossfadeLayout->addWidget(crossfadeLabel);
+    hCrossfadeLayout->addWidget(m_crossfadeSlider, 1);
+    hCrossfadeLayout->addWidget(m_crossfadeValueLabel);
+    hCrossfadeLayout->addStretch();
+    vLayout->addLayout(hCrossfadeLayout);
+
     auto *visualizerLabel = new QLabel(i18n("Visualizer"), this);
     visualizerLabel->setStyleSheet(u"font-weight: bold;"_s);
     vLayout->addWidget(visualizerLabel);
@@ -331,6 +348,18 @@ void MainWindow::connectPlayer()
             m_volumeSlider->setValue(vol);
     });
 
+    m_playerConnections << connect(m_crossfadeSlider, &QSlider::valueChanged, this, [this](int seconds) {
+        m_crossfadeValueLabel->setText(i18n("%1 s", seconds));
+        m_playlist->setCrossfadeDuration(std::chrono::seconds{seconds});
+    });
+    m_playerConnections << connect(m_playlist, &DragonPlaylist::crossfadeDurationChanged, this, [this](std::chrono::milliseconds duration) {
+        const int seconds = static_cast<int>(std::chrono::duration_cast<std::chrono::seconds>(duration).count());
+        m_crossfadeValueLabel->setText(i18n("%1 s", seconds));
+        if (m_crossfadeSlider->value() != seconds) {
+            m_crossfadeSlider->setValue(seconds);
+        }
+    });
+
     m_playerConnections << connect(m_player, &DragonPlayer::playbackStateChanged, this, [this](DragonPlayer::PlaybackState, DragonPlayer::PlaybackState) {
         updatePlaybackState();
     });
@@ -365,6 +394,7 @@ void MainWindow::changeAudioSink(int index)
     bool isPlaying = m_player->playbackState() == DragonPlayer::PlaybackState::PlayingState;
     qreal currentVolume = m_player->audioOutput()->volume();
     bool gaplessEnabled = m_playlist->gaplessEnabled();
+    const auto crossfadeDuration = m_playlist->crossfadeDuration();
     auto fftMode = m_spectrumAnalyzer->mode();
     auto fftRate = m_spectrumAnalyzer->frameRate();
 
@@ -385,6 +415,7 @@ void MainWindow::changeAudioSink(int index)
     m_diagnostics->setSpectrumAnalyzer(m_spectrumAnalyzer);
 
     m_playlist->setGaplessEnabled(gaplessEnabled);
+    m_playlist->setCrossfadeDuration(crossfadeDuration);
     m_player->audioOutput()->setVolume(currentVolume);
     m_spectrumAnalyzer->setMode(fftMode);
     m_spectrumAnalyzer->setFrameRate(fftRate);

@@ -10,16 +10,8 @@
 
 #include <QDebug>
 
+#include <algorithm>
 #include <chrono>
-
-using namespace std::chrono_literals;
-
-namespace
-{
-// 3 s equal-power crossfade when the user selects a different track.
-// Natural end-of-track gapless handoffs use setNextSource() and are unaffected.
-constexpr auto kTrackSwitchCrossfade = 3s;
-}
 
 DragonPlaylist::DragonPlaylist(DragonPlayer *player, QObject *parent)
     : QObject(parent)
@@ -186,7 +178,7 @@ void DragonPlaylist::playNext()
     }
     m_currentIndex++;
     DragonSourceOptions options;
-    options.setCrossfadeDuration(kTrackSwitchCrossfade);
+    options.setCrossfadeDuration(m_crossfadeDuration);
     m_player->setSource(m_tracks[m_currentIndex].url, options);
     m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
@@ -200,7 +192,7 @@ void DragonPlaylist::playPrevious()
     }
     m_currentIndex--;
     DragonSourceOptions options;
-    options.setCrossfadeDuration(kTrackSwitchCrossfade);
+    options.setCrossfadeDuration(m_crossfadeDuration);
     m_player->setSource(m_tracks[m_currentIndex].url, options);
     m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
@@ -214,7 +206,7 @@ void DragonPlaylist::setCurrentIndex(int index)
     }
     m_currentIndex = index;
     DragonSourceOptions options;
-    options.setCrossfadeDuration(kTrackSwitchCrossfade);
+    options.setCrossfadeDuration(m_crossfadeDuration);
     m_player->setSource(m_tracks[m_currentIndex].url, options);
     m_player->play();
     Q_EMIT currentIndexChanged(m_currentIndex);
@@ -232,6 +224,20 @@ void DragonPlaylist::setGaplessEnabled(bool enabled)
         m_gaplessEnabled = enabled;
         Q_EMIT gaplessEnabledChanged(enabled);
         updatePlayerQueue();
+    }
+}
+
+std::chrono::milliseconds DragonPlaylist::crossfadeDuration() const
+{
+    return m_crossfadeDuration;
+}
+
+void DragonPlaylist::setCrossfadeDuration(std::chrono::milliseconds duration)
+{
+    duration = std::max(std::chrono::milliseconds{0}, duration);
+    if (m_crossfadeDuration != duration) {
+        m_crossfadeDuration = duration;
+        Q_EMIT crossfadeDurationChanged(duration);
     }
 }
 
