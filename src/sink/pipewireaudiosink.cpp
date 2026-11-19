@@ -450,10 +450,10 @@ bool PipeWireAudioSinkStream::closeStream()
     }
 
     m_quiesce.beginClose();
-    const bool quiesced = m_quiesce.waitForIdle(500ms);
+    const bool quiesced = m_quiesce.waitForIdle(CallbackQuiesce::kDefaultCloseTimeout);
     if (!quiesced) {
-        qCCritical(dragonMediaBackendAudio)
-            << "PipeWire stream close(): callbacks did not quiesce within 500ms; leaking the pw stream (zombie state) to avoid a use-after-free";
+        qCCritical(dragonMediaBackendAudio) << "PipeWire stream close(): callbacks did not quiesce within" << CallbackQuiesce::kDefaultCloseTimeout.count()
+                                            << "ms; leaking the pw stream (zombie state) to avoid a use-after-free";
         m_sink.m_poisoned = true;
         // Deliberately leak: release the stream without destroying it, so a
         // still-running onProcess can keep dereferencing a valid object.

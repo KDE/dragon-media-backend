@@ -798,6 +798,15 @@ void TestPlaybackPipeline::testDestructorWithPoisonedFadingVoiceLeaksInsteadOfFr
     QVERIFY(fadingVoice->isPoisoned());
     // Stuck callback can still safely pull from the leaked fading voice under ASan.
     QCOMPARE(fadingStreamPtr->pump(2048).size(), size_t{2048});
+
+    pipeA.consumer().drain();
+    pipeA.setProducerDone(true);
+    for (int i = 0; i < 16; ++i) {
+        std::ignore = fadingStreamPtr->pump(2048);
+        QCoreApplication::processEvents();
+    }
+    QVERIFY(fadingVoice->isPoisoned());
+    QVERIFY(!fadingStreamPtr.isNull());
 }
 
 void TestPlaybackPipeline::testCrossfadeLinkOutlivesZombieFadingVoiceAcrossHardSwitch()

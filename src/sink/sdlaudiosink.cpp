@@ -369,10 +369,10 @@ bool SdlAudioSinkStream::closeStream()
     // RT path. While closing, callbacks bail out before touching anything,
     // so this is bounded.
     m_quiesce.beginClose();
-    const bool quiesced = m_quiesce.waitForIdle(500ms);
+    const bool quiesced = m_quiesce.waitForIdle(CallbackQuiesce::kDefaultCloseTimeout);
     if (!quiesced) {
-        qCCritical(dragonMediaBackendAudio)
-            << "SDL stream close(): callback did not quiesce within 500ms; leaking the native stream (zombie state) to avoid a use-after-free";
+        qCCritical(dragonMediaBackendAudio) << "SDL stream close(): callback did not quiesce within" << CallbackQuiesce::kDefaultCloseTimeout.count()
+                                            << "ms; leaking the native stream (zombie state) to avoid a use-after-free";
         // Deliberately leak the stream: it stays bound to the device, which
         // the sink also keeps alive, so a still-running callback can keep
         // dereferencing valid objects.

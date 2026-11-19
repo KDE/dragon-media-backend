@@ -439,7 +439,9 @@ void TestVoice::testDemotedVoiceDrainsStagedFlushBeforeFadeOut()
     const auto out = drainSpan(outgoing->render(2048));
     QCOMPARE(out.size(), size_t{2048});
     const float expectedFirstSample = 0.8f * std::cos((1024.0f / 44100.0f) * (std::numbers::pi_v<float> * 0.5f));
-    QVERIFY(qAbs(out[0] - expectedFirstSample) < 1e-3f);
+    const float noAdvanceSample = 0.8f;
+    QVERIFY2(qAbs(out[0] - expectedFirstSample) < qAbs(out[0] - noAdvanceSample), "fade-out did not advance over the dry-pipe starvation quantum");
+    QVERIFY(qAbs(out[0] - expectedFirstSample) < 2e-4f);
     QVERIFY(out[out.size() - 2] < out[0]);
 }
 

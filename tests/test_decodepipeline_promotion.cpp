@@ -100,6 +100,10 @@ private Q_SLOTS:
     // BoundaryEvent must report seekable=true for a promoted seekable track.
     void testBoundaryEventCarriesSeekable();
 
+    void testEofSyncKeepsDecoderAliveForSeek();
+
+    void testStopSessionSuppressesEndOfStream();
+
     // Multiple sequential promotions must keep the current source updated
     // so the final track reports its own URL on sessionFinished.
     void testSequentialPromotionsMaintainSourceIntegrity();
@@ -318,6 +322,132 @@ void TestDecodePipelinePromotion::testBoundaryEventCarriesSeekable()
         },
         15000));
     QVERIFY2(seekableSeen.load(std::memory_order_acquire), "Promoted local file track must be marked seekable in BoundaryEvent");
+}
+
+void TestDecodePipelinePromotion::testEofSyncKeepsDecoderAliveForSeek()
+{
+    QVERIFY(TestFixture::verifyExists(u"sample-3s.mp3"_s));
+    const QUrl url = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+
+    DragonPlayer player;
+    DecodePipeline pipeline(&player);
+
+    struct SampleLog {
+        std::mutex mutex;
+        std::size_t audioChunks = 0;
+        bool emptySyncSeen = false;
+    } sampleLog;
+
+    pipeline.setSamplesCallback([&sampleLog](std::span<const float> samples, const std::stop_token &) {
+        std::scoped_lock lock(sampleLog.mutex);
+        if (samples.empty()) {
+            sampleLog.emptySyncSeen = true;
+        } else {
+            ++sampleLog.audioChunks;
+        }
+    });
+
+    struct EosObservation {
+        bool emptySyncDelivered;
+        std::size_t audioChunks;
+    };
+    std::mutex eosMutex;
+    std::vector<EosObservation> eosObservations;
+    pipeline.setBoundaryCallback([&sampleLog, &eosMutex, &eosObservations](const DecodePipeline::BoundaryEvent &event) -> bool {
+        if (event.kind == DecodePipeline::BoundaryEvent::Kind::EndOfStream) {
+            std::scoped_lock eosLock(eosMutex);
+            std::scoped_lock logLock(sampleLog.mutex);
+            eosObservations.push_back(EosObservation{
+                .emptySyncDelivered = sampleLog.emptySyncSeen,
+                .audioChunks = sampleLog.audioChunks,
+            });
+        }
+        return true;
+    });
+
+    FinishedLog finished;
+    QObject::connect(&pipeline, &DecodePipeline::sessionFinished, [&finished](const QUrl &source, bool hadFatalError) {
+        Q_UNUSED(hadFatalError);
+        finished.append(source);
+    });
+
+    InitCapture init;
+    auto initTask = runInitialize(pipeline, url, &init);
+    QVERIFY(QTest::qWaitFor(
+        [&init]() {
+            return init.done.load(std::memory_order_acquire);
+        },
+        10000));
+    QVERIFY2(init.result.success, qPrintable(init.result.errorMessage));
+
+    QTRY_VERIFY_WITH_TIMEOUT(eosObservations.size() == std::size_t{1}, 15000);
+    {
+        std::scoped_lock eosLock(eosMutex);
+        QVERIFY2(eosObservations[0].emptySyncDelivered, "the EOF empty samples sync must be delivered before the EndOfStream boundary");
+        QVERIFY(eosObservations[0].audioChunks > 0);
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(pipeline.isFinished(), 5000);
+    QVERIFY(!pipeline.isActive());
+
+    pipeline.requestSeek(500ms);
+    std::size_t chunksAtFirstEof = 0;
+    {
+        std::scoped_lock eosLock(eosMutex);
+        chunksAtFirstEof = eosObservations[0].audioChunks;
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(eosObservations.size() == std::size_t{2}, 15000);
+    {
+        std::scoped_lock eosLock(eosMutex);
+        QVERIFY(eosObservations[1].audioChunks > chunksAtFirstEof);
+    }
+}
+
+void TestDecodePipelinePromotion::testStopSessionSuppressesEndOfStream()
+{
+    QVERIFY(TestFixture::verifyExists(u"sample-3s.mp3"_s));
+    const QUrl url = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+
+    DragonPlayer player;
+    DecodePipeline pipeline(&player);
+
+    std::atomic<bool> decodeGate{false};
+    pipeline.setSamplesCallback([&decodeGate](std::span<const float>, const std::stop_token &st) {
+        while (!decodeGate.load(std::memory_order_acquire) && !st.stop_requested()) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    });
+
+    std::atomic<int> eosCount{0};
+    pipeline.setBoundaryCallback([&eosCount](const DecodePipeline::BoundaryEvent &event) -> bool {
+        if (event.kind == DecodePipeline::BoundaryEvent::Kind::EndOfStream) {
+            eosCount.fetch_add(1, std::memory_order_acq_rel);
+        }
+        return true;
+    });
+
+    FinishedLog finished;
+    QObject::connect(&pipeline, &DecodePipeline::sessionFinished, [&finished](const QUrl &source, bool hadFatalError) {
+        Q_UNUSED(hadFatalError);
+        finished.append(source);
+    });
+
+    InitCapture init;
+    auto initTask = runInitialize(pipeline, url, &init);
+    QVERIFY(QTest::qWaitFor(
+        [&init]() {
+            return init.done.load(std::memory_order_acquire);
+        },
+        10000));
+    QVERIFY2(init.result.success, qPrintable(init.result.errorMessage));
+
+    pipeline.stopSession();
+    QVERIFY(!pipeline.isActive());
+    QVERIFY(!pipeline.isFinished());
+
+    QTest::qWait(1000);
+    QCoreApplication::processEvents();
+    QCOMPARE(eosCount.load(std::memory_order_acquire), 0);
+    QCOMPARE(finished.size(), std::size_t{0});
 }
 
 void TestDecodePipelinePromotion::testSequentialPromotionsMaintainSourceIntegrity()

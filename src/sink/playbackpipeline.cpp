@@ -8,7 +8,9 @@
 #include "dragonmediabackend_audio_logging.h"
 #include "nullaudiosink.h"
 
+#include <QCoreApplication>
 #include <QMetaObject>
+#include <QPointer>
 
 #include <algorithm>
 #include <chrono>
@@ -65,35 +67,57 @@ std::unique_ptr<Voice> PlaybackPipeline::makeVoice(Pipe<float> *pipe)
 {
     const std::uint64_t generation = m_nextVoiceGeneration++;
 
+    const QPointer<PlaybackPipeline> pipeline = this;
+    QCoreApplication *const context = QCoreApplication::instance();
+
     Voice::Notifiers notifiers;
     notifiers.trackStarted =
-        [this](std::uint64_t generation, std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration, std::uint64_t streamEpoch) {
+        [pipeline, context](std::uint64_t generation, std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration, std::uint64_t streamEpoch) {
+            if (!context) {
+                return;
+            }
             QMetaObject::invokeMethod(
-                this,
-                [this, generation, trackId, duration, streamEpoch]() {
-                    if (generation == m_primaryGeneration && m_primary && m_primary->clock().streamEpoch() == streamEpoch
-                        && !m_primary->clock().isSwitchArmed()) {
-                        Q_EMIT trackStarted(trackId, duration);
+                context,
+                [pipeline, generation, trackId, duration, streamEpoch]() {
+                    if (!pipeline) {
+                        return;
+                    }
+                    if (generation == pipeline->m_primaryGeneration && pipeline->m_primary && pipeline->m_primary->clock().streamEpoch() == streamEpoch
+                        && !pipeline->m_primary->clock().isSwitchArmed()) {
+                        Q_EMIT pipeline->trackStarted(trackId, duration);
                     }
                 },
                 Qt::QueuedConnection);
         };
-    notifiers.formatChangeRequired = [this](std::uint64_t generation, int sampleRate, int channels, std::uint64_t streamEpoch) {
+    notifiers.formatChangeRequired = [pipeline, context](std::uint64_t generation, int sampleRate, int channels, std::uint64_t streamEpoch) {
+        if (!context) {
+            return;
+        }
         QMetaObject::invokeMethod(
-            this,
-            [this, generation, sampleRate, channels, streamEpoch]() {
-                if (generation == m_primaryGeneration && m_primary && m_primary->clock().streamEpoch() == streamEpoch && !m_primary->clock().isSwitchArmed()) {
-                    Q_EMIT formatChangeRequired(sampleRate, channels);
+            context,
+            [pipeline, generation, sampleRate, channels, streamEpoch]() {
+                if (!pipeline) {
+                    return;
+                }
+                if (generation == pipeline->m_primaryGeneration && pipeline->m_primary && pipeline->m_primary->clock().streamEpoch() == streamEpoch
+                    && !pipeline->m_primary->clock().isSwitchArmed()) {
+                    Q_EMIT pipeline->formatChangeRequired(sampleRate, channels);
                 }
             },
             Qt::QueuedConnection);
     };
-    notifiers.fadingFinished = [this, pipe](std::uint64_t generation) {
+    notifiers.fadingFinished = [pipeline, context, pipe](std::uint64_t generation) {
+        if (!context) {
+            return;
+        }
         QMetaObject::invokeMethod(
-            this,
-            [this, generation, pipe]() {
-                if (generation == m_fadingGeneration) {
-                    onFadingVoiceEnded(pipe, QString());
+            context,
+            [pipeline, generation, pipe]() {
+                if (!pipeline) {
+                    return;
+                }
+                if (generation == pipeline->m_fadingGeneration) {
+                    pipeline->onFadingVoiceEnded(pipe, QString());
                 }
             },
             Qt::QueuedConnection);

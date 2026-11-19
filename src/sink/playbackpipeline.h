@@ -13,7 +13,6 @@
 #include <QObject>
 #include <QString>
 
-#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <functional>

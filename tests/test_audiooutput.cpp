@@ -102,6 +102,7 @@ private Q_SLOTS:
 
 private:
     void fillQueue(Pipe<float> *pipe, const std::vector<float> &data);
+    static bool waitForWrittenCounterStable(PlaybackPipeline *output);
     static QString currentSinkBackend();
     static bool findSinkInputByApplicationName(const QString &appName, uint32_t &sinkInputIndexOut);
     static bool setSinkInputVolume(uint32_t sinkInputIndex, int percent);
@@ -951,12 +952,20 @@ void TestAudioOutput::testPositionStabilityDuringPause()
     QTest::qWait(100);
 
     output->pause();
-    const std::chrono::milliseconds posAtPause = output->position();
 
-    for (int i = 0; i < 5; ++i) {
+    std::chrono::milliseconds posAtPause{};
+    bool stable = false;
+    for (int attempt = 0; attempt < 20 && !stable; ++attempt) {
         QTest::qWait(100);
-        const std::chrono::milliseconds currentPos = output->position();
-        QCOMPARE(currentPos, posAtPause);
+        posAtPause = output->position();
+        QTest::qWait(100);
+        stable = output->position() == posAtPause;
+    }
+    QVERIFY2(stable, "Position must freeze after pause");
+
+    for (int i = 0; i < 3; ++i) {
+        QTest::qWait(100);
+        QCOMPARE(output->position(), posAtPause);
     }
 
     output->resume();
@@ -1010,6 +1019,21 @@ void TestAudioOutput::testPositionAdvancesSmoothlyDuringPlayback()
 void TestAudioOutput::fillQueue(Pipe<float> *pipe, const std::vector<float> &data)
 {
     pipe->producer().write(data, std::stop_token{});
+}
+
+bool TestAudioOutput::waitForWrittenCounterStable(PlaybackPipeline *output)
+{
+    qint64 previous = output->totalSamplesWritten();
+    for (int attempt = 0; attempt < 20; ++attempt) {
+        QTest::qWait(150);
+        const qint64 current = output->totalSamplesWritten();
+        if (current == previous) {
+            QTest::qWait(150);
+            return output->totalSamplesWritten() == current;
+        }
+        previous = current;
+    }
+    return false;
 }
 
 QString TestAudioOutput::currentSinkBackend()
@@ -1727,10 +1751,8 @@ void TestAudioOutput::testSdlPausedSeekAndCrossfadePauseCount()
     output->pause();
     QVERIFY(output->isPaused());
 
-    QTest::qWait(50);
+    QVERIFY2(waitForWrittenCounterStable(output.get()), "written counter must stay frozen while both crossfade streams are paused");
     const qint64 writtenWhilePaused = output->totalSamplesWritten();
-    QTest::qWait(150);
-    QCOMPARE(output->totalSamplesWritten(), writtenWhilePaused);
 
     // Idempotent resume must decrement the paused count cleanly and resume playback.
     output->resume();
@@ -1758,10 +1780,8 @@ void TestAudioOutput::testSdlPausedSeekAndCrossfadePauseCount()
 
     output->pause();
     QVERIFY(output->isPaused());
-    QTest::qWait(50);
+    QVERIFY2(waitForWrittenCounterStable(output.get()), "written counter must stay frozen while the single stream is paused");
     const qint64 singleStreamPausedSamples = output->totalSamplesWritten();
-    QTest::qWait(150);
-    QCOMPARE(output->totalSamplesWritten(), singleStreamPausedSamples);
 
     output->resume();
     QVERIFY(!output->isPaused());

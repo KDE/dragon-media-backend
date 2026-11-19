@@ -13,36 +13,21 @@
 #include "sink/nullaudiosink.h"
 #include "sink/playbackpipeline.h"
 #include "sink/playbackpipelinefactory.h"
+#include "sink/pulsesilencefill.h"
 #include <DragonAudioOutput>
 
 #include <QElapsedTimer>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstdint>
 #include <thread>
 #include <vector>
 
 using namespace Qt::StringLiterals;
 using namespace std::chrono_literals;
 
-// Phase-1 threading remediation tests for the audio sink backends.
-//
-// What is testable headlessly:
-//  - the CallbackQuiesce handshake itself (unit level: concurrent
-//    callback enter/exit vs. close() waiting, with and without in-flight
-//    callbacks);
-//  - the null sink still passing through the pipeline SPI;
-//  - the SDL backend's open/pause/resume/close lifecycle through the
-//    plugin factory with SDL_AUDIODRIVER=dummy (no audio hardware).
-//
-// What is NOT testable without a real backend, and is therefore only covered
-// by code review:
-//  - the SDL "store m_session before SetAudioStreamGetCallback/Resume"
-//    ordering: observing it would require intercepting SDL's internal
-//    callback scheduling, which the dummy driver does not expose;
-//  - the PulseAudio/PipeWire quiesce, open-flag ordering, param-changed
-//    dedup and post-EOS empty-buffer behavior: these need live daemons and
-//    are exercised by the test_audiooutput_*/test_e2e_*_gapless suites.
 class TestSinkBackends : public QObject
 {
     Q_OBJECT
@@ -58,6 +43,8 @@ private Q_SLOTS:
     // Backend smoke tests
     void testNullSinkStillPasses();
     void testSdlLifecycleWithDummyDriver();
+
+    void testPulseSilenceFillFrameAlignment();
 };
 
 void TestSinkBackends::testQuiesceIdleByDefault()
@@ -268,6 +255,125 @@ void TestSinkBackends::testSdlLifecycleWithDummyDriver()
 
     QVERIFY(pipeline->close());
     QVERIFY(!pipeline->isDeviceOpen());
+}
+
+void TestSinkBackends::testPulseSilenceFillFrameAlignment()
+{
+    struct FakeStream {
+        std::size_t chunkBytes;
+        bool failBegin = false;
+        bool failWrite = false;
+        std::size_t beginCalls = 0;
+        std::size_t cancelCalls = 0;
+        std::vector<std::size_t> writeSizes;
+        std::vector<std::uint8_t> written;
+        std::vector<std::uint8_t> arena;
+
+        explicit FakeStream(std::size_t chunk)
+            : chunkBytes(chunk)
+            , arena(chunk)
+        {
+            std::fill(arena.begin(), arena.end(), std::uint8_t{0xAB});
+        }
+
+        int begin_write(void **buffer, std::size_t *bytes)
+        {
+            ++beginCalls;
+            if (failBegin) {
+                return -1;
+            }
+            *buffer = arena.data();
+            *bytes = chunkBytes;
+            return 0;
+        }
+
+        int write(void *buffer, std::size_t bytes)
+        {
+            if (failWrite) {
+                return -1;
+            }
+            const auto *begin = static_cast<const std::uint8_t *>(buffer);
+            written.insert(written.end(), begin, begin + bytes);
+            writeSizes.push_back(bytes);
+            return 0;
+        }
+
+        void cancel_write()
+        {
+            ++cancelCalls;
+        }
+
+        [[nodiscard]] bool allZero() const
+        {
+            return std::all_of(written.begin(), written.end(), [](std::uint8_t byte) {
+                return byte == 0;
+            });
+        }
+    };
+
+    const auto fill = [](FakeStream &stream, std::size_t bytes, int channels) {
+        return fillStreamWithSilence(
+            bytes,
+            channels,
+            [&stream](void **buffer, std::size_t *chunk) {
+                return stream.begin_write(buffer, chunk);
+            },
+            [&stream](void *buffer, std::size_t chunk) {
+                return stream.write(buffer, chunk);
+            },
+            [&stream]() {
+                stream.cancel_write();
+            });
+    };
+
+    {
+        FakeStream stream(65536);
+        QCOMPARE(fill(stream, 8192, 2), std::size_t{8192});
+        QCOMPARE(stream.writeSizes, std::vector<std::size_t>{8192});
+        QVERIFY(stream.allZero());
+        QCOMPARE(stream.cancelCalls, std::size_t{0});
+    }
+
+    {
+        FakeStream stream(1001);
+        QCOMPARE(fill(stream, 4096, 2), std::size_t{4096});
+        QCOMPARE(stream.beginCalls, std::size_t{5});
+        QCOMPARE(stream.writeSizes, std::vector<std::size_t>({1000, 1000, 1000, 1000, 96}));
+        QVERIFY(stream.allZero());
+    }
+
+    {
+        FakeStream stream(65536);
+        QCOMPARE(fill(stream, 4097, 5), std::size_t{4080});
+        QCOMPARE(stream.writeSizes, std::vector<std::size_t>{4080});
+        QVERIFY(stream.allZero());
+    }
+
+    {
+        FakeStream stream(65536);
+        QCOMPARE(fill(stream, 6, 2), std::size_t{0});
+        QCOMPARE(stream.beginCalls, std::size_t{0});
+    }
+
+    {
+        FakeStream stream(4);
+        QCOMPARE(fill(stream, 8192, 2), std::size_t{0});
+        QCOMPARE(stream.cancelCalls, std::size_t{1});
+        QVERIFY(stream.writeSizes.empty());
+    }
+
+    {
+        FakeStream stream(65536);
+        stream.failBegin = true;
+        QCOMPARE(fill(stream, 8192, 2), std::size_t{0});
+        QCOMPARE(stream.beginCalls, std::size_t{1});
+    }
+    {
+        FakeStream stream(1000);
+        stream.failWrite = true;
+        QCOMPARE(fill(stream, 4096, 2), std::size_t{0});
+        QCOMPARE(stream.beginCalls, std::size_t{1});
+    }
 }
 
 QTEST_MAIN(TestSinkBackends)

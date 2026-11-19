@@ -74,6 +74,7 @@ private Q_SLOTS:
     void testStaleEpochSamplesProducedRejected();
     void testProducerGateTransitions();
     void testEosEpochTagInterleavings();
+    void testEosArmedChecksAreEpochScoped();
     void testClockResetUnsticksStaleEos();
     void testTwoBoundariesInOneQuantum();
     void testEosConcurrentBoundaryVsEpochSwitchRace();
@@ -497,6 +498,35 @@ void TestStreamClock::testEosEpochTagInterleavings()
         QVERIFY(!clock.boundaryEndOfStream(oldEpoch));
         QVERIFY(!clock.endOfStreamArmed());
     }
+}
+
+void TestStreamClock::testEosArmedChecksAreEpochScoped()
+{
+    StreamClock clock;
+    clock.setFormat(44100, 2);
+
+    const auto oldEpoch = clock.streamEpoch();
+    clock.samplesProduced(oldEpoch, 100);
+    QVERIFY(clock.boundaryEndOfStream(oldEpoch));
+    clock.noteSamplesRead(100);
+    QVERIFY(clock.tryClaimDrained());
+    QVERIFY(clock.endOfStreamArmed());
+
+    const auto newEpoch = clock.reserveEpoch();
+    QVERIFY(newEpoch != oldEpoch);
+    QVERIFY(!clock.endOfStreamArmed());
+    QVERIFY(!clock.endOfStreamPending());
+    QVERIFY(!clock.tryClaimDrained());
+    QVERIFY(!clock.takeDrainedEmission());
+    QVERIFY(!clock.retractEndOfStream());
+
+    clock.beginStream(newEpoch);
+    QVERIFY(!clock.endOfStreamArmed());
+    clock.samplesProduced(newEpoch, 20);
+    QVERIFY(clock.boundaryEndOfStream(newEpoch));
+    QVERIFY(clock.endOfStreamArmed());
+    QVERIFY(clock.retractEndOfStream());
+    QVERIFY(!clock.endOfStreamArmed());
 }
 
 // A stale Claimed/Emitted EOS (left over from a torn-down stream) must not

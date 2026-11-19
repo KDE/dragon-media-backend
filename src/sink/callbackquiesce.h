@@ -19,6 +19,8 @@ using namespace std::chrono_literals;
 class CallbackQuiesce
 {
 public:
+    static constexpr std::chrono::milliseconds kDefaultCloseTimeout{1500};
+
     CallbackQuiesce() = default;
 
     CallbackQuiesce(const CallbackQuiesce &) = delete;

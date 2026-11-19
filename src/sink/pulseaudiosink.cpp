@@ -6,6 +6,7 @@
 #include "pulseaudiosink.h"
 
 #include "dragonmediabackend_audio_logging.h"
+#include "pulsesilencefill.h"
 
 #include <KLocalizedString>
 #include <KPluginFactory>
@@ -556,10 +557,10 @@ bool PulseAudioSinkStream::closeStream()
     // Callbacks check the quiesce handshake and bail quickly when close is
     // in progress, so this is bounded.
     m_quiesce.beginClose();
-    const bool quiesced = m_quiesce.waitForIdle(500ms);
+    const bool quiesced = m_quiesce.waitForIdle(CallbackQuiesce::kDefaultCloseTimeout);
     if (!quiesced) {
-        qCCritical(dragonMediaBackendAudio)
-            << "PulseAudio stream close(): callbacks did not quiesce within 500ms; leaking the PA stream (zombie state) to avoid a use-after-free";
+        qCCritical(dragonMediaBackendAudio) << "PulseAudio stream close(): callbacks did not quiesce within" << CallbackQuiesce::kDefaultCloseTimeout.count()
+                                            << "ms; leaking the PA stream (zombie state) to avoid a use-after-free";
         m_sink.m_poisoned = true;
         m_sink.unregisterStream(this);
         std::ignore = m_stream.release();
@@ -819,28 +820,22 @@ void PulseAudioSinkStream::writeCallback(pa_stream *s, size_t nbytes, void *user
             qCWarning(dragonMediaBackendAudio) << "PulseAudio pa_stream_drain failed:" << pa_strerror(pa_context_errno(self->m_sink.m_pa->context.get()));
         }
     } else if (!self->renderer().endOfStreamArmed()) {
-        const size_t channels = static_cast<size_t>(std::max(1, self->m_channels));
-        const size_t frameBytes = channels * sizeof(float);
-        size_t remainingBytes = floatsNeeded * sizeof(float);
-        while (remainingBytes >= frameBytes) {
-            void *buf = nullptr;
-            size_t chunkBytes = remainingBytes;
-            if (pa_stream_begin_write(s, &buf, &chunkBytes) < 0 || !buf || chunkBytes == 0) {
-                break;
-            }
-            const size_t writeBytes = std::min(chunkBytes, remainingBytes);
-            const size_t alignedBytes = writeBytes - (writeBytes % frameBytes);
-            if (alignedBytes == 0) {
+        const size_t silenceBytes = floatsNeeded * sizeof(float);
+        const std::size_t written = fillStreamWithSilence(
+            silenceBytes,
+            self->m_channels,
+            [s](void **buf, std::size_t *bytes) {
+                return pa_stream_begin_write(s, buf, bytes);
+            },
+            [s](void *buf, std::size_t bytes) {
+                return pa_stream_write(s, buf, bytes, nullptr, 0, PA_SEEK_RELATIVE);
+            },
+            [s]() {
                 pa_stream_cancel_write(s);
-                break;
-            }
-            std::memset(buf, 0, alignedBytes);
-            if (pa_stream_write(s, buf, alignedBytes, nullptr, 0, PA_SEEK_RELATIVE) < 0) {
-                qCCritical(dragonMediaBackendAudio) << "PulseAudio pa_stream_write silence failed:"
-                                                    << pa_strerror(pa_context_errno(self->m_sink.m_pa->context.get()));
-                break;
-            }
-            remainingBytes -= alignedBytes;
+            });
+        if (written < silenceBytes) {
+            qCWarning(dragonMediaBackendAudio) << "PulseAudio silence fill incomplete:" << written << "of" << silenceBytes
+                                               << pa_strerror(pa_context_errno(self->m_sink.m_pa->context.get()));
         }
     }
 }

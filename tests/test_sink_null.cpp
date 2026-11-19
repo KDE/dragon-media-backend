@@ -38,6 +38,7 @@ private Q_SLOTS:
     void testNullSinkMethods();
     void testNullSinkSignals();
     void testPlayerWithNullSinkState();
+    void testDeviceOpenFailureTearsDownDecodeSessions();
 };
 
 void TestSinkNull::testFactoryExplicitNull()
@@ -191,6 +192,33 @@ void TestSinkNull::testPlayerWithNullSinkState()
     player.stop();
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
     QVERIFY(stateSpy.isEmpty());
+}
+
+void TestSinkNull::testDeviceOpenFailureTearsDownDecodeSessions()
+{
+    VERIFY_FIXTURE_EXISTS(u"sample-3s.mp3"_s);
+    const QUrl source = QUrl::fromLocalFile(QString::fromUtf8(DRAGON_SDL_TESTS_FIXTURES_DIR) + u"/sample-3s.mp3"_s);
+
+    DragonPlayer player(DragonAudioOutput::Backend::Null);
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+
+    player.setSource(source);
+    player.play();
+    QTRY_COMPARE_WITH_TIMEOUT(player.error(), DragonPlayer::Error::ResourceError, 10000);
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::StoppedState, 10000);
+
+    QTest::qWait(4000);
+    QCoreApplication::processEvents();
+    QVERIFY2(!SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::EndOfMedia),
+             "A decode session cancelled by the device-open failure must not complete into EndOfMedia");
+    QCOMPARE(player.position(), 0ms);
+
+    player.setSource(source);
+    player.play();
+    QTRY_COMPARE_WITH_TIMEOUT(player.error(), DragonPlayer::Error::ResourceError, 10000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY2(!SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::EndOfMedia),
+             "The second load's failed session must not complete into EndOfMedia either");
 }
 
 QTEST_GUILESS_MAIN(TestSinkNull)
