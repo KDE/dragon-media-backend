@@ -352,7 +352,6 @@ ecm_qt_install_logging_categories(
 
 set(DragonMediaBackend_PUBLIC_HEADERS
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonplayer.h
-    ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonduration.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonsourceoptions.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonaudiooutput.h
     ${CMAKE_CURRENT_SOURCE_DIR}/include/DragonMediaBackend/dragonfftframe.h

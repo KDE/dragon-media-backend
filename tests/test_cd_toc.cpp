@@ -14,7 +14,7 @@
 
 #include "stream/cd/cdstream.h"
 
-#include "dragonduration.h"
+#include "player/dragonduration.h"
 
 #include <DragonCdToc>
 #include <DragonCdTocReader>

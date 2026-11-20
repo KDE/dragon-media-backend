@@ -5,6 +5,7 @@
 add_library(dragon_player_objs OBJECT
     dragonplayer.cpp
     dragonduration.cpp
+    dragonduration.h
     dragonsourceoptions.cpp
     dragonaudiooutput.cpp
     pipe.cpp

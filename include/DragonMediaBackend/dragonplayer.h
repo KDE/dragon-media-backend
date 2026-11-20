@@ -19,7 +19,11 @@
 #include <memory>
 #include <optional>
 
-#include "dragonduration.h"
+#ifdef DRAGONMEDIABACKEND_INTERNAL_BUILD
+#include "player/dragonduration.h"
+#else
+class DragonDuration;
+#endif
 #include "dragonsourceoptions.h"
 
 class DragonAudioOutput;

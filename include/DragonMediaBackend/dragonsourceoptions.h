@@ -5,8 +5,13 @@
 
 #pragma once
 
-#include "dragonduration.h"
 #include "dragonmediabackend_export.h"
+
+#ifdef DRAGONMEDIABACKEND_INTERNAL_BUILD
+#include "player/dragonduration.h"
+#else
+class DragonDuration;
+#endif
 
 #include <QMetaType>
 #include <QSharedDataPointer>

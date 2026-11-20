@@ -9,7 +9,7 @@
 #include "dragonmediabackend_export.h"
 
 #ifdef DRAGONMEDIABACKEND_INTERNAL_BUILD
-#include "dragonduration.h"
+#include "player/dragonduration.h"
 #else
 class DragonDuration;
 #endif
