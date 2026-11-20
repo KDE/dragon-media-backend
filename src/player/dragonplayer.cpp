@@ -513,11 +513,9 @@ void DragonPlayerPrivate::init()
     primarySlot().producerStreamEpoch.store(initialEpoch, std::memory_order_release);
     audioOutput->playbackPipeline()->setFftPipe(nullptr);
 
-    // Bounded cleanup when a fading voice ends on its own (fade completed,
-    // early EOF, or a fading-stream error): stop and drain the matching
-    // fading slot by pipe identity so its decoder cannot remain blocked on
-    // a pipe nobody reads anymore. Normally retirement has already stopped
-    // the decoder; for a stalled producer this is the bounded path.
+    // Cleanup when a fading voice ends on its own (fade completed, early EOF,
+    // or a fading-stream error): stop and drain the matching fading slot by
+    // pipe identity so its decoder cannot remain parked on a full pipe.
     audioOutput->playbackPipeline()->setFadingVoiceEndedCallback([this](Pipe<float> *pipe, const QString &error) {
         for (auto &slot : m_slots) {
             if (&slot.audioPipe != pipe) {
@@ -606,19 +604,15 @@ void DragonPlayerPrivate::init()
         });
 
         slot.decodePipeline.setBoundaryCallback([this, &slot](const DecodePipeline::BoundaryEvent &event) {
-            if (!isPrimarySlot(slot)) {
-                // Only the primary slot's boundaries may affect player and
-                // sink state; a retiring fade-out slot must stay invisible.
-                return true;
-            }
             if (event.kind == DecodePipeline::BoundaryEvent::Kind::EndOfStream) {
                 slot.audioPipe.setProducerDone(true);
             }
+            if (!isPrimarySlot(slot)) {
+                // Only the primary slot's boundaries may affect player and
+                // sink state; reject any racing gapless TrackStart on a fading slot.
+                return event.kind != DecodePipeline::BoundaryEvent::Kind::TrackStart;
+            }
             return onPipelineBoundary(slot, event);
-        });
-
-        slot.decodePipeline.setRetireFinishedCallback([&slot]() {
-            slot.audioPipe.setProducerDone(true);
         });
 
         connect(
@@ -637,9 +631,13 @@ void DragonPlayerPrivate::init()
             &DecodePipeline::sessionFinished,
             this,
             [this, &slot](const QUrl &source, bool hadFatalError) {
-                if (isPrimarySlot(slot)) {
-                    onDecodeFinished(source, hadFatalError);
+                if (!isPrimarySlot(slot)) {
+                    if (hadFatalError) {
+                        slot.audioPipe.setProducerDone(true);
+                    }
+                    return;
                 }
+                onDecodeFinished(source, hadFatalError);
             },
             Qt::QueuedConnection);
 
@@ -940,13 +938,9 @@ void DragonPlayer::setSource(const QUrl &source, const DragonSourceOptions &opti
         incoming.streamEpoch.store(epoch, std::memory_order_release);
         incoming.producerStreamEpoch.store(epoch, std::memory_order_release);
 
-        // Retire the outgoing slot in-place for the remaining fade-out samples, budgeted in the outgoing
-        // track's native format
-        const int outgoingRate = std::max(1, d->currentSampleRate);
-        const int outgoingChannels = std::max(1, d->currentChannels);
-        const std::int64_t totalFadeOutSamples = ((crossfadeDuration + Voice::kSlowLoadHoldMax).count() * outgoingRate * outgoingChannels) / 1000;
-        const std::int64_t bufferedSamples = static_cast<std::int64_t>(outgoing.audioPipe.consumer().ready());
-        outgoing.decodePipeline.retireAfter(totalFadeOutSamples - bufferedSamples);
+        // Prevent the fading slot from promoting a pre-warmed gapless next track;
+        // it keeps decoding until natural EOF or fadingVoiceEndedCallback stops it.
+        outgoing.decodePipeline.clearNextSource();
     } else {
         for (auto &slot : d->m_slots) {
             d->invalidateSlotContent(slot);

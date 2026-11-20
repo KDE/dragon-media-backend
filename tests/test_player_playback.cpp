@@ -102,6 +102,9 @@ private Q_SLOTS:
     void testFatalDecodeErrorDuringCrossfadeStopsFadingVoice();
     void testSetDifferentSourceWhilePlayingClosesDeviceAndStaysStopped();
     void testSeekWhileStoppedDoesNotOpenDeviceAndPlaysFromTarget();
+    void testCrossfadeOutgoingReachesNaturalEofEarly();
+    void testCrossfadeClearsPreWarmedNextSource();
+    void testSequentialCrossfadesRecycleFadingSlot();
 };
 
 void TestPlayerPlayback::testPositionTimerEmitsDuringPlayback()
@@ -1240,6 +1243,124 @@ void TestPlayerPlayback::testSeekWhileStoppedDoesNotOpenDeviceAndPlaysFromTarget
 
     QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::EndOfMedia, 5000);
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+}
+
+void TestPlayerPlayback::testCrossfadeOutgoingReachesNaturalEofEarly()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    const auto urlA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    const auto urlB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
+
+    QVERIFY(helper.setSourceAndWait(urlA));
+    QVERIFY(helper.playAndWait());
+    QTRY_VERIFY_WITH_TIMEOUT(diag.audioPosition() > 50ms, 5000);
+
+    const auto durA = player.duration();
+    QVERIFY(durA.has_value() && *durA > 1000ms);
+
+    // Seek near the end of track A so it reaches natural EOF well before the
+    // 2500ms crossfade window expires.
+    player.setPosition(*durA - 300ms);
+    QTRY_VERIFY_WITH_TIMEOUT(diag.audioPosition() > *durA - 400ms, 5000);
+
+    QSignalSpy statusSpy(&player, &DragonPlayer::statusChanged);
+    DragonSourceOptions opts;
+    opts.setCrossfadeDuration(2500ms);
+    player.setSource(urlB, opts);
+    QVERIFY(diag.playbackPipeline()->isCrossfading());
+
+    // The fading slot's natural EndOfStream must set producerDone(true) and
+    // retire the fading voice early (well before the 2500ms fade duration)
+    // without triggering EndOfMedia or Stopping track B.
+    QTRY_VERIFY_WITH_TIMEOUT(!diag.playbackPipeline()->isCrossfading(), 1800);
+    QCOMPARE(player.source(), urlB);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
+    QVERIFY2(!SignalSpyHelper::containsStatus(statusSpy, DragonPlayer::MediaStatus::EndOfMedia),
+             "Outgoing track's natural EOF during crossfade must not emit EndOfMedia");
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::EndOfMedia, 10000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY(diag.producerSamples() > 0);
+    QCOMPARE(diag.producerSamples(), diag.audioSamplesRead());
+}
+
+void TestPlayerPlayback::testCrossfadeClearsPreWarmedNextSource()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    const auto urlA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    const auto urlB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
+    const auto urlC = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.aac"_s));
+
+    QVERIFY(helper.setSourceAndWait(urlA));
+    QVERIFY(helper.playAndWait());
+    QTRY_VERIFY_WITH_TIMEOUT(diag.audioPosition() > 50ms, 5000);
+
+    // Pre-warm a gapless next track on track A's slot before crossfading to B.
+    player.setNextSource(urlC);
+    QTest::qWait(150);
+
+    const auto durA = player.duration();
+    QVERIFY(durA.has_value() && *durA > 1000ms);
+    player.setPosition(*durA - 300ms);
+    QTRY_VERIFY_WITH_TIMEOUT(diag.audioPosition() > *durA - 400ms, 5000);
+
+    QSignalSpy trackSpy(&player, &DragonPlayer::trackChanged);
+    DragonSourceOptions opts;
+    opts.setCrossfadeDuration(1500ms);
+    player.setSource(urlB, opts);
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.source(), urlB, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(!diag.playbackPipeline()->isCrossfading(), 5000);
+    QCOMPARE(player.source(), urlB);
+    QCOMPARE(trackSpy.count(), 0);
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::EndOfMedia, 10000);
+    QCOMPARE(player.source(), urlB);
+    QCOMPARE(trackSpy.count(), 0);
+}
+
+void TestPlayerPlayback::testSequentialCrossfadesRecycleFadingSlot()
+{
+    DragonPlayer player;
+    Diagnostics diag(&player);
+    PlayerHelper helper(&player);
+
+    const auto urlA = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.mp3"_s));
+    const auto urlB = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
+    const auto urlC = QUrl::fromLocalFile(TestFixture::fixturePath(u"sample-3s.aac"_s));
+
+    QVERIFY(helper.setSourceAndWait(urlA));
+    QVERIFY(helper.playAndWait());
+    QTRY_VERIFY_WITH_TIMEOUT(diag.audioPosition() > 100ms, 5000);
+
+    DragonSourceOptions opts;
+    opts.setCrossfadeDuration(400ms);
+
+    // First crossfade (A -> B): A is longer than the fade, so its decoder
+    // parks on a full pipe until fadingVoiceEndedCallback stops it.
+    player.setSource(urlB, opts);
+    QTRY_COMPARE_WITH_TIMEOUT(player.source(), urlB, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(!diag.playbackPipeline()->isCrossfading(), 5000);
+
+    // Second crossfade (B -> C): reuses slot A cleanly.
+    player.setSource(urlC, opts);
+    QTRY_COMPARE_WITH_TIMEOUT(player.source(), urlC, 5000);
+    QTRY_COMPARE_WITH_TIMEOUT(player.playbackState(), DragonPlayer::PlaybackState::PlayingState, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(player.status() == DragonPlayer::MediaStatus::LoadedMedia, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(!diag.playbackPipeline()->isCrossfading(), 5000);
+
+    QTRY_COMPARE_WITH_TIMEOUT(player.status(), DragonPlayer::MediaStatus::EndOfMedia, 10000);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QVERIFY(diag.producerSamples() > 0);
+    QCOMPARE(diag.producerSamples(), diag.audioSamplesRead());
 }
 
 QTEST_MAIN(TestPlayerPlayback)

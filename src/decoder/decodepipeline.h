@@ -16,7 +16,6 @@
 #include <QUrl>
 #include <atomic>
 #include <condition_variable>
-#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -56,18 +55,6 @@ public:
     // the session that ends up current (the promoted track's decoder, not
     // the outgoing track's, which is already destroyed at EOF).
     void requestSeek(std::chrono::milliseconds position);
-
-    // In-place retirement for crossfading: the active session keeps decoding
-    // its own track until it has produced remainingSamples more samples (or
-    // the file ends / errors), then stops without reporting completion or
-    // end-of-stream, and invokes the retire-finished callback instead.
-    using RetireFinishedCallback = std::function<void()>;
-    void setRetireFinishedCallback(RetireFinishedCallback cb);
-    void retireAfter(std::int64_t remainingSamples);
-    [[nodiscard]] bool isRetiring() const noexcept
-    {
-        return m_retiring.load(std::memory_order_acquire);
-    }
 
     using SamplesCallback = std::function<void(std::span<const float> samples, const std::stop_token &st)>;
 
@@ -171,11 +158,6 @@ private:
     mutable std::mutex m_boundaryCallbackMutex;
 
     DragonPlayer *m_player = nullptr;
-
-    RetireFinishedCallback m_retireFinishedCallback;
-    mutable std::mutex m_retireCallbackMutex;
-    std::atomic<bool> m_retiring{false};
-    std::atomic<std::int64_t> m_retiringSamplesRemaining{0};
 
     std::jthread m_decodeThread;
     mutable std::mutex m_decoderMutex;
