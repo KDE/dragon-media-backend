@@ -260,11 +260,15 @@ void TestSdlGapless::testCrossfadeSameFormat()
     // Equal-power handoff: across the overlap 440 Hz declines and 880 Hz rises,
     // both monotonically within noise tolerance, and the power sum stays near
     // the pre-fade level instead of dipping.
+    const double preFadePower = mag440[2] * mag440[2] + mag880[2] * mag880[2];
     for (int w = fadeStart; w <= fadeEnd; ++w) {
         if (w > fadeStart) {
             QVERIFY2(mag440[w] <= mag440[w - 1] + 0.15 * max440, qPrintable(u"440 Hz envelope not monotonically declining at window %1"_s.arg(w)));
             QVERIFY2(mag880[w] >= mag880[w - 1] - 0.15 * max880, qPrintable(u"880 Hz envelope not monotonically rising at window %1"_s.arg(w)));
         }
+        const double windowPower = mag440[w] * mag440[w] + mag880[w] * mag880[w];
+        QVERIFY2(windowPower >= 0.55 * preFadePower && windowPower <= 1.45 * preFadePower,
+                 qPrintable(u"Combined power (%1) dipped or spiked relative to pre-fade power (%2) at window %3"_s.arg(windowPower).arg(preFadePower).arg(w)));
     }
 
     // No clicks: adjacent captured samples in the overlap window must stay

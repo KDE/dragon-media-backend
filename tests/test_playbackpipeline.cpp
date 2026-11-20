@@ -222,6 +222,7 @@ void TestPlaybackPipeline::testIncomingStreamOpensAtNativeFormatAfterLoad()
 void TestPlaybackPipeline::testSecondStreamCreationFailureFallsBackToSolo()
 {
     PlaybackPipeline pipeline(std::make_unique<FakeAudioSink>());
+    QSignalSpy errorSpy(&pipeline, &PlaybackPipeline::errorOccurred);
     Pipe<float> pipeA;
     Pipe<float> pipeB;
     pipeline.setAudioPipe(&pipeA);
@@ -231,18 +232,29 @@ void TestPlaybackPipeline::testSecondStreamCreationFailureFallsBackToSolo()
 
     std::ignore = pipeline.armCrossfade(&pipeA, &pipeB, 1000ms, 1000ms);
 
-    // Fail every stream creation after the first: open() keeps the failure
-    // local while a fading voice exists and leaves the primary streamless.
+    // Fail the second stream creation while the fading stream is still active:
+    // open() keeps the failure local (no errorOccurred emitted) and leaves the
+    // primary streamless so the player can abort the fading voice and retry solo.
     fakeSinkOf(pipeline)->failStreamsAfter(1);
     pipeline.open(44100, 2);
     QVERIFY(!pipeline.isDeviceOpen());
     QVERIFY(pipeline.isCrossfading());
+    QCOMPARE(errorSpy.count(), 0);
 
-    // The player aborts the fading voice and retries the primary solo.
+    // The player aborts the fading voice (freeing its stream) and retries the
+    // primary solo: once stream creation succeeds again, the primary opens.
     pipeline.abortFadingVoice();
-    pipeline.open(44100, 2);
-    QVERIFY(!pipeline.isDeviceOpen());
     QVERIFY(!pipeline.isCrossfading());
+    fakeSinkOf(pipeline)->failStreamsAfter(-1);
+    pipeline.open(44100, 2);
+    QVERIFY(pipeline.isDeviceOpen());
+    QCOMPARE(errorSpy.count(), 0);
+
+    // By contrast, a solo stream creation failure (no fading voice) emits errorOccurred.
+    fakeSinkOf(pipeline)->failStreamsAfter(0);
+    pipeline.open(48000, 2);
+    QVERIFY(!pipeline.isDeviceOpen());
+    QCOMPARE(errorSpy.count(), 1);
 }
 
 void TestPlaybackPipeline::testVolumeAndMuteFanOutToAllStreams()

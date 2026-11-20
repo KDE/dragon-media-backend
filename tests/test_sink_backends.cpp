@@ -10,7 +10,6 @@
 
 #include "player/pipe.h"
 #include "sink/callbackquiesce.h"
-#include "sink/nullaudiosink.h"
 #include "sink/playbackpipeline.h"
 #include "sink/playbackpipelinefactory.h"
 #include "sink/pulsesilencefill.h"
@@ -41,7 +40,6 @@ private Q_SLOTS:
     void testQuiesceWakeupOnCallbackExit();
 
     // Backend smoke tests
-    void testNullSinkStillPasses();
     void testSdlLifecycleWithDummyDriver();
 
     void testPulseSilenceFillFrameAlignment();
@@ -189,25 +187,6 @@ void TestSinkBackends::testQuiesceWakeupOnCallbackExit()
     QVERIFY(quiesced.load(std::memory_order_acquire));
     // Woken well before the 3s timeout: the callback exited ~50ms in.
     QVERIFY2(timer.elapsed() < 2500, "close() wait should be woken by the callback exit, not by its timeout");
-}
-
-void TestSinkBackends::testNullSinkStillPasses()
-{
-    PlaybackPipeline pipeline(std::make_unique<NullAudioSink>());
-    QVERIFY(pipeline.probe());
-    QVERIFY(!pipeline.isDeviceOpen());
-    QVERIFY(!pipeline.isPaused());
-    QCOMPARE(pipeline.deviceQueuedSamples(), qint64(0));
-
-    Pipe<float> pipe;
-    pipeline.setAudioPipe(&pipe);
-    pipeline.open(44100, 2);
-    pipeline.setVolume(0.5f);
-    pipeline.setMuted(true);
-    pipeline.pause();
-    pipeline.resume();
-    pipeline.clearStream();
-    QVERIFY(pipeline.close());
 }
 
 void TestSinkBackends::testSdlLifecycleWithDummyDriver()

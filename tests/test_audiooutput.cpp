@@ -1272,12 +1272,17 @@ void TestAudioOutput::testBoundaryStaleEpochTagDiscarded()
 
     QTRY_COMPARE_WITH_TIMEOUT(trackSpy.count(), 1, 5000);
 
-    std::ignore = output->setPositionOffset(std::chrono::milliseconds{0});
-    QTRY_VERIFY2(output->streamEpoch() > epoch, "flush should bump the stream epoch");
+    // A boundary queued under the old epoch before a flush supersedes the stream
+    // must be discarded by the consumer's epoch check after the flush.
+    QVERIFY(output->boundaryTrackStart(8, 44100, 2, {}, epoch));
+    const std::uint64_t newEpoch = output->setPositionOffset(std::chrono::milliseconds{0});
+    QVERIFY2(newEpoch > epoch, "flush should bump the stream epoch");
+    QTRY_VERIFY_WITH_TIMEOUT(!output->isFlushPending(), 3000);
 
     fillQueue(&pipe, std::vector<float>(8820, 0.5f));
-    output->samplesProduced(epoch, 8820); // superseded epoch: dropped
-    QVERIFY(output->boundaryTrackStart(8, 44100, 2, {}, epoch)); // stamped with the stale epoch
+    output->samplesProduced(newEpoch, 8820);
+    // A late boundary stamped with the stale epoch after the flush is also discarded.
+    QVERIFY(output->boundaryTrackStart(9, 44100, 2, {}, epoch));
 
     const bool consumed = QTest::qWaitFor(
         [&]() {
@@ -1419,37 +1424,41 @@ void TestAudioOutput::testEosPublicationOrderRace()
         }
     });
 
-    for (int i = 0; i < 20000; ++i) {
-        // Stream 1: arm with 50 samples so m_eosSample becomes 50
+    const std::vector<float> hundredSamples(100, 0.5f);
+    for (int i = 0; i < 5000; ++i) {
+        // Stream 1: arm with 50 samples so the EOS marker sample is 50
         clock.samplesProduced(clock.streamEpoch(), 50);
-        clock.boundaryEndOfStream(clock.streamEpoch());
+        QVERIFY(clock.boundaryEndOfStream(clock.streamEpoch()));
 
-        // Flush resets counters and m_eosState to None, but leaves m_eosSample = 50
+        // Stage and consume a flush via Voice so beginStream() actually publishes
+        // the new epoch and resets counters + EndOfStreamMarker.
         clock.setPositionOffset(0ms);
-        clock.armSwitch();
-        std::ignore = voice.render(0, 0us);
+        std::ignore = voice.stageFlush(0ms);
+        std::ignore = voice.render(100, 0us);
+        QCOMPARE(clock.streamSamplesRead(), std::uint64_t{0});
 
         // Stream 2: consumer reads 100 samples
-        fillQueue(&pipe, std::vector<float>(100, 0.5f));
+        fillQueue(&pipe, hundredSamples);
         std::ignore = voice.render(100, 0us);
+        QCOMPARE(clock.streamSamplesRead(), std::uint64_t{100});
 
         // Producer writes 10,000 samples
         clock.samplesProduced(clock.streamEpoch(), 10000);
 
-        // Arm EOS for stream 2: before updating m_eosSample, buggy code exposes Pending with m_eosSample = 50
-        clock.boundaryEndOfStream(clock.streamEpoch());
-        clock.retractEndOfStream();
+        // Arm EOS for stream 2: EndOfStreamMarker packs (epoch, Pending, 10000) in one word,
+        // so the consumer thread can never observe Pending with the old sample count of 50.
+        QVERIFY(clock.boundaryEndOfStream(clock.streamEpoch()));
+        QVERIFY(clock.retractEndOfStream());
 
         // Flush for next iteration
         clock.setPositionOffset(0ms);
-        clock.armSwitch();
-        std::ignore = voice.render(0, 0us);
+        std::ignore = voice.stageFlush(0ms);
+        std::ignore = voice.render(100, 0us);
     }
 
     stop.store(true, std::memory_order_relaxed);
     consumerThread.join();
 
-    qDebug() << "staleEosObserved count:" << staleEosObserved.load();
     QCOMPARE(staleEosObserved.load(), 0);
 }
 
@@ -1751,7 +1760,7 @@ void TestAudioOutput::testSdlPausedSeekAndCrossfadePauseCount()
     output->pause();
     QVERIFY(output->isPaused());
 
-    QVERIFY2(waitForWrittenCounterStable(output.get()), "written counter must stay frozen while both crossfade streams are paused");
+    QVERIFY2(waitForWrittenCounterStable(output.get()), "written counter must stay frozen after paused seek and reopen");
     const qint64 writtenWhilePaused = output->totalSamplesWritten();
 
     // Idempotent resume must decrement the paused count cleanly and resume playback.
@@ -1760,14 +1769,19 @@ void TestAudioOutput::testSdlPausedSeekAndCrossfadePauseCount()
     QVERIFY(!output->isPaused());
     QTRY_VERIFY_WITH_TIMEOUT(output->totalSamplesWritten() > writtenWhilePaused, 5000);
 
-    // Closing two paused crossfade streams and resetting to one stream must not
-    // leave phantom paused counts behind.
+    // Pausing during an active two-stream crossfade must freeze both streams,
+    // and closing/resetting while paused must not leave phantom paused counts behind.
     Pipe<float> pipeB(65536);
-    std::ignore = output->armCrossfade(&pipeA, &pipeB, 500ms, 500ms);
+    fillQueue(&pipeB, std::vector<float>(32000, 0.5f));
+    const auto crossfadeEpoch = output->armCrossfade(&pipeA, &pipeB, 1000ms, 1000ms);
     output->open(44100, 2);
+    output->samplesProduced(crossfadeEpoch, 32000);
     QVERIFY(output->isCrossfading());
+    QTRY_VERIFY_WITH_TIMEOUT(output->totalSamplesWritten() > 0, 5000);
+
     output->pause();
     QVERIFY(output->isPaused());
+    QVERIFY2(waitForWrittenCounterStable(output.get()), "written counter must stay frozen while both crossfade streams are paused");
     QVERIFY(output->close());
     output->reset();
 

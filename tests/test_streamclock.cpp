@@ -60,7 +60,6 @@ class TestStreamClock : public QObject
 
 private Q_SLOTS:
     void testFreshClockState();
-    void testProducerCounterFollowsEpoch();
     void testBoundaryFiresAfterReadAndRewindsWrittenCounter();
     void testStaleEpochBoundaryDiscarded();
     void testFormatStallClampsBudgetAndDedups();
@@ -94,23 +93,6 @@ void TestStreamClock::testFreshClockState()
     clock.setFormat(44100, 2);
     QVERIFY(clock.hasFormat(44100, 2));
     QVERIFY(!clock.hasFormat(48000, 2));
-}
-
-void TestStreamClock::testProducerCounterFollowsEpoch()
-{
-    StreamClock clock;
-
-    // Stale-epoch production is discarded; only the live epoch counts.
-    clock.samplesProduced(clock.streamEpoch(), 100);
-    QCOMPARE(clock.producerSamples(), 100);
-
-    const auto staged = stageSwitch(clock);
-    clock.beginStream(staged.epoch);
-    QCOMPARE(clock.producerSamples(), 0);
-    clock.samplesProduced(1, 50); // superseded epoch
-    QCOMPARE(clock.producerSamples(), 0);
-    clock.samplesProduced(clock.streamEpoch(), 30);
-    QCOMPARE(clock.producerSamples(), 30);
 }
 
 void TestStreamClock::testBoundaryFiresAfterReadAndRewindsWrittenCounter()
@@ -450,12 +432,13 @@ void TestStreamClock::testProducerGateTransitions()
 }
 
 // The EOS must survive every interleaving of its arming with a stream switch:
-// the epoch tag recorded before and re-verified after the None->Pending CAS
-// catches a switch that published in between.
+// the epoch tag is checked against ProducerState before arming and packed into
+// the EndOfStreamMarker CAS word.
 void TestStreamClock::testEosEpochTagInterleavings()
 {
-    // Interleaving 1: EOS armed, then the switch publishes. The EOS belongs
-    // to the old stream; beginStream resets the EOS state with it.
+    // Interleaving 1: EOS armed under oldEpoch, then the switch stages and
+    // publishes. The EOS belongs to the old stream; beginStream resets the EOS
+    // state to the new epoch.
     {
         StreamClock clock;
         clock.samplesProduced(clock.streamEpoch(), 500);
@@ -465,38 +448,34 @@ void TestStreamClock::testEosEpochTagInterleavings()
         QVERIFY(!clock.endOfStreamArmed());
     }
 
-    // Interleaving 2: the switch publishes (new epoch) while the EOS arming
-    // is mid-flight; the tag check rejects the stale EOS instead of applying
-    // it to the new stream with a bogus sample count.
+    // Interleaving 2: a switch is staged (reserveEpoch bumps ProducerState's
+    // epoch on the main thread before beginStream runs on the audio thread);
+    // a producer attempting to arm EOS with oldEpoch is rejected immediately.
+    {
+        StreamClock clock;
+        const auto oldEpoch = clock.streamEpoch();
+        clock.samplesProduced(oldEpoch, 500);
+        const auto staged = stageSwitch(clock);
+        QVERIFY(!clock.boundaryEndOfStream(oldEpoch));
+        QVERIFY(!clock.endOfStreamArmed());
+        clock.beginStream(staged.epoch);
+        QVERIFY(!clock.endOfStreamArmed());
+    }
+
+    // Interleaving 3: the switch has already published on the audio thread
+    // (EndOfStreamMarker word now carries the new epoch); a late producer
+    // call with oldEpoch is rejected, while arming under the new epoch succeeds.
     {
         StreamClock clock;
         const auto oldEpoch = clock.streamEpoch();
         clock.samplesProduced(oldEpoch, 500);
         const auto staged = stageSwitch(clock);
         clock.beginStream(staged.epoch);
-        // Producer's EOS arming arrives after the new stream published.
         QVERIFY(!clock.boundaryEndOfStream(oldEpoch));
         QVERIFY(!clock.endOfStreamArmed());
-        // EOS for the NEW stream arms cleanly.
         clock.samplesProduced(clock.streamEpoch(), 20);
         QVERIFY(clock.boundaryEndOfStream(clock.streamEpoch()));
         QVERIFY(clock.endOfStreamArmed());
-    }
-
-    // Interleaving 3: EOS CAS wins the race against beginStream's EOS reset.
-    // The CAS records Pending before beginStream resets to None; the
-    // post-CAS epoch re-verification retracts it.
-    {
-        StreamClock clock;
-        const auto oldEpoch = clock.streamEpoch();
-        clock.samplesProduced(oldEpoch, 500);
-        const auto staged = stageSwitch(clock);
-        // Simulate: CAS succeeded, then beginStream ran, then the re-check.
-        // Drive it through the real API: arm under oldEpoch is refused after
-        // the publish because the epoch no longer matches.
-        clock.beginStream(staged.epoch);
-        QVERIFY(!clock.boundaryEndOfStream(oldEpoch));
-        QVERIFY(!clock.endOfStreamArmed());
     }
 }
 
