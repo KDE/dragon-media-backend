@@ -11,6 +11,7 @@ SPDX-License-Identifier: CC0-1.0
   <name xml:lang="ar">خلفية وسائط دراغون</name>
   <name xml:lang="ca">Dragon Media Backend</name>
   <name xml:lang="ca-valencia">Dragon Media Backend</name>
+  <name xml:lang="it">Dragon Media Backend</name>
   <name xml:lang="nl">Dragon media-backend</name>
   <name xml:lang="pt-BR">Backend Dragon Media</name>
   <name xml:lang="sl">Dragon Media Backend</name>
@@ -24,6 +25,7 @@ SPDX-License-Identifier: CC0-1.0
   <summary xml:lang="ar">مكتبة تشغيل الصوت لتطبيقات تشغيل الموسيقى</summary>
   <summary xml:lang="ca">Biblioteca de reproducció d'àudio per a reproductors de música</summary>
   <summary xml:lang="ca-valencia">Biblioteca de reproducció d'àudio per a reproductors de música</summary>
+  <summary xml:lang="it">Libreria di riproduzione audio per riproduttori multimediali</summary>
   <summary xml:lang="nl">Bibliotheek voor het afspelen van audio in muziekspelers</summary>
   <summary xml:lang="pt-BR">Biblioteca de reprodução de áudio para reprodutores de música</summary>
   <summary xml:lang="sl">Knjižnica za predvajanje zvoka za glasbene predvajalnike</summary>
@@ -42,6 +44,7 @@ SPDX-License-Identifier: CC0-1.0
     <p xml:lang="ar">خلفية وسائط دراغون مكتبة Qt C++ موجهة لمشغلات الموسيقى المكتبية. يمكنها تشغيل أي صيغة صوتية يفك ترميزها FFmpeg وتُخرجها عبر نظام ملحقات لمصارف الصوت مع دعم PipeWire وPulseAudio وSDL.</p>
     <p xml:lang="ca">Dragon Media Backend és una biblioteca C++ amb Qt destinada als reproductors de música d'escriptori. Pot reproduir qualsevol format d'àudio que el FFmpeg descodifiqui i emet a través d'un sistema de connectors de conductes d'àudio amb suport per al PipeWire, PulseAudio i SDL.</p>
     <p xml:lang="ca-valencia">Dragon Media Backend és una biblioteca C++ amb Qt destinada als reproductors de música d'escriptori. Pot reproduir qualsevol format d'àudio que FFmpeg descodifique i emet a través d'un sistema de connectors de conductes d'àudio amb suport per a PipeWire, PulseAudio i SDL.</p>
+    <p xml:lang="it">Dragon Media Backend è una libraria C++ Qt destinata ai riproduttori musica per desktop. Può riprodurre ogni formato audio che FFmpeg è in grado di modificare, e lo riproduce tramite un sistema di estensioni per dispositivi di uscita audio (sink) con supporto per PipeWire, PulseAudio e SDL. </p>
     <p xml:lang="nl">Dragon media-backend is een Qt C++-bibliotheek die bedoeld is voor muziekspelers op het bureaublad. De bibliotheek kan elk audioformaat afspelen dat door FFmpeg wordt gedecodeerd en voert het geluid uit via een plug-in-systeem van audio-uitvoer, met ondersteuning voor PipeWire, PulseAudio en SDL.</p>
     <p xml:lang="pt-BR">O Backend Dragon Media é uma biblioteca em C++ (utilizando Qt) voltada para reprodutores de música para desktop. Ele é capaz de reproduzir qualquer formato de áudio que o FFmpeg consiga decodificar, enviando a saída por meio de um sistema de plugins de destinos de áudio com suporte para PipeWire, PulseAudio e SDL.</p>
     <p xml:lang="sl">Dragon Media Backend je knjižnica Qt C++, namenjena namiznim predvajalnikom glasbe. Predvaja lahko kateri koli zvočni format, ki ga dekodira FFmpeg, zvok pa usmerja prek sistema vtičnikov z podporo za PipeWire, PulseAudio in SDL.</p>
@@ -59,6 +62,7 @@ SPDX-License-Identifier: CC0-1.0
     <p xml:lang="ar">كما تحسب تحويلات فورييه السريعة للتصورات الصوتية، ويمكنها تشغيل الموسيقى عبر نظام KIO في كيدي، وتشغيل أقراص الصوت المدمجة وتوفير معلومات أساسية عن مساراتها، وتدعم بيانات ICY الوصفية لبثوث الراديو.</p>
     <p xml:lang="ca">També calcula FFT per a visualitzacions d'àudio, pot reproduir música sobre el sistema KIO de KDE, reproduir CD d'àudio i proporciona informació bàsica de pistes dels CD d'àudio, i admet metadades ICY per a fluxos de ràdio.</p>
     <p xml:lang="ca-valencia">També calcula FFT per a visualitzacions d'àudio, pot reproduir música sobre el sistema KIO de KDE, reproduir CD d'àudio i proporciona informació bàsica de pistes dels CD d'àudio, i admet metadades ICY per a fluxos de ràdio.</p>
+    <p xml:lang="it">Effettua anche il calcolo di FFT per la visualizzazione dell'audio, può riprodurre audio usando il sistema KIO di KDE, riproduce CD audio e fornisce informazioni di base sulle tracce dei CD audio, e supporta i metadati ICY per flussi radio.</p>
     <p xml:lang="nl">Het berekent tevens FFT's voor audiovisualisaties, kan muziek afspelen via het KIO-systeem van KDE, speelt audio-cd's af en biedt basisinformatie over de nummers op een audio-cd, en ondersteunt ICY-metadata voor radio-streams.</p>
     <p xml:lang="pt-BR">Também calcula FFTs para visualizações de áudio, pode reproduzir músicas por meio do sistema KIO do KDE, toca CDs de áudio e fornece informações básicas sobre as faixas desses CDs, além de oferecer suporte a metadados ICY para transmissões de rádio.</p>
     <p xml:lang="sl">Prav tako izračunava FFT-je za zvočne vizualizacije, lahko predvaja glasbo prek sistema KIO v okolju KDE, predvaja zvočne CD-je in zagotavlja osnovne podatke o skladbah na njih, podpira pa tudi metapodatke ICY za radijske prenose.</p>
