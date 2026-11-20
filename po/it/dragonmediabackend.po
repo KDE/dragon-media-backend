@@ -1,0 +1,299 @@
+# Copyright (C) 2026 This file is copyright:
+# This file is distributed under the same license as the dragon-media-backend package.
+# SPDX-FileCopyrightText: 2026 Luigi Toscano <luigi.toscano@tiscali.it>
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: dragon-media-backend\n"
+"Report-Msgid-Bugs-To: https://bugs.kde.org\n"
+"POT-Creation-Date: 2026-11-12 04:48+0000\n"
+"PO-Revision-Date: 2026-11-18 23:06+0100\n"
+"Last-Translator: Luigi Toscano <luigi.toscano@tiscali.it>\n"
+"Language-Team: Italian <kde-i18n-it@kde.org>\n"
+"Language: it\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Lokalize 26.08.2\n"
+
+#: decoder/decodepipeline.cpp:452
+#, kde-format
+msgid "Failed to create decoder"
+msgstr "Impossibile creare il decodificatore"
+
+#: decoder/decodepipeline.cpp:687
+#, kde-format
+msgid "Stream error"
+msgstr "Errore del flusso"
+
+#: decoder/decoder.cpp:199
+#, kde-format
+msgid "Failed to initialize media input"
+msgstr "Impossibile inizializzare l'input del supporto multimediale"
+
+#: decoder/decoder.cpp:203
+#, kde-format
+msgid "Failed to open media container"
+msgstr "Impossibile aprire il contenitore multimediale"
+
+#: decoder/decoder.cpp:207
+#, kde-format
+msgid "No supported audio stream found"
+msgstr "Nessun flusso audio supportato trovato"
+
+#: decoder/decoder.cpp:211
+#, kde-format
+msgid "Audio codec setup failed"
+msgstr "Impostazione del codec audio non riuscita"
+
+#: decoder/decoder.cpp:215
+#, kde-format
+msgid "Audio resampler setup failed"
+msgstr "Impostazione del ricampionatore audio non riuscita"
+
+#: decoder/decoder.cpp:219
+#, kde-format
+msgid "Failed to allocate decoder resources"
+msgstr "Impossibile allocare risorse per il decodificatore"
+
+#: decoder/decoder.cpp:238
+#, kde-format
+msgid "Decoder not initialized"
+msgstr "Decodificatore non inizializzato"
+
+#: decoder/decoder.cpp:518
+#, kde-format
+msgid "Resampler reinitialization failed after seek"
+msgstr ""
+"Reinizializzazione del ricampionatore non riuscita dopo il riposizionamento"
+
+#: decoder/decoder.cpp:561
+#, kde-format
+msgid "Read error after %1 attempts: %2"
+msgstr "Errore di lettura dopo %1 tentativi: %2"
+
+#: player/dragonplayer.cpp:94
+#, kde-format
+msgid "Failed to open the audio output device."
+msgstr "Impossibile aprire il dispositivo di uscita audio."
+
+#: player/dragonplayer.cpp:231
+#, kde-format
+msgid "Fatal error while decoding media"
+msgstr "Errore fatale durante la decodifica del supporto multimediale"
+
+#: player/dragonplayer.cpp:258
+#, kde-format
+msgid "Error while decoding media"
+msgstr "Errore durante la decodifica del supporto multimediale"
+
+#: player/dragonplayer.cpp:651
+#, kde-format
+msgid "Failed to open media source"
+msgstr "Impossibile aprire la fonte multimediale"
+
+#: player/dragonplayer.cpp:651
+#, kde-format
+msgid "Network error"
+msgstr "Errore di rete"
+
+#: sink/nullaudiosink.cpp:16
+#, kde-format
+msgid "Could not find any audio sink plugins."
+msgstr ""
+
+#: sink/pipewireaudiosink.cpp:193
+#, kde-format
+msgid "PipeWire: failed to create thread loop"
+msgstr ""
+
+#: sink/pipewireaudiosink.cpp:231
+#, kde-format
+msgid "PipeWire: failed to create stream"
+msgstr "PipeWire: impossibile creare un flusso"
+
+#: sink/pipewireaudiosink.cpp:256
+#, kde-format
+msgid "PipeWire: failed to build audio format"
+msgstr "PipeWire: impossibile costruire il formato audio"
+
+#: sink/pipewireaudiosink.cpp:265
+#, kde-format
+msgid "PipeWire: failed to connect stream"
+msgstr "PipeWire: impossibile collegarsi al flusso"
+
+#: sink/pipewireaudiosink.cpp:272
+#, kde-format
+msgid "PipeWire: failed to start thread loop"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:248
+#, kde-format
+msgid "PulseAudio: failed to create mainloop"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:255
+#, kde-format
+msgid "PulseAudio: failed to start mainloop"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:269
+#, kde-format
+msgid "PulseAudio: failed to get mainloop API"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:294
+#, kde-format
+msgid "PulseAudio: failed to create context"
+msgstr "PulseAudio: impossibile creare il contesto"
+
+#: sink/pulseaudiosink.cpp:304
+#, kde-format
+msgid "PulseAudio: failed to connect context"
+msgstr "PulseAudio: impossibile collegarsi al contesto"
+
+#: sink/pulseaudiosink.cpp:316
+#, kde-format
+msgid "PulseAudio: context not ready"
+msgstr "PulseAudio: contesto non pronto"
+
+#: sink/pulseaudiosink.cpp:414
+#, kde-format
+msgid "PulseAudio: failed to init channel map"
+msgstr "PulseAudio: impossibile inizializzare la mappa dei canali"
+
+#: sink/pulseaudiosink.cpp:423
+#, kde-format
+msgid "PulseAudio: failed to create stream proplist"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:442
+#, kde-format
+msgid "PulseAudio: failed to create stream"
+msgstr "PulseAudio: impossibile creare il flusso"
+
+#: sink/pulseaudiosink.cpp:469
+#, kde-format
+msgid "PulseAudio: failed to connect stream"
+msgstr "PulseAudio: impossibile collegarsi al flusso"
+
+#: sink/pulseaudiosink.cpp:482
+#, kde-format
+msgid "PulseAudio: stream not ready"
+msgstr "PulseAudio: flusso non pronto"
+
+#: stream/cd/cddisc.cpp:111
+#, kde-format
+msgid "The CD has no tracks."
+msgstr "Il CD non ha tracce."
+
+#: stream/cd/cddisc.cpp:148
+#, kde-format
+msgid "The disc is not an Audio CD."
+msgstr "Il disco non è in formato Audio CD."
+
+#: stream/cd/cddisc.cpp:189
+#, kde-format
+msgid "Could not open the CD device. Check that a disc is present."
+msgstr ""
+"Impossibile aprire il dispositivo CD. Verificare che un disco sia presente."
+
+#: stream/cd/cdstream.cpp:117
+#, kde-format
+msgid "The audiocd:/ URL does not name a track to play."
+msgstr "L'URL audiocd:/ non indica una traccia da riprodurre."
+
+#: stream/cd/cdstream.cpp:155
+#, kde-format
+msgid "Track not found on the CD: %1"
+msgstr "Traccia non trovata sul CD: %1"
+
+#: stream/cd/cdstream.cpp:159
+#, kde-format
+msgid "CD track %1 is not an audio track."
+msgstr "La traccia CD %1 non è una traccia audio."
+
+#: stream/cd/cdstream.cpp:166
+#, kde-format
+msgid "Could not determine the length of CD track %1."
+msgstr "Impossibile determinare la lunghezza della traccia CD %1."
+
+#: stream/cd/cdstream.cpp:284
+#, kde-format
+msgid "The CD is no longer available."
+msgstr "Il CD non è più disponibile."
+
+#: stream/cd/cdstream.cpp:289
+#, kde-format
+msgid "Attempted to read past the end of the CD track."
+msgstr "Tentativo di leggere oltre la fine della traccia CD."
+
+#: stream/cd/cdstream.cpp:296
+#, kde-format
+msgid "Error reading the CD. The disc may have been ejected."
+msgstr "Errore nella lettura del CD. Il disco potrebbe essere stato espulso."
+
+#: stream/cd/dragoncdtocreader.cpp:61
+#, kde-format
+msgid "This build of Dragon Media Backend was made without CD support."
+msgstr ""
+"Questa versione di Dragon Media Backend è stata compilata senza supporto per "
+"CD."
+
+#: stream/http/httpprotocol.cpp:227 stream/http/httpsocket.cpp:247
+#: stream/http/httpsocket.cpp:340
+#, kde-format
+msgid "Malformed response"
+msgstr "Risposta malformata"
+
+#: stream/http/httpsocket.cpp:31
+#, kde-format
+msgid "Stream stopped sending data"
+msgstr "Si è fermato l'invio dati del flusso"
+
+#: stream/http/httpsocket.cpp:88
+#, kde-format
+msgid "Invalid stream URL: %1"
+msgstr "URL non valido del flusso: %1"
+
+#: stream/http/httpsocket.cpp:104 stream/http/httpsocket.cpp:457
+#, kde-format
+msgid "Connection closed"
+msgstr "Connessione chiusa"
+
+#: stream/http/httpsocket.cpp:366 stream/http/httpsocket.cpp:376
+#, kde-format
+msgid "Server responded with status %1"
+msgstr "Il server ha risposto con lo stato %1"
+
+#: stream/http/httpsocket.cpp:372
+#, kde-format
+msgid "Proxy requires authentication"
+msgstr "Il proxy richiede autenticazione"
+
+#: stream/http/httpsocket.cpp:383
+#, kde-format
+msgid "Server returned unexpected byte range"
+msgstr "Il server ha restituito un intervallo di byte inaspettato"
+
+#: stream/http/httpsocket.cpp:388
+#, kde-format
+msgid "Server ignored requested byte range"
+msgstr "Il server ha ignorato l'intervallo di byte richiesto"
+
+#: stream/http/httpsocket.cpp:399 stream/http/httpsocket.cpp:409
+#: stream/http/httpsocket.cpp:413 stream/http/httpsocket.cpp:416
+#, kde-format
+msgid "Unusable redirect address"
+msgstr "Indirizzo di ridirezionamento inutilizzabile"
+
+#: stream/http/httpsocket.cpp:402
+#, kde-format
+msgid "Too many redirects"
+msgstr "Troppi ridirezionamenti"
+
+#: stream/http/radiostream.cpp:246
+#, kde-format
+msgid "Network error: %1"
+msgstr "Errore di rete: %1"
