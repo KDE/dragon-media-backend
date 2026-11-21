@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <latch>
 #include <optional>
 #include <thread>
 #include <vector>
@@ -316,6 +317,8 @@ void TestStreamClock::testBoundaryRingUseAfterPopRace()
 
     std::atomic<bool> stop{false};
     std::atomic<int> corruptionCount{0};
+    std::atomic<int> producerAttempts{0};
+    std::latch ready{2};
 
     StreamClock::EventHandlers handlers;
     handlers.trackStarted = [&](std::uint32_t trackId, std::optional<std::chrono::milliseconds> duration, std::uint64_t) {
@@ -328,24 +331,39 @@ void TestStreamClock::testBoundaryRingUseAfterPopRace()
     const auto epoch = clock.streamEpoch();
 
     std::jthread producer([&] {
+        ready.arrive_and_wait();
         std::uint32_t id = 1;
         while (!stop.load(std::memory_order_relaxed)) {
             clock.samplesProduced(epoch, 10);
             if (clock.boundaryTrackStart(id, 44100, 2, std::chrono::milliseconds{static_cast<qint64>(id) * 1000}, epoch)) {
                 ++id;
             }
+            producerAttempts.fetch_add(1, std::memory_order_relaxed);
         }
     });
 
-    for (int i = 0; i < 50000; ++i) {
+    ready.arrive_and_wait();
+
+    constexpr int kMinReads = 50000;
+    constexpr int kMinProducerAttempts = 100;
+    const auto deadline = std::chrono::steady_clock::now() + 5s;
+
+    for (int i = 0; i < kMinReads || producerAttempts.load(std::memory_order_relaxed) < kMinProducerAttempts; ++i) {
         clock.noteSamplesRead(100);
         clock.advanceBoundaries(true, nullptr);
+        if (i >= kMinReads) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                break;
+            }
+            std::this_thread::sleep_for(1ms);
+        }
     }
     stop.store(true, std::memory_order_relaxed);
     producer.join();
 
     QVERIFY2(corruptionCount.load() == 0,
              qPrintable(QStringLiteral("Detected %1 boundary corruptions due to use-after-pop in advanceBoundaries()").arg(corruptionCount.load())));
+    QVERIFY(producerAttempts.load(std::memory_order_relaxed) > 0);
 }
 
 // Invariant test: samplesProduced() with a stale epoch tag is safely rejected by
@@ -589,8 +607,10 @@ void TestStreamClock::testEosConcurrentBoundaryVsEpochSwitchRace()
     std::atomic<bool> stop{false};
     std::atomic<int> falseClaims{0};
     std::atomic<int> producerAttempts{0};
+    std::latch ready{2};
 
     std::jthread producer([&] {
+        ready.arrive_and_wait();
         while (!stop.load(std::memory_order_acquire)) {
             const std::uint64_t epoch = activeEpoch.load(std::memory_order_acquire);
             clock.samplesProduced(epoch, 64);
@@ -599,7 +619,13 @@ void TestStreamClock::testEosConcurrentBoundaryVsEpochSwitchRace()
         }
     });
 
-    for (int i = 0; i < 4000; ++i) {
+    ready.arrive_and_wait();
+
+    constexpr int kMinSwitches = 4000;
+    constexpr int kMinProducerAttempts = 100;
+    const auto deadline = std::chrono::steady_clock::now() + 5s;
+
+    for (int i = 0; i < kMinSwitches || producerAttempts.load(std::memory_order_relaxed) < kMinProducerAttempts; ++i) {
         const auto nextEpoch = clock.reserveEpoch();
         clock.armSwitch();
         clock.beginStream(nextEpoch);
@@ -612,7 +638,12 @@ void TestStreamClock::testEosConcurrentBoundaryVsEpochSwitchRace()
         }
 
         activeEpoch.store(nextEpoch, std::memory_order_release);
-        if ((i % 32) == 0) {
+        if (i >= kMinSwitches) {
+            if (std::chrono::steady_clock::now() >= deadline) {
+                break;
+            }
+            std::this_thread::sleep_for(1ms);
+        } else if ((i % 32) == 0) {
             std::this_thread::yield();
         }
     }
