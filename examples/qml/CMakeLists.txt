@@ -10,6 +10,7 @@ endif()
 qt_add_executable(dragonqml_example
     main.cpp
 )
+set_target_properties(dragonqml_example PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if(ANDROID)
     set_target_properties(dragonqml_example PROPERTIES PREFIX "lib")
