@@ -4,6 +4,7 @@
  */
 
 #include "voice.h"
+#include "cppcompat.h"
 #include "fft/pcmblock.h"
 #include "player/pipe.h"
 #include "sink/dragonmediabackend_audio_logging.h"
@@ -375,7 +376,7 @@ void Voice::forwardToFft(std::span<const float> pcm, std::chrono::microseconds p
     const int sampleRate = m_clock.currentSampleRate();
     const int channels = m_clock.currentChannels();
 
-    auto chunks = pcm | std::views::chunk(PcmBlock::MAX_SAMPLES);
+    auto chunks = pcm | compat::views::chunk(PcmBlock::MAX_SAMPLES);
     fftPipe->producer().writeSomeWith(std::ranges::size(chunks), [&](std::span<PcmBlock> fb1, std::span<PcmBlock> fb2) {
         auto chunkIt = chunks.begin();
         const auto chunkEnd = chunks.end();

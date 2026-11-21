@@ -13,11 +13,9 @@
 #if defined(__cpp_lib_move_only_function)
 #include <functional>
 #endif
-#if defined(__cpp_lib_ranges_enumerate)
 #include <ranges>
-#endif
 
-#if !defined(__cpp_lib_generator) || !defined(__cpp_lib_move_only_function) || !defined(__cpp_lib_ranges_enumerate)
+#if !defined(__cpp_lib_generator) || !defined(__cpp_lib_move_only_function) || !defined(__cpp_lib_ranges_enumerate) || !defined(__cpp_lib_ranges_chunk)
 #include <coroutine>
 #include <exception>
 #include <iterator>
@@ -329,4 +327,131 @@ auto enumerate(Range &range)
 
 #endif
 
+#if defined(__cpp_lib_ranges_chunk)
+
+using std::views::chunk;
+
+#else
+
+template<std::ranges::forward_range V>
+    requires std::ranges::view<V>
+class chunk_view : public std::ranges::view_interface<chunk_view<V>>
+{
+    using base_iter = std::ranges::iterator_t<V>;
+    using base_sentinel = std::ranges::sentinel_t<V>;
+
+public:
+    chunk_view() = default;
+    chunk_view(V base, std::size_t chunkSize)
+        : m_base(std::move(base))
+        , m_chunkSize(chunkSize)
+    {
+    }
+
+    class iterator
+    {
+    public:
+        using difference_type = std::ptrdiff_t;
+        using value_type = std::ranges::subrange<base_iter>;
+        using iterator_concept = std::forward_iterator_tag;
+
+        iterator() = default;
+        iterator(base_iter cur, base_sentinel end, std::size_t chunkSize)
+            : m_cur(cur)
+            , m_end(end)
+            , m_chunkSize(chunkSize)
+        {
+        }
+
+        value_type operator*() const
+        {
+            auto next = m_cur;
+            std::ranges::advance(next, static_cast<std::ranges::range_difference_t<V>>(m_chunkSize), m_end);
+            return std::ranges::subrange(m_cur, next);
+        }
+
+        iterator &operator++()
+        {
+            std::ranges::advance(m_cur, static_cast<std::ranges::range_difference_t<V>>(m_chunkSize), m_end);
+            return *this;
+        }
+
+        iterator operator++(int)
+        {
+            auto tmp = *this;
+            ++*this;
+            return tmp;
+        }
+
+        bool operator==(const iterator &other) const
+        {
+            return m_cur == other.m_cur;
+        }
+
+        bool operator==(std::default_sentinel_t) const
+        {
+            return m_cur == m_end;
+        }
+
+    private:
+        base_iter m_cur{};
+        base_sentinel m_end{};
+        std::size_t m_chunkSize = 0;
+    };
+
+    iterator begin()
+    {
+        return iterator{std::ranges::begin(m_base), std::ranges::end(m_base), m_chunkSize};
+    }
+
+    std::default_sentinel_t end() const noexcept
+    {
+        return {};
+    }
+
+    std::size_t size() const
+        requires std::ranges::sized_range<const V>
+    {
+        const auto total = static_cast<std::size_t>(std::ranges::size(m_base));
+        return total / m_chunkSize + (total % m_chunkSize != 0 ? 1 : 0);
+    }
+
+    std::size_t size()
+        requires std::ranges::sized_range<V> && (!std::ranges::sized_range<const V>)
+    {
+        const auto total = static_cast<std::size_t>(std::ranges::size(m_base));
+        return total / m_chunkSize + (total % m_chunkSize != 0 ? 1 : 0);
+    }
+
+private:
+    V m_base{};
+    std::size_t m_chunkSize = 0;
+};
+
+struct chunk_closure {
+    std::size_t chunkSize;
+
+    template<std::ranges::viewable_range Range>
+    friend auto operator|(Range &&range, chunk_closure closure)
+    {
+        return chunk_view{std::views::all(std::forward<Range>(range)), closure.chunkSize};
+    }
+};
+
+struct chunk_fn {
+    template<std::ranges::viewable_range Range>
+    auto operator()(Range &&range, std::size_t chunkSize) const
+    {
+        return chunk_view{std::views::all(std::forward<Range>(range)), chunkSize};
+    }
+
+    constexpr chunk_closure operator()(std::size_t chunkSize) const noexcept
+    {
+        return chunk_closure{chunkSize};
+    }
+};
+
+inline constexpr chunk_fn chunk{};
+
+#endif
 }
