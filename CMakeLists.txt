@@ -45,6 +45,11 @@ include(KDEClangFormat)
 include(KDEGitCommitHooks)
 include(ECMUninstallTarget)
 
+if(BUILD_COVERAGE AND CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    # workaround for https://gcc.gnu.org/bugzilla/show_bug.cgi?id=68080
+    add_compile_options(-fprofile-update=atomic)
+endif()
+
 ecm_setup_version(PROJECT
     VARIABLE_PREFIX DRAGONMEDIABACKEND
     VERSION_HEADER "${CMAKE_CURRENT_BINARY_DIR}/dragonmediabackend_version.h"
