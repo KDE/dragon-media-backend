@@ -56,8 +56,8 @@ function(dragon_add_test name)
     )
 endfunction()
 
-# Adds one "base" test plus <base>_sdl / _pulseaudio / _pipewire
-# variants (the latter only when the backend was found).
+# Configures the "base" test to use SDL, and adds <base>_pulseaudio / _pipewire
+# variants (each only when the backend was found).
 #
 # The pulseaudio/pipewire variants share the system audio graph (and, for
 # capture-style tests, the dragon-test-sink monitor ports), so they must not
@@ -91,7 +91,7 @@ endfunction()
 
 set(_dragon_audio_tests
     test_player_basics
-    test_player_playback_sdl
+    test_player_playback
     test_player_playback_pulseaudio
     test_player_playback_pipewire
     test_player_signals
@@ -99,17 +99,16 @@ set(_dragon_audio_tests
     test_player_prefinish
     test_player_fft
     test_e2e
-    test_e2e_sdl
     test_e2e_pulseaudio
     test_e2e_pipewire
     test_network_playback
-    test_audiooutput_sdl
+    test_audiooutput
     test_audiooutput_pulseaudio
     test_audiooutput_pipewire
-    test_player_streamname_sdl
+    test_player_streamname
     test_player_streamname_pulseaudio
     test_player_streamname_pipewire
-    test_e2e_gapless_data_streams_sdl
+    test_e2e_gapless_data_streams
     test_e2e_gapless_data_streams_pulseaudio
     test_e2e_gapless_data_streams_pipewire
     test_cdstream
@@ -254,7 +253,7 @@ if(DRAGON_CI_PIPEWIRE AND NOT WIN32)
 endif()
 
 if(DRAGON_CI_NO_AUDIO)
-    set(_no_audio_tests ${_dragon_audio_tests} test_e2e_sdl_gapless test_e2e_pipewire_gapless test_e2e_pulseaudio_gapless test_audiooutput test_player_playback)
+    set(_no_audio_tests ${_dragon_audio_tests} test_e2e_sdl_gapless test_e2e_pipewire_gapless test_e2e_pulseaudio_gapless)
     foreach(_test ${_no_audio_tests})
         if(TEST ${_test})
             set_tests_properties(${_test} PROPERTIES DISABLED TRUE)
