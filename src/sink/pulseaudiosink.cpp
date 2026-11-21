@@ -720,12 +720,22 @@ qint64 PulseAudioSinkStream::deviceQueuedSamples() const
 
     ScopedMainloopLock lock(m_sink.m_pa->mainloop.get());
 
-    const auto queuedUs = queuedDurationLocked();
-    if (!queuedUs) {
-        return 0;
+    pa_usec_t latency = 0;
+    int negative = 0;
+    if (pa_stream_get_latency(m_stream->handle.get(), &latency, &negative) == 0) {
+        if (negative) {
+            return 0;
+        }
+        return static_cast<qint64>(latency) * m_sampleRate * m_channels / 1000000;
     }
 
-    return queuedUs->count() * m_sampleRate * m_channels / 1000000;
+    // Fall back to the negotiated tlength so position stays monotonic until real timing data is available.
+    if (const pa_buffer_attr *attr = pa_stream_get_buffer_attr(m_stream->handle.get());
+        attr && attr->tlength > 0 && attr->tlength != static_cast<uint32_t>(-1)) {
+        return static_cast<qint64>(attr->tlength / sizeof(float));
+    }
+
+    return 0;
 }
 
 int PulseAudioSinkStream::audioBufferFrames() const

@@ -43,6 +43,7 @@ private Q_SLOTS:
     void testSdlLifecycleWithDummyDriver();
 
     void testPulseSilenceFillFrameAlignment();
+    void testPulseAudioPositionMonotonicAtStartup();
 };
 
 void TestSinkBackends::testQuiesceIdleByDefault()
@@ -353,6 +354,48 @@ void TestSinkBackends::testPulseSilenceFillFrameAlignment()
         QCOMPARE(fill(stream, 4096, 2), std::size_t{0});
         QCOMPARE(stream.beginCalls, std::size_t{1});
     }
+}
+
+void TestSinkBackends::testPulseAudioPositionMonotonicAtStartup()
+{
+    DragonAudioOutput::Backend selectedSink = DragonAudioOutput::Backend::Auto;
+    auto pipeline = createPlaybackPipeline(DragonAudioOutput::Backend::PulseAudio, &selectedSink);
+    if (!pipeline || selectedSink != DragonAudioOutput::Backend::PulseAudio) {
+        QSKIP("PulseAudio sink not available");
+    }
+
+    Pipe<float> pipe;
+    pipeline->setAudioPipe(&pipe);
+
+    // Prime 0.5s of stereo 44.1 kHz PCM so the very first writeCallback fills
+    // the stream's full tlength before the first timing update arrives.
+    std::vector<float> pcm(44100, 0.0f);
+    QCOMPARE(pipe.producer().write(std::span<const float>{pcm}, std::stop_token{}), pcm.size());
+
+    pipeline->open(44100, 2);
+    QVERIFY(pipeline->isDeviceOpen());
+
+    // Immediately after open(), position() must not jump forward by ~tlength
+    // while pa_stream_get_latency() still returns -PA_ERR_NODATA and then snap
+    // backwards once the first timing update arrives.
+    std::chrono::milliseconds maxSeen{0};
+    std::chrono::milliseconds maxBackward{0};
+    QElapsedTimer elapsed;
+    elapsed.start();
+    while (elapsed.elapsed() < 150) {
+        const auto pos = pipeline->position();
+        if (pos < maxSeen) {
+            maxBackward = std::max(maxBackward, maxSeen - pos);
+        } else {
+            maxSeen = pos;
+        }
+        QTest::qWait(5);
+    }
+
+    QVERIFY2(maxBackward <= 25ms, qPrintable(u"Position snapped backwards by %1 ms at PulseAudio startup"_s.arg(maxBackward.count())));
+    QVERIFY(maxSeen >= 50ms);
+
+    QVERIFY(pipeline->close());
 }
 
 QTEST_MAIN(TestSinkBackends)
