@@ -47,14 +47,19 @@ target_include_directories(dragonsdlaudiosink PRIVATE
         ${PROJECT_BINARY_DIR}
         ${PROJECT_SOURCE_DIR}/LockFreeSpscQueue
 )
+target_link_libraries(dragonsdlaudiosink PRIVATE
+        SDL3::SDL3
+        KF6::CoreAddons
+        KF6::I18n
+        Qt6::Gui
+)
+target_compile_definitions(dragonsdlaudiosink PRIVATE TRANSLATION_DOMAIN="dragonmediabackend")
 if(ANDROID)
     target_include_directories(dragonsdlaudiosink PRIVATE
             ${PROJECT_SOURCE_DIR}/include/DragonMediaBackend
-            ${PROJECT_SOURCE_DIR}/src
     )
-    target_link_libraries(dragonsdlaudiosink PRIVATE SDL3::SDL3 KF6::CoreAddons Qt6::Gui)
 else()
-    target_link_libraries(dragonsdlaudiosink PRIVATE DragonMediaBackend SDL3::SDL3 KF6::CoreAddons KF6::I18n Qt6::Gui)
+    target_link_libraries(dragonsdlaudiosink PRIVATE DragonMediaBackend)
 endif()
 
 # useful for applications that fetch us via ContentFetch
