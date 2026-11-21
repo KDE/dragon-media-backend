@@ -58,7 +58,7 @@ public:
 private:
     friend class PipeWireAudioSink;
 
-    [[nodiscard]] bool connectToCore(const StreamVolumeInit &volumeInit);
+    [[nodiscard]] bool connectToCore(StreamVolumeInit volumeInit);
     [[nodiscard]] bool closeStream() override;
     void setChannelVolumes(float linearGain);
     void handleSinkInputVolumes(float avgGain);

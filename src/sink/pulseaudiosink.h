@@ -68,7 +68,7 @@ public:
 private:
     friend class PulseAudioSink;
 
-    [[nodiscard]] bool connectStream(const StreamVolumeInit &volumeInit);
+    [[nodiscard]] bool connectStream(StreamVolumeInit volumeInit);
     [[nodiscard]] bool closeStream() override;
 
     void applyVolume(float linearGain);

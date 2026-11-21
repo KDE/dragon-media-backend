@@ -54,10 +54,7 @@ AudioSinkStream::AudioSinkStream(AudioSinkStreamRenderer &renderer, QObject *par
 {
 }
 
-AudioSinkStream::~AudioSinkStream()
-{
-    std::ignore = close();
-}
+AudioSinkStream::~AudioSinkStream() = default;
 
 bool AudioSinkStream::close()
 {

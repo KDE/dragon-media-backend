@@ -9,6 +9,8 @@
 #include "player/pipe.h"
 #include "sink/dragonmediabackend_audio_logging.h"
 
+#include <QScopeGuard>
+
 #include <algorithm>
 #include <ranges>
 #include <thread>
@@ -357,16 +359,10 @@ void Voice::checkFadingFinished()
 
 void Voice::forwardToFft(std::span<const float> pcm, std::chrono::microseconds pts)
 {
-    struct WriterGuard {
-        std::atomic<int> &counter;
-        ~WriterGuard()
-        {
-            counter.fetch_sub(1, std::memory_order_seq_cst);
-        }
-    };
-
     m_fftWriters.fetch_add(1, std::memory_order_seq_cst);
-    WriterGuard guard{m_fftWriters};
+    const auto guard = qScopeGuard([this]() {
+        m_fftWriters.fetch_sub(1, std::memory_order_seq_cst);
+    });
 
     auto *fftPipe = m_fftPipe.load(std::memory_order_seq_cst);
     if (fftPipe == nullptr || pcm.empty()) {

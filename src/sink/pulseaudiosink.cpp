@@ -422,7 +422,7 @@ PulseAudioSinkStream::~PulseAudioSinkStream()
     std::ignore = close();
 }
 
-bool PulseAudioSinkStream::connectStream(const StreamVolumeInit &volumeInit)
+bool PulseAudioSinkStream::connectStream(StreamVolumeInit volumeInit)
 {
     m_firstVolumeReportSeen.store(false, std::memory_order_relaxed);
     m_gainSetByPipeline.store(volumeInit.linearGain.has_value(), std::memory_order_relaxed);

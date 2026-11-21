@@ -52,7 +52,7 @@ QString CdUrl::deviceFromUrl(const QUrl &url)
 
 std::optional<int> CdUrl::trackNumberFromName(const QString &fileName, int firstTrackNum, int lastTrackNum)
 {
-    QString name = fileName;
+    QStringView name(fileName);
     const qsizetype dot = name.lastIndexOf(u'.');
     if (dot >= 0) {
         name.truncate(dot);
@@ -75,7 +75,7 @@ std::optional<int> CdUrl::trackNumberFromName(const QString &fileName, int first
             ++i;
         }
         bool ok = false;
-        const int value = name.mid(start, i - start).toInt(&ok);
+        const int value = name.sliced(start, i - start).toInt(&ok);
         if (ok) {
             runs.push_back(Run{value, i - start});
         }

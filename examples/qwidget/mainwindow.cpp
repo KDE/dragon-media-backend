@@ -290,7 +290,7 @@ void MainWindow::setupUi()
 
 void MainWindow::connectPlayer()
 {
-    for (auto c : std::as_const(m_playerConnections)) {
+    for (const auto &c : std::as_const(m_playerConnections)) {
         QObject::disconnect(c);
     }
     m_playerConnections.clear();

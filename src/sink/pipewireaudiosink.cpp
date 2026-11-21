@@ -334,7 +334,7 @@ PipeWireAudioSinkStream::~PipeWireAudioSinkStream()
     std::ignore = close();
 }
 
-bool PipeWireAudioSinkStream::connectToCore(const StreamVolumeInit &volumeInit)
+bool PipeWireAudioSinkStream::connectToCore(StreamVolumeInit volumeInit)
 {
     m_firstVolumeReportSeen.store(false, std::memory_order_relaxed);
     m_gainSetByPipeline.store(volumeInit.linearGain.has_value(), std::memory_order_relaxed);

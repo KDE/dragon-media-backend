@@ -29,7 +29,10 @@
 class DRAGONMEDIABACKEND_EXPORT AudioSinkStreamRenderer
 {
 public:
+    AudioSinkStreamRenderer() = default;
     virtual ~AudioSinkStreamRenderer() = default;
+
+    Q_DISABLE_COPY_MOVE(AudioSinkStreamRenderer)
 
     // Render one quantum of interleaved F32 PCM (up to maxSamples samples).
     // The returned span stays valid until the next call and is owned by the
