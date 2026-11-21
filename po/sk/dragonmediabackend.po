@@ -1,0 +1,296 @@
+# Slovak translations for dragon-media-backend package
+# Slovenské preklady pre balík dragon-media-backend.
+# Copyright (C) 2026 This file is copyright:
+# This file is distributed under the same license as the dragon-media-backend package.
+# Roman Paholík <wizzardsk@gmail.com>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: dragon-media-backend\n"
+"Report-Msgid-Bugs-To: https://bugs.kde.org\n"
+"POT-Creation-Date: 2026-11-12 04:48+0000\n"
+"PO-Revision-Date: 2026-11-20 12:50+0000\n"
+"Last-Translator: Roman Paholík <wizzardsk@gmail.com>\n"
+"Language-Team: Slovak <kde-i18n-doc@kde.org>\n"
+"Language: sk\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2;\n"
+
+#: decoder/decodepipeline.cpp:452
+#, kde-format
+msgid "Failed to create decoder"
+msgstr "Vytvorenie dekodéra zlyhalo"
+
+#: decoder/decodepipeline.cpp:687
+#, kde-format
+msgid "Stream error"
+msgstr "Chyba prúdu údajov"
+
+#: decoder/decoder.cpp:199
+#, kde-format
+msgid "Failed to initialize media input"
+msgstr "Inicializácia mediálneho vstupu zlyhala"
+
+#: decoder/decoder.cpp:203
+#, kde-format
+msgid "Failed to open media container"
+msgstr "Otvorenie mediálneho kontajnera zlyhalo"
+
+#: decoder/decoder.cpp:207
+#, kde-format
+msgid "No supported audio stream found"
+msgstr "Nenašiel sa žiadny podporovaný zvukový prúd"
+
+#: decoder/decoder.cpp:211
+#, kde-format
+msgid "Audio codec setup failed"
+msgstr "Nastavenie zvukového kodeku zlyhalo"
+
+#: decoder/decoder.cpp:215
+#, kde-format
+msgid "Audio resampler setup failed"
+msgstr "Nastavenie prevzorkovania zvuku zlyhalo"
+
+#: decoder/decoder.cpp:219
+#, kde-format
+msgid "Failed to allocate decoder resources"
+msgstr "Alokovanie prostriedkov dekodéra zlyhalo"
+
+#: decoder/decoder.cpp:238
+#, kde-format
+msgid "Decoder not initialized"
+msgstr "Dekodér nie je inicializovaný"
+
+#: decoder/decoder.cpp:518
+#, kde-format
+msgid "Resampler reinitialization failed after seek"
+msgstr "Opätovná inicializácia prevzorkovania po posune zlyhala"
+
+#: decoder/decoder.cpp:561
+#, kde-format
+msgid "Read error after %1 attempts: %2"
+msgstr "Chyba čítania po %1 pokusoch: %2"
+
+#: player/dragonplayer.cpp:94
+#, kde-format
+msgid "Failed to open the audio output device."
+msgstr "Otvorenie zvukového výstupného zariadenia zlyhalo."
+
+#: player/dragonplayer.cpp:231
+#, kde-format
+msgid "Fatal error while decoding media"
+msgstr "Pri dekódovaní média nastala závažná chyba"
+
+#: player/dragonplayer.cpp:258
+#, kde-format
+msgid "Error while decoding media"
+msgstr "Chyba pri dekódovaní média"
+
+#: player/dragonplayer.cpp:651
+#, kde-format
+msgid "Failed to open media source"
+msgstr "Otvorenie zdroja média zlyhalo"
+
+#: player/dragonplayer.cpp:651
+#, kde-format
+msgid "Network error"
+msgstr "Chyba siete"
+
+#: sink/nullaudiosink.cpp:16
+#, kde-format
+msgid "Could not find any audio sink plugins."
+msgstr "Nepodarilo sa nájsť žiadne zásuvné moduly zvukového výstupu."
+
+#: sink/pipewireaudiosink.cpp:193
+#, kde-format
+msgid "PipeWire: failed to create thread loop"
+msgstr "PipeWire: vytvorenie slučky vlákna zlyhalo"
+
+#: sink/pipewireaudiosink.cpp:231
+#, kde-format
+msgid "PipeWire: failed to create stream"
+msgstr "PipeWire: vytvorenie prúdu zlyhalo"
+
+#: sink/pipewireaudiosink.cpp:256
+#, kde-format
+msgid "PipeWire: failed to build audio format"
+msgstr "PipeWire: zostavenie zvukového formátu zlyhalo"
+
+#: sink/pipewireaudiosink.cpp:265
+#, kde-format
+msgid "PipeWire: failed to connect stream"
+msgstr "PipeWire: pripojenie prúdu zlyhalo"
+
+#: sink/pipewireaudiosink.cpp:272
+#, kde-format
+msgid "PipeWire: failed to start thread loop"
+msgstr "PipeWire: spustenie slučky vlákna zlyhalo"
+
+#: sink/pulseaudiosink.cpp:248
+#, kde-format
+msgid "PulseAudio: failed to create mainloop"
+msgstr "PulseAudio: vytvorenie hlavnej slučky zlyhalo"
+
+#: sink/pulseaudiosink.cpp:255
+#, kde-format
+msgid "PulseAudio: failed to start mainloop"
+msgstr "PulseAudio: spustenie hlavnej slučky zlyhalo"
+
+#: sink/pulseaudiosink.cpp:269
+#, kde-format
+msgid "PulseAudio: failed to get mainloop API"
+msgstr "PulseAudio: získanie API hlavnej slučky zlyhalo"
+
+#: sink/pulseaudiosink.cpp:294
+#, kde-format
+msgid "PulseAudio: failed to create context"
+msgstr "PulseAudio: vytvorenie kontextu zlyhalo"
+
+#: sink/pulseaudiosink.cpp:304
+#, kde-format
+msgid "PulseAudio: failed to connect context"
+msgstr "PulseAudio: pripojenie kontextu zlyhalo"
+
+#: sink/pulseaudiosink.cpp:316
+#, kde-format
+msgid "PulseAudio: context not ready"
+msgstr "PulseAudio: kontext nie je pripravený"
+
+#: sink/pulseaudiosink.cpp:414
+#, kde-format
+msgid "PulseAudio: failed to init channel map"
+msgstr "PulseAudio: inicializácia mapy kanálov zlyhala"
+
+#: sink/pulseaudiosink.cpp:423
+#, kde-format
+msgid "PulseAudio: failed to create stream proplist"
+msgstr "PulseAudio: vytvorenie zoznamu vlastností prúdu zlyhalo"
+
+#: sink/pulseaudiosink.cpp:442
+#, kde-format
+msgid "PulseAudio: failed to create stream"
+msgstr "PulseAudio: vytvorenie prúdu zlyhalo"
+
+#: sink/pulseaudiosink.cpp:469
+#, kde-format
+msgid "PulseAudio: failed to connect stream"
+msgstr "PulseAudio: pripojenie prúdu zlyhalo"
+
+#: sink/pulseaudiosink.cpp:482
+#, kde-format
+msgid "PulseAudio: stream not ready"
+msgstr "PulseAudio: prúd nie je pripravený"
+
+#: stream/cd/cddisc.cpp:111
+#, kde-format
+msgid "The CD has no tracks."
+msgstr "CD nemá žiadne stopy."
+
+#: stream/cd/cddisc.cpp:148
+#, kde-format
+msgid "The disc is not an Audio CD."
+msgstr "Disk nie je zvukové CD."
+
+#: stream/cd/cddisc.cpp:189
+#, kde-format
+msgid "Could not open the CD device. Check that a disc is present."
+msgstr "Nepodarilo sa otvoriť zariadenie CD. Skontrolujte, či je vložený disk."
+
+#: stream/cd/cdstream.cpp:117
+#, kde-format
+msgid "The audiocd:/ URL does not name a track to play."
+msgstr "URL audiocd:/ neurčuje stopu na prehranie."
+
+#: stream/cd/cdstream.cpp:155
+#, kde-format
+msgid "Track not found on the CD: %1"
+msgstr "Stopa sa na CD nenašla: %1"
+
+#: stream/cd/cdstream.cpp:159
+#, kde-format
+msgid "CD track %1 is not an audio track."
+msgstr "Stopa CD %1 nie je zvuková stopa."
+
+#: stream/cd/cdstream.cpp:166
+#, kde-format
+msgid "Could not determine the length of CD track %1."
+msgstr "Nepodarilo sa zistiť dĺžku stopy CD %1."
+
+#: stream/cd/cdstream.cpp:284
+#, kde-format
+msgid "The CD is no longer available."
+msgstr "CD už nie je dostupné."
+
+#: stream/cd/cdstream.cpp:289
+#, kde-format
+msgid "Attempted to read past the end of the CD track."
+msgstr "Pokus o čítanie za koncom stopy CD."
+
+#: stream/cd/cdstream.cpp:296
+#, kde-format
+msgid "Error reading the CD. The disc may have been ejected."
+msgstr "Chyba pri čítaní CD. Disk mohol byť vysunutý."
+
+#: stream/cd/dragoncdtocreader.cpp:61
+#, kde-format
+msgid "This build of Dragon Media Backend was made without CD support."
+msgstr "Toto zostavenie Dragon Media Backend bolo vytvorené bez podpory CD."
+
+#: stream/http/httpprotocol.cpp:227 stream/http/httpsocket.cpp:247
+#: stream/http/httpsocket.cpp:340
+#, kde-format
+msgid "Malformed response"
+msgstr "Chybná odpoveď"
+
+#: stream/http/httpsocket.cpp:31
+#, kde-format
+msgid "Stream stopped sending data"
+msgstr "Prúd prestal posielať údaje"
+
+#: stream/http/httpsocket.cpp:88
+#, kde-format
+msgid "Invalid stream URL: %1"
+msgstr "Neplatná URL prúdu: %1"
+
+#: stream/http/httpsocket.cpp:104 stream/http/httpsocket.cpp:457
+#, kde-format
+msgid "Connection closed"
+msgstr "Spojenie zavreté"
+
+#: stream/http/httpsocket.cpp:366 stream/http/httpsocket.cpp:376
+#, kde-format
+msgid "Server responded with status %1"
+msgstr "Server odpovedal stavom %1"
+
+#: stream/http/httpsocket.cpp:372
+#, kde-format
+msgid "Proxy requires authentication"
+msgstr "Proxy vyžaduje overenie"
+
+#: stream/http/httpsocket.cpp:383
+#, kde-format
+msgid "Server returned unexpected byte range"
+msgstr "Server vrátil neočakávaný rozsah bajtov"
+
+#: stream/http/httpsocket.cpp:388
+#, kde-format
+msgid "Server ignored requested byte range"
+msgstr "Server ignoroval požadovaný rozsah bajtov"
+
+#: stream/http/httpsocket.cpp:399 stream/http/httpsocket.cpp:409
+#: stream/http/httpsocket.cpp:413 stream/http/httpsocket.cpp:416
+#, kde-format
+msgid "Unusable redirect address"
+msgstr "Nepoužiteľná adresa presmerovania"
+
+#: stream/http/httpsocket.cpp:402
+#, kde-format
+msgid "Too many redirects"
+msgstr "Príliš veľa presmerovaní"
+
+#: stream/http/radiostream.cpp:246
+#, kde-format
+msgid "Network error: %1"
+msgstr "Chyba siete: %1"
