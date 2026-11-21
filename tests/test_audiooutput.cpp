@@ -1523,7 +1523,7 @@ void TestAudioOutput::testStartupExternalVolumeRestored()
 
     // Simulate server-restore event at connect (0.5 linear gain)
     constexpr float restoredGain = 0.5f;
-    constexpr float expectedSlider = 1.0f - std::exp(-restoredGain * 4.60517018599f);
+    const float expectedSlider = 1.0f - std::exp(-restoredGain * 4.60517018599f);
 
     Pipe<float> pipe(65536);
     output->setAudioPipe(&pipe);
