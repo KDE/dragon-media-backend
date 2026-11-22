@@ -1,0 +1,287 @@
+# Copyright (C) 2026 This file is copyright:
+# This file is distributed under the same license as the dragon-media-backend package.
+#
+# SPDX-FileCopyrightText: 2026 Yaron Shahrabani <sh.yaron@gmail.com>
+msgid ""
+msgstr ""
+"Project-Id-Version: dragon-media-backend\n"
+"Report-Msgid-Bugs-To: https://bugs.kde.org\n"
+"POT-Creation-Date: 2026-11-21 22:44+0000\n"
+"PO-Revision-Date: 2026-11-21 09:25+0200\n"
+"Last-Translator: Yaron Shahrabani <sh.yaron@gmail.com>\n"
+"Language-Team: Hebrew <kde-l10n-he@kde.org>\n"
+"Language: he\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Lokalize 26.08.3\n"
+
+#: decoder/decodepipeline.cpp:469
+#, kde-format
+msgid "Failed to create decoder"
+msgstr "יצירת מפענח נכשלה"
+
+#: decoder/decodepipeline.cpp:713
+#, kde-format
+msgid "Stream error"
+msgstr "שגיאת תזרים"
+
+#: decoder/decoder.cpp:199
+#, kde-format
+msgid "Failed to initialize media input"
+msgstr "אתחול קלט המדיה נכשל"
+
+#: decoder/decoder.cpp:203
+#, kde-format
+msgid "Failed to open media container"
+msgstr "פתיחת מכולת מדיה נכשלה"
+
+#: decoder/decoder.cpp:207
+#, kde-format
+msgid "No supported audio stream found"
+msgstr "לא נמצא תזרים שמע נתמך"
+
+#: decoder/decoder.cpp:211
+#, kde-format
+msgid "Audio codec setup failed"
+msgstr "הקמת מפענח שמע נכשלה"
+
+#: decoder/decoder.cpp:215
+#, kde-format
+msgid "Audio resampler setup failed"
+msgstr ""
+
+#: decoder/decoder.cpp:219
+#, kde-format
+msgid "Failed to allocate decoder resources"
+msgstr "הקצאת משאבי מפענח נכשלה"
+
+#: decoder/decoder.cpp:238
+#, kde-format
+msgid "Decoder not initialized"
+msgstr "המפענח לא אותחל"
+
+#: decoder/decoder.cpp:528
+#, kde-format
+msgid "Resampler reinitialization failed after seek"
+msgstr ""
+
+#: decoder/decoder.cpp:571
+#, kde-format
+msgid "Read error after %1 attempts: %2"
+msgstr "שגיאת קריאה אחרי %1 ניסיונות: %2"
+
+#: player/dragonplayer.cpp:121
+#, kde-format
+msgid "Failed to open the audio output device."
+msgstr "פתיחת התקן פלט השמע נכשלה."
+
+#: player/dragonplayer.cpp:273
+#, kde-format
+msgid "Fatal error while decoding media"
+msgstr "שגיאה מכרעת בפיענוח מדיה"
+
+#: player/dragonplayer.cpp:300
+#, kde-format
+msgid "Error while decoding media"
+msgstr "שגיאה בפיענוח מדיה"
+
+#: player/dragonplayer.cpp:848
+#, kde-format
+msgid "Failed to open media source"
+msgstr "פתיחת מקור מדיה נכשלה"
+
+#: player/dragonplayer.cpp:848
+#, kde-format
+msgid "Network error"
+msgstr "שגיאת רשת"
+
+#: sink/nullaudiosink.cpp:16
+#, kde-format
+msgid "Could not find any audio sink plugins."
+msgstr ""
+
+#: sink/pipewireaudiosink.cpp:287
+#, kde-format
+msgid "PipeWire: connection to the PipeWire server failed"
+msgstr ""
+
+#: sink/pipewireaudiosink.cpp:292
+#, kde-format
+msgid "PipeWire: failed to connect stream"
+msgstr "PipeWire: החיבור לתזרים נכשל"
+
+#: sink/pulseaudiosink.cpp:199
+#, kde-format
+msgid "PulseAudio: failed to create mainloop"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:206
+#, kde-format
+msgid "PulseAudio: failed to start mainloop"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:220
+#, kde-format
+msgid "PulseAudio: failed to get mainloop API"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:245
+#, kde-format
+msgid "PulseAudio: failed to create context"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:255
+#, kde-format
+msgid "PulseAudio: failed to connect context"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:267
+#, kde-format
+msgid "PulseAudio: context not ready"
+msgstr "PulseAudio: ההקשר לא מוכן"
+
+#: sink/pulseaudiosink.cpp:335
+#, fuzzy, kde-format
+#| msgid "PulseAudio: failed to create stream proplist"
+msgid "PulseAudio audio device is poisoned"
+msgstr "PulseAudio: יצירת רשימת מאפיינים (proplist) לתזרים נכשלה"
+
+#: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
+#: sink/pulseaudiosink.cpp:391
+#, kde-format
+msgid "PulseAudio: failed to connect stream"
+msgstr "PulseAudio: התחברות לתזרים נכשלה"
+
+#: sink/sdlaudiosink.cpp:159
+#, kde-format
+msgid "SDL: audio output is in a zombie state after a failed close"
+msgstr ""
+
+#: stream/cd/cddisc.cpp:111
+#, kde-format
+msgid "The CD has no tracks."
+msgstr "אין רצועות בתקליטור."
+
+#: stream/cd/cddisc.cpp:148
+#, kde-format
+msgid "The disc is not an Audio CD."
+msgstr "זה לא תקליטור שמע."
+
+#: stream/cd/cddisc.cpp:189
+#, kde-format
+msgid "Could not open the CD device. Check that a disc is present."
+msgstr ""
+
+#: stream/cd/cdstream.cpp:117
+#, kde-format
+msgid "The audiocd:/ URL does not name a track to play."
+msgstr ""
+
+#: stream/cd/cdstream.cpp:155
+#, kde-format
+msgid "Track not found on the CD: %1"
+msgstr "הרצועה לא נמצאה בתקליטור: %1"
+
+#: stream/cd/cdstream.cpp:159
+#, kde-format
+msgid "CD track %1 is not an audio track."
+msgstr ""
+
+#: stream/cd/cdstream.cpp:166
+#, kde-format
+msgid "Could not determine the length of CD track %1."
+msgstr ""
+
+#: stream/cd/cdstream.cpp:284
+#, kde-format
+msgid "The CD is no longer available."
+msgstr "התקליטור לא זמין עוד."
+
+#: stream/cd/cdstream.cpp:289
+#, kde-format
+msgid "Attempted to read past the end of the CD track."
+msgstr ""
+
+#: stream/cd/cdstream.cpp:296
+#, kde-format
+msgid "Error reading the CD. The disc may have been ejected."
+msgstr ""
+
+#: stream/cd/dragoncdtocreader.cpp:69
+#, kde-format
+msgid "This build of Dragon Media Backend was made without CD support."
+msgstr ""
+
+#: stream/http/httpprotocol.cpp:227 stream/http/httpsocket.cpp:247
+#: stream/http/httpsocket.cpp:340
+#, kde-format
+msgid "Malformed response"
+msgstr ""
+
+#: stream/http/httpsocket.cpp:31
+#, kde-format
+msgid "Stream stopped sending data"
+msgstr ""
+
+#: stream/http/httpsocket.cpp:88
+#, kde-format
+msgid "Invalid stream URL: %1"
+msgstr "כתובת תזרים שגויה: %1"
+
+#: stream/http/httpsocket.cpp:104 stream/http/httpsocket.cpp:457
+#, kde-format
+msgid "Connection closed"
+msgstr ""
+
+#: stream/http/httpsocket.cpp:366 stream/http/httpsocket.cpp:376
+#, kde-format
+msgid "Server responded with status %1"
+msgstr ""
+
+#: stream/http/httpsocket.cpp:372
+#, kde-format
+msgid "Proxy requires authentication"
+msgstr ""
+
+#: stream/http/httpsocket.cpp:383
+#, kde-format
+msgid "Server returned unexpected byte range"
+msgstr ""
+
+#: stream/http/httpsocket.cpp:388
+#, kde-format
+msgid "Server ignored requested byte range"
+msgstr ""
+
+#: stream/http/httpsocket.cpp:399 stream/http/httpsocket.cpp:409
+#: stream/http/httpsocket.cpp:413 stream/http/httpsocket.cpp:416
+#, kde-format
+msgid "Unusable redirect address"
+msgstr "כתובת הפניה בלתי שימושית"
+
+#: stream/http/httpsocket.cpp:402
+#, kde-format
+msgid "Too many redirects"
+msgstr "יותר מדי הפניות"
+
+#: stream/http/radiostream.cpp:246
+#, kde-format
+msgid "Network error: %1"
+msgstr ""
+
+#~ msgid "PipeWire: failed to create thread loop"
+#~ msgstr "PipeWire: יצירת לולאת תהליכון נכשלה"
+
+#~ msgid "PipeWire: failed to create stream"
+#~ msgstr "PipeWire: יצירת תזרים נכשלה"
+
+#~ msgid "PipeWire: failed to start thread loop"
+#~ msgstr "PipeWire: התחלת לולאת תהליכון נכשלה"
+
+#~ msgid "PulseAudio: failed to create stream"
+#~ msgstr "PulseAudio: יצירת תזרים נכשלה"
+
+#~ msgid "PulseAudio: stream not ready"
+#~ msgstr "PulseAudio: התזרים לא מוכן"

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-11-12 04:48+0000\n"
+"POT-Creation-Date: 2026-11-21 22:44+0000\n"
 "PO-Revision-Date: 2026-11-14 16:15+0100\n"
 "Last-Translator: Nemanja Hiršl <nemhirsl@gmail.com>\n"
 "Language-Team: Serbian <kde-i18n-sr@kde.org>\n"
@@ -17,12 +17,12 @@ msgstr ""
 "X-Text-Markup: kde4\n"
 "X-Environment: kde\n"
 
-#: decoder/decodepipeline.cpp:452
+#: decoder/decodepipeline.cpp:469
 #, kde-format
 msgid "Failed to create decoder"
 msgstr "Не могу да направим декодер"
 
-#: decoder/decodepipeline.cpp:687
+#: decoder/decodepipeline.cpp:713
 #, kde-format
 msgid "Stream error"
 msgstr "Грешка тока"
@@ -62,37 +62,37 @@ msgstr "Не могу да резервишем ресурсе за декоде
 msgid "Decoder not initialized"
 msgstr "Декодер није припремљен"
 
-#: decoder/decoder.cpp:518
+#: decoder/decoder.cpp:528
 #, kde-format
 msgid "Resampler reinitialization failed after seek"
 msgstr "Не могу поново да припремим преузорковач после тражења"
 
-#: decoder/decoder.cpp:561
+#: decoder/decoder.cpp:571
 #, kde-format
 msgid "Read error after %1 attempts: %2"
 msgstr "Грешка читања после %1 покушаја: %2"
 
-#: player/dragonplayer.cpp:94
+#: player/dragonplayer.cpp:121
 #, kde-format
 msgid "Failed to open the audio output device."
 msgstr "Не могу да отворим уређај за аудио излаз."
 
-#: player/dragonplayer.cpp:231
+#: player/dragonplayer.cpp:273
 #, kde-format
 msgid "Fatal error while decoding media"
 msgstr "Кобна грешка при декодирању медијума"
 
-#: player/dragonplayer.cpp:258
+#: player/dragonplayer.cpp:300
 #, kde-format
 msgid "Error while decoding media"
 msgstr "Грешка при декодирању медијума"
 
-#: player/dragonplayer.cpp:651
+#: player/dragonplayer.cpp:848
 #, kde-format
 msgid "Failed to open media source"
 msgstr "Не могу да отворим медијски извор"
 
-#: player/dragonplayer.cpp:651
+#: player/dragonplayer.cpp:848
 #, kde-format
 msgid "Network error"
 msgstr "Грешка мреже"
@@ -102,85 +102,62 @@ msgstr "Грешка мреже"
 msgid "Could not find any audio sink plugins."
 msgstr "Не могу да нађем ниједан прикључак за аудио излаз."
 
-#: sink/pipewireaudiosink.cpp:193
+#: sink/pipewireaudiosink.cpp:287
 #, kde-format
-msgid "PipeWire: failed to create thread loop"
-msgstr "PipeWire: не могу да направим петљу нити"
+msgid "PipeWire: connection to the PipeWire server failed"
+msgstr ""
 
-#: sink/pipewireaudiosink.cpp:231
-#, kde-format
-msgid "PipeWire: failed to create stream"
-msgstr "PipeWire: не могу да направим ток"
-
-#: sink/pipewireaudiosink.cpp:256
-#, kde-format
-msgid "PipeWire: failed to build audio format"
-msgstr "PipeWire: не могу да саставим аудио формат"
-
-#: sink/pipewireaudiosink.cpp:265
+#: sink/pipewireaudiosink.cpp:292
 #, kde-format
 msgid "PipeWire: failed to connect stream"
 msgstr "PipeWire: не могу да повежем ток"
 
-#: sink/pipewireaudiosink.cpp:272
-#, kde-format
-msgid "PipeWire: failed to start thread loop"
-msgstr "PipeWire: не могу да покренем петљу нити"
-
-#: sink/pulseaudiosink.cpp:248
+#: sink/pulseaudiosink.cpp:199
 #, kde-format
 msgid "PulseAudio: failed to create mainloop"
 msgstr "Пулс‑аудио: не могу да направим главну петљу"
 
-#: sink/pulseaudiosink.cpp:255
+#: sink/pulseaudiosink.cpp:206
 #, kde-format
 msgid "PulseAudio: failed to start mainloop"
 msgstr "Пулс‑аудио: не могу да покренем главну петљу"
 
-#: sink/pulseaudiosink.cpp:269
+#: sink/pulseaudiosink.cpp:220
 #, kde-format
 msgid "PulseAudio: failed to get mainloop API"
 msgstr "Пулс‑аудио: не могу да добавим АПИ главне петље"
 
-#: sink/pulseaudiosink.cpp:294
+#: sink/pulseaudiosink.cpp:245
 #, kde-format
 msgid "PulseAudio: failed to create context"
 msgstr "Пулс‑аудио: не могу да направим контекст"
 
-#: sink/pulseaudiosink.cpp:304
+#: sink/pulseaudiosink.cpp:255
 #, kde-format
 msgid "PulseAudio: failed to connect context"
 msgstr "Пулс‑аудио: не могу да повежем контекст"
 
-#: sink/pulseaudiosink.cpp:316
+#: sink/pulseaudiosink.cpp:267
 #, kde-format
 msgid "PulseAudio: context not ready"
 msgstr "Пулс‑аудио: контекст није спреман"
 
-#: sink/pulseaudiosink.cpp:414
-#, kde-format
-msgid "PulseAudio: failed to init channel map"
-msgstr "Пулс‑аудио: не могу да припремим мапу канала"
-
-#: sink/pulseaudiosink.cpp:423
-#, kde-format
-msgid "PulseAudio: failed to create stream proplist"
+#: sink/pulseaudiosink.cpp:335
+#, fuzzy, kde-format
+#| msgid "PulseAudio: failed to create stream proplist"
+msgid "PulseAudio audio device is poisoned"
 msgstr "Пулс‑аудио: не могу да направим списак својстава тока"
 
-#: sink/pulseaudiosink.cpp:442
-#, kde-format
-msgid "PulseAudio: failed to create stream"
-msgstr "Пулс‑аудио: не могу да направим ток"
-
-#: sink/pulseaudiosink.cpp:469
+#: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
+#: sink/pulseaudiosink.cpp:391
 #, kde-format
 msgid "PulseAudio: failed to connect stream"
 msgstr "Пулс‑аудио: не могу да повежем ток"
 
-#: sink/pulseaudiosink.cpp:482
+#: sink/sdlaudiosink.cpp:159
 #, kde-format
-msgid "PulseAudio: stream not ready"
-msgstr "Пулс‑аудио: ток није спреман"
+msgid "SDL: audio output is in a zombie state after a failed close"
+msgstr ""
 
 #: stream/cd/cddisc.cpp:111
 #, kde-format
@@ -232,7 +209,7 @@ msgstr "Покушано је читање иза краја стазе на Ц�
 msgid "Error reading the CD. The disc may have been ejected."
 msgstr "Грешка при читању ЦД‑а. Диск је можда избачен."
 
-#: stream/cd/dragoncdtocreader.cpp:61
+#: stream/cd/dragoncdtocreader.cpp:69
 #, kde-format
 msgid "This build of Dragon Media Backend was made without CD support."
 msgstr "Змајева медијска позадина је изграђена без подршке за ЦД."
@@ -293,3 +270,24 @@ msgstr "Превише преусмеравања"
 #, kde-format
 msgid "Network error: %1"
 msgstr "Грешка мреже: %1"
+
+#~ msgid "PipeWire: failed to create thread loop"
+#~ msgstr "PipeWire: не могу да направим петљу нити"
+
+#~ msgid "PipeWire: failed to create stream"
+#~ msgstr "PipeWire: не могу да направим ток"
+
+#~ msgid "PipeWire: failed to build audio format"
+#~ msgstr "PipeWire: не могу да саставим аудио формат"
+
+#~ msgid "PipeWire: failed to start thread loop"
+#~ msgstr "PipeWire: не могу да покренем петљу нити"
+
+#~ msgid "PulseAudio: failed to init channel map"
+#~ msgstr "Пулс‑аудио: не могу да припремим мапу канала"
+
+#~ msgid "PulseAudio: failed to create stream"
+#~ msgstr "Пулс‑аудио: не могу да направим ток"
+
+#~ msgid "PulseAudio: stream not ready"
+#~ msgstr "Пулс‑аудио: ток није спреман"

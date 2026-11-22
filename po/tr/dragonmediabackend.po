@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-11-12 04:48+0000\n"
+"POT-Creation-Date: 2026-11-21 22:44+0000\n"
 "PO-Revision-Date: 2026-11-10 20:55+0300\n"
 "Last-Translator: Emir SARI <emir_sari@icloud.com>\n"
 "Language-Team: Turkish <kde-l10n-tr@kde.org>\n"
@@ -17,12 +17,12 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 "X-Generator: Lokalize 26.08.2\n"
 
-#: decoder/decodepipeline.cpp:452
+#: decoder/decodepipeline.cpp:469
 #, kde-format
 msgid "Failed to create decoder"
 msgstr "Kod çözücü oluşturulamadı"
 
-#: decoder/decodepipeline.cpp:687
+#: decoder/decodepipeline.cpp:713
 #, kde-format
 msgid "Stream error"
 msgstr "Akış hatası"
@@ -62,37 +62,37 @@ msgstr "Kod çözücü özkaynakları ayrılamadı"
 msgid "Decoder not initialized"
 msgstr "Kod çözücü ilklendirilmemiş"
 
-#: decoder/decoder.cpp:518
+#: decoder/decoder.cpp:528
 #, kde-format
 msgid "Resampler reinitialization failed after seek"
 msgstr "Sarma sonrası yeniden örnekleyiciyi ilklendirme başarısız"
 
-#: decoder/decoder.cpp:561
+#: decoder/decoder.cpp:571
 #, kde-format
 msgid "Read error after %1 attempts: %2"
 msgstr "%1 denemeden sonra okuma hatası: %2"
 
-#: player/dragonplayer.cpp:94
+#: player/dragonplayer.cpp:121
 #, kde-format
 msgid "Failed to open the audio output device."
 msgstr "Ses çıkış aygıtı açılamadı"
 
-#: player/dragonplayer.cpp:231
+#: player/dragonplayer.cpp:273
 #, kde-format
 msgid "Fatal error while decoding media"
 msgstr "Ortam kodu çözülürken onulmaz hata"
 
-#: player/dragonplayer.cpp:258
+#: player/dragonplayer.cpp:300
 #, kde-format
 msgid "Error while decoding media"
 msgstr "Ortam kodu çözülürken hata"
 
-#: player/dragonplayer.cpp:651
+#: player/dragonplayer.cpp:848
 #, kde-format
 msgid "Failed to open media source"
 msgstr "Ortam kaynağı açılamadı"
 
-#: player/dragonplayer.cpp:651
+#: player/dragonplayer.cpp:848
 #, kde-format
 msgid "Network error"
 msgstr "Ağ hatası"
@@ -102,85 +102,62 @@ msgstr "Ağ hatası"
 msgid "Could not find any audio sink plugins."
 msgstr "Bulunan ses havuzu eklentisi yok"
 
-#: sink/pipewireaudiosink.cpp:193
+#: sink/pipewireaudiosink.cpp:287
 #, kde-format
-msgid "PipeWire: failed to create thread loop"
-msgstr "PipeWire: İş parçacığı döngüsü oluşturulamadı"
+msgid "PipeWire: connection to the PipeWire server failed"
+msgstr ""
 
-#: sink/pipewireaudiosink.cpp:231
-#, kde-format
-msgid "PipeWire: failed to create stream"
-msgstr "PipeWire: Akış oluşturulamadı"
-
-#: sink/pipewireaudiosink.cpp:256
-#, kde-format
-msgid "PipeWire: failed to build audio format"
-msgstr "PipeWire: Ses biçimi yapılamadı"
-
-#: sink/pipewireaudiosink.cpp:265
+#: sink/pipewireaudiosink.cpp:292
 #, kde-format
 msgid "PipeWire: failed to connect stream"
 msgstr "PipeWire: Akış bağlanamadı"
 
-#: sink/pipewireaudiosink.cpp:272
-#, kde-format
-msgid "PipeWire: failed to start thread loop"
-msgstr "PipeWire: İş parçacığı döngüsü başlatılamadı"
-
-#: sink/pulseaudiosink.cpp:248
+#: sink/pulseaudiosink.cpp:199
 #, kde-format
 msgid "PulseAudio: failed to create mainloop"
 msgstr "PulseAudio: Ana döngü oluşturulamadı"
 
-#: sink/pulseaudiosink.cpp:255
+#: sink/pulseaudiosink.cpp:206
 #, kde-format
 msgid "PulseAudio: failed to start mainloop"
 msgstr "PulseAudio: Ana döngü başlatılamadı"
 
-#: sink/pulseaudiosink.cpp:269
+#: sink/pulseaudiosink.cpp:220
 #, kde-format
 msgid "PulseAudio: failed to get mainloop API"
 msgstr "PulseAudio: Ana döngü API’si alınamadı"
 
-#: sink/pulseaudiosink.cpp:294
+#: sink/pulseaudiosink.cpp:245
 #, kde-format
 msgid "PulseAudio: failed to create context"
 msgstr "PulseAudio: Bağlam oluşturulamadı"
 
-#: sink/pulseaudiosink.cpp:304
+#: sink/pulseaudiosink.cpp:255
 #, kde-format
 msgid "PulseAudio: failed to connect context"
 msgstr "PulseAudio: Bağlam bağlanamadı"
 
-#: sink/pulseaudiosink.cpp:316
+#: sink/pulseaudiosink.cpp:267
 #, kde-format
 msgid "PulseAudio: context not ready"
 msgstr "PulseAudio: Bağlam hazır değil"
 
-#: sink/pulseaudiosink.cpp:414
-#, kde-format
-msgid "PulseAudio: failed to init channel map"
-msgstr "PulseAudio: Kanal eşlemi ilklendirilemedi"
-
-#: sink/pulseaudiosink.cpp:423
-#, kde-format
-msgid "PulseAudio: failed to create stream proplist"
+#: sink/pulseaudiosink.cpp:335
+#, fuzzy, kde-format
+#| msgid "PulseAudio: failed to create stream proplist"
+msgid "PulseAudio audio device is poisoned"
 msgstr "PulseAudio: Akış özellikleri listesi oluşturulamadı"
 
-#: sink/pulseaudiosink.cpp:442
-#, kde-format
-msgid "PulseAudio: failed to create stream"
-msgstr "PulseAudio: Akış oluşturulamadı"
-
-#: sink/pulseaudiosink.cpp:469
+#: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
+#: sink/pulseaudiosink.cpp:391
 #, kde-format
 msgid "PulseAudio: failed to connect stream"
 msgstr "PulseAudio: Akış bağlanamadı"
 
-#: sink/pulseaudiosink.cpp:482
+#: sink/sdlaudiosink.cpp:159
 #, kde-format
-msgid "PulseAudio: stream not ready"
-msgstr "PulseAudio: Akış hazır değil"
+msgid "SDL: audio output is in a zombie state after a failed close"
+msgstr ""
 
 #: stream/cd/cddisc.cpp:111
 #, kde-format
@@ -232,7 +209,7 @@ msgstr "CD parçasının sonundan sonrası okunmaya çalışılıyor"
 msgid "Error reading the CD. The disc may have been ejected."
 msgstr "CD okunurken hata. Disk çıkarılmış olabilir"
 
-#: stream/cd/dragoncdtocreader.cpp:61
+#: stream/cd/dragoncdtocreader.cpp:69
 #, kde-format
 msgid "This build of Dragon Media Backend was made without CD support."
 msgstr "Dragon Ortam Arka Ucu’nun bu yapısı, CD desteği olmadan yapılmış"
@@ -293,3 +270,24 @@ msgstr "Pek çok yeniden yönlendirme"
 #, kde-format
 msgid "Network error: %1"
 msgstr "Ağ hatası: %1"
+
+#~ msgid "PipeWire: failed to create thread loop"
+#~ msgstr "PipeWire: İş parçacığı döngüsü oluşturulamadı"
+
+#~ msgid "PipeWire: failed to create stream"
+#~ msgstr "PipeWire: Akış oluşturulamadı"
+
+#~ msgid "PipeWire: failed to build audio format"
+#~ msgstr "PipeWire: Ses biçimi yapılamadı"
+
+#~ msgid "PipeWire: failed to start thread loop"
+#~ msgstr "PipeWire: İş parçacığı döngüsü başlatılamadı"
+
+#~ msgid "PulseAudio: failed to init channel map"
+#~ msgstr "PulseAudio: Kanal eşlemi ilklendirilemedi"
+
+#~ msgid "PulseAudio: failed to create stream"
+#~ msgstr "PulseAudio: Akış oluşturulamadı"
+
+#~ msgid "PulseAudio: stream not ready"
+#~ msgstr "PulseAudio: Akış hazır değil"
