@@ -9,6 +9,7 @@
 #include <QtCore>
 #include <QtTest>
 
+#include "helpers/fixture_generator.h"
 #include "logging_timestamp_init.h"
 #include "test_utils.h"
 
@@ -46,6 +47,7 @@ private Q_SLOTS:
     void testSeekDuringGaplessTail();
     void testPrewarmFailureEmitsEos();
     void testSeekAfterPromotionBeforeTrackStarted();
+    void testShortTrackDoesNotEmitAboutToFinishWhileStopped();
 
 private:
     bool waitForPlaybackStart(DragonPlayer &player, int timeoutMs = 5000)
@@ -469,6 +471,49 @@ void TestPlayerPrefinish::testSeekAfterPromotionBeforeTrackStarted()
 
     QVERIFY2(helper.waitForEndOfMedia(15000), "Track 2 must reach EndOfMedia after a seek in the promotion window");
     QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+
+    player.stop();
+}
+
+void TestPlayerPrefinish::testShortTrackDoesNotEmitAboutToFinishWhileStopped()
+{
+    const auto shortFixture = FixtureGenerator::makeEndMarkerFixture(48000, 1, 48000);
+    const auto cleanup = qScopeGuard([&shortFixture]() {
+        QFile::remove(shortFixture.filePath);
+    });
+
+    DragonPlayer player;
+    PlayerHelper helper(&player);
+    Diagnostics diagnostics(&player);
+    player.setPrefinishMark(2000ms);
+
+    QSignalSpy aboutToFinishSpy(&player, &DragonPlayer::aboutToFinish);
+    QSignalSpy trackChangedSpy(&player, &DragonPlayer::trackChanged);
+
+    QVERIFY(helper.setSourceAndWait(QUrl::fromLocalFile(shortFixture.filePath)));
+
+    // Wait for the short track to finish decoding into the pipe while still StoppedState.
+    QVERIFY2(QTest::qWaitFor(
+                 [&diagnostics]() {
+                     return !diagnostics.hasActiveDecoder();
+                 },
+                 5000),
+             "Short track should finish decoding while still StoppedState");
+    QTest::qWait(50);
+
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::StoppedState);
+    QCOMPARE(aboutToFinishSpy.count(), 0);
+
+    const QUrl url2 = QUrl::fromLocalFile(TestFixture::fixturePath(u"gs-3s-2c-44100hz.ogg"_s));
+    connect(&player, &DragonPlayer::aboutToFinish, &player, [&player, url2]() {
+        player.setNextSource(url2);
+    });
+
+    QVERIFY(helper.playAndWait());
+    QTRY_VERIFY_WITH_TIMEOUT(aboutToFinishSpy.count() == 1, 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(trackChangedSpy.count() == 1, 10000);
+    QCOMPARE(player.source(), url2);
+    QCOMPARE(player.playbackState(), DragonPlayer::PlaybackState::PlayingState);
 
     player.stop();
 }

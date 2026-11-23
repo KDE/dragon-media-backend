@@ -180,7 +180,7 @@ dragon_add_test(test_player_playback  LIBRARIES ${_player_libs} PkgConfig::FLAC)
 dragon_add_backend_test_variants(test_player_playback)
 dragon_add_test(test_player_signals   LIBRARIES ${_player_libs})
 dragon_add_test(test_player_setsource LIBRARIES ${_player_libs})
-dragon_add_test(test_player_prefinish LIBRARIES ${_player_libs})
+dragon_add_test(test_player_prefinish LIBRARIES ${_player_libs} PkgConfig::FLAC)
 dragon_add_test(test_player_fft       LIBRARIES ${_player_libs})
 
 # Decode-pipeline gapless promotion race (no audio device needed: the

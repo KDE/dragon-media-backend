@@ -278,7 +278,7 @@ void DragonPlayerPrivate::onDecodeFinished(const QUrl &source, bool hadFatalErro
         return;
     }
 
-    if (prefinishMark > 0ms && !aboutToFinishEmitted && audioOutput && currentDuration) {
+    if (currentPlaybackState == DragonPlayer::PlaybackState::PlayingState && prefinishMark > 0ms && !aboutToFinishEmitted && audioOutput && currentDuration) {
         const qint64 pipeBacklog = static_cast<qint64>(audioPipe().consumer().ready());
         const qint64 eventualSamples = audioOutput->playbackPipeline()->totalSamplesWritten() + pipeBacklog;
         const std::chrono::milliseconds eventualPosition{(eventualSamples / currentChannels) * 1000 / currentSampleRate};
