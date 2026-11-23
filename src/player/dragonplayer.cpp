@@ -700,25 +700,17 @@ void DragonPlayerPrivate::init()
 }
 
 DragonPlayer::DragonPlayer(QObject *parent)
-    : QObject(parent)
+    : DragonPlayer(DragonAudioOutput::Backend::Auto, parent)
 {
-    qRegisterMetaType<DragonFftFrame>();
-
-    d = std::make_unique<DragonPlayerPrivate>(this, DragonAudioOutput::Backend::Auto);
-    d->init();
-
-    connect(this, &DragonPlayer::playbackStateChanged, this, [](PlaybackState newState, PlaybackState oldState) {
-        qCDebug(dragonMediaBackendPlayer) << "playbackState changed from" << oldState << "to" << newState;
-    });
-    connect(this, &DragonPlayer::statusChanged, this, [](MediaStatus status) {
-        qCDebug(dragonMediaBackendPlayer) << "mediaStatus changed to" << status;
-    });
 }
 
 DragonPlayer::DragonPlayer(DragonAudioOutput::Backend requestedBackend, QObject *parent)
     : QObject(parent)
 {
     qRegisterMetaType<DragonFftFrame>();
+
+    // avoid warnings about mismatched threads if a non-main thread is the first caller of k18n code
+    std::ignore = KLocalizedString::languages();
 
     d = std::make_unique<DragonPlayerPrivate>(this, requestedBackend);
     d->init();
