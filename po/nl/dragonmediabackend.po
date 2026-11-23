@@ -7,15 +7,15 @@ msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
 "POT-Creation-Date: 2026-11-21 22:44+0000\n"
-"PO-Revision-Date: 2026-11-10 13:40+0100\n"
-"Last-Translator: freek <freekdekruijf@kde.nl>\n"
+"PO-Revision-Date: 2026-11-22 23:53+0100\n"
+"Last-Translator: Freek de Kruijf <freekdekruijf@kde.nl>\n"
 "Language-Team: \n"
 "Language: nl\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n != 1;\n"
-"X-Generator: Lokalize 26.04.1\n"
+"X-Generator: Lokalize 26.08.3\n"
 
 #: decoder/decodepipeline.cpp:469
 #, kde-format
@@ -105,7 +105,7 @@ msgstr "Er konden geen audio-uitvoer-plugins worden gevonden."
 #: sink/pipewireaudiosink.cpp:287
 #, kde-format
 msgid "PipeWire: connection to the PipeWire server failed"
-msgstr ""
+msgstr "PipeWire: verbinding met de PipeWire-server is mislukt"
 
 #: sink/pipewireaudiosink.cpp:292
 #, kde-format
@@ -143,10 +143,9 @@ msgid "PulseAudio: context not ready"
 msgstr "PulseAudio: context is niet gereed"
 
 #: sink/pulseaudiosink.cpp:335
-#, fuzzy, kde-format
-#| msgid "PulseAudio: failed to create stream proplist"
+#, kde-format
 msgid "PulseAudio audio device is poisoned"
-msgstr "PulseAudio: stream-eigenschappenlijst aanmaken is mislukt"
+msgstr "Het PulseAudio-audioapparaat is vergiftigd."
 
 #: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
 #: sink/pulseaudiosink.cpp:391
@@ -158,6 +157,8 @@ msgstr "PulseAudio: aan stream verbinden is mislukt"
 #, kde-format
 msgid "SDL: audio output is in a zombie state after a failed close"
 msgstr ""
+"SDL: audio-output bevindt zich in een zombie-toestand na een mislukte "
+"afsluiting"
 
 #: stream/cd/cddisc.cpp:111
 #, kde-format

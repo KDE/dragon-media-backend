@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
 "POT-Creation-Date: 2026-11-21 22:44+0000\n"
-"PO-Revision-Date: 2026-11-10 06:24-0300\n"
+"PO-Revision-Date: 2026-11-22 04:56-0300\n"
 "Last-Translator: Marcus Gama <marcus.gama@kde.org>\n"
 "Language-Team: Brazilian Portuguese <kde-i18n-pt_BR@kde.org>\n"
 "Language: pt_BR\n"
@@ -15,7 +15,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
-"X-Generator: Lokalize 26.08.3\n"
+"X-Generator: Lokalize 26.08.2\n"
 
 #: decoder/decodepipeline.cpp:469
 #, kde-format
@@ -105,7 +105,7 @@ msgstr "Não foi possível encontrar nenhum plugin de destino de áudio."
 #: sink/pipewireaudiosink.cpp:287
 #, kde-format
 msgid "PipeWire: connection to the PipeWire server failed"
-msgstr ""
+msgstr "PipeWire: falha na conexão com o servidor PipeWire"
 
 #: sink/pipewireaudiosink.cpp:292
 #, kde-format
@@ -143,10 +143,9 @@ msgid "PulseAudio: context not ready"
 msgstr "PulseAudio: contexto não está pronto"
 
 #: sink/pulseaudiosink.cpp:335
-#, fuzzy, kde-format
-#| msgid "PulseAudio: failed to create stream proplist"
+#, kde-format
 msgid "PulseAudio audio device is poisoned"
-msgstr "PulseAudio: falha ao criar proplist de fluxo"
+msgstr "O dispositivo de áudio do PulseAudio está corrompido"
 
 #: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
 #: sink/pulseaudiosink.cpp:391
@@ -158,6 +157,8 @@ msgstr "PulseAudio: falha ao conectar fluxo"
 #, kde-format
 msgid "SDL: audio output is in a zombie state after a failed close"
 msgstr ""
+"SDL: a saída de áudio fica em um estado \"zumbi\" após uma falha no "
+"fechamento"
 
 #: stream/cd/cddisc.cpp:111
 #, kde-format

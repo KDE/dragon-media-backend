@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
 "POT-Creation-Date: 2026-11-21 22:44+0000\n"
-"PO-Revision-Date: 2026-11-10 20:55+0300\n"
+"PO-Revision-Date: 2026-11-22 19:15+0300\n"
 "Last-Translator: Emir SARI <emir_sari@icloud.com>\n"
 "Language-Team: Turkish <kde-l10n-tr@kde.org>\n"
 "Language: tr\n"
@@ -105,7 +105,7 @@ msgstr "Bulunan ses havuzu eklentisi yok"
 #: sink/pipewireaudiosink.cpp:287
 #, kde-format
 msgid "PipeWire: connection to the PipeWire server failed"
-msgstr ""
+msgstr "PipeWire: PipeWire sunucusuna bağlanılamadı"
 
 #: sink/pipewireaudiosink.cpp:292
 #, kde-format
@@ -143,10 +143,9 @@ msgid "PulseAudio: context not ready"
 msgstr "PulseAudio: Bağlam hazır değil"
 
 #: sink/pulseaudiosink.cpp:335
-#, fuzzy, kde-format
-#| msgid "PulseAudio: failed to create stream proplist"
+#, kde-format
 msgid "PulseAudio audio device is poisoned"
-msgstr "PulseAudio: Akış özellikleri listesi oluşturulamadı"
+msgstr "PulseAudio ses aygıtı zehirlenmiş"
 
 #: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
 #: sink/pulseaudiosink.cpp:391
@@ -157,7 +156,7 @@ msgstr "PulseAudio: Akış bağlanamadı"
 #: sink/sdlaudiosink.cpp:159
 #, kde-format
 msgid "SDL: audio output is in a zombie state after a failed close"
-msgstr ""
+msgstr "SDL: Başarısız bir kapatma sonrası ses çıkışı bir zombi durumunda"
 
 #: stream/cd/cddisc.cpp:111
 #, kde-format

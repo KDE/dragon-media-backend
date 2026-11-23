@@ -1,0 +1,272 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: kdeorg\n"
+"Report-Msgid-Bugs-To: https://bugs.kde.org\n"
+"POT-Creation-Date: 2026-11-21 22:44+0000\n"
+"PO-Revision-Date: 2026-11-22 08:57\n"
+"Last-Translator: \n"
+"Language-Team: Chinese Simplified\n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"X-Crowdin-Project: kdeorg\n"
+"X-Crowdin-Project-ID: 269464\n"
+"X-Crowdin-Language: zh-CN\n"
+"X-Crowdin-File: /kf6-trunk/messages/dragon-media-backend/dragonmediabackend."
+"pot\n"
+"X-Crowdin-File-ID: 60645\n"
+
+#: decoder/decodepipeline.cpp:469
+#, kde-format
+msgid "Failed to create decoder"
+msgstr "创建解码器失败"
+
+#: decoder/decodepipeline.cpp:713
+#, kde-format
+msgid "Stream error"
+msgstr "数据流错误"
+
+#: decoder/decoder.cpp:199
+#, kde-format
+msgid "Failed to initialize media input"
+msgstr "初始化媒体输入失败"
+
+#: decoder/decoder.cpp:203
+#, kde-format
+msgid "Failed to open media container"
+msgstr "打开媒体容器失败"
+
+#: decoder/decoder.cpp:207
+#, kde-format
+msgid "No supported audio stream found"
+msgstr "没有找到支持的音频流"
+
+#: decoder/decoder.cpp:211
+#, kde-format
+msgid "Audio codec setup failed"
+msgstr "音频编码设置失败"
+
+#: decoder/decoder.cpp:215
+#, kde-format
+msgid "Audio resampler setup failed"
+msgstr "音频重采样器设置失败"
+
+#: decoder/decoder.cpp:219
+#, kde-format
+msgid "Failed to allocate decoder resources"
+msgstr "分配解码器资源失败"
+
+#: decoder/decoder.cpp:238
+#, kde-format
+msgid "Decoder not initialized"
+msgstr "解码器没有初始化"
+
+#: decoder/decoder.cpp:528
+#, kde-format
+msgid "Resampler reinitialization failed after seek"
+msgstr "时移后重采样器重新初始化失败"
+
+#: decoder/decoder.cpp:571
+#, kde-format
+msgid "Read error after %1 attempts: %2"
+msgstr "尝试 %1 次后读取错误：%2"
+
+#: player/dragonplayer.cpp:121
+#, kde-format
+msgid "Failed to open the audio output device."
+msgstr "打开音频输出设备失败。"
+
+#: player/dragonplayer.cpp:273
+#, kde-format
+msgid "Fatal error while decoding media"
+msgstr "解码媒体时发生致命错误"
+
+#: player/dragonplayer.cpp:300
+#, kde-format
+msgid "Error while decoding media"
+msgstr "解码媒体时出错"
+
+#: player/dragonplayer.cpp:848
+#, kde-format
+msgid "Failed to open media source"
+msgstr "打开媒体源失败"
+
+#: player/dragonplayer.cpp:848
+#, kde-format
+msgid "Network error"
+msgstr "网络错误"
+
+#: sink/nullaudiosink.cpp:16
+#, kde-format
+msgid "Could not find any audio sink plugins."
+msgstr "无法找到任何音频接收端插件。"
+
+#: sink/pipewireaudiosink.cpp:287
+#, kde-format
+msgid "PipeWire: connection to the PipeWire server failed"
+msgstr ""
+
+#: sink/pipewireaudiosink.cpp:292
+#, kde-format
+msgid "PipeWire: failed to connect stream"
+msgstr "PipeWire：连接流失败"
+
+#: sink/pulseaudiosink.cpp:199
+#, kde-format
+msgid "PulseAudio: failed to create mainloop"
+msgstr "PulseAudio：创建主循环失败"
+
+#: sink/pulseaudiosink.cpp:206
+#, kde-format
+msgid "PulseAudio: failed to start mainloop"
+msgstr "PulseAudio：启动主循环失败"
+
+#: sink/pulseaudiosink.cpp:220
+#, kde-format
+msgid "PulseAudio: failed to get mainloop API"
+msgstr "PulseAudio：获取主循环 API 失败"
+
+#: sink/pulseaudiosink.cpp:245
+#, kde-format
+msgid "PulseAudio: failed to create context"
+msgstr "PulseAudio：创建上下文失败"
+
+#: sink/pulseaudiosink.cpp:255
+#, kde-format
+msgid "PulseAudio: failed to connect context"
+msgstr "PulseAudio：连接上下文失败"
+
+#: sink/pulseaudiosink.cpp:267
+#, kde-format
+msgid "PulseAudio: context not ready"
+msgstr "PulseAudio：上下文尚未就绪"
+
+#: sink/pulseaudiosink.cpp:335
+#, kde-format
+msgid "PulseAudio audio device is poisoned"
+msgstr ""
+
+#: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
+#: sink/pulseaudiosink.cpp:391
+#, kde-format
+msgid "PulseAudio: failed to connect stream"
+msgstr "PulseAudio：连接流失败"
+
+#: sink/sdlaudiosink.cpp:159
+#, kde-format
+msgid "SDL: audio output is in a zombie state after a failed close"
+msgstr ""
+
+#: stream/cd/cddisc.cpp:111
+#, kde-format
+msgid "The CD has no tracks."
+msgstr "此 CD 不含音轨。"
+
+#: stream/cd/cddisc.cpp:148
+#, kde-format
+msgid "The disc is not an Audio CD."
+msgstr "此光盘不是音频 CD。"
+
+#: stream/cd/cddisc.cpp:189
+#, kde-format
+msgid "Could not open the CD device. Check that a disc is present."
+msgstr "无法打开 CD 设备。请检查是否已放入光盘。"
+
+#: stream/cd/cdstream.cpp:117
+#, kde-format
+msgid "The audiocd:/ URL does not name a track to play."
+msgstr "此 audiocd:/ URL 没有指定要播放的音轨。"
+
+#: stream/cd/cdstream.cpp:155
+#, kde-format
+msgid "Track not found on the CD: %1"
+msgstr "CD 中没有找到音轨：%1"
+
+#: stream/cd/cdstream.cpp:159
+#, kde-format
+msgid "CD track %1 is not an audio track."
+msgstr "CD 轨道 %1 不是音轨。"
+
+#: stream/cd/cdstream.cpp:166
+#, kde-format
+msgid "Could not determine the length of CD track %1."
+msgstr "无法确定 CD 音轨 %1 的时长。"
+
+#: stream/cd/cdstream.cpp:284
+#, kde-format
+msgid "The CD is no longer available."
+msgstr "此 CD 已不再可用。"
+
+#: stream/cd/cdstream.cpp:289
+#, kde-format
+msgid "Attempted to read past the end of the CD track."
+msgstr "尝试读取 CD 音轨末尾之后的内容。"
+
+#: stream/cd/cdstream.cpp:296
+#, kde-format
+msgid "Error reading the CD. The disc may have been ejected."
+msgstr "读取 CD 时出错。光盘可能已被弹出。"
+
+#: stream/cd/dragoncdtocreader.cpp:69
+#, kde-format
+msgid "This build of Dragon Media Backend was made without CD support."
+msgstr "此版本的 Dragon 媒体后端程序在构建时没有启用 CD 支持。"
+
+#: stream/http/httpprotocol.cpp:227 stream/http/httpsocket.cpp:247
+#: stream/http/httpsocket.cpp:340
+#, kde-format
+msgid "Malformed response"
+msgstr "响应格式错误"
+
+#: stream/http/httpsocket.cpp:31
+#, kde-format
+msgid "Stream stopped sending data"
+msgstr "流已停止发送数据"
+
+#: stream/http/httpsocket.cpp:88
+#, kde-format
+msgid "Invalid stream URL: %1"
+msgstr "无效的流 URL：%1"
+
+#: stream/http/httpsocket.cpp:104 stream/http/httpsocket.cpp:457
+#, kde-format
+msgid "Connection closed"
+msgstr "连接已关闭"
+
+#: stream/http/httpsocket.cpp:366 stream/http/httpsocket.cpp:376
+#, kde-format
+msgid "Server responded with status %1"
+msgstr "服务器返回状态 %1"
+
+#: stream/http/httpsocket.cpp:372
+#, kde-format
+msgid "Proxy requires authentication"
+msgstr "代理服务器需要身份验证"
+
+#: stream/http/httpsocket.cpp:383
+#, kde-format
+msgid "Server returned unexpected byte range"
+msgstr "服务器返回了意外的字节范围"
+
+#: stream/http/httpsocket.cpp:388
+#, kde-format
+msgid "Server ignored requested byte range"
+msgstr "服务器忽略了请求的字节范围"
+
+#: stream/http/httpsocket.cpp:399 stream/http/httpsocket.cpp:409
+#: stream/http/httpsocket.cpp:413 stream/http/httpsocket.cpp:416
+#, kde-format
+msgid "Unusable redirect address"
+msgstr "无法使用的重定向地址"
+
+#: stream/http/httpsocket.cpp:402
+#, kde-format
+msgid "Too many redirects"
+msgstr "重定向次数过多"
+
+#: stream/http/radiostream.cpp:246
+#, kde-format
+msgid "Network error: %1"
+msgstr "网络错误：%1"
