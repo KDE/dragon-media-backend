@@ -18,7 +18,8 @@
                 "Name[sr@latin]": "Ijan Monro",
                 "Name[sr]": "Ијан Монро",
                 "Name[tr]": "Ian Monroe",
-                "Name[uk]": "Ian Monroe"
+                "Name[uk]": "Ian Monroe",
+                "Name[zh_CN]": "Ian Monroe"
             }
         ],
         "Category": "Audio",
@@ -38,6 +39,7 @@
         "Description[sr]": "SDL3 аудио излаз за Змајеву медијску позадину",
         "Description[tr]": "Dragon Ortam Arka Ucu için SDL3 ses çıkışı",
         "Description[uk]": "Виведення звуку з SDL3 для мультимедійного модуля Dragon",
+        "Description[zh_CN]": "Dragon 媒体后端的 SDL3 音频输出",
         "EnabledByDefault": true,
         "Icon": "audio-card",
         "Name": "SDL3 Audio Sink",
@@ -55,6 +57,7 @@
         "Name[sr]": "Аудио излаз SDL3",
         "Name[tr]": "SDL3 Ses Havuzu",
         "Name[uk]": "Приймач звуку SDL3",
+        "Name[zh_CN]": "SDL3 音频接收端",
         "ServiceTypes": [
             "DragonMediaBackend/AudioSink"
         ],

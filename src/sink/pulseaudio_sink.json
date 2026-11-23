@@ -18,7 +18,8 @@
                 "Name[sr@latin]": "Ijan Monro",
                 "Name[sr]": "Ијан Монро",
                 "Name[tr]": "Ian Monroe",
-                "Name[uk]": "Ian Monroe"
+                "Name[uk]": "Ian Monroe",
+                "Name[zh_CN]": "Ian Monroe"
             }
         ],
         "Category": "Audio",
@@ -38,6 +39,7 @@
         "Description[sr]": "Пулс‑аудио аудио излаз за Змајеву медијску позадину",
         "Description[tr]": "Dragon Ortam Arka Ucu için PulseAudio ses çıkışı",
         "Description[uk]": "Виведення звуку з PulseAudio для мультимедійного модуля Dragon",
+        "Description[zh_CN]": "Dragon 媒体后端的 PulseAudio 音频输出",
         "EnabledByDefault": true,
         "Icon": "audio-card",
         "Name": "PulseAudio Audio Sink",
@@ -55,6 +57,7 @@
         "Name[sr]": "Аудио излаз Пулс‑аудија",
         "Name[tr]": "PulseAudio Ses Havuzu",
         "Name[uk]": "Приймач звуку PulseAudio",
+        "Name[zh_CN]": "PulseAudio 音频接收端",
         "ServiceTypes": [
             "DragonMediaBackend/AudioSink"
         ],

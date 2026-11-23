@@ -18,7 +18,8 @@
                 "Name[sr@latin]": "Ijan Monro",
                 "Name[sr]": "Ијан Монро",
                 "Name[tr]": "Ian Monroe",
-                "Name[uk]": "Ian Monroe"
+                "Name[uk]": "Ian Monroe",
+                "Name[zh_CN]": "Ian Monroe"
             }
         ],
         "Category": "Audio",
@@ -38,6 +39,7 @@
         "Description[sr]": "PipeWire аудио излаз за Змајеву медијску позадину",
         "Description[tr]": "Dragon Ortam Arka Ucu için PipeWire ses çıkışı",
         "Description[uk]": "Виведення звуку з PipeWire для мультимедійного модуля Dragon",
+        "Description[zh_CN]": "Dragon 媒体后端的 PipeWire 音频输出",
         "EnabledByDefault": true,
         "Icon": "audio-card",
         "Name": "PipeWire Audio Sink",
@@ -55,6 +57,7 @@
         "Name[sr]": "Аудио излаз PipeWire",
         "Name[tr]": "PipeWire Ses Havuzu",
         "Name[uk]": "Приймач звуку PipeWire",
+        "Name[zh_CN]": "PipeWire 音频接收端",
         "ServiceTypes": [
             "DragonMediaBackend/AudioSink"
         ],
