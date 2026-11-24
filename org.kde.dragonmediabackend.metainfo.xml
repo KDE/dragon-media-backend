@@ -11,6 +11,7 @@ SPDX-License-Identifier: CC0-1.0
   <name xml:lang="ar">خلفية وسائط دراغون</name>
   <name xml:lang="ca">Dragon Media Backend</name>
   <name xml:lang="ca-valencia">Dragon Media Backend</name>
+  <name xml:lang="fr">Moteur multimédia de Dragon</name>
   <name xml:lang="he">מנגנון המדיה של Dragon</name>
   <name xml:lang="it">Dragon Media Backend</name>
   <name xml:lang="nl">Dragon media-backend</name>
@@ -28,6 +29,7 @@ SPDX-License-Identifier: CC0-1.0
   <summary xml:lang="ar">مكتبة تشغيل الصوت لتطبيقات تشغيل الموسيقى</summary>
   <summary xml:lang="ca">Biblioteca de reproducció d'àudio per a reproductors de música</summary>
   <summary xml:lang="ca-valencia">Biblioteca de reproducció d'àudio per a reproductors de música</summary>
+  <summary xml:lang="fr">Bibliothèque de lecture audio pour lecteurs de musique</summary>
   <summary xml:lang="he">ספריית השמעה לנגני מוזיקה</summary>
   <summary xml:lang="it">Libreria di riproduzione audio per riproduttori multimediali</summary>
   <summary xml:lang="nl">Bibliotheek voor het afspelen van audio in muziekspelers</summary>
@@ -50,6 +52,7 @@ SPDX-License-Identifier: CC0-1.0
     <p xml:lang="ar">خلفية وسائط دراغون مكتبة Qt C++ موجهة لمشغلات الموسيقى المكتبية. يمكنها تشغيل أي صيغة صوتية يفك ترميزها FFmpeg وتُخرجها عبر نظام ملحقات لمصارف الصوت مع دعم PipeWire وPulseAudio وSDL.</p>
     <p xml:lang="ca">Dragon Media Backend és una biblioteca C++ amb Qt destinada als reproductors de música d'escriptori. Pot reproduir qualsevol format d'àudio que el FFmpeg descodifiqui i emet a través d'un sistema de connectors de conductes d'àudio amb suport per al PipeWire, PulseAudio i SDL.</p>
     <p xml:lang="ca-valencia">Dragon Media Backend és una biblioteca C++ amb Qt destinada als reproductors de música d'escriptori. Pot reproduir qualsevol format d'àudio que FFmpeg descodifique i emet a través d'un sistema de connectors de conductes d'àudio amb suport per a PipeWire, PulseAudio i SDL.</p>
+    <p xml:lang="fr">Le moteur multimédia de Dragon est une bibliothèque en C++ avec Qt destinée aux lecteurs de musique pour le bureau. Il peut lire n'importe quel format audio que le logiciel « FFmpeg » peut décoder et peut le proposer en sortie grâce à un système de modules externes de flux audio prenant en charge PipeWire, PulseAudio et SDL.</p>
     <p xml:lang="he">מנגנון המדיה של Dragon היא ספריית Qt שנכתבה ב־C++‎ ומיועדת לנגני מוזיקה. היא יכולה לנגן כל סוג קובץ שמע ש־FFmpeg מקודד והפלט מתבצע דרך מערכת תוספים של יעדי שמע עם תמיכה ב־PipeWire,‏ PulseAudio ו־SDL.</p>
     <p xml:lang="it">Dragon Media Backend è una libraria C++ Qt destinata ai riproduttori musica per desktop. Può riprodurre ogni formato audio che FFmpeg è in grado di modificare, e lo riproduce tramite un sistema di estensioni per dispositivi di uscita audio (sink) con supporto per PipeWire, PulseAudio e SDL. </p>
     <p xml:lang="nl">Dragon media-backend is een Qt C++-bibliotheek die bedoeld is voor muziekspelers op het bureaublad. De bibliotheek kan elk audioformaat afspelen dat door FFmpeg wordt gedecodeerd en voert het geluid uit via een plug-in-systeem van audio-uitvoer, met ondersteuning voor PipeWire, PulseAudio en SDL.</p>
@@ -71,6 +74,7 @@ SPDX-License-Identifier: CC0-1.0
     <p xml:lang="ar">كما تحسب تحويلات فورييه السريعة للتصورات الصوتية، ويمكنها تشغيل الموسيقى عبر نظام KIO في كيدي، وتشغيل أقراص الصوت المدمجة وتوفير معلومات أساسية عن مساراتها، وتدعم بيانات ICY الوصفية لبثوث الراديو.</p>
     <p xml:lang="ca">També calcula FFT per a visualitzacions d'àudio, pot reproduir música sobre el sistema KIO de KDE, reproduir CD d'àudio i proporciona informació bàsica de pistes dels CD d'àudio, i admet metadades ICY per a fluxos de ràdio.</p>
     <p xml:lang="ca-valencia">També calcula FFT per a visualitzacions d'àudio, pot reproduir música sobre el sistema KIO de KDE, reproduir CD d'àudio i proporciona informació bàsica de pistes dels CD d'àudio, i admet metadades ICY per a fluxos de ràdio.</p>
+    <p xml:lang="fr">Il calcule également les transformations de Fourrier (FFT) pour les affichages de l'audio. Il peut lire de la musique au dessus du système « kio » de KDE et des CD audio. Il fournit des informations basiques sur les pistes de CD audio et prend en charge les métadonnées « ICY » pour les flux radio.</p>
     <p xml:lang="he">הוא מחשב גם FFTים להמחשת שמע, יכול לנגן מוזיקה על גבי מערכת KIO של KDE, מנגן תקליטורי שמע ומספק פרטי רצועות תקליטורים בסיסיות ותומך גם בנתוני על מסוג ICY לתזרימי רדיו.</p>
     <p xml:lang="it">Effettua anche il calcolo di FFT per la visualizzazione dell'audio, può riprodurre audio usando il sistema KIO di KDE, riproduce CD audio e fornisce informazioni di base sulle tracce dei CD audio, e supporta i metadati ICY per flussi radio.</p>
     <p xml:lang="nl">Het berekent tevens FFT's voor audiovisualisaties, kan muziek afspelen via het KIO-systeem van KDE, speelt audio-cd's af en biedt basisinformatie over de nummers op een audio-cd, en ondersteunt ICY-metadata voor radio-streams.</p>
