@@ -488,8 +488,11 @@ void TestRadioStream::testBufferingSignals()
     }
     bigPayload.resize(targetSize);
 
+    const int initialBurstSize = 65536; // Well above RADIO_HIGH_WATER_MARK (16 KiB)
+
     QTcpServer server;
     QList<QTcpSocket *> clients;
+    QTimer *sendTimer = nullptr;
 
     QObject::connect(&server, &QTcpServer::newConnection, &server, [&]() {
         while (server.hasPendingConnections()) {
@@ -503,12 +506,12 @@ void TestRadioStream::testBufferingSignals()
             headers.append("Connection: keep-alive\r\n");
             headers.append("\r\n");
             sock->write(headers);
+            sock->write(bigPayload.left(initialBurstSize));
             sock->flush();
 
-            // Send steadily at a moderate rate the reader controls
-            // buffering transitions by alternating drain and wait phases
+            // Hold further writes until the test explicitly starts the refill phase
             auto *timer = new QTimer(sock);
-            auto offset = std::make_shared<int>(0);
+            auto offset = std::make_shared<int>(initialBurstSize);
             QObject::connect(timer, &QTimer::timeout, sock, [&, sock, timer, offset]() {
                 if (*offset >= bigPayload.size()) {
                     sock->disconnectFromHost();
@@ -520,7 +523,7 @@ void TestRadioStream::testBufferingSignals()
                 sock->flush();
                 *offset += len;
             });
-            timer->start(1);
+            sendTimer = timer;
         }
     });
 
@@ -539,35 +542,47 @@ void TestRadioStream::testBufferingSignals()
     stream.setUrl(url);
     stream.start();
 
-    // Give the server time to fill the initial buffer above HIGH_WATER_MARK
-    QTest::qWait(200);
+    // Wait for the initial burst to fill the buffer above HIGH_WATER_MARK
+    QTRY_COMPARE_WITH_TIMEOUT(stream.bufferDepth(), initialBurstSize, 10000);
+    QVERIFY(sendTimer != nullptr);
+    QCOMPARE(bufferingSpy.count(), 0);
+    QCOMPARE(bufferedSpy.count(), 0);
+
+    enum class ReaderPhase {
+        DrainInitialBurst,
+        Paused,
+        DrainContinuously,
+        Done,
+    };
 
     std::stop_source ss;
     std::vector<uint8_t> buf(65536);
     std::atomic<int> totalRead{0};
-    // Phase control: 0=drain, 1=pause (let buffer refill), 2=done
-    std::atomic<int> phase{0};
+    std::atomic<ReaderPhase> phase{ReaderPhase::DrainInitialBurst};
 
     std::thread reader([&]() {
         while (!ss.stop_requested()) {
-            const int p = phase.load(std::memory_order_acquire);
-            if (p == 2)
+            const ReaderPhase p = phase.load(std::memory_order_acquire);
+            if (p == ReaderPhase::Done)
                 break;
-            if (p == 1) {
-                // Pause phase: don't read, let buffer accumulate
+            if (p == ReaderPhase::Paused) {
+                // Paused: don't read, let buffer accumulate
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
                 continue;
             }
-            // Drain phase: read everything available
             int n = stream.read(buf, ss.get_token());
             if (n <= 0)
                 break;
-            totalRead += n;
+            const int readSoFar = totalRead.fetch_add(n, std::memory_order_acq_rel) + n;
+            if (p == ReaderPhase::DrainInitialBurst && readSoFar >= initialBurstSize) {
+                ReaderPhase expected = ReaderPhase::DrainInitialBurst;
+                phase.compare_exchange_strong(expected, ReaderPhase::Paused, std::memory_order_acq_rel);
+            }
         }
     });
 
     auto cleanup = qScopeGuard([&]() {
-        phase.store(2, std::memory_order_release);
+        phase.store(ReaderPhase::Done, std::memory_order_release);
         ss.request_stop();
         if (reader.joinable())
             reader.join();
@@ -577,17 +592,19 @@ void TestRadioStream::testBufferingSignals()
             c->deleteLater();
     });
 
-    // Let the drain phase run until buffer is empty and streamBuffering fires
-    QTRY_VERIFY_WITH_TIMEOUT(bufferingSpy.count() > 0, 10000);
+    // DrainInitialBurst: reader drains the initial burst to empty, firing streamBuffering once, then transitions to Paused
+    QTRY_COMPARE_WITH_TIMEOUT(bufferingSpy.count(), 1, 10000);
+    QTRY_COMPARE_WITH_TIMEOUT(phase.load(std::memory_order_acquire), ReaderPhase::Paused, 10000);
+    QCOMPARE(stream.bufferDepth(), 0);
+    QCOMPARE(bufferedSpy.count(), 0);
 
-    // Pause reader so buffer can refill above HIGH_WATER_MARK
-    phase.store(1, std::memory_order_release);
-
-    // Wait for buffer to refill above HIGH_WATER_MARK and streamBuffered to fire exactly once
+    // Paused: resume server writes so the buffer refills above HIGH_WATER_MARK and fires streamBuffered once
+    sendTimer->start(1);
     QTRY_COMPARE_WITH_TIMEOUT(bufferedSpy.count(), 1, 10000);
+    QCOMPARE(bufferingSpy.count(), 1);
 
-    // Resume reading to consume more data
-    phase.store(0, std::memory_order_release);
+    // DrainContinuously: resume reading to consume more data
+    phase.store(ReaderPhase::DrainContinuously, std::memory_order_release);
     QTRY_VERIFY_WITH_TIMEOUT(totalRead.load() > 262144, 10000);
 
     QVERIFY2(totalRead.load() > 0, "Should have read some data");
