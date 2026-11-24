@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-11-21 22:44+0000\n"
+"POT-Creation-Date: 2026-11-23 23:48+0000\n"
 "PO-Revision-Date: 2026-11-22 04:56-0300\n"
 "Last-Translator: Marcus Gama <marcus.gama@kde.org>\n"
 "Language-Team: Brazilian Portuguese <kde-i18n-pt_BR@kde.org>\n"
@@ -87,12 +87,12 @@ msgstr "Erro fatal ao decodificar mídia"
 msgid "Error while decoding media"
 msgstr "Erro ao decodificar mídia"
 
-#: player/dragonplayer.cpp:848
+#: player/dragonplayer.cpp:840
 #, kde-format
 msgid "Failed to open media source"
 msgstr "Falha ao abrir a fonte de mídia"
 
-#: player/dragonplayer.cpp:848
+#: player/dragonplayer.cpp:840
 #, kde-format
 msgid "Network error"
 msgstr "Erro de rede"

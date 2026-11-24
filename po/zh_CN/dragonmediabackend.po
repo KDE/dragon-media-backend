@@ -2,7 +2,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: kdeorg\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-11-21 22:44+0000\n"
+"POT-Creation-Date: 2026-11-23 23:48+0000\n"
 "PO-Revision-Date: 2026-11-22 08:57\n"
 "Last-Translator: \n"
 "Language-Team: Chinese Simplified\n"
@@ -88,12 +88,12 @@ msgstr "解码媒体时发生致命错误"
 msgid "Error while decoding media"
 msgstr "解码媒体时出错"
 
-#: player/dragonplayer.cpp:848
+#: player/dragonplayer.cpp:840
 #, kde-format
 msgid "Failed to open media source"
 msgstr "打开媒体源失败"
 
-#: player/dragonplayer.cpp:848
+#: player/dragonplayer.cpp:840
 #, kde-format
 msgid "Network error"
 msgstr "网络错误"

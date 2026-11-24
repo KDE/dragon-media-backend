@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-11-21 22:44+0000\n"
+"POT-Creation-Date: 2026-11-23 23:48+0000\n"
 "PO-Revision-Date: 2026-11-21 09:25+0200\n"
 "Last-Translator: Yaron Shahrabani <sh.yaron@gmail.com>\n"
 "Language-Team: Hebrew <kde-l10n-he@kde.org>\n"
@@ -88,12 +88,12 @@ msgstr "שגיאה מכרעת בפיענוח מדיה"
 msgid "Error while decoding media"
 msgstr "שגיאה בפיענוח מדיה"
 
-#: player/dragonplayer.cpp:848
+#: player/dragonplayer.cpp:840
 #, kde-format
 msgid "Failed to open media source"
 msgstr "פתיחת מקור מדיה נכשלה"
 
-#: player/dragonplayer.cpp:848
+#: player/dragonplayer.cpp:840
 #, kde-format
 msgid "Network error"
 msgstr "שגיאת רשת"

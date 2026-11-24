@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
-"POT-Creation-Date: 2026-11-21 22:44+0000\n"
+"POT-Creation-Date: 2026-11-23 23:48+0000\n"
 "PO-Revision-Date: 2026-11-22 12:42+0200\n"
 "Last-Translator: Yuri Chornoivan <yurchor@ukr.net>\n"
 "Language-Team: Ukrainian <trans-uk@lists.fedoraproject.org>\n"
@@ -90,12 +90,12 @@ msgstr "Критична помилка під час декодування м�
 msgid "Error while decoding media"
 msgstr "Помилка під час декодування мультимедійних даних"
 
-#: player/dragonplayer.cpp:848
+#: player/dragonplayer.cpp:840
 #, kde-format
 msgid "Failed to open media source"
 msgstr "Не вдалося відкрити джерело мультимедійних даних"
 
-#: player/dragonplayer.cpp:848
+#: player/dragonplayer.cpp:840
 #, kde-format
 msgid "Network error"
 msgstr "Помилка мережі"
