@@ -7,7 +7,7 @@ msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
 "POT-Creation-Date: 2026-11-23 23:48+0000\n"
-"PO-Revision-Date: 2026-11-21 09:25+0200\n"
+"PO-Revision-Date: 2026-11-24 11:55+0200\n"
 "Last-Translator: Yaron Shahrabani <sh.yaron@gmail.com>\n"
 "Language-Team: Hebrew <kde-l10n-he@kde.org>\n"
 "Language: he\n"
@@ -51,7 +51,7 @@ msgstr "הקמת מפענח שמע נכשלה"
 #: decoder/decoder.cpp:215
 #, kde-format
 msgid "Audio resampler setup failed"
-msgstr ""
+msgstr "הקמת דוגם שמע מחדש נכשלה"
 
 #: decoder/decoder.cpp:219
 #, kde-format
@@ -66,7 +66,7 @@ msgstr "המפענח לא אותחל"
 #: decoder/decoder.cpp:528
 #, kde-format
 msgid "Resampler reinitialization failed after seek"
-msgstr ""
+msgstr "אתחול מחדש של דוגם מחדש נכשל לאחר חתירה"
 
 #: decoder/decoder.cpp:571
 #, kde-format
@@ -101,12 +101,12 @@ msgstr "שגיאת רשת"
 #: sink/nullaudiosink.cpp:16
 #, kde-format
 msgid "Could not find any audio sink plugins."
-msgstr ""
+msgstr "לא נמצאו תוספי יעדי שמע כלשהם."
 
 #: sink/pipewireaudiosink.cpp:287
 #, kde-format
 msgid "PipeWire: connection to the PipeWire server failed"
-msgstr ""
+msgstr "PipeWire: החיבור לשרת ה־PipeWire נכשל"
 
 #: sink/pipewireaudiosink.cpp:292
 #, kde-format
@@ -116,27 +116,27 @@ msgstr "PipeWire: החיבור לתזרים נכשל"
 #: sink/pulseaudiosink.cpp:199
 #, kde-format
 msgid "PulseAudio: failed to create mainloop"
-msgstr ""
+msgstr "PulseAudio: יצירת הלולאה הראשית נכשלה"
 
 #: sink/pulseaudiosink.cpp:206
 #, kde-format
 msgid "PulseAudio: failed to start mainloop"
-msgstr ""
+msgstr "PulseAudio: הפעלת הלולאה הראשית נכשלה"
 
 #: sink/pulseaudiosink.cpp:220
 #, kde-format
 msgid "PulseAudio: failed to get mainloop API"
-msgstr ""
+msgstr "PulseAudio: משיכת ה־API של הלולאה הראשית"
 
 #: sink/pulseaudiosink.cpp:245
 #, kde-format
 msgid "PulseAudio: failed to create context"
-msgstr ""
+msgstr "PulseAudio: יצירת ההקשר נכשלה"
 
 #: sink/pulseaudiosink.cpp:255
 #, kde-format
 msgid "PulseAudio: failed to connect context"
-msgstr ""
+msgstr "PulseAudio: ההתחברות להקשר נכשלה"
 
 #: sink/pulseaudiosink.cpp:267
 #, kde-format
@@ -144,10 +144,9 @@ msgid "PulseAudio: context not ready"
 msgstr "PulseAudio: ההקשר לא מוכן"
 
 #: sink/pulseaudiosink.cpp:335
-#, fuzzy, kde-format
-#| msgid "PulseAudio: failed to create stream proplist"
+#, kde-format
 msgid "PulseAudio audio device is poisoned"
-msgstr "PulseAudio: יצירת רשימת מאפיינים (proplist) לתזרים נכשלה"
+msgstr "התקן שמע PulseAudio מורעל"
 
 #: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
 #: sink/pulseaudiosink.cpp:391
@@ -158,7 +157,7 @@ msgstr "PulseAudio: התחברות לתזרים נכשלה"
 #: sink/sdlaudiosink.cpp:159
 #, kde-format
 msgid "SDL: audio output is in a zombie state after a failed close"
-msgstr ""
+msgstr "SDL: פלט השמע הוא במצב זומבי אחרי סגירה שנכשלה"
 
 #: stream/cd/cddisc.cpp:111
 #, kde-format
@@ -173,12 +172,12 @@ msgstr "זה לא תקליטור שמע."
 #: stream/cd/cddisc.cpp:189
 #, kde-format
 msgid "Could not open the CD device. Check that a disc is present."
-msgstr ""
+msgstr "לא ניתן לפתוח את התקן התקליטור. נא לבדוק שיש בתוכו תקליטור."
 
 #: stream/cd/cdstream.cpp:117
 #, kde-format
 msgid "The audiocd:/ URL does not name a track to play."
-msgstr ""
+msgstr "כתובת ה־audiocd:/‎ לא מציינת רצועה לניגון."
 
 #: stream/cd/cdstream.cpp:155
 #, kde-format
@@ -188,12 +187,12 @@ msgstr "הרצועה לא נמצאה בתקליטור: %1"
 #: stream/cd/cdstream.cpp:159
 #, kde-format
 msgid "CD track %1 is not an audio track."
-msgstr ""
+msgstr "רצועת התקליטור %1 אינה רצועת שמע."
 
 #: stream/cd/cdstream.cpp:166
 #, kde-format
 msgid "Could not determine the length of CD track %1."
-msgstr ""
+msgstr "לא ניתן לאתר את אורך רצועת התקליטור %1."
 
 #: stream/cd/cdstream.cpp:284
 #, kde-format
@@ -203,28 +202,28 @@ msgstr "התקליטור לא זמין עוד."
 #: stream/cd/cdstream.cpp:289
 #, kde-format
 msgid "Attempted to read past the end of the CD track."
-msgstr ""
+msgstr "התבצע ניסיון לקרוא מעבר לסוף רצועת התקליטור."
 
 #: stream/cd/cdstream.cpp:296
 #, kde-format
 msgid "Error reading the CD. The disc may have been ejected."
-msgstr ""
+msgstr "שגיאה בקריאת התקליטור. יכול להיות שהוא נשלף החוצה."
 
 #: stream/cd/dragoncdtocreader.cpp:69
 #, kde-format
 msgid "This build of Dragon Media Backend was made without CD support."
-msgstr ""
+msgstr "המהדורה הזאת של מנגנון המדיה Dragon נבנתה ללא תמיכה בתקליטורים."
 
 #: stream/http/httpprotocol.cpp:227 stream/http/httpsocket.cpp:247
 #: stream/http/httpsocket.cpp:340
 #, kde-format
 msgid "Malformed response"
-msgstr ""
+msgstr "תגובה פגומה"
 
 #: stream/http/httpsocket.cpp:31
 #, kde-format
 msgid "Stream stopped sending data"
-msgstr ""
+msgstr "התזרים הפסיק לשלוח נתונים"
 
 #: stream/http/httpsocket.cpp:88
 #, kde-format
@@ -234,27 +233,27 @@ msgstr "כתובת תזרים שגויה: %1"
 #: stream/http/httpsocket.cpp:104 stream/http/httpsocket.cpp:457
 #, kde-format
 msgid "Connection closed"
-msgstr ""
+msgstr "החיבור נסגר"
 
 #: stream/http/httpsocket.cpp:366 stream/http/httpsocket.cpp:376
 #, kde-format
 msgid "Server responded with status %1"
-msgstr ""
+msgstr "השרת הגיב עם הודעת מצב %1"
 
 #: stream/http/httpsocket.cpp:372
 #, kde-format
 msgid "Proxy requires authentication"
-msgstr ""
+msgstr "המתווך דורש אימות"
 
 #: stream/http/httpsocket.cpp:383
 #, kde-format
 msgid "Server returned unexpected byte range"
-msgstr ""
+msgstr "השרת החזיר טווח בתים לא צפוי"
 
 #: stream/http/httpsocket.cpp:388
 #, kde-format
 msgid "Server ignored requested byte range"
-msgstr ""
+msgstr "השרת התעלם מטווח הבתים שהתבקש"
 
 #: stream/http/httpsocket.cpp:399 stream/http/httpsocket.cpp:409
 #: stream/http/httpsocket.cpp:413 stream/http/httpsocket.cpp:416
@@ -270,7 +269,7 @@ msgstr "יותר מדי הפניות"
 #: stream/http/radiostream.cpp:246
 #, kde-format
 msgid "Network error: %1"
-msgstr ""
+msgstr "שגיאת רשת: %1"
 
 #~ msgid "PipeWire: failed to create thread loop"
 #~ msgstr "PipeWire: יצירת לולאת תהליכון נכשלה"

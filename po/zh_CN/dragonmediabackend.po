@@ -106,7 +106,7 @@ msgstr "无法找到任何音频接收端插件。"
 #: sink/pipewireaudiosink.cpp:287
 #, kde-format
 msgid "PipeWire: connection to the PipeWire server failed"
-msgstr ""
+msgstr "PipeWire：连接 PipeWire 服务器失败"
 
 #: sink/pipewireaudiosink.cpp:292
 #, kde-format
@@ -146,7 +146,7 @@ msgstr "PulseAudio：上下文尚未就绪"
 #: sink/pulseaudiosink.cpp:335
 #, kde-format
 msgid "PulseAudio audio device is poisoned"
-msgstr ""
+msgstr "PulseAudio 音频设备状态异常"
 
 #: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
 #: sink/pulseaudiosink.cpp:391
@@ -157,7 +157,7 @@ msgstr "PulseAudio：连接流失败"
 #: sink/sdlaudiosink.cpp:159
 #, kde-format
 msgid "SDL: audio output is in a zombie state after a failed close"
-msgstr ""
+msgstr "SDL：音频输出在关闭失败后处于卡死状态"
 
 #: stream/cd/cddisc.cpp:111
 #, kde-format
