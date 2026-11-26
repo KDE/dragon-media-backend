@@ -9,7 +9,7 @@ msgstr ""
 "Project-Id-Version: dragon-media-backend\n"
 "Report-Msgid-Bugs-To: https://bugs.kde.org\n"
 "POT-Creation-Date: 2026-11-23 23:48+0000\n"
-"PO-Revision-Date: 2026-11-10 12:56+0100\n"
+"PO-Revision-Date: 2026-11-22 09:26+0100\n"
 "Last-Translator: Josep M. Ferrer <txemaq@gmail.com>\n"
 "Language-Team: Catalan <kde-i18n-ca@kde.org>\n"
 "Language: ca@valencia\n"
@@ -57,7 +57,7 @@ msgstr "No s'ha pogut configurar el remostrejador d'àudio"
 #: decoder/decoder.cpp:219
 #, kde-format
 msgid "Failed to allocate decoder resources"
-msgstr "No s'ha pogut assignar els recursos del descodificador"
+msgstr "No s'han pogut assignar els recursos del descodificador"
 
 #: decoder/decoder.cpp:238
 #, kde-format
@@ -107,7 +107,7 @@ msgstr "No s'ha trobat cap connector de conducte d'àudio."
 #: sink/pipewireaudiosink.cpp:287
 #, kde-format
 msgid "PipeWire: connection to the PipeWire server failed"
-msgstr ""
+msgstr "PipeWire: la connexió al servidor PipeWire ha fallat"
 
 #: sink/pipewireaudiosink.cpp:292
 #, kde-format
@@ -145,10 +145,9 @@ msgid "PulseAudio: context not ready"
 msgstr "PulseAudio: el context no està preparat"
 
 #: sink/pulseaudiosink.cpp:335
-#, fuzzy, kde-format
-#| msgid "PulseAudio: failed to create stream proplist"
+#, kde-format
 msgid "PulseAudio audio device is poisoned"
-msgstr "PulseAudio: no s'ha pogut crear la «proplist» del flux"
+msgstr "El dispositiu d'àudio PulseAudio està emmetzinat"
 
 #: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
 #: sink/pulseaudiosink.cpp:391
@@ -160,6 +159,7 @@ msgstr "PulseAudio: no s'ha pogut connectar el flux"
 #, kde-format
 msgid "SDL: audio output is in a zombie state after a failed close"
 msgstr ""
+"SDL: l'eixida d'àudio està en un estat zombi després d'un tancament fallit"
 
 #: stream/cd/cddisc.cpp:111
 #, kde-format
@@ -277,24 +277,3 @@ msgstr "Massa redireccions"
 #, kde-format
 msgid "Network error: %1"
 msgstr "S'ha produït un error de la xarxa: %1"
-
-#~ msgid "PipeWire: failed to create thread loop"
-#~ msgstr "PipeWire: no s'ha pogut crear el bucle de fils"
-
-#~ msgid "PipeWire: failed to create stream"
-#~ msgstr "PipeWire: no s'ha pogut crear el flux"
-
-#~ msgid "PipeWire: failed to build audio format"
-#~ msgstr "PipeWire: no s'ha pogut construir el format d'àudio"
-
-#~ msgid "PipeWire: failed to start thread loop"
-#~ msgstr "PipeWire: no s'ha pogut iniciar el bucle de fils"
-
-#~ msgid "PulseAudio: failed to init channel map"
-#~ msgstr "PulseAudio: no s'ha pogut iniciar el mapa de canals"
-
-#~ msgid "PulseAudio: failed to create stream"
-#~ msgstr "PulseAudio: no s'ha pogut crear el flux"
-
-#~ msgid "PulseAudio: stream not ready"
-#~ msgstr "PulseAudio: el flux no està preparat"
