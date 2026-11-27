@@ -1,0 +1,272 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR This file is copyright:
+# This file is distributed under the same license as the dragon-media-backend package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: dragon-media-backend\n"
+"Report-Msgid-Bugs-To: https://bugs.kde.org\n"
+"POT-Creation-Date: 2026-11-23 23:48+0000\n"
+"PO-Revision-Date: 2026-11-26 06:57+0100\n"
+"Last-Translator: Temuri Doghonadze <temuri.doghonadze@gmail.com>\n"
+"Language-Team: Georgian <kde-i18n-doc@kde.org>\n"
+"Language: ka\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: Poedit 3.10\n"
+
+#: decoder/decodepipeline.cpp:469
+#, kde-format
+msgid "Failed to create decoder"
+msgstr "დეკოდერის შექმნა ჩავარდა"
+
+#: decoder/decodepipeline.cpp:713
+#, kde-format
+msgid "Stream error"
+msgstr "ნაკადის შეცდომა"
+
+#: decoder/decoder.cpp:199
+#, kde-format
+msgid "Failed to initialize media input"
+msgstr "მედიის შეყვანის ინიციალიზაცია ჩავარდა"
+
+#: decoder/decoder.cpp:203
+#, kde-format
+msgid "Failed to open media container"
+msgstr "მედიის კონტეინერის გახსნა ჩავარდა"
+
+#: decoder/decoder.cpp:207
+#, kde-format
+msgid "No supported audio stream found"
+msgstr "მხარდაჭერილი აუდიონაკადები აღმოჩენილი არაა"
+
+#: decoder/decoder.cpp:211
+#, kde-format
+msgid "Audio codec setup failed"
+msgstr "აუდიოკოდეკის მორგება ჩავარდა"
+
+#: decoder/decoder.cpp:215
+#, kde-format
+msgid "Audio resampler setup failed"
+msgstr "აუდიოს რესამპლერის მორგება ჩვარდა"
+
+#: decoder/decoder.cpp:219
+#, kde-format
+msgid "Failed to allocate decoder resources"
+msgstr "დეკოდერის რესურსების გამოყოფა ჩავარდა"
+
+#: decoder/decoder.cpp:238
+#, kde-format
+msgid "Decoder not initialized"
+msgstr "დეკოდერი ინიციალიზებული არაა"
+
+#: decoder/decoder.cpp:528
+#, kde-format
+msgid "Resampler reinitialization failed after seek"
+msgstr "რესამპლერის თავიდან ინიციალიზაცია ჩავარდა გადახვევის შემდეგ"
+
+#: decoder/decoder.cpp:571
+#, kde-format
+msgid "Read error after %1 attempts: %2"
+msgstr "წაკითხვის შეცდომა %1 მცდელობის შემდეგ: %2"
+
+#: player/dragonplayer.cpp:121
+#, kde-format
+msgid "Failed to open the audio output device."
+msgstr "აუდიოს გამოტანის მოწყობილობის გახსნა ჩავარდა."
+
+#: player/dragonplayer.cpp:273
+#, kde-format
+msgid "Fatal error while decoding media"
+msgstr "მედიის დეკოდირებისას აღმოჩენილია ფატალური შეცდომა"
+
+#: player/dragonplayer.cpp:300
+#, kde-format
+msgid "Error while decoding media"
+msgstr "მედიის დეკოდირებისას აღმოჩენილია შეცდომა"
+
+#: player/dragonplayer.cpp:840
+#, kde-format
+msgid "Failed to open media source"
+msgstr "მედიის წყაროს გახსნა შეუძლებელია"
+
+#: player/dragonplayer.cpp:840
+#, kde-format
+msgid "Network error"
+msgstr "ქსელის შეცდომა"
+
+#: sink/nullaudiosink.cpp:16
+#, kde-format
+msgid "Could not find any audio sink plugins."
+msgstr "აუდიოს გამოტანის დამატებების აღმოჩენა შეუძლებელია."
+
+#: sink/pipewireaudiosink.cpp:287
+#, kde-format
+msgid "PipeWire: connection to the PipeWire server failed"
+msgstr "PipeWire: PipeWire-ის სერვერთან დაკავშირება ჩავარდა"
+
+#: sink/pipewireaudiosink.cpp:292
+#, kde-format
+msgid "PipeWire: failed to connect stream"
+msgstr "PipeWire: ნაკადის დაკავშირება ჩავარდა"
+
+#: sink/pulseaudiosink.cpp:199
+#, kde-format
+msgid "PulseAudio: failed to create mainloop"
+msgstr "PulseAudio: მთავარი მარყუჟის შექმნა ჩავარდა"
+
+#: sink/pulseaudiosink.cpp:206
+#, kde-format
+msgid "PulseAudio: failed to start mainloop"
+msgstr "PulseAudio: მთავარი მარყუჟის გაშვება ჩავარდა"
+
+#: sink/pulseaudiosink.cpp:220
+#, kde-format
+msgid "PulseAudio: failed to get mainloop API"
+msgstr "PulseAudio: მთავარი მარყუჟის API-ის მიღება ჩავარდა"
+
+#: sink/pulseaudiosink.cpp:245
+#, kde-format
+msgid "PulseAudio: failed to create context"
+msgstr "PulseAudio: კონტექსტის მიღება ჩავარდა"
+
+#: sink/pulseaudiosink.cpp:255
+#, kde-format
+msgid "PulseAudio: failed to connect context"
+msgstr "PulseAudio: კონტექსტთან დაკავშირება ჩავარდა"
+
+#: sink/pulseaudiosink.cpp:267
+#, kde-format
+msgid "PulseAudio: context not ready"
+msgstr "PulseAudio: კონტექსტი მზად არაა"
+
+#: sink/pulseaudiosink.cpp:335
+#, kde-format
+msgid "PulseAudio audio device is poisoned"
+msgstr "PulseAudio-ის აუდიომოწყობილობა მოწამლულია"
+
+#: sink/pulseaudiosink.cpp:381 sink/pulseaudiosink.cpp:387
+#: sink/pulseaudiosink.cpp:391
+#, kde-format
+msgid "PulseAudio: failed to connect stream"
+msgstr "PulseAudio: ნაკადთან დაკავშირება ჩავარდა"
+
+#: sink/sdlaudiosink.cpp:159
+#, kde-format
+msgid "SDL: audio output is in a zombie state after a failed close"
+msgstr "SDL: ჩავარდნილი დახურვის შემდეგ აუდიოს გამოტანა ზომბის მდგომარეობაშია"
+
+#: stream/cd/cddisc.cpp:111
+#, kde-format
+msgid "The CD has no tracks."
+msgstr "CD-ს აუდიოტრეკები არ აქვს."
+
+#: stream/cd/cddisc.cpp:148
+#, kde-format
+msgid "The disc is not an Audio CD."
+msgstr "დისკი არ არის აუდიო CD."
+
+#: stream/cd/cddisc.cpp:189
+#, kde-format
+msgid "Could not open the CD device. Check that a disc is present."
+msgstr "CD მოწყობილობის გახსნა შეუძლებელია. შეამოწმეთ, დისკი დევს თუ არა."
+
+#: stream/cd/cdstream.cpp:117
+#, kde-format
+msgid "The audiocd:/ URL does not name a track to play."
+msgstr "URL audiocd:/ არ შეიცავს დასაკრავი ტრეკის ნომერს."
+
+#: stream/cd/cdstream.cpp:155
+#, kde-format
+msgid "Track not found on the CD: %1"
+msgstr "CD-ზე ტრეკი აღმოჩენილი არაა: %1"
+
+#: stream/cd/cdstream.cpp:159
+#, kde-format
+msgid "CD track %1 is not an audio track."
+msgstr "CD-ი ტრეკი %1 აუდიოტრეკი არაა."
+
+#: stream/cd/cdstream.cpp:166
+#, kde-format
+msgid "Could not determine the length of CD track %1."
+msgstr "CD ტრეკის %1 სიგრძის დადგენა შეუძლებელია."
+
+#: stream/cd/cdstream.cpp:284
+#, kde-format
+msgid "The CD is no longer available."
+msgstr "CD ხელმისაწვდომი აღარაა."
+
+#: stream/cd/cdstream.cpp:289
+#, kde-format
+msgid "Attempted to read past the end of the CD track."
+msgstr "CD-ის ტრეკის ბოლოს შემდეგ წაკითხვის მცდელობა."
+
+#: stream/cd/cdstream.cpp:296
+#, kde-format
+msgid "Error reading the CD. The disc may have been ejected."
+msgstr "CD-ის წაკითხვის შეცდომა. შეიძლება, დისკი ამოღებულია."
+
+#: stream/cd/dragoncdtocreader.cpp:69
+#, kde-format
+msgid "This build of Dragon Media Backend was made without CD support."
+msgstr "Dragon Media Backend-ის ამ აგებაში CD-ის მხარდაჭერა ჩართული არაა."
+
+#: stream/http/httpprotocol.cpp:227 stream/http/httpsocket.cpp:247
+#: stream/http/httpsocket.cpp:340
+#, kde-format
+msgid "Malformed response"
+msgstr "არასწორი პასუხი"
+
+#: stream/http/httpsocket.cpp:31
+#, kde-format
+msgid "Stream stopped sending data"
+msgstr "ნაკადმა მონაცემების გამოგზავნა შეწყვიტა"
+
+#: stream/http/httpsocket.cpp:88
+#, kde-format
+msgid "Invalid stream URL: %1"
+msgstr "არასწორი ნაკადის URL: %1"
+
+#: stream/http/httpsocket.cpp:104 stream/http/httpsocket.cpp:457
+#, kde-format
+msgid "Connection closed"
+msgstr "კავშირი დახურულია"
+
+#: stream/http/httpsocket.cpp:366 stream/http/httpsocket.cpp:376
+#, kde-format
+msgid "Server responded with status %1"
+msgstr "სერვერმა გვიპასუხა სტატუსით %1"
+
+#: stream/http/httpsocket.cpp:372
+#, kde-format
+msgid "Proxy requires authentication"
+msgstr "პროქსის ავთენტიკაცია სჭირდება"
+
+#: stream/http/httpsocket.cpp:383
+#, kde-format
+msgid "Server returned unexpected byte range"
+msgstr "სერვერმა მოულოდნელი ბაიტების შუალედი დააბრუნა"
+
+#: stream/http/httpsocket.cpp:388
+#, kde-format
+msgid "Server ignored requested byte range"
+msgstr "სერვერმა დააიგნორა მოთხოვნილი ბაიტების შუალედი"
+
+#: stream/http/httpsocket.cpp:399 stream/http/httpsocket.cpp:409
+#: stream/http/httpsocket.cpp:413 stream/http/httpsocket.cpp:416
+#, kde-format
+msgid "Unusable redirect address"
+msgstr "გადამისამართების გამოუსადეგარი მისამართი"
+
+#: stream/http/httpsocket.cpp:402
+#, kde-format
+msgid "Too many redirects"
+msgstr "მეტისმეტად ბევრი გადამისამართება"
+
+#: stream/http/radiostream.cpp:246
+#, kde-format
+msgid "Network error: %1"
+msgstr "ქსელის შეცდომა: %1"
